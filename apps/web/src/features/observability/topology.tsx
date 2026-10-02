@@ -11,7 +11,14 @@ export default function Topology({ flow }: { flow: FlowStats }) {
       data: { label: c },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
-      style: { background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--line-strong)', borderRadius: 10, fontSize: 12, width: 130 },
+      style: {
+        background: 'var(--surface)',
+        color: 'var(--ink)',
+        border: '1px solid var(--line-strong)',
+        borderRadius: 10,
+        fontSize: 12,
+        width: 130,
+      },
     })),
     {
       id: 'gw',
@@ -19,7 +26,15 @@ export default function Topology({ flow }: { flow: FlowStats }) {
       data: { label: 'Bastion gateway' },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
-      style: { background: 'var(--tangerine-soft)', color: 'var(--tangerine-ink)', border: '1px solid var(--tangerine)', borderRadius: 10, fontSize: 13, fontWeight: 600, width: 150 },
+      style: {
+        background: 'var(--tangerine-soft)',
+        color: 'var(--tangerine-ink)',
+        border: '1px solid var(--tangerine)',
+        borderRadius: 10,
+        fontSize: 13,
+        fontWeight: 600,
+        width: 150,
+      },
     },
     ...flow.installations.map((s, i) => ({
       id: `s-${s.id}`,
@@ -37,17 +52,40 @@ export default function Topology({ flow }: { flow: FlowStats }) {
     })),
   ];
   const edges: Edge[] = [
-    ...flow.clients.map((c) => ({ id: `e-${c}`, source: `c-${c}`, target: 'gw', animated: false, style: { stroke: 'var(--line-strong)' } })),
+    ...flow.clients.map((c) => ({
+      id: `e-${c}`,
+      source: `c-${c}`,
+      target: 'gw',
+      animated: false,
+      style: { stroke: 'var(--line-strong)' },
+    })),
     ...flow.installations.map((s) => ({
       id: `e-${s.id}`,
       source: 'gw',
       target: `s-${s.id}`,
-      style: { stroke: s.errorRate > 0.1 ? 'var(--coral)' : 'var(--sky)', strokeWidth: 1 + Math.min(6, s.calls / 120) },
+      style: {
+        stroke: s.errorRate > 0.1 ? 'var(--coral)' : 'var(--sky)',
+        strokeWidth: 1 + Math.min(6, s.calls / 120),
+      },
     })),
   ];
   return (
-    <div style={{ height: 340 }} role="img" aria-label="Topology of clients, the gateway and servers. Use the table view for exact numbers.">
-      <ReactFlow nodes={nodes} edges={edges} fitView nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} zoomOnScroll={false} panOnDrag={false} proOptions={{ hideAttribution: true }}>
+    <div
+      style={{ height: 340 }}
+      role="img"
+      aria-label="Topology of clients, the gateway and servers. Use the table view for exact numbers."
+    >
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        fitView
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        zoomOnScroll={false}
+        panOnDrag={false}
+        proOptions={{ hideAttribution: true }}
+      >
         <Background color="var(--chart-grid)" />
       </ReactFlow>
     </div>

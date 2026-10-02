@@ -31,7 +31,13 @@ const Pane = ({
       tone === 'accent' && 'bg-tangerine-soft',
     )}
   >
-    <span className={cn('text-overline', tone === 'danger' && '[color:var(--coral-ink)]', tone === 'accent' && '[color:var(--tangerine-ink)]')}>
+    <span
+      className={cn(
+        'text-overline',
+        tone === 'danger' && '[color:var(--coral-ink)]',
+        tone === 'accent' && '[color:var(--tangerine-ink)]',
+      )}
+    >
       {label}
     </span>
     {children}
@@ -39,7 +45,15 @@ const Pane = ({
 );
 
 /** Side-by-side definition diff with the changed segments highlighted (12.5, 13.6). */
-export function DiffView({ left, right, leftLabel, rightLabel, mode = 'text', tone = 'danger', className }: Props) {
+export function DiffView({
+  left,
+  right,
+  leftLabel,
+  rightLabel,
+  mode = 'text',
+  tone = 'danger',
+  className,
+}: Props) {
   const words = useMemo(() => (mode === 'text' ? diffWords(left, right) : []), [left, right, mode]);
   const rows = useMemo(() => (mode === 'lines' ? diffLines(left, right) : []), [left, right, mode]);
 
@@ -52,7 +66,9 @@ export function DiffView({ left, right, leftLabel, rightLabel, mode = 'text', to
               .filter((w) => w.type !== 'add')
               .map((w, i) =>
                 w.type === 'del' ? (
-                  <mark key={`${i}-${w.text}`} data-diff="removed">{w.text}</mark>
+                  <mark key={`${i}-${w.text}`} data-diff="removed">
+                    {w.text}
+                  </mark>
                 ) : (
                   <span key={`${i}-${w.text}`}>{w.text}</span>
                 ),
@@ -65,7 +81,9 @@ export function DiffView({ left, right, leftLabel, rightLabel, mode = 'text', to
               .filter((w) => w.type !== 'del')
               .map((w, i) =>
                 w.type === 'add' ? (
-                  <mark key={`${i}-${w.text}`} data-diff="added">{w.text}</mark>
+                  <mark key={`${i}-${w.text}`} data-diff="added">
+                    {w.text}
+                  </mark>
                 ) : (
                   <span key={`${i}-${w.text}`}>{w.text}</span>
                 ),
@@ -79,12 +97,17 @@ export function DiffView({ left, right, leftLabel, rightLabel, mode = 'text', to
   return (
     <div className={cn('grid gap-3 sm:grid-cols-2', className)} data-testid="diff-view">
       {(['left', 'right'] as const).map((side) => (
-        <Pane key={side} label={side === 'left' ? leftLabel : rightLabel} tone={side === 'left' ? 'plain' : 'accent'}>
+        <Pane
+          key={side}
+          label={side === 'left' ? leftLabel : rightLabel}
+          tone={side === 'left' ? 'plain' : 'accent'}
+        >
           <pre className="m-0 overflow-x-auto font-mono text-[12px] leading-[20px]">
             {rows.map((r, i) => {
               const text = side === 'left' ? r.left : r.right;
               const changed =
-                r.kind === 'changed' || (side === 'left' ? r.kind === 'removed' : r.kind === 'added');
+                r.kind === 'changed' ||
+                (side === 'left' ? r.kind === 'removed' : r.kind === 'added');
               return (
                 <span
                   key={`${side}-${i}`}

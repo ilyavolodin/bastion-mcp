@@ -128,9 +128,19 @@ export const sectionForPath = (pathname: string): NavSection => {
 export type DeniedCopy = { title: string; body: string; linkLabel: string; to: string };
 export const DENIED: Record<NavSection, DeniedCopy> = {
   home: { title: 'Not in this role’s navigation', body: '', linkLabel: 'Back to Home', to: '/' },
-  store: { title: 'Not in this role’s navigation', body: '', linkLabel: 'Open the Store', to: '/store' },
+  store: {
+    title: 'Not in this role’s navigation',
+    body: '',
+    linkLabel: 'Open the Store',
+    to: '/store',
+  },
   servers: { title: 'Not in this role’s navigation', body: '', linkLabel: 'Back to Home', to: '/' },
-  activity: { title: 'Not in this role’s navigation', body: '', linkLabel: 'Back to Home', to: '/' },
+  activity: {
+    title: 'Not in this role’s navigation',
+    body: '',
+    linkLabel: 'Back to Home',
+    to: '/',
+  },
   plugins: { title: 'Not in this role’s navigation', body: '', linkLabel: 'Back to Home', to: '/' },
   observability: {
     title: 'Not in this role’s navigation',

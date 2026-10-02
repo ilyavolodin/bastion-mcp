@@ -42,8 +42,8 @@ export function ConnectCard() {
         <div className="flex-1">
           <h2 className="m-0 text-[22px] leading-[30px] font-semibold">Connect your AI tools</h2>
           <p className="m-0 mt-1 max-w-[520px]">
-            One URL carries every server you’ve installed. Sign in once from your client; Bastion handles
-            each server’s credentials.
+            One URL carries every server you’ve installed. Sign in once from your client; Bastion
+            handles each server’s credentials.
           </p>
         </div>
         <NetworkArt />

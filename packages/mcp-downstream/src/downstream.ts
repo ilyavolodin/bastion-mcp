@@ -237,7 +237,7 @@ export const createDownstream = (deps: DownstreamDeps): Downstream => {
     operationDeps: { skills: deps.skills, logger },
     ...(config.keepAliveMs === undefined ? {} : { keepAliveMs: config.keepAliveMs }),
   });
-  const direct = createDirectHandler({ run, serverInfo: (rc) => rc.resolved.endpoint.serverInfo });
+  const direct = createDirectHandler({ run });
   const resolver = new EndpointResolver({
     data: deps.endpointData,
     cache: endpointCache,

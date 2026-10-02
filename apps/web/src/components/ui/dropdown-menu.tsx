@@ -36,6 +36,9 @@ export const DropdownMenuItem = React.forwardRef<
 ));
 DropdownMenuItem.displayName = 'DropdownMenuItem';
 
-export const DropdownMenuLabel = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+export const DropdownMenuLabel = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn('px-3 py-2 text-caption text-muted', className)} {...props} />
 );

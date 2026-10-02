@@ -25,7 +25,9 @@ export function RoleBar() {
         <Eye className="size-[18px] text-tangerine-ink" aria-hidden="true" />
         <span className="text-overline">Role preview</span>
         <span className="text-caption text-muted">
-          {current === 'actual' ? `Showing your own role (${actualRole}).` : `Showing only what a ${role} sees.`}
+          {current === 'actual'
+            ? `Showing your own role (${actualRole}).`
+            : `Showing only what a ${role} sees.`}
         </span>
       </div>
       <div className="flex gap-1 rounded-md bg-sunken p-1">
@@ -37,10 +39,16 @@ export function RoleBar() {
             onClick={() => setPreviewRole(o.id === 'actual' ? null : (o.id as UiRole))}
             className={cn(
               'inline-flex h-9 items-center gap-1.5 rounded-sm px-3.5 text-[13px] font-medium',
-              o.id === current ? 'bg-surface text-ink shadow-[0_0_0_1.5px_var(--tangerine-ink)]' : 'text-muted',
+              o.id === current
+                ? 'bg-surface text-ink shadow-[0_0_0_1.5px_var(--tangerine-ink)]'
+                : 'text-muted',
             )}
           >
-            <span className="size-2 rounded-full" style={{ background: o.dot }} aria-hidden="true" />
+            <span
+              className="size-2 rounded-full"
+              style={{ background: o.dot }}
+              aria-hidden="true"
+            />
             {o.label}
           </button>
         ))}

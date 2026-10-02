@@ -8,7 +8,10 @@ export function sparkPoints(data: number[], w = 200, h = 36, pad = 2): string {
   const span = max - min || 1;
   const step = data.length > 1 ? w / (data.length - 1) : 0;
   return data
-    .map((y, i) => `${(i * step).toFixed(1)},${(h - pad - ((y - min) / span) * (h - pad * 2)).toFixed(1)}`)
+    .map(
+      (y, i) =>
+        `${(i * step).toFixed(1)},${(h - pad - ((y - min) / span) * (h - pad * 2)).toFixed(1)}`,
+    )
     .join(' ');
 }
 
@@ -21,7 +24,13 @@ type Props = {
 };
 
 /** A tiny trend line for lists and tiles; exact values live in detail views (18.1). */
-export function Sparkline({ data, color = 'var(--tangerine)', height = 36, label, className }: Props) {
+export function Sparkline({
+  data,
+  color = 'var(--tangerine)',
+  height = 36,
+  label,
+  className,
+}: Props) {
   if (data.length < 2) return null;
   return (
     <svg

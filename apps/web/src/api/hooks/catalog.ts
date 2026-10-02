@@ -11,8 +11,8 @@ import type {
   CatalogVersion,
   ExecutableApproval,
   FileNode,
-  InstallRequest,
   Installation,
+  InstallRequest,
   RegistryServer,
   SkillFile,
   TestResult,
@@ -66,7 +66,8 @@ export const useTestResult = (entryId: string, versionId: string | null) =>
   useQuery<TestResult | null>({
     queryKey: [...keys.catalog, 'test', entryId, versionId],
     enabled: Boolean(versionId),
-    refetchInterval: (q) => ((q.state.data as TestResult | null | undefined)?.status === 'running' ? 800 : false),
+    refetchInterval: (q) =>
+      (q.state.data as TestResult | null | undefined)?.status === 'running' ? 800 : false,
     queryFn: ({ signal }) =>
       api.get<TestResult | null>(`/catalog/${entryId}/versions/${versionId}/test`, { signal }),
   });
@@ -122,7 +123,10 @@ export const useSaveFile = (entryId: string, versionId: string) =>
         `/catalog/${entryId}/versions/${versionId}/files/${file.path.split('/').map(encodeURIComponent).join('/')}`,
         { content: file.content },
       ),
-    [[...keys.catalog, 'files', entryId, versionId], [...keys.catalog, 'file', entryId, versionId]],
+    [
+      [...keys.catalog, 'files', entryId, versionId],
+      [...keys.catalog, 'file', entryId, versionId],
+    ],
   );
 
 // --- Auto-install policies (11.5) ------------------------------------------------------------------
@@ -162,7 +166,11 @@ export const useRegistryInstall = () =>
 
 export const useInstallRequests = (status: 'open' | 'all' = 'open', enabled = true) =>
   useQuery({
-    ...listQuery<InstallRequest>(keys.requests, '/install-requests', status === 'open' ? { status } : {}),
+    ...listQuery<InstallRequest>(
+      keys.requests,
+      '/install-requests',
+      status === 'open' ? { status } : {},
+    ),
     enabled,
   });
 

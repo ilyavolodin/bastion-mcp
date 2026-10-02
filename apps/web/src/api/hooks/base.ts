@@ -1,8 +1,8 @@
 import {
   type QueryKey,
+  type UseMutationOptions,
   useMutation,
   useQueryClient,
-  type UseMutationOptions,
 } from '@tanstack/react-query';
 import { fetchAll, type Query } from '../client';
 

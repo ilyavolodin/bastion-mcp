@@ -27,7 +27,15 @@ const searchSchema = z.object({
 
 const AUTH_TONE = { oauth: 'warn', userSecret: 'berry', teamSecret: 'ok', none: 'ok' } as const;
 
-function StoreCard({ entry, selected, onSelect }: { entry: StoreEntry; selected: boolean; onSelect: () => void }) {
+function StoreCard({
+  entry,
+  selected,
+  onSelect,
+}: {
+  entry: StoreEntry;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   return (
     <article
       className={cn(
@@ -68,7 +76,10 @@ function StoreCard({ entry, selected, onSelect }: { entry: StoreEntry; selected:
       </div>
       <div className="flex items-center gap-2">
         <div className="h-1.5 flex-1 overflow-hidden rounded-sm bg-sunken" aria-hidden="true">
-          <div className="h-full rounded-sm" style={{ width: `${entry.popularity}%`, background: entry.color }} />
+          <div
+            className="h-full rounded-sm"
+            style={{ width: `${entry.popularity}%`, background: entry.color }}
+          />
         </div>
         <span className="text-caption text-muted">{formatNumber(entry.installCount)} people</span>
       </div>
@@ -118,12 +129,26 @@ export function StorePage() {
         }
       />
 
-      <div role="tablist" aria-label="Store sections" className="flex items-center gap-1 self-start rounded-md bg-line p-1">
-        <span role="tab" aria-selected="true" tabIndex={0} className="inline-flex h-9 items-center rounded-sm bg-grad-tangerine px-4 text-label text-on-bright">
+      <div
+        role="tablist"
+        aria-label="Store sections"
+        className="flex items-center gap-1 self-start rounded-md bg-line p-1"
+      >
+        <span
+          role="tab"
+          aria-selected="true"
+          tabIndex={0}
+          className="inline-flex h-9 items-center rounded-sm bg-grad-tangerine px-4 text-label text-on-bright"
+        >
           Approved servers
         </span>
         {can('registry') ? (
-          <Link to="/registry" role="tab" aria-selected="false" className="inline-flex h-9 items-center gap-2 rounded-sm px-4 text-label text-muted no-underline hover:text-ink">
+          <Link
+            to="/registry"
+            role="tab"
+            aria-selected="false"
+            className="inline-flex h-9 items-center gap-2 rounded-sm px-4 text-label text-muted no-underline hover:text-ink"
+          >
             MCP Registry
           </Link>
         ) : null}
@@ -175,7 +200,17 @@ export function StorePage() {
                     ? 'Try a tool name or what you want to do, like “create ticket”.'
                     : 'An admin or manager publishes the first server from the Catalog.'
                 }
-                action={search.q ? { label: 'Clear search', onClick: () => { setDraft(''); setSearch({ q: undefined }); } } : undefined}
+                action={
+                  search.q
+                    ? {
+                        label: 'Clear search',
+                        onClick: () => {
+                          setDraft('');
+                          setSearch({ q: undefined });
+                        },
+                      }
+                    : undefined
+                }
               />
             }
           >
@@ -190,7 +225,12 @@ export function StorePage() {
               ) : (
                 <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
                   {shown.map((e) => (
-                    <StoreCard key={e.id} entry={e} selected={search.entry === e.slug} onSelect={() => setSearch({ entry: e.slug })} />
+                    <StoreCard
+                      key={e.id}
+                      entry={e}
+                      selected={search.entry === e.slug}
+                      onSelect={() => setSearch({ entry: e.slug })}
+                    />
                   ))}
                 </div>
               );
@@ -199,7 +239,12 @@ export function StorePage() {
         </div>
         {search.entry && wide ? (
           entry ? (
-            <EntryDetail docked entry={entry} onClose={close} onInstall={() => setInstalling(true)} />
+            <EntryDetail
+              docked
+              entry={entry}
+              onClose={close}
+              onInstall={() => setInstalling(true)}
+            />
           ) : (
             <div className="w-[400px] shrink-0" role="status" aria-label="Loading details" />
           )
@@ -208,8 +253,16 @@ export function StorePage() {
 
       {search.entry && !wide ? (
         <Dialog open onOpenChange={(o) => !o && close()}>
-          <DialogContent title={entry?.displayName ?? 'Server details'} placement="drawer" hideTitle>
-            {entry ? <EntryDetail entry={entry} onInstall={() => setInstalling(true)} /> : <p>Loading…</p>}
+          <DialogContent
+            title={entry?.displayName ?? 'Server details'}
+            placement="drawer"
+            hideTitle
+          >
+            {entry ? (
+              <EntryDetail entry={entry} onInstall={() => setInstalling(true)} />
+            ) : (
+              <p>Loading…</p>
+            )}
           </DialogContent>
         </Dialog>
       ) : null}

@@ -1,4 +1,4 @@
-import { delay, http, HttpResponse, sse } from 'msw';
+import { delay, HttpResponse, http, sse } from 'msw';
 import type {
   AutoInstallInput,
   CallFilters,
@@ -40,7 +40,8 @@ export const problem = (
     { status, headers: { 'Content-Type': 'application/problem+json' } },
   );
 
-const forbidden = () => problem(403, 'forbidden', 'You do not have access to this', 'Ask an admin to change your role.');
+const forbidden = () =>
+  problem(403, 'forbidden', 'You do not have access to this', 'Ask an admin to change your role.');
 const notFound = (what = 'Resource') => problem(404, 'not_found', `${what} not found`);
 
 const paginate = <T>(items: T[], url: URL) => {
@@ -56,6 +57,9 @@ const q = (url: URL, name: string) => url.searchParams.get(name) ?? '';
 const etagged = (body: object, version: string) =>
   HttpResponse.json(body as never, { headers: { ETag: `"${version}"` } });
 
+const filePath = (url: string) =>
+  decodeURIComponent(new URL(url).pathname.replace(/^.*\/files\//, ''));
+
 const entrySlug = (inst: Installation) => (inst.catalogEntryId ?? '').replace(/^c-/, '');
 
 const buildClientConfig = (client: ClientId, url: string): ClientConfig => {
@@ -66,7 +70,11 @@ const buildClientConfig = (client: ClientId, url: string): ClientConfig => {
         label: 'Claude Desktop',
         format: 'json',
         filename: 'claude_desktop_config.json',
-        content: JSON.stringify({ mcpServers: { bastion: { command: 'npx', args: ['-y', 'mcp-remote', url] } } }, null, 2),
+        content: JSON.stringify(
+          { mcpServers: { bastion: { command: 'npx', args: ['-y', 'mcp-remote', url] } } },
+          null,
+          2,
+        ),
         instructions: 'Paste into Settings, Developer, Edit config, then restart Claude Desktop.',
       };
     case 'claude-code':
@@ -100,7 +108,8 @@ const buildClientConfig = (client: ClientId, url: string): ClientConfig => {
 };
 
 const callsFor = (db: MockDb, url: URL) => {
-  const rangeMs = { '1h': fx.HOUR, '24h': fx.DAY, '7d': 7 * fx.DAY }[q(url, 'range') || '24h'] ?? fx.DAY;
+  const rangeMs =
+    { '1h': fx.HOUR, '24h': fx.DAY, '7d': 7 * fx.DAY }[q(url, 'range') || '24h'] ?? fx.DAY;
   const outcome = q(url, 'outcome');
   const f: CallFilters = {
     userId: q(url, 'userId'),
@@ -126,9 +135,12 @@ const callsFor = (db: MockDb, url: URL) => {
 // The typed SSE client only knows the default 'message' event; named events are sent as-is.
 type SseClient = { send: (m: never) => void };
 const SSE_CLIENTS = new Set<SseClient>();
-const sendNamed = (c: SseClient, event: string, data: string) => (c.send as (m: { event: string; data: string }) => void)({ event, data });
+const sendNamed = (c: SseClient, event: string, data: string) =>
+  (c.send as (m: { event: string; data: string }) => void)({ event, data });
 /** Pushes a server event to every open `/events` stream (demo and tests). */
 export const emitMockEvent = (event: string, data: unknown): void => {
+  if (event === 'notification')
+    getDb().notifications.unshift(data as MockDb['notifications'][number]);
   for (const c of [...SSE_CLIENTS]) {
     try {
       sendNamed(c, event, JSON.stringify(data));
@@ -141,7 +153,10 @@ export const emitMockEvent = (event: string, data: unknown): void => {
 export const handlers = [
   // CSRF double-submit on every state-changing call (9.2).
   http.all(P('/*'), ({ request }) => {
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) && !request.headers.get('x-bastion-csrf')) {
+    if (
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) &&
+      !request.headers.get('x-bastion-csrf')
+    ) {
       return problem(403, 'csrf_missing', 'Missing CSRF token', 'Reload the page and try again.');
     }
     return undefined;
@@ -150,8 +165,10 @@ export const handlers = [
   // --- Session ---------------------------------------------------------------------------------------
   http.get(P('/me'), async () => {
     await latency();
-    const stored = typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem('bastion.mockRole');
-    if (stored === 'admin' || stored === 'manager' || stored === 'member' || stored === 'auditor') setRole(stored);
+    const stored =
+      typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem('bastion.mockRole');
+    if (stored === 'admin' || stored === 'manager' || stored === 'member' || stored === 'auditor')
+      setRole(stored);
     return HttpResponse.json(getDb().me);
   }),
   http.patch(P('/me'), async ({ request }) => {
@@ -160,7 +177,9 @@ export const handlers = [
     if (body.theme) db.me.theme = body.theme;
     return HttpResponse.json(db.me);
   }),
-  http.get(P('/me/notifications'), ({ request }) => paginate(getDb().notifications, new URL(request.url))),
+  http.get(P('/me/notifications'), ({ request }) =>
+    paginate(getDb().notifications, new URL(request.url)),
+  ),
   http.post(P('/me/notifications/:id/read'), ({ params }) => {
     const n = getDb().notifications.find((x) => x.id === params.id);
     if (n) n.readAt = new Date().toISOString();
@@ -196,7 +215,8 @@ export const handlers = [
     const missing = entry.form.variables
       .filter((v) => v.required && !input.variables[v.name])
       .map((v) => ({ path: `variables.${v.name}`, message: `${v.label} is required` }));
-    if (missing.length) return problem(422, 'validation_failed', 'Some fields need attention', undefined, missing);
+    if (missing.length)
+      return problem(422, 'validation_failed', 'Some fields need attention', undefined, missing);
     const exists = db.installations.some((i) => i.slug === input.entrySlug);
     const base = db.installations.find((i) => i.slug === input.entrySlug);
     if (exists && base) return HttpResponse.json(base, { status: 200 });
@@ -219,7 +239,8 @@ export const handlers = [
       enabled: true,
       hidden: false,
       pinnedVersion: false,
-      status: entry.authMode === 'oauth' || entry.authMode === 'userSecret' ? 'needs_setup' : 'ready',
+      status:
+        entry.authMode === 'oauth' || entry.authMode === 'userSecret' ? 'needs_setup' : 'ready',
       statusDetail: null,
       canManage: true,
       spark24: [],
@@ -227,13 +248,23 @@ export const handlers = [
       toolCount: entry.items.filter((i) => i.kind === 'tool').length,
       secrets: entry.form.secrets.map((s) => ({ name: s.name, set: false })),
       oauth: entry.setup.oauthProvider
-        ? { provider: entry.setup.oauthProvider, scopes: ['read'], connected: false, expiresAt: null }
+        ? {
+            provider: entry.setup.oauthProvider,
+            scopes: ['read'],
+            connected: false,
+            expiresAt: null,
+          }
         : null,
       updatedAt: new Date().toISOString(),
     };
     db.installations.push(inst);
     db.egress[inst.id] = {
-      hosts: entry.egressHosts.map((host) => ({ host, status: 'allowed', reason: 'Declared by the catalog entry', lastSeenAt: null })),
+      hosts: entry.egressHosts.map((host) => ({
+        host,
+        status: 'allowed',
+        reason: 'Declared by the catalog entry',
+        lastSeenAt: null,
+      })),
       requests: [],
     };
     return HttpResponse.json(inst, { status: 201 });
@@ -242,7 +273,10 @@ export const handlers = [
     const db = getDb();
     const inst = db.installations.find((i) => i.id === params.id);
     if (!inst) return notFound('Installation');
-    return etagged({ ...inst, canManage: roleIs(db, 'admin', 'manager') || inst.ownerType === 'user' }, inst.updatedAt);
+    return etagged(
+      { ...inst, canManage: roleIs(db, 'admin', 'manager') || inst.ownerType === 'user' },
+      inst.updatedAt,
+    );
   }),
   http.patch(P('/installations/:id'), async ({ params, request }) => {
     const db = getDb();
@@ -250,7 +284,12 @@ export const handlers = [
     if (!inst) return notFound('Installation');
     const match = request.headers.get('if-match');
     if (match && match !== `"${inst.updatedAt}"`) {
-      return problem(412, 'precondition_failed', 'Changed by someone else', 'Reload and try again.');
+      return problem(
+        412,
+        'precondition_failed',
+        'Changed by someone else',
+        'Reload and try again.',
+      );
     }
     Object.assign(inst, await request.json(), { updatedAt: new Date().toISOString() });
     if (inst.enabled && inst.status === 'disabled') inst.status = 'ready';
@@ -259,7 +298,8 @@ export const handlers = [
   http.delete(P('/installations/:id'), ({ params }) => {
     const db = getDb();
     db.installations = db.installations.filter((i) => i.id !== params.id);
-    for (const e of db.endpoints) e.installationIds = e.installationIds.filter((x) => x !== params.id);
+    for (const e of db.endpoints)
+      e.installationIds = e.installationIds.filter((x) => x !== params.id);
     return new HttpResponse(null, { status: 204 });
   }),
   http.post(P('/installations/:id/restart'), () => new HttpResponse(null, { status: 204 })),
@@ -298,9 +338,16 @@ export const handlers = [
       const db = getDb();
       const inst = db.installations.find((i) => i.id === params.id);
       if (!inst) return notFound('Installation');
-      const kind = { tools: 'tool', prompts: 'prompt', resources: 'resource', templates: 'template' }[path];
+      const kind = {
+        tools: 'tool',
+        prompts: 'prompt',
+        resources: 'resource',
+        templates: 'template',
+      }[path];
       const doc = db.overrides[inst.id] ?? { version: 1 as const };
-      const items = (fx.ITEMS[entrySlug(inst)] ?? []).filter((i) => i.kind === kind).map((i) => applyToCapability(i, doc));
+      const items = (fx.ITEMS[entrySlug(inst)] ?? [])
+        .filter((i) => i.kind === kind)
+        .map((i) => applyToCapability(i, doc));
       return HttpResponse.json({ items, nextCursor: null });
     }),
   ),
@@ -311,7 +358,9 @@ export const handlers = [
     const db = getDb();
     const body = (await request.json()) as { host: string; reason: string };
     const rec = { id: nextId('er'), host: body.host, status: 'open' as const, reason: body.reason };
-    (db.egress[String(params.id)] ??= { hosts: [], requests: [] }).requests.push(rec);
+    const bucket = db.egress[String(params.id)] ?? { hosts: [], requests: [] };
+    bucket.requests.push(rec);
+    db.egress[String(params.id)] = bucket;
     return HttpResponse.json(rec, { status: 201 });
   }),
   http.get(P('/installations/:id/overrides'), ({ params }) => {
@@ -333,7 +382,9 @@ export const handlers = [
     const db = getDb();
     const body = (await request.json()) as { installationId: string; document: OverrideDocument };
     const inst = db.installations.find((i) => i.id === body.installationId);
-    return HttpResponse.json(previewDefinitions(fx.ITEMS[inst ? entrySlug(inst) : ''] ?? [], body.document));
+    return HttpResponse.json(
+      previewDefinitions(fx.ITEMS[inst ? entrySlug(inst) : ''] ?? [], body.document),
+    );
   }),
   http.post(P('/installations/:id/try'), async ({ request }) => {
     const body = (await request.json()) as { name: string; arguments: Record<string, unknown> };
@@ -343,7 +394,17 @@ export const handlers = [
       isError: blocked,
       text: blocked
         ? 'Blocked by guard: SQL write pattern'
-        : JSON.stringify({ tool: body.name, rows: [{ id: 1, total: 42 }, { id: 2, total: 17 }] }, null, 2),
+        : JSON.stringify(
+            {
+              tool: body.name,
+              rows: [
+                { id: 1, total: 42 },
+                { id: 2, total: 17 },
+              ],
+            },
+            null,
+            2,
+          ),
       durationMs: blocked ? 31 : 184,
       guard: blocked ? 'SQL write pattern' : null,
     });
@@ -359,7 +420,11 @@ export const handlers = [
     let i = 0;
     sendNamed(client, 'log', lines[0] ?? '');
     const timer = setInterval(() => {
-      sendNamed(client, 'log', `${new Date().toISOString().slice(11, 19)} ${lines[++i % lines.length]}`);
+      sendNamed(
+        client,
+        'log',
+        `${new Date().toISOString().slice(11, 19)} ${lines[++i % lines.length]}`,
+      );
     }, 2500);
     request.signal.addEventListener('abort', () => clearInterval(timer));
   }),
@@ -370,8 +435,19 @@ export const handlers = [
     const body = (await request.json()) as { name: string; installationIds: string[] };
     const slug = body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const db = getDb();
-    const tools = db.installations.filter((i) => body.installationIds.includes(i.id)).reduce((n, i) => n + i.toolCount, 0);
-    const ep = { id: nextId('e'), slug, name: body.name, url: `https://${fx.HOST}/mcp/c/${slug}`, isDefault: false, installationIds: body.installationIds, toolCount: tools, updatedAt: new Date().toISOString() };
+    const tools = db.installations
+      .filter((i) => body.installationIds.includes(i.id))
+      .reduce((n, i) => n + i.toolCount, 0);
+    const ep = {
+      id: nextId('e'),
+      slug,
+      name: body.name,
+      url: `https://${fx.HOST}/mcp/c/${slug}`,
+      isDefault: false,
+      installationIds: body.installationIds,
+      toolCount: tools,
+      updatedAt: new Date().toISOString(),
+    };
     db.endpoints.push(ep);
     return HttpResponse.json(ep, { status: 201 });
   }),
@@ -380,7 +456,9 @@ export const handlers = [
     const ep = db.endpoints.find((e) => e.id === params.id);
     if (!ep) return notFound('Endpoint');
     Object.assign(ep, await request.json());
-    ep.toolCount = db.installations.filter((i) => ep.installationIds.includes(i.id)).reduce((n, i) => n + i.toolCount, 0);
+    ep.toolCount = db.installations
+      .filter((i) => ep.installationIds.includes(i.id))
+      .reduce((n, i) => n + i.toolCount, 0);
     return HttpResponse.json(ep);
   }),
   http.delete(P('/endpoints/:id'), ({ params }) => {
@@ -408,9 +486,23 @@ export const handlers = [
       .filter((e) => {
         if (!text) return true;
         const toolText = e.items.map((i) => `${i.name} ${i.description}`).join(' ');
-        return `${e.displayName} ${e.description} ${e.tags.join(' ')} ${toolText}`.toLowerCase().includes(text);
+        return `${e.displayName} ${e.description} ${e.tags.join(' ')} ${toolText}`
+          .toLowerCase()
+          .includes(text);
       })
-      .map(({ items: _items, summary: _s, setup: _su, egressHosts: _e, guards: _g, versions: _v, form: _f, canEdit: _c, ...card }) => card);
+      .map(
+        ({
+          items: _items,
+          summary: _s,
+          setup: _su,
+          egressHosts: _e,
+          guards: _g,
+          versions: _v,
+          form: _f,
+          canEdit: _c,
+          ...card
+        }) => card,
+      );
     return paginate(entries, new URL(request.url));
   }),
   http.get(P('/store/:slug'), ({ params }) => {
@@ -441,12 +533,16 @@ export const handlers = [
   http.get(P('/stats/latency'), () => HttpResponse.json({ buckets: fx.buildLatency(getDb().now) })),
   http.get(P('/stats/sandboxes'), () => HttpResponse.json(fx.buildSandboxStats(getDb().now))),
   http.get(P('/stats/guards'), () => HttpResponse.json(fx.buildGuardStats(getDb().now))),
-  http.get(P('/security/findings'), ({ request }) => paginate(fx.buildFindings(getDb().now), new URL(request.url))),
+  http.get(P('/security/findings'), ({ request }) =>
+    paginate(fx.buildFindings(getDb().now), new URL(request.url)),
+  ),
   http.get(P('/drift-reviews'), ({ request }) => {
     const db = getDb();
     const open = q(new URL(request.url), 'status') === 'open';
     return paginate(
-      db.drift.filter((d) => !open || d.status === 'open').map((d) => ({ ...d, canDecide: roleIs(db, 'admin', 'manager') })),
+      db.drift
+        .filter((d) => !open || d.status === 'open')
+        .map((d) => ({ ...d, canDecide: roleIs(db, 'admin', 'manager') })),
       new URL(request.url),
     );
   }),
@@ -466,9 +562,15 @@ export const handlers = [
     if (!roleIs(db, 'admin', 'manager', 'auditor')) return forbidden();
     if (q(url, 'needsApproval')) {
       const items = db.catalog
-        .filter((c) => c.executable && (db.versions[c.id] ?? []).some((v) => v.executableApproval === 'pending'))
+        .filter(
+          (c) =>
+            c.executable &&
+            (db.versions[c.id] ?? []).some((v) => v.executableApproval === 'pending'),
+        )
         .map((c) => {
-          const v = (db.versions[c.id] ?? []).find((x) => x.executableApproval === 'pending') as CatalogVersion;
+          const v = (db.versions[c.id] ?? []).find(
+            (x) => x.executableApproval === 'pending',
+          ) as CatalogVersion;
           return {
             entryId: c.id,
             versionId: v.id,
@@ -477,7 +579,11 @@ export const handlers = [
             color: c.color,
             author: 'Raj M',
             summary: 'adds 1 hook',
-            diff: ['+ hooks/post-tool.sh', '+   curl -s $PAGER_URL -d @-', '  skills/triage/SKILL.md'],
+            diff: [
+              '+ hooks/post-tool.sh',
+              '+   curl -s $PAGER_URL -d @-',
+              '  skills/triage/SKILL.md',
+            ],
           };
         });
       return paginate(items, url);
@@ -485,7 +591,9 @@ export const handlers = [
     const kind = q(url, 'kind');
     const text = q(url, 'q').toLowerCase();
     return paginate(
-      db.catalog.filter((c) => (!kind || c.kind === kind) && (!text || c.displayName.toLowerCase().includes(text))),
+      db.catalog.filter(
+        (c) => (!kind || c.kind === kind) && (!text || c.displayName.toLowerCase().includes(text)),
+      ),
       url,
     );
   }),
@@ -517,14 +625,26 @@ export const handlers = [
     };
     db.catalog.unshift(entry);
     db.versions[id] = [
-      { id: `v-${id}-0.1.0`, entryId: id, label: body.spec.version || '0.1.0', status: 'draft', spec: body.spec, test: null, changelog: '', createdAt: new Date().toISOString(), executableApproval: 'none' },
+      {
+        id: `v-${id}-0.1.0`,
+        entryId: id,
+        label: body.spec.version || '0.1.0',
+        status: 'draft',
+        spec: body.spec,
+        test: null,
+        changelog: '',
+        createdAt: new Date().toISOString(),
+        executableApproval: 'none',
+      },
     ];
     return HttpResponse.json({ ...entry, versions: db.versions[id] }, { status: 201 });
   }),
   http.get(P('/catalog/:id'), ({ params }) => {
     const db = getDb();
     const e = db.catalog.find((c) => c.id === params.id);
-    return e ? HttpResponse.json({ ...e, versions: db.versions[e.id] ?? [] }) : notFound('Catalog entry');
+    return e
+      ? HttpResponse.json({ ...e, versions: db.versions[e.id] ?? [] })
+      : notFound('Catalog entry');
   }),
   http.patch(P('/catalog/:id'), async ({ params, request }) => {
     const db = getDb();
@@ -538,8 +658,18 @@ export const handlers = [
     const e = db.catalog.find((c) => c.id === params.id);
     if (!e) return notFound('Catalog entry');
     const body = (await request.json()) as { spec: CatalogVersion['spec'] };
-    const v: CatalogVersion = { id: nextId('v'), entryId: e.id, label: body.spec.version, status: 'draft', spec: body.spec, test: null, changelog: '', createdAt: new Date().toISOString(), executableApproval: 'none' };
-    (db.versions[e.id] ??= []).unshift(v);
+    const v: CatalogVersion = {
+      id: nextId('v'),
+      entryId: e.id,
+      label: body.spec.version,
+      status: 'draft',
+      spec: body.spec,
+      test: null,
+      changelog: '',
+      createdAt: new Date().toISOString(),
+      executableApproval: 'none',
+    };
+    db.versions[e.id] = [v, ...(db.versions[e.id] ?? [])];
     e.draftVersionId = v.id;
     return HttpResponse.json(v, { status: 201 });
   }),
@@ -557,7 +687,13 @@ export const handlers = [
     const v = (db.versions[String(params.id)] ?? []).find((x) => x.id === params.vid);
     if (!v) return notFound('Version');
     db.testStarts[v.id] = Date.now();
-    const result = { ...fx.passingTest(v.label), status: 'running' as const, phases: fx.passingTest(v.label).phases.slice(0, 2), scan: [], stderr: ['npx -y …'] };
+    const result = {
+      ...fx.passingTest(v.label),
+      status: 'running' as const,
+      phases: fx.passingTest(v.label).phases.slice(0, 2),
+      scan: [],
+      stderr: ['npx -y …'],
+    };
     v.test = result;
     return HttpResponse.json(result, { status: 202 });
   }),
@@ -578,7 +714,12 @@ export const handlers = [
     const v = (db.versions[String(params.id)] ?? []).find((x) => x.id === params.vid);
     if (!e || !v) return notFound('Version');
     if (v.test?.status !== 'passed') {
-      return problem(409, 'test_required', 'Run a passing test first', 'Publishing needs a passing test of this exact version.');
+      return problem(
+        409,
+        'test_required',
+        'Run a passing test first',
+        'Publishing needs a passing test of this exact version.',
+      );
     }
     v.status = 'published';
     e.status = 'published';
@@ -597,29 +738,38 @@ export const handlers = [
   http.get(P('/catalog/:id/versions/:vid/files'), () =>
     HttpResponse.json({ items: getDb().files.nodes, nextCursor: null }),
   ),
-  http.get(P('/catalog/:id/versions/:vid/files/*'), ({ params }) => {
-    const raw = params[0];
-    const path = decodeURIComponent(Array.isArray(raw) ? raw.join('/') : String(raw));
+  http.get(P('/catalog/:id/versions/:vid/files/*'), ({ request }) => {
+    const path = filePath(request.url);
     const f = getDb().files.files[path];
     return f ? HttpResponse.json(f) : notFound('File');
   }),
-  http.put(P('/catalog/:id/versions/:vid/files/*'), async ({ params, request }) => {
-    const raw = params[0];
-    const path = decodeURIComponent(Array.isArray(raw) ? raw.join('/') : String(raw));
+  http.put(P('/catalog/:id/versions/:vid/files/*'), async ({ request }) => {
+    const path = filePath(request.url);
     const body = (await request.json()) as { content: string };
     const db = getDb();
     const prev = db.files.files[path];
-    db.files.files[path] = { path, content: body.content, classification: prev?.classification ?? 'plain' };
+    db.files.files[path] = {
+      path,
+      content: body.content,
+      classification: prev?.classification ?? 'plain',
+    };
     return new HttpResponse(null, { status: 204 });
   }),
 
-  http.get(P('/auto-install-policies'), ({ request }) => paginate(getDb().autoInstall, new URL(request.url))),
+  http.get(P('/auto-install-policies'), ({ request }) =>
+    paginate(getDb().autoInstall, new URL(request.url)),
+  ),
   http.post(P('/auto-install-policies/:id/preview'), async ({ request }) => {
     const body = (await request.json()) as AutoInstallInput;
     const db = getDb();
     const teamTargets = body.targets.filter((t) => t.type === 'team');
     const everyone = body.targets.some((t) => t.type === 'all');
-    const people = everyone ? 451 : teamTargets.reduce((n, t) => n + (db.teams.find((x) => x.id === t.id)?.memberCount ?? 0) * 21, 0) || 12;
+    const people = everyone
+      ? 451
+      : teamTargets.reduce(
+          (n, t) => n + (db.teams.find((x) => x.id === t.id)?.memberCount ?? 0) * 21,
+          0,
+        ) || 12;
     return HttpResponse.json({
       people,
       teams: everyone ? db.teams.length : teamTargets.length,
@@ -631,7 +781,11 @@ export const handlers = [
     const db = getDb();
     if (!roleIs(db, 'admin', 'manager')) return forbidden();
     const body = (await request.json()) as AutoInstallInput;
-    const p = { id: nextId('ap'), entryName: db.catalog.find((c) => c.id === body.entryId)?.displayName ?? body.entryId, ...body };
+    const p = {
+      id: nextId('ap'),
+      entryName: db.catalog.find((c) => c.id === body.entryId)?.displayName ?? body.entryId,
+      ...body,
+    };
     db.autoInstall.push(p);
     return HttpResponse.json(p, { status: 201 });
   }),
@@ -651,7 +805,9 @@ export const handlers = [
   http.get(P('/registry/servers'), ({ request }) => {
     const text = q(new URL(request.url), 'q').toLowerCase();
     return paginate(
-      getDb().registry.filter((s) => !text || `${s.name} ${s.description}`.toLowerCase().includes(text)),
+      getDb().registry.filter(
+        (s) => !text || `${s.name} ${s.description}`.toLowerCase().includes(text),
+      ),
       new URL(request.url),
     );
   }),
@@ -660,10 +816,11 @@ export const handlers = [
     const body = (await request.json()) as { sourceId: string; name: string; version: string };
     const server = db.registry.find((s) => s.name === body.name);
     if (!server) return notFound('Registry server');
-    if (server.policy !== 'allowed') return problem(403, 'registry_policy', 'The registry policy requires a request');
+    if (server.policy !== 'allowed')
+      return problem(403, 'registry_policy', 'The registry policy requires a request');
     const short = body.name.split('/').pop() ?? body.name;
     const inst: Installation = {
-      ...fx.buildInstallations()[0]!,
+      ...(fx.buildInstallations()[0] as Installation),
       id: nextId('i'),
       slug: short,
       toolPrefix: short.replace(/[^a-z0-9]/gi, '_'),
@@ -682,13 +839,27 @@ export const handlers = [
   http.get(P('/install-requests'), ({ request }) => {
     const db = getDb();
     const open = q(new URL(request.url), 'status') === 'open';
-    const mine = db.role === 'member' ? db.requests.filter((r) => r.requesterId === db.me.id) : db.requests;
-    return paginate(mine.filter((r) => !open || r.status === 'open'), new URL(request.url));
+    const mine =
+      db.role === 'member' ? db.requests.filter((r) => r.requesterId === db.me.id) : db.requests;
+    return paginate(
+      mine.filter((r) => !open || r.status === 'open'),
+      new URL(request.url),
+    );
   }),
   http.post(P('/install-requests'), async ({ request }) => {
     const db = getDb();
     const body = (await request.json()) as { sourceId: string; name: string; reason: string };
-    const rq = { id: nextId('rq'), status: 'open' as const, requesterName: db.me.name, requesterId: db.me.id, teamName: db.me.teams[0]?.name ?? null, serverName: body.name, sourceName: db.registry.find((s) => s.name === body.name)?.sourceName ?? '', reason: body.reason, createdAt: new Date().toISOString() };
+    const rq = {
+      id: nextId('rq'),
+      status: 'open' as const,
+      requesterName: db.me.name,
+      requesterId: db.me.id,
+      teamName: db.me.teams[0]?.name ?? null,
+      serverName: body.name,
+      sourceName: db.registry.find((s) => s.name === body.name)?.sourceName ?? '',
+      reason: body.reason,
+      createdAt: new Date().toISOString(),
+    };
     db.requests.unshift(rq);
     const s = db.registry.find((x) => x.name === body.name);
     if (s) s.requested = true;
@@ -710,7 +881,11 @@ export const handlers = [
     const text = q(url, 'q').toLowerCase();
     const team = q(url, 'teamId');
     return paginate(
-      db.users.filter((u) => (!text || `${u.name} ${u.email}`.toLowerCase().includes(text)) && (!team || u.teams.some((t) => t.id === team))),
+      db.users.filter(
+        (u) =>
+          (!text || `${u.name} ${u.email}`.toLowerCase().includes(text)) &&
+          (!team || u.teams.some((t) => t.id === team)),
+      ),
       url,
     );
   }),
@@ -738,7 +913,9 @@ export const handlers = [
     const user = db.users.find((u) => u.id === params.userId);
     if (!team || !user) return notFound('Team or user');
     const body = (await request.json()) as { role: 'manager' | 'member' };
-    team.members = team.members.filter((m) => m.userId !== user.id).concat({ userId: user.id, name: user.name, role: body.role });
+    team.members = team.members
+      .filter((m) => m.userId !== user.id)
+      .concat({ userId: user.id, name: user.name, role: body.role });
     team.memberCount = team.members.length;
     return new HttpResponse(null, { status: 204 });
   }),
@@ -750,11 +927,16 @@ export const handlers = [
     }
     return new HttpResponse(null, { status: 204 });
   }),
-  http.get(P('/role-mapping-rules'), ({ request }) => paginate(getDb().roleMapping, new URL(request.url))),
+  http.get(P('/role-mapping-rules'), ({ request }) =>
+    paginate(getDb().roleMapping, new URL(request.url)),
+  ),
   http.post(P('/role-mapping-rules'), async ({ request }) => {
     const db = getDb();
     if (!roleIs(db, 'admin')) return forbidden();
-    const rule = { id: nextId('rm'), ...((await request.json()) as object) } as MockDb['roleMapping'][number];
+    const rule = {
+      id: nextId('rm'),
+      ...((await request.json()) as object),
+    } as MockDb['roleMapping'][number];
     db.roleMapping.push(rule);
     return HttpResponse.json(rule, { status: 201 });
   }),
@@ -769,11 +951,20 @@ export const handlers = [
     db.roleMapping = db.roleMapping.filter((r) => r.id !== params.id);
     return new HttpResponse(null, { status: 204 });
   }),
-  http.get(P('/service-accounts'), ({ request }) => paginate(getDb().serviceAccounts, new URL(request.url))),
+  http.get(P('/service-accounts'), ({ request }) =>
+    paginate(getDb().serviceAccounts, new URL(request.url)),
+  ),
   http.post(P('/service-accounts'), async ({ request }) => {
     const db = getDb();
     const body = (await request.json()) as { name: string; teamId: string };
-    const sa = { id: nextId('sa'), name: body.name, teamId: body.teamId, teamName: db.teams.find((t) => t.id === body.teamId)?.name ?? '', credentials: 0, createdAt: new Date().toISOString() };
+    const sa = {
+      id: nextId('sa'),
+      name: body.name,
+      teamId: body.teamId,
+      teamName: db.teams.find((t) => t.id === body.teamId)?.name ?? '',
+      credentials: 0,
+      createdAt: new Date().toISOString(),
+    };
     db.serviceAccounts.push(sa);
     return HttpResponse.json(sa, { status: 201 });
   }),
@@ -796,18 +987,30 @@ export const handlers = [
   http.get(P('/policy-rules'), ({ request }) => {
     const db = getDb();
     return paginate(
-      db.policyRules.map((r) => ({ ...r, canEdit: roleIs(db, 'admin') || (roleIs(db, 'manager') && !r.orgLevel) })),
+      db.policyRules.map((r) => ({
+        ...r,
+        canEdit: roleIs(db, 'admin') || (roleIs(db, 'manager') && !r.orgLevel),
+      })),
       new URL(request.url),
     );
   }),
   http.post(P('/policy-rules/preview'), async ({ request }) => {
     const body = (await request.json()) as PolicyRuleInput;
-    return HttpResponse.json({ people: Math.max(1, body.who.length * 38), tools: Math.max(1, body.what.length * 3) });
+    return HttpResponse.json({
+      people: Math.max(1, body.who.length * 38),
+      tools: Math.max(1, body.what.length * 3),
+    });
   }),
   http.post(P('/policy-rules'), async ({ request }) => {
     const db = getDb();
     const body = (await request.json()) as PolicyRuleInput;
-    const rule = { id: nextId('pr'), ...body, affected: { people: body.who.length * 38, tools: body.what.length * 3 }, orgLevel: false, canEdit: true };
+    const rule = {
+      id: nextId('pr'),
+      ...body,
+      affected: { people: body.who.length * 38, tools: body.what.length * 3 },
+      orgLevel: false,
+      canEdit: true,
+    };
     db.policyRules.unshift(rule);
     return HttpResponse.json(rule, { status: 201 });
   }),
@@ -828,7 +1031,10 @@ export const handlers = [
   }),
   http.post(P('/custom-policies'), async ({ request }) => {
     const db = getDb();
-    const p = { id: nextId('cp'), ...((await request.json()) as object) } as MockDb['customPolicies'][number];
+    const p = {
+      id: nextId('cp'),
+      ...((await request.json()) as object),
+    } as MockDb['customPolicies'][number];
     db.customPolicies.push(p);
     return HttpResponse.json(p, { status: 201 });
   }),
@@ -850,8 +1056,17 @@ export const handlers = [
     const open = (cedar.match(/\(/g) ?? []).length;
     const close = (cedar.match(/\)/g) ?? []).length;
     if (open !== close) errors.push({ line: lines.length, message: 'Unbalanced parentheses' });
-    if (!/\b(permit|forbid)\b/.test(cedar)) errors.push({ line: 1, message: 'A policy starts with permit or forbid' });
-    if (!/;\s*$/.test(cedar.trim().replace(/\/\/.*$/gm, '').trim())) errors.push({ line: lines.length, message: 'A policy ends with ;' });
+    if (!/\b(permit|forbid)\b/.test(cedar))
+      errors.push({ line: 1, message: 'A policy starts with permit or forbid' });
+    if (
+      !/;\s*$/.test(
+        cedar
+          .trim()
+          .replace(/\/\/.*$/gm, '')
+          .trim(),
+      )
+    )
+      errors.push({ line: lines.length, message: 'A policy ends with ;' });
     return HttpResponse.json({ valid: errors.length === 0, errors });
   }),
   http.post(P('/policies/simulate'), async ({ request }) => {
@@ -864,15 +1079,32 @@ export const handlers = [
         decision: 'deny',
         summary: 'Decided by the forbid rule on destructive Slack tools',
         matches: [
-          { id: 'rule-support-no-destructive', effect: 'forbid', label: 'rule-support-no-destructive', deciding: true },
-          { id: 'installation-default', effect: 'permit', label: 'installation default', deciding: false },
+          {
+            id: 'rule-support-no-destructive',
+            effect: 'forbid',
+            label: 'rule-support-no-destructive',
+            deciding: true,
+          },
+          {
+            id: 'installation-default',
+            effect: 'permit',
+            label: 'installation default',
+            deciding: false,
+          },
         ],
       });
     }
     return HttpResponse.json({
       decision: 'permit',
       summary: 'Allowed by the installation default',
-      matches: [{ id: 'installation-default', effect: 'permit', label: 'installation default', deciding: true }],
+      matches: [
+        {
+          id: 'installation-default',
+          effect: 'permit',
+          label: 'installation default',
+          deciding: true,
+        },
+      ],
     });
   }),
 
@@ -900,7 +1132,17 @@ export const handlers = [
   http.post(P('/idp-connections'), async ({ request }) => {
     const db = getDb();
     const body = (await request.json()) as Partial<MockDb['idp'][number]>;
-    const idp = { id: nextId('idp'), name: '', issuer: '', clientId: '', scopes: ['openid', 'email', 'profile'], domains: [], status: 'untested' as const, lastTestAt: null, ...body };
+    const idp = {
+      id: nextId('idp'),
+      name: '',
+      issuer: '',
+      clientId: '',
+      scopes: ['openid', 'email', 'profile'],
+      domains: [],
+      status: 'untested' as const,
+      lastTestAt: null,
+      ...body,
+    };
     db.idp.push(idp);
     return HttpResponse.json(idp, { status: 201 });
   }),
@@ -920,9 +1162,17 @@ export const handlers = [
     return HttpResponse.json({
       ok,
       steps: [
-        { name: 'Discovery document', ok, detail: ok ? `${i.issuer}/.well-known/openid-configuration` : 'The issuer must use https' },
+        {
+          name: 'Discovery document',
+          ok,
+          detail: ok ? `${i.issuer}/.well-known/openid-configuration` : 'The issuer must use https',
+        },
         { name: 'JWKS reachable', ok, detail: ok ? '2 keys' : 'Skipped' },
-        { name: 'Client credentials', ok, detail: ok ? 'Token endpoint accepted the client' : 'Skipped' },
+        {
+          name: 'Client credentials',
+          ok,
+          detail: ok ? 'Token endpoint accepted the client' : 'Skipped',
+        },
       ],
     });
   }),
@@ -936,7 +1186,10 @@ export const handlers = [
   http.get(P('/limit-rules'), ({ request }) => paginate(getDb().limits, new URL(request.url))),
   http.post(P('/limit-rules'), async ({ request }) => {
     const db = getDb();
-    const rule = { id: nextId('lr'), ...((await request.json()) as object) } as MockDb['limits'][number];
+    const rule = {
+      id: nextId('lr'),
+      ...((await request.json()) as object),
+    } as MockDb['limits'][number];
     db.limits.push(rule);
     return HttpResponse.json(rule, { status: 201 });
   }),
@@ -969,7 +1222,9 @@ export const handlers = [
   http.get(P('/marketplaces/:id'), ({ params }) => {
     const db = getDb();
     const m = db.marketplaceDetails[String(params.id)];
-    return m ? HttpResponse.json({ ...m, canManage: roleIs(db, 'admin', 'manager') }) : notFound('Marketplace');
+    return m
+      ? HttpResponse.json({ ...m, canManage: roleIs(db, 'admin', 'manager') })
+      : notFound('Marketplace');
   }),
   http.post(P('/marketplaces/:id/releases/:n/promote'), ({ params }) => {
     const m = getDb().marketplaceDetails[String(params.id)];
@@ -989,11 +1244,55 @@ export const handlers = [
     const client = q(new URL(request.url), 'client') || 'claude-code';
     const url = `https://${fx.HOST}/plugins/acme.git`;
     const rollout = {
-      'claude-code': { label: 'Claude Code managed settings', kind: 'snippet', content: JSON.stringify({ extraKnownMarketplaces: { acme: { source: { source: 'git', url }, autoUpdate: true } }, enabledPlugins: { 'security-review@acme': true } }, null, 2) },
-      codex: { label: 'Codex requirements.toml', kind: 'snippet', content: `[marketplaces]\nrestrict_to_allowed_sources = true\n\n[marketplaces.allowed_sources.acme]\nsource = "git"\nurl = "${url}"\n` },
-      'claude-desktop-3p': { label: 'Claude Desktop (third-party cloud)', kind: 'snippet', content: JSON.stringify({ allowedPluginMarketplaces: [{ source: 'git', url, ref: '58d0f4a', credentialKind: 'credentialHelper', credentialHelper: '/usr/local/bin/bastion-credential', installationPreference: 'available' }] }, null, 2) },
-      'claude-ai': { label: 'claude.ai organization settings', kind: 'checklist', content: '1. Organization settings, Plugins and skills, Marketplaces: add github.com/acme/bastion-plugins.\n2. Set Security review to Required.\n3. Set Release notes to Installed by default.\n4. Leave the others Available.' },
-      chatgpt: { label: 'ChatGPT workspace admin', kind: 'checklist', content: '1. Admin, Plugins, Import marketplace: paste the GitHub mirror URL.\n2. Match each plugin’s installation policy per role.\n3. Plugins with MCP servers show as Desktop only.' },
+      'claude-code': {
+        label: 'Claude Code managed settings',
+        kind: 'snippet',
+        content: JSON.stringify(
+          {
+            extraKnownMarketplaces: { acme: { source: { source: 'git', url }, autoUpdate: true } },
+            enabledPlugins: { 'security-review@acme': true },
+          },
+          null,
+          2,
+        ),
+      },
+      codex: {
+        label: 'Codex requirements.toml',
+        kind: 'snippet',
+        content: `[marketplaces]\nrestrict_to_allowed_sources = true\n\n[marketplaces.allowed_sources.acme]\nsource = "git"\nurl = "${url}"\n`,
+      },
+      'claude-desktop-3p': {
+        label: 'Claude Desktop (third-party cloud)',
+        kind: 'snippet',
+        content: JSON.stringify(
+          {
+            allowedPluginMarketplaces: [
+              {
+                source: 'git',
+                url,
+                ref: '58d0f4a',
+                credentialKind: 'credentialHelper',
+                credentialHelper: '/usr/local/bin/bastion-credential',
+                installationPreference: 'available',
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+      },
+      'claude-ai': {
+        label: 'claude.ai organization settings',
+        kind: 'checklist',
+        content:
+          '1. Organization settings, Plugins and skills, Marketplaces: add github.com/acme/bastion-plugins.\n2. Set Security review to Required.\n3. Set Release notes to Installed by default.\n4. Leave the others Available.',
+      },
+      chatgpt: {
+        label: 'ChatGPT workspace admin',
+        kind: 'checklist',
+        content:
+          '1. Admin, Plugins, Import marketplace: paste the GitHub mirror URL.\n2. Match each plugin’s installation policy per role.\n3. Plugins with MCP servers show as Desktop only.',
+      },
     }[client] ?? { label: client, kind: 'snippet', content: '' };
     return HttpResponse.json({ client, ...rollout });
   }),

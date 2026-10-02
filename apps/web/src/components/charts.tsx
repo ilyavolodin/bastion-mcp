@@ -17,7 +17,12 @@ export function AutoSize({ height, children }: { height: number; children: React
   );
 }
 
-type TooltipEntry = { name?: string | number; value?: string | number; color?: string; dataKey?: string | number };
+type TooltipEntry = {
+  name?: string | number;
+  value?: string | number;
+  color?: string;
+  dataKey?: string | number;
+};
 
 /** Tooltip card in the Zest style (radius-lg, shadow-float). */
 export function ChartTooltip({
@@ -37,11 +42,17 @@ export function ChartTooltip({
   return (
     <div className="rounded-lg bg-surface px-3 py-2 text-caption shadow-float">
       {label !== undefined ? (
-        <div className="mb-1 font-semibold text-ink">{labelFormat ? labelFormat(label) : String(label)}</div>
+        <div className="mb-1 font-semibold text-ink">
+          {labelFormat ? labelFormat(label) : String(label)}
+        </div>
       ) : null}
       {payload.map((p) => (
         <div key={String(p.dataKey ?? p.name)} className="flex items-center gap-2 text-muted">
-          <span className="size-2 rounded-full" style={{ background: p.color }} aria-hidden="true" />
+          <span
+            className="size-2 rounded-full"
+            style={{ background: p.color }}
+            aria-hidden="true"
+          />
           <span>{p.name}</span>
           <span className="ml-auto font-semibold tabular-nums text-ink">
             {format ? format(p.value ?? '', String(p.name ?? '')) : String(p.value)}

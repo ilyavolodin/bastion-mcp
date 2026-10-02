@@ -32,7 +32,9 @@ export function SearchTrigger({ className }: { className?: string }) {
 /** Setup badge in the header: installations that still need the user's input (11.5). */
 function SetupBadge() {
   const { data } = useInstallations();
-  const n = (data ?? []).filter((i) => i.status === 'needs_setup' || i.status === 'reconnect_required').length;
+  const n = (data ?? []).filter(
+    (i) => i.status === 'needs_setup' || i.status === 'reconnect_required',
+  ).length;
   if (n === 0) return null;
   return (
     <Link

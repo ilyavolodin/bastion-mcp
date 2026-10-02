@@ -1,0 +1,23 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "root": false,
+  "extends": "//",
+  "files": { "includes": ["**", "!public"] },
+  "css": { "parser": { "tailwindDirectives": true } },
+  "linter": {
+    "rules": {
+      "suspicious": { "noArrayIndexKey": "off", "noDocumentCookie": "off" },
+      "complexity": { "noImportantStyles": "off" },
+      "a11y": {
+        "useSemanticElements": "off",
+        "noLabelWithoutControl": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/test/**", "src/**/*.test.ts", "src/**/*.test.tsx", "e2e/**"],
+      "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
+    }
+  ]
+}

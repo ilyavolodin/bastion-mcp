@@ -441,6 +441,12 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@bastion-mcp/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
+      '@bastion-mcp/secrets':
+        specifier: workspace:*
+        version: link:../secrets
       '@bastion-mcp/testkit':
         specifier: workspace:*
         version: link:../testkit
@@ -456,6 +462,12 @@ importers:
       '@opentelemetry/sdk-trace-base':
         specifier: 2.11.0
         version: 2.11.0(@opentelemetry/api@1.9.1)
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
+      jose:
+        specifier: 6.2.12
+        version: 6.2.12
 
   packages/mcp-upstream:
     dependencies:

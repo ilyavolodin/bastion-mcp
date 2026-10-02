@@ -1,6 +1,6 @@
 import { Check, CircleOff, Info, TriangleAlert, X } from 'lucide-react';
 import type * as React from 'react';
-import type { InstallationStatus } from '@/api/types';
+import type { InstallationStatus as InstallationStatusValue } from '@/api/types';
 import { cn } from '@/lib/cn';
 
 /**
@@ -26,7 +26,9 @@ type DotProps = { tone: Tone; label: string; className?: string; hideLabel?: boo
 export function StatusDot({ tone, label, className, hideLabel }: DotProps) {
   const { dot, fg, Icon } = TONES[tone];
   return (
-    <span className={cn('inline-flex items-center gap-1.5 text-caption font-medium', fg, className)}>
+    <span
+      className={cn('inline-flex items-center gap-1.5 text-caption font-medium', fg, className)}
+    >
       <span className={cn('size-2 rounded-full', dot)} aria-hidden="true" />
       <Icon className="size-3.5" strokeWidth={2} aria-hidden="true" />
       <span className={cn(hideLabel && 'sr-only')}>{label}</span>
@@ -53,7 +55,7 @@ export function StatusPill({ tone, label, className }: DotProps) {
   );
 }
 
-export const INSTALLATION_STATUS: Record<InstallationStatus, { tone: Tone; label: string }> = {
+export const INSTALLATION_STATUS: Record<InstallationStatusValue, { tone: Tone; label: string }> = {
   ready: { tone: 'ok', label: 'Ready' },
   needs_setup: { tone: 'warn', label: 'Needs setup' },
   reconnect_required: { tone: 'warn', label: 'Reconnect required' },
@@ -65,7 +67,7 @@ export function InstallationStatus({
   status,
   variant = 'dot',
 }: {
-  status: InstallationStatus;
+  status: InstallationStatusValue;
   variant?: 'dot' | 'pill';
 }) {
   const s = INSTALLATION_STATUS[status];
@@ -94,13 +96,55 @@ export const OUTCOME: Record<
   Outcome,
   { label: string; bg: string; fg: string; bar: string; strip: string }
 > = {
-  ok: { label: 'Succeeded', bg: 'bg-mint-soft', fg: 'text-mint-ink', bar: 'bg-mint', strip: 'var(--mint)' },
-  tool_error: { label: 'Tool error', bg: 'bg-tangerine-soft', fg: 'text-tangerine-ink', bar: 'bg-sun', strip: 'var(--sun)' },
-  error: { label: 'Upstream error', bg: 'bg-tangerine-soft', fg: 'text-tangerine-ink', bar: 'bg-sun', strip: 'var(--sun)' },
-  denied: { label: 'Denied by policy', bg: 'bg-berry-soft', fg: 'text-berry-ink', bar: 'bg-berry', strip: 'var(--berry-ink)' },
-  blocked: { label: 'Blocked by guard', bg: 'bg-coral-soft', fg: 'text-coral-ink', bar: 'bg-coral', strip: 'var(--coral-ink)' },
-  rate_limited: { label: 'Rate limited', bg: 'bg-sky-soft', fg: 'text-sky-ink', bar: 'bg-sky', strip: 'var(--sky)' },
-  input_required: { label: 'Needs input', bg: 'bg-sky-soft', fg: 'text-sky-ink', bar: 'bg-sky', strip: 'var(--sky)' },
+  ok: {
+    label: 'Succeeded',
+    bg: 'bg-mint-soft',
+    fg: 'text-mint-ink',
+    bar: 'bg-mint',
+    strip: 'var(--mint)',
+  },
+  tool_error: {
+    label: 'Tool error',
+    bg: 'bg-tangerine-soft',
+    fg: 'text-tangerine-ink',
+    bar: 'bg-sun',
+    strip: 'var(--sun)',
+  },
+  error: {
+    label: 'Upstream error',
+    bg: 'bg-tangerine-soft',
+    fg: 'text-tangerine-ink',
+    bar: 'bg-sun',
+    strip: 'var(--sun)',
+  },
+  denied: {
+    label: 'Denied by policy',
+    bg: 'bg-berry-soft',
+    fg: 'text-berry-ink',
+    bar: 'bg-berry',
+    strip: 'var(--berry-ink)',
+  },
+  blocked: {
+    label: 'Blocked by guard',
+    bg: 'bg-coral-soft',
+    fg: 'text-coral-ink',
+    bar: 'bg-coral',
+    strip: 'var(--coral-ink)',
+  },
+  rate_limited: {
+    label: 'Rate limited',
+    bg: 'bg-sky-soft',
+    fg: 'text-sky-ink',
+    bar: 'bg-sky',
+    strip: 'var(--sky)',
+  },
+  input_required: {
+    label: 'Needs input',
+    bg: 'bg-sky-soft',
+    fg: 'text-sky-ink',
+    bar: 'bg-sky',
+    strip: 'var(--sky)',
+  },
 };
 
 /** Outcome badge: dot plus label, tinted ground (Activity list and drawer). */
@@ -120,6 +164,14 @@ export function OutcomeBadge({ outcome, label }: { outcome: Outcome; label?: str
   );
 }
 
-export function IconBadge({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={cn('inline-flex items-center justify-center', className)}>{children}</span>;
+export function IconBadge({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span className={cn('inline-flex items-center justify-center', className)}>{children}</span>
+  );
 }

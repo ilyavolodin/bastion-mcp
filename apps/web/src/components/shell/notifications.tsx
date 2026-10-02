@@ -47,7 +47,10 @@ export function NotificationsBell() {
                 >
                   <span
                     aria-hidden="true"
-                    className={cn('mt-1.5 size-2 shrink-0 rounded-full', n.readAt ? 'bg-line' : 'bg-coral')}
+                    className={cn(
+                      'mt-1.5 size-2 shrink-0 rounded-full',
+                      n.readAt ? 'bg-line' : 'bg-coral',
+                    )}
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block text-label">
@@ -55,7 +58,9 @@ export function NotificationsBell() {
                       {!n.readAt ? <span className="sr-only"> (unread)</span> : null}
                     </span>
                     <span className="block text-[13px] leading-5 text-muted">{n.body}</span>
-                    <span className="block text-[11px] text-muted">{formatRelative(n.createdAt)}</span>
+                    <span className="block text-[11px] text-muted">
+                      {formatRelative(n.createdAt)}
+                    </span>
                   </span>
                 </button>
               </li>

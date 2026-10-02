@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Lock, X } from 'lucide-react';
-import * as React from 'react';
+import type * as React from 'react';
 import { cn } from '@/lib/cn';
 import { avatarColor, initials } from '@/lib/format';
 import type { Tone } from './status';
@@ -39,7 +39,9 @@ export function CardHeader({
     <div className={cn('flex flex-wrap items-center gap-x-3 gap-y-2', className)}>
       <h2 id={id} className={cn('m-0 min-w-0 flex-1 text-card-title', titleClassName)}>
         {title}
-        {subtitle ? <span className="ml-2 text-caption font-normal text-muted">{subtitle}</span> : null}
+        {subtitle ? (
+          <span className="ml-2 text-caption font-normal text-muted">{subtitle}</span>
+        ) : null}
       </h2>
       {actions}
     </div>
@@ -208,7 +210,13 @@ export function ServerIcon({
 }
 
 // --- Misc layout -------------------------------------------------------------------------------------------
-export function Overline({ className, children }: { className?: string; children: React.ReactNode }) {
+export function Overline({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
   return <span className={cn('text-overline', className)}>{children}</span>;
 }
 

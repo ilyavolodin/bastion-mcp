@@ -14,7 +14,10 @@ export const PopoverContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       align={align}
-      className={cn('z-50 w-[360px] max-w-[calc(100vw-32px)] rounded-lg bg-surface p-4 shadow-float', className)}
+      className={cn(
+        'z-50 w-[360px] max-w-[calc(100vw-32px)] rounded-lg bg-surface p-4 shadow-float',
+        className,
+      )}
       {...props}
     />
   </Primitive.Portal>

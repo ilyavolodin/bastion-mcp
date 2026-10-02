@@ -57,7 +57,8 @@ export const useServiceAccounts = () =>
   useQuery(listQuery<ServiceAccount>(keys.serviceAccounts, '/service-accounts'));
 export const useCreateServiceAccount = () =>
   useApiMutation(
-    (input: { name: string; teamId: string }) => api.post<ServiceAccount>('/service-accounts', input),
+    (input: { name: string; teamId: string }) =>
+      api.post<ServiceAccount>('/service-accounts', input),
     [keys.serviceAccounts],
   );
 export const useDeleteServiceAccount = () =>
@@ -72,7 +73,8 @@ export const usePatchOAuthClient = () =>
     [keys.oauthClients],
   );
 
-export const usePolicyRules = () => useQuery(listQuery<PolicyRule>(keys.policyRules, '/policy-rules'));
+export const usePolicyRules = () =>
+  useQuery(listQuery<PolicyRule>(keys.policyRules, '/policy-rules'));
 export const useSavePolicyRule = () =>
   useApiMutation(
     (input: { id?: string; rule: PolicyRuleInput }) =>
@@ -104,7 +106,9 @@ export const useDeleteCustomPolicy = () =>
 export const useValidatePolicy = () =>
   useApiMutation((cedar: string) => api.post<PolicyValidation>('/policies/validate', { cedar }));
 export const useSimulate = () =>
-  useApiMutation((input: SimulationInput) => api.post<SimulationResult>('/policies/simulate', input));
+  useApiMutation((input: SimulationInput) =>
+    api.post<SimulationResult>('/policies/simulate', input),
+  );
 
 // --- Settings and system -------------------------------------------------------------------------
 export const usePatchSettings = () =>
@@ -116,7 +120,10 @@ export const useIdpConnections = () =>
   useQuery(listQuery<IdpConnection>(keys.idp, '/idp-connections'));
 export const useSaveIdp = () =>
   useApiMutation(
-    (input: { id?: string; idp: Omit<IdpConnection, 'id' | 'status' | 'lastTestAt'> & { clientSecret?: string } }) =>
+    (input: {
+      id?: string;
+      idp: Omit<IdpConnection, 'id' | 'status' | 'lastTestAt'> & { clientSecret?: string };
+    }) =>
       input.id
         ? api.patch<IdpConnection>(`/idp-connections/${input.id}`, input.idp)
         : api.post<IdpConnection>('/idp-connections', input.idp),

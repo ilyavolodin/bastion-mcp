@@ -38,5 +38,5 @@ export function NotInNavigation({ section }: { section: NavSection }) {
 /** Route-level guard: wraps a screen so a role outside its navigation gets the screen above. */
 export function Guard({ section, children }: { section: NavSection; children: React.ReactNode }) {
   const { can } = useAuth();
-  return can(section) ? <>{children}</> : <NotInNavigation section={section} />;
+  return can(section) ? children : <NotInNavigation section={section} />;
 }

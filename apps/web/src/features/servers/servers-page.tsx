@@ -11,7 +11,9 @@ import { useSearchState } from '@/lib/search';
 import { EndpointsPanel } from './endpoints-panel';
 import { InstallationTile } from './installation-tile';
 
-const searchSchema = z.object({ tab: z.enum(['servers', 'endpoints']).catch('servers').default('servers') });
+const searchSchema = z.object({
+  tab: z.enum(['servers', 'endpoints']).catch('servers').default('servers'),
+});
 
 export function ServersPage() {
   const [s, setS] = useSearchState(searchSchema);
@@ -40,7 +42,14 @@ export function ServersPage() {
             query={q}
             skeleton={<CardsSkeleton count={4} className="h-[150px]" />}
             isEmpty={(d) => d.length === 0}
-            empty={<EmptyState icon={<Server />} title="Install your first server" description="Servers give your AI tools something to work with." action={{ label: 'Browse the store', to: '/store' }} />}
+            empty={
+              <EmptyState
+                icon={<Server />}
+                title="Install your first server"
+                description="Servers give your AI tools something to work with."
+                action={{ label: 'Browse the store', to: '/store' }}
+              />
+            }
           >
             {(items) => (
               <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">

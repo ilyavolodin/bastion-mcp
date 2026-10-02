@@ -2,14 +2,14 @@ import { Link } from '@tanstack/react-router';
 import { CheckCircle2, KeyRound, Link2 } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
+import { ApiError, api } from '@/api/client';
 import { useConnectInstallation, useCreateInstallation, useEndpoints } from '@/api/hooks';
 import type { Installation, StoreEntryDetail } from '@/api/types';
-import { api, ApiError } from '@/api/client';
 import { ClientConfigTabs } from '@/components/client-config';
 import { CopyField } from '@/components/copy-field';
 import { FieldsInputs, useFieldsForm } from '@/components/form';
-import { ProblemAlert } from '@/components/problem';
 import { ServerIcon } from '@/components/primitives';
+import { ProblemAlert } from '@/components/problem';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
@@ -36,7 +36,10 @@ export function InstallFlow({
   const create = useCreateInstallation();
   const connect = useConnectInstallation();
   const endpoints = useEndpoints();
-  const fields = React.useMemo(() => [...entry.form.variables, ...entry.form.secrets], [entry.form]);
+  const fields = React.useMemo(
+    () => [...entry.form.variables, ...entry.form.secrets],
+    [entry.form],
+  );
   const form = useFieldsForm(fields);
   const [error, setError] = React.useState<unknown>(null);
   const needsOauth = Boolean(entry.setup.oauthProvider);
@@ -109,9 +112,16 @@ export function InstallFlow({
       >
         <div className="flex items-center gap-3">
           <ServerIcon letter={entry.letter} color={entry.color} size={40} />
-          <ol className="m-0 flex list-none gap-2 p-0 text-caption text-muted" aria-label="Install steps">
+          <ol
+            className="m-0 flex list-none gap-2 p-0 text-caption text-muted"
+            aria-label="Install steps"
+          >
             {(['setup', ...(needsOauth ? ['connect'] : []), 'ready'] as Step[]).map((s, i) => (
-              <li key={s} aria-current={s === step ? 'step' : undefined} className={s === step ? 'font-semibold text-ink' : ''}>
+              <li
+                key={s}
+                aria-current={s === step ? 'step' : undefined}
+                className={s === step ? 'font-semibold text-ink' : ''}
+              >
                 {i + 1}. {s === 'setup' ? 'Setup' : s === 'connect' ? 'Connect' : 'Ready'}
               </li>
             ))}
@@ -131,7 +141,11 @@ export function InstallFlow({
               <FieldsInputs fields={fields} form={form} />
             )}
             {error ? <ProblemAlert error={error} /> : null}
-            <Button type="submit" size="lg" disabled={create.isPending || form.formState.isSubmitting}>
+            <Button
+              type="submit"
+              size="lg"
+              disabled={create.isPending || form.formState.isSubmitting}
+            >
               {create.isPending ? 'Installing…' : 'Install'}
             </Button>
           </form>
@@ -142,8 +156,9 @@ export function InstallFlow({
             <div className="flex items-start gap-3 rounded-md bg-tangerine-soft p-4 text-tangerine-ink">
               <Link2 className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
               <p className="m-0 text-ink">
-                {entry.displayName} acts on your behalf, so it needs your {entry.setup.oauthProvider}. Bastion
-                stores the token encrypted and never shows it to your AI tool.
+                {entry.displayName} acts on your behalf, so it needs your{' '}
+                {entry.setup.oauthProvider}. Bastion stores the token encrypted and never shows it
+                to your AI tool.
               </p>
             </div>
             <Button size="lg" onClick={doConnect} disabled={connect.isPending}>
@@ -165,7 +180,9 @@ export function InstallFlow({
                 {needsOauth && connect.isIdle ? '. It asks you to sign in on first use.' : '.'}
               </span>
             </div>
-            {endpoint ? <CopyField value={endpoint.url} label="endpoint URL" tone="sunken" /> : null}
+            {endpoint ? (
+              <CopyField value={endpoint.url} label="endpoint URL" tone="sunken" />
+            ) : null}
             <ClientConfigTabs endpointId={endpoint?.id} />
             <div className="flex gap-2">
               {installation ? (
@@ -189,4 +206,3 @@ export function InstallFlow({
     </Dialog>
   );
 }
-

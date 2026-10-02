@@ -9,8 +9,8 @@ import type {
   Finding,
   FlowStats,
   GuardStats,
-  Page,
   LatencyBucket,
+  Page,
   SandboxStats,
   StatsRange,
   StatsScope,
@@ -49,7 +49,11 @@ export const useCallSeries = (args: StatsArgs) =>
     queryKey: [...keys.stats, 'calls', 'time', args],
     queryFn: ({ signal }) =>
       api.get<CallSeries>('/stats/calls', {
-        query: { groupBy: 'time', bucket: args.range === '1h' ? 'minute' : 'hour', ...statsQuery(args) },
+        query: {
+          groupBy: 'time',
+          bucket: args.range === '1h' ? 'minute' : 'hour',
+          ...statsQuery(args),
+        },
         signal,
       }),
   });

@@ -73,10 +73,25 @@ export const buildMe = (role: UiRole): Me => {
     email: 'dana.whitfield@acme.dev',
     name: 'Dana Whitfield',
     orgRole,
-    teams: [{ id: 't-platform', name: 'Platform team', role: role === 'member' || role === 'auditor' ? 'member' : 'manager' }],
+    teams: [
+      {
+        id: 't-platform',
+        name: 'Platform team',
+        role: role === 'member' || role === 'auditor' ? 'member' : 'manager',
+      },
+    ],
     theme: 'light',
-    org: { name: 'Acme Corp', host: fx.HOST, traceUiUrl: 'https://traces.acme.dev/trace', toolWarnThreshold: 40 },
-    capabilities: { registry: role !== 'auditor', publishOrgWide: role === 'admin', personalInstalls: 'remoteOnly' },
+    org: {
+      name: 'Acme Corp',
+      host: fx.HOST,
+      traceUiUrl: 'https://traces.acme.dev/trace',
+      toolWarnThreshold: 40,
+    },
+    capabilities: {
+      registry: role !== 'auditor',
+      publishOrgWide: role === 'admin',
+      personalInstalls: 'remoteOnly',
+    },
   };
 };
 
@@ -145,7 +160,10 @@ export function createDb(role: UiRole = 'admin', now: number = Date.now()): Mock
       'i-postgres': {
         version: 1,
         tools: {
-          pg_run_query: { description: { mode: 'append', text: 'Queries run on the analytics replica.' }, annotations: { readOnlyHint: true } },
+          pg_run_query: {
+            description: { mode: 'append', text: 'Queries run on the analytics replica.' },
+            annotations: { readOnlyHint: true },
+          },
           pg_describe_table: { title: 'Describe a table' },
           pg_write_rows: { hidden: true },
         },
@@ -155,11 +173,36 @@ export function createDb(role: UiRole = 'admin', now: number = Date.now()): Mock
       installations.map((i) => [
         i.id,
         {
-          hosts: (fx.buildStoreEntry(i.slug === 'pg-analytics' ? 'postgres' : i.slug, new Set())?.egressHosts ?? []).map(
-            (host): EgressHost => ({ host, status: 'allowed', reason: 'Declared by the catalog entry', lastSeenAt: new Date(now - 3_600_000).toISOString() }),
-          ).concat(
-            i.runtime === 'npm' ? [{ host: 'registry.npmjs.org', status: 'allowed', reason: 'Package install', lastSeenAt: null }, { host: 'telemetry.example.net', status: 'denied', reason: 'Not on the allowlist', lastSeenAt: new Date(now - 7_200_000).toISOString() }] : [],
-          ),
+          hosts: (
+            fx.buildStoreEntry(i.slug === 'pg-analytics' ? 'postgres' : i.slug, new Set())
+              ?.egressHosts ?? []
+          )
+            .map(
+              (host): EgressHost => ({
+                host,
+                status: 'allowed',
+                reason: 'Declared by the catalog entry',
+                lastSeenAt: new Date(now - 3_600_000).toISOString(),
+              }),
+            )
+            .concat(
+              i.runtime === 'npm'
+                ? [
+                    {
+                      host: 'registry.npmjs.org',
+                      status: 'allowed',
+                      reason: 'Package install',
+                      lastSeenAt: null,
+                    },
+                    {
+                      host: 'telemetry.example.net',
+                      status: 'denied',
+                      reason: 'Not on the allowlist',
+                      lastSeenAt: new Date(now - 7_200_000).toISOString(),
+                    },
+                  ]
+                : [],
+            ),
           requests: [],
         },
       ]),

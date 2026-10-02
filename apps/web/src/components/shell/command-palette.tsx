@@ -38,7 +38,11 @@ function PeopleGroups({ go }: { go: Go }) {
       {(users.data ?? []).length > 0 ? (
         <CommandGroup heading="People">
           {(users.data ?? []).map((u) => (
-            <CommandItem key={u.id} value={`person ${u.name} ${u.email}`} onSelect={() => go('/access', { tab: 'people', q: u.name })}>
+            <CommandItem
+              key={u.id}
+              value={`person ${u.name} ${u.email}`}
+              onSelect={() => go('/access', { tab: 'people', q: u.name })}
+            >
               <User className="size-4 text-muted" aria-hidden="true" />
               {u.name}
               <span className="ml-auto text-caption text-muted">{u.email}</span>
@@ -49,7 +53,11 @@ function PeopleGroups({ go }: { go: Go }) {
       {(teams.data ?? []).length > 0 ? (
         <CommandGroup heading="Teams">
           {(teams.data ?? []).map((t) => (
-            <CommandItem key={t.id} value={`team ${t.name}`} onSelect={() => go('/access', { tab: 'teams' })}>
+            <CommandItem
+              key={t.id}
+              value={`team ${t.name}`}
+              onSelect={() => go('/access', { tab: 'teams' })}
+            >
               <Users className="size-4 text-muted" aria-hidden="true" />
               {t.name}
             </CommandItem>
@@ -102,7 +110,11 @@ export function CommandPalette() {
             <CommandEmpty>No results. Try a server or tool name.</CommandEmpty>
             <CommandGroup heading="Pages">
               {visibleSections(role, me.capabilities).map((s) => (
-                <CommandItem key={s} value={`page ${SECTIONS[s].label}`} onSelect={() => go(SECTIONS[s].path)}>
+                <CommandItem
+                  key={s}
+                  value={`page ${SECTIONS[s].label}`}
+                  onSelect={() => go(SECTIONS[s].path)}
+                >
                   <LayoutGrid className="size-4 text-muted" aria-hidden="true" />
                   {SECTIONS[s].label}
                 </CommandItem>
@@ -111,7 +123,11 @@ export function CommandPalette() {
             {servers.length > 0 ? (
               <CommandGroup heading="Servers">
                 {servers.map((s) => (
-                  <CommandItem key={s.id} value={`server ${s.displayName} ${s.slug}`} onSelect={() => go(`/servers/${s.id}`)}>
+                  <CommandItem
+                    key={s.id}
+                    value={`server ${s.displayName} ${s.slug}`}
+                    onSelect={() => go(`/servers/${s.id}`)}
+                  >
                     <Server className="size-4 text-muted" aria-hidden="true" />
                     {s.displayName}
                   </CommandItem>
@@ -137,7 +153,11 @@ export function CommandPalette() {
             {can('settings') ? (
               <CommandGroup heading="Settings">
                 {SETTINGS_PAGES.map(([id, label]) => (
-                  <CommandItem key={id} value={`settings ${label}`} onSelect={() => go('/settings', { section: id })}>
+                  <CommandItem
+                    key={id}
+                    value={`settings ${label}`}
+                    onSelect={() => go('/settings', { section: id })}
+                  >
                     <Settings2 className="size-4 text-muted" aria-hidden="true" />
                     {label}
                   </CommandItem>

@@ -5,12 +5,32 @@ import { Button } from './ui/button';
 
 type Action = { label: string; href?: string; onClick?: () => void };
 
-const describe = (error: unknown): { title: string; detail: string; Icon: typeof CircleAlert; fields: string[] } => {
+const describe = (
+  error: unknown,
+): { title: string; detail: string; Icon: typeof CircleAlert; fields: string[] } => {
   if (error instanceof ApiError) {
     const fields = error.errors.map((e) => (e.path ? `${e.path}: ${e.message}` : e.message));
-    if (error.status === 0) return { title: error.title, detail: 'Check your connection and try again.', Icon: WifiOff, fields };
-    if (error.status === 403) return { title: error.title, detail: error.detail || 'Ask an admin if you need this.', Icon: ShieldOff, fields };
-    if (error.status === 412) return { title: 'Changed by someone else', detail: 'Reload to see the latest version, then try again.', Icon: RefreshCw, fields };
+    if (error.status === 0)
+      return {
+        title: error.title,
+        detail: 'Check your connection and try again.',
+        Icon: WifiOff,
+        fields,
+      };
+    if (error.status === 403)
+      return {
+        title: error.title,
+        detail: error.detail || 'Ask an admin if you need this.',
+        Icon: ShieldOff,
+        fields,
+      };
+    if (error.status === 412)
+      return {
+        title: 'Changed by someone else',
+        detail: 'Reload to see the latest version, then try again.',
+        Icon: RefreshCw,
+        fields,
+      };
     return { title: error.title, detail: error.detail, Icon: CircleAlert, fields };
   }
   return {
@@ -78,7 +98,10 @@ export function ProblemScreen({
   );
 }
 
-type BoundaryProps = { children: React.ReactNode; fallback?: (e: unknown, reset: () => void) => React.ReactNode };
+type BoundaryProps = {
+  children: React.ReactNode;
+  fallback?: (e: unknown, reset: () => void) => React.ReactNode;
+};
 
 /** Route-level error boundary: a crash in one screen keeps the shell alive. */
 export class ErrorBoundary extends React.Component<BoundaryProps, { error: unknown }> {

@@ -22,13 +22,22 @@ function MobileBar() {
     <div className="flex items-center gap-3 border-b border-line bg-surface px-4 py-2.5 md:hidden">
       <BastionMark size={24} />
       <span className="flex-1 text-[16px] font-semibold">Bastion</span>
-      <Button variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => setOpen(true)}>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Open navigation"
+        onClick={() => setOpen(true)}
+      >
         <Menu className="size-5" aria-hidden="true" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent title="Navigation" placement="drawer" hideTitle>
           <nav aria-label="Main" className="flex flex-col gap-1.5 pt-8">
-            <NavLinks collapsible={false} only={(s) => Boolean(SECTIONS[s].compact)} onNavigate={() => setOpen(false)} />
+            <NavLinks
+              collapsible={false}
+              only={(s) => Boolean(SECTIONS[s].compact)}
+              onNavigate={() => setOpen(false)}
+            />
             <p className="m-0 mt-3 px-3 text-caption text-muted">
               Other screens need a wider display.
             </p>

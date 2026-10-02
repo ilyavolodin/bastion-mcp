@@ -24,10 +24,18 @@ export function PhaseTimeline({ phases }: { phases: TestResult['phases'] }) {
         <li
           key={p.name}
           className="flex min-w-14 flex-col justify-center overflow-hidden rounded-sm px-2 text-ink"
-          style={{ flex: Math.max(p.durationMs / total, 0.08), background: SOFT[p.name], borderBottom: `3px solid ${PHASE_COLOR[p.name]}` }}
+          style={{
+            flex: Math.max(p.durationMs / total, 0.08),
+            background: SOFT[p.name],
+            borderBottom: `3px solid ${PHASE_COLOR[p.name]}`,
+          }}
         >
-          <span className="whitespace-nowrap text-[11px] leading-[14px] font-semibold">{p.name}</span>
-          <span className="whitespace-nowrap text-[11px] leading-[14px]">{formatDuration(p.durationMs)}</span>
+          <span className="whitespace-nowrap text-[11px] leading-[14px] font-semibold">
+            {p.name}
+          </span>
+          <span className="whitespace-nowrap text-[11px] leading-[14px]">
+            {formatDuration(p.durationMs)}
+          </span>
         </li>
       ))}
     </ol>
@@ -45,7 +53,6 @@ export const isPassing = (t: TestResult | null | undefined, versionLabel: string
 export function TestPanel({
   entryId,
   versionId,
-  versionLabel,
   canRun,
   onBeforeRun,
 }: {
@@ -73,7 +80,10 @@ export function TestPanel({
             <>
               {t ? (
                 t.status === 'passed' ? (
-                  <StatusPill tone="ok" label={`Passed as ${t.ranAs === 'Dana Whitfield' ? 'you' : t.ranAs}`} />
+                  <StatusPill
+                    tone="ok"
+                    label={`Passed as ${t.ranAs === 'Dana Whitfield' ? 'you' : t.ranAs}`}
+                  />
                 ) : t.status === 'failed' ? (
                   <StatusPill tone="bad" label="Failed" />
                 ) : (
@@ -87,9 +97,15 @@ export function TestPanel({
           }
         />
         {!t && !running ? (
-          <p className="m-0 text-muted">The test starts the server as you, lists what it offers and scans every description.</p>
+          <p className="m-0 text-muted">
+            The test starts the server as you, lists what it offers and scans every description.
+          </p>
         ) : null}
-        {t ? <PhaseTimeline phases={t.phases} /> : running ? <Skeleton className="h-10 w-full" /> : null}
+        {t ? (
+          <PhaseTimeline phases={t.phases} />
+        ) : running ? (
+          <Skeleton className="h-10 w-full" />
+        ) : null}
         {t && t.status !== 'running' ? (
           <dl className="m-0 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {(
@@ -115,15 +131,24 @@ export function TestPanel({
             <CardHeader title="Tool description scan" className="mb-2" />
             {t.scan.map((s) => (
               <div key={s.item} className="flex min-h-11 items-center gap-3 border-b border-line">
-                <span className={`inline-flex size-6 shrink-0 items-center justify-center rounded-full ${s.verdict === 'clean' ? 'bg-mint-soft text-mint-ink' : 'bg-tangerine-soft text-tangerine-ink'}`}>
-                  {s.verdict === 'clean' ? <Check className="size-3.5" strokeWidth={2.5} aria-label="Clean" role="img" /> : <TriangleAlert className="size-3.5" aria-label="Needs attention" role="img" />}
+                <span
+                  className={`inline-flex size-6 shrink-0 items-center justify-center rounded-full ${s.verdict === 'clean' ? 'bg-mint-soft text-mint-ink' : 'bg-tangerine-soft text-tangerine-ink'}`}
+                >
+                  {s.verdict === 'clean' ? (
+                    <Check className="size-3.5" strokeWidth={2.5} aria-label="Clean" role="img" />
+                  ) : (
+                    <TriangleAlert className="size-3.5" aria-label="Needs attention" role="img" />
+                  )}
                 </span>
                 <span className="min-w-[180px] font-mono text-[13px] font-semibold">{s.item}</span>
                 <span className="flex-1 text-[13px] text-muted">{s.message}</span>
               </div>
             ))}
           </Card>
-          <section aria-label="Server output" className="flex flex-col gap-2 rounded-lg bg-[#171a3a] px-5 py-[18px] text-[#f4f4f6]">
+          <section
+            aria-label="Server output"
+            className="flex flex-col gap-2 rounded-lg bg-[#171a3a] px-5 py-[18px] text-[#f4f4f6]"
+          >
             <span className="text-overline !text-[#a7a9b8]">stderr</span>
             <pre className="m-0 whitespace-pre-wrap font-mono text-[12px] leading-5">
               {t.stderr.map((l, i) => (

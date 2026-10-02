@@ -26,7 +26,10 @@ export function SettingsTab({ installation: i }: { installation: Installation })
   const restart = useRestartInstallation(i.id);
   const navigate = useNavigate();
   const [confirm, setConfirm] = React.useState(false);
-  const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { slug: i.slug, toolPrefix: i.toolPrefix } });
+  const form = useForm<Values>({
+    resolver: zodResolver(schema),
+    defaultValues: { slug: i.slug, toolPrefix: i.toolPrefix },
+  });
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <Card aria-label="Names" className="gap-4">
@@ -34,46 +37,110 @@ export function SettingsTab({ installation: i }: { installation: Installation })
         <form
           className="flex flex-col gap-4"
           noValidate
-          onSubmit={form.handleSubmit((v) => patch.mutate(v, { onSuccess: () => toast.success('Saved') }))}
+          onSubmit={form.handleSubmit((v) =>
+            patch.mutate(v, { onSuccess: () => toast.success('Saved') }),
+          )}
         >
-          <Field label="Slug" help="Part of this server’s own URL" error={form.formState.errors.slug?.message}>
-            {({ id, describedBy, invalid }) => <Input id={id} aria-describedby={describedBy} aria-invalid={invalid} disabled={!i.canManage} {...form.register('slug')} />}
+          <Field
+            label="Slug"
+            help="Part of this server’s own URL"
+            error={form.formState.errors.slug?.message}
+          >
+            {({ id, describedBy, invalid }) => (
+              <Input
+                id={id}
+                aria-describedby={describedBy}
+                aria-invalid={invalid}
+                disabled={!i.canManage}
+                {...form.register('slug')}
+              />
+            )}
           </Field>
-          <Field label="Tool prefix" help="Added to tool names on a combined endpoint" error={form.formState.errors.toolPrefix?.message}>
-            {({ id, describedBy, invalid }) => <Input id={id} aria-describedby={describedBy} aria-invalid={invalid} disabled={!i.canManage} {...form.register('toolPrefix')} />}
+          <Field
+            label="Tool prefix"
+            help="Added to tool names on a combined endpoint"
+            error={form.formState.errors.toolPrefix?.message}
+          >
+            {({ id, describedBy, invalid }) => (
+              <Input
+                id={id}
+                aria-describedby={describedBy}
+                aria-invalid={invalid}
+                disabled={!i.canManage}
+                {...form.register('toolPrefix')}
+              />
+            )}
           </Field>
-          <Button type="submit" disabled={!i.canManage || patch.isPending}>Save names</Button>
+          <Button type="submit" disabled={!i.canManage || patch.isPending}>
+            Save names
+          </Button>
         </form>
       </Card>
       <Card aria-label="Behaviour" className="gap-4">
         <CardHeader title="Behaviour" />
         <label className="flex items-center gap-3">
-          <Switch checked={i.pinnedVersion} disabled={!i.canManage} onCheckedChange={(v) => patch.mutate({ pinnedVersion: v })} />
+          <Switch
+            checked={i.pinnedVersion}
+            disabled={!i.canManage}
+            onCheckedChange={(v) => patch.mutate({ pinnedVersion: v })}
+          />
           <span>
             <span className="block text-label">Stay on version {i.versionLabel}</span>
-            <span className="block text-caption text-muted">Otherwise this follows new published versions.</span>
+            <span className="block text-caption text-muted">
+              Otherwise this follows new published versions.
+            </span>
           </span>
         </label>
         <label className="flex items-center gap-3">
-          <Switch checked={i.enabled} disabled={!i.canManage} onCheckedChange={(v) => patch.mutate({ enabled: v })} />
+          <Switch
+            checked={i.enabled}
+            disabled={!i.canManage}
+            onCheckedChange={(v) => patch.mutate({ enabled: v })}
+          />
           <span className="text-label">{i.enabled ? 'Enabled' : 'Turned off'}</span>
         </label>
         {i.runtime !== 'remote' ? (
-          <Button variant="outline" size="sm" className="self-start" disabled={restart.isPending} onClick={() => restart.mutate(undefined, { onSuccess: () => toast.success('Restart requested') })}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="self-start"
+            disabled={restart.isPending}
+            onClick={() =>
+              restart.mutate(undefined, { onSuccess: () => toast.success('Restart requested') })
+            }
+          >
             Restart server
           </Button>
         ) : null}
         <div className="border-t border-line pt-4">
-          <Button variant="danger" disabled={!i.canManage} onClick={() => setConfirm(true)}>Remove server</Button>
+          <Button variant="danger" disabled={!i.canManage} onClick={() => setConfirm(true)}>
+            Remove server
+          </Button>
         </div>
       </Card>
       <Dialog open={confirm} onOpenChange={setConfirm}>
-        <DialogContent title={`Remove ${i.displayName}?`} description="Its tools leave every endpoint. Secrets and sign-in are deleted.">
+        <DialogContent
+          title={`Remove ${i.displayName}?`}
+          description="Its tools leave every endpoint. Secrets and sign-in are deleted."
+        >
           <div className="flex gap-2">
-            <Button variant="danger" disabled={del.isPending} onClick={() => del.mutate(i.id, { onSuccess: () => { toast.success(`${i.displayName} removed`); void navigate({ to: '/servers' }); } })}>
+            <Button
+              variant="danger"
+              disabled={del.isPending}
+              onClick={() =>
+                del.mutate(i.id, {
+                  onSuccess: () => {
+                    toast.success(`${i.displayName} removed`);
+                    void navigate({ to: '/servers' });
+                  },
+                })
+              }
+            >
               Remove
             </Button>
-            <Button variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
+            <Button variant="outline" onClick={() => setConfirm(false)}>
+              Keep it
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

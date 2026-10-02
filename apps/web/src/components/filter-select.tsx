@@ -38,7 +38,10 @@ export function FilterSelect({
           </option>
         ))}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-3 size-3.5 text-muted" aria-hidden="true" />
+      <ChevronDown
+        className="pointer-events-none absolute right-3 size-3.5 text-muted"
+        aria-hidden="true"
+      />
     </label>
   );
 }

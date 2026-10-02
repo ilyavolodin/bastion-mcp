@@ -1,11 +1,11 @@
 import { Link } from '@tanstack/react-router';
-import { TriangleAlert, Server } from 'lucide-react';
+import { Server, TriangleAlert } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, Tooltip, XAxis } from 'recharts';
 import { useCallSeries, useInstallations, useQuotas, useTeams, useUsers } from '@/api/hooks';
 import type { Quota } from '@/api/types';
 import { useAuth } from '@/auth/auth';
-import { AutoSize, AXIS_TICK, ChartTooltip, dayLabel, GRID } from '@/components/charts';
 import { ChartCard } from '@/components/chart-card';
+import { AutoSize, AXIS_TICK, ChartTooltip, dayLabel, GRID } from '@/components/charts';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Avatar, Card, CardHeader, Tag } from '@/components/primitives';
@@ -13,10 +13,10 @@ import { CardsSkeleton, QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { formatNumber, installationAction, percent } from '@/lib/format';
-import { ConnectCard } from './connect-card';
-import { DecisionsCard } from './decisions-card';
 import { InstallationTile } from '../servers/installation-tile';
 import { useInstallationAction } from '../servers/use-installation-action';
+import { ConnectCard } from './connect-card';
+import { DecisionsCard } from './decisions-card';
 
 const BAR_COLORS = ['var(--tangerine)', 'var(--sky)', 'var(--teal)'];
 
@@ -52,7 +52,9 @@ function SetupBanner() {
       <TriangleAlert className="size-[22px] text-tangerine-ink" aria-hidden="true" />
       <p className="m-0 min-w-0 flex-1">
         <strong className="font-semibold">{message}</strong> {tail}
-        {needy.length > 1 ? ` ${needy.length - 1} more ${needy.length === 2 ? 'server needs' : 'servers need'} attention below.` : ''}
+        {needy.length > 1
+          ? ` ${needy.length - 1} more ${needy.length === 2 ? 'server needs' : 'servers need'} attention below.`
+          : ''}
       </p>
       <Button disabled={pending} onClick={() => run(first)}>
         {action?.label}
@@ -69,7 +71,10 @@ function QuotasCard() {
       <QueryBoundary query={q} label="Loading quotas">
         {(items) =>
           items.map((quota, i) => {
-            const pct = percent(quota.mode === 'left' ? quota.limit - quota.used : quota.used, quota.limit);
+            const pct = percent(
+              quota.mode === 'left' ? quota.limit - quota.used : quota.used,
+              quota.limit,
+            );
             return (
               <div key={quota.id} className="flex flex-col gap-1.5">
                 <div className="flex items-baseline gap-2">
@@ -120,7 +125,11 @@ function WeekCard() {
       <QueryBoundary query={q} label="Loading activity">
         {() => (
           <AutoSize height={130}>
-            <AreaChart data={buckets} margin={{ top: 6, right: 0, left: 0, bottom: 0 }} accessibilityLayer={false}>
+            <AreaChart
+              data={buckets}
+              margin={{ top: 6, right: 0, left: 0, bottom: 0 }}
+              accessibilityLayer={false}
+            >
               <defs>
                 <linearGradient id="homeArea" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="var(--tangerine)" stopOpacity={0.32} />
@@ -128,9 +137,22 @@ function WeekCard() {
                 </linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke={GRID} />
-              <XAxis dataKey="t" tickFormatter={dayLabel} tick={AXIS_TICK} axisLine={false} tickLine={false} />
+              <XAxis
+                dataKey="t"
+                tickFormatter={dayLabel}
+                tick={AXIS_TICK}
+                axisLine={false}
+                tickLine={false}
+              />
               <Tooltip content={<ChartTooltip labelFormat={dayLabel} />} />
-              <Area type="monotone" dataKey="calls" name="Calls" stroke="var(--tangerine)" strokeWidth={2.5} fill="url(#homeArea)" />
+              <Area
+                type="monotone"
+                dataKey="calls"
+                name="Calls"
+                stroke="var(--tangerine)"
+                strokeWidth={2.5}
+                fill="url(#homeArea)"
+              />
             </AreaChart>
           </AutoSize>
         )}
@@ -144,11 +166,13 @@ function TeamCard() {
   const { me, role } = useAuth();
   const teams = useTeams(role === 'admin');
   const myTeam = me.teams.find((t) => t.role === 'manager') ?? me.teams[0];
-  const team = role === 'admin' ? (teams.data?.find((t) => t.id === myTeam?.id) ?? teams.data?.[0]) : myTeam;
+  const team =
+    role === 'admin' ? (teams.data?.find((t) => t.id === myTeam?.id) ?? teams.data?.[0]) : myTeam;
   const users = useUsers(team ? { teamId: team.id } : {});
   const weekAgo = Date.now() - 7 * 86_400_000;
   const people = users.data ?? [];
-  const connected = (u: (typeof people)[number]) => u.lastActiveAt !== null && new Date(u.lastActiveAt).getTime() > weekAgo;
+  const connected = (u: (typeof people)[number]) =>
+    u.lastActiveAt !== null && new Date(u.lastActiveAt).getTime() > weekAgo;
   const missing = people.filter((u) => !connected(u)).length;
   return (
     <Card aria-label="Team adoption" className="gap-3.5">
@@ -158,7 +182,11 @@ function TeamCard() {
         {people.slice(0, 14).map((u) => {
           const on = connected(u);
           return (
-            <li key={u.id} className="flex justify-center" title={`${u.name}: ${on ? 'connected' : 'not yet'}`}>
+            <li
+              key={u.id}
+              className="flex justify-center"
+              title={`${u.name}: ${on ? 'connected' : 'not yet'}`}
+            >
               <Avatar name={u.name} size={36} dashed={!on} color="var(--sky)" />
               <span className="sr-only">{on ? 'connected' : 'not yet connected'}</span>
             </li>
@@ -171,7 +199,10 @@ function TeamCard() {
           Connected
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="size-2 rounded-full border-[1.5px] border-dashed border-line-strong" aria-hidden="true" />
+          <span
+            className="size-2 rounded-full border-[1.5px] border-dashed border-line-strong"
+            aria-hidden="true"
+          />
           Not yet
         </span>
         {missing > 0 ? (
@@ -218,10 +249,16 @@ export function HomePage() {
           }
         >
           {(items) => (
-            <div className={cn('grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]')}>
-              {items.filter((i) => !i.hidden).map((i) => (
-                <InstallationTile key={i.id} installation={i} />
-              ))}
+            <div
+              className={cn(
+                'grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]',
+              )}
+            >
+              {items
+                .filter((i) => !i.hidden)
+                .map((i) => (
+                  <InstallationTile key={i.id} installation={i} />
+                ))}
             </div>
           )}
         </QueryBoundary>

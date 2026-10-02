@@ -5,12 +5,12 @@ import { useOverrides, usePreviewOverrides, useSaveOverrides, useTryTool } from 
 import type { DefinitionPair, OverrideDocument } from '@/api/types';
 import { CodeEditor } from '@/components/code-editor';
 import { DiffView } from '@/components/diff-view';
+import { Field } from '@/components/form';
 import { Card, CardHeader, ReadOnlyNote, Segmented, Tag } from '@/components/primitives';
 import { ProblemAlert } from '@/components/problem';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { Select, Textarea } from '@/components/ui/input';
-import { Field } from '@/components/form';
 import { cn } from '@/lib/cn';
 import { stableStringify } from '@/lib/diff';
 import {
@@ -32,7 +32,10 @@ function TryIt({ installationId, tools }: { installationId: string; tools: Defin
   const result = run.data;
   return (
     <Card aria-label="Try it" className="gap-3.5">
-      <CardHeader title="Try it" subtitle="Calls the tool through the final definition, with all guards" />
+      <CardHeader
+        title="Try it"
+        subtitle="Calls the tool through the final definition, with all guards"
+      />
       <div className="grid gap-4 sm:grid-cols-[240px_minmax(0,1fr)]">
         <Field label="Tool">
           {({ id }) => (
@@ -47,7 +50,15 @@ function TryIt({ installationId, tools }: { installationId: string; tools: Defin
         </Field>
         <Field label="Arguments (JSON)" error={argError ?? undefined}>
           {({ id, describedBy, invalid }) => (
-            <Textarea id={id} aria-describedby={describedBy} aria-invalid={invalid} value={args} onChange={(e) => setArgs(e.target.value)} className="min-h-20 font-mono text-[12px]" spellCheck={false} />
+            <Textarea
+              id={id}
+              aria-describedby={describedBy}
+              aria-invalid={invalid}
+              value={args}
+              onChange={(e) => setArgs(e.target.value)}
+              className="min-h-20 font-mono text-[12px]"
+              spellCheck={false}
+            />
           )}
         </Field>
       </div>
@@ -77,14 +88,28 @@ function TryIt({ installationId, tools }: { installationId: string; tools: Defin
         ) : null}
       </div>
       {result ? (
-        <pre aria-label="Result" className="m-0 max-h-60 overflow-auto rounded-md bg-sunken p-3 font-mono text-[12px]">{result.text}</pre>
+        <pre
+          role="group"
+          aria-label="Result"
+          className="m-0 max-h-60 overflow-auto rounded-md bg-sunken p-3 font-mono text-[12px]"
+        >
+          {result.text}
+        </pre>
       ) : null}
       {run.isError ? <ProblemAlert error={run.error} /> : null}
     </Card>
   );
 }
 
-function Editor({ installationId, initial, canEdit }: { installationId: string; initial: OverrideDocument; canEdit: boolean }) {
+function Editor({
+  installationId,
+  initial,
+  canEdit,
+}: {
+  installationId: string;
+  initial: OverrideDocument;
+  canEdit: boolean;
+}) {
   const [doc, setDoc] = React.useState<OverrideDocument>(initial);
   const [saved, setSaved] = React.useState<OverrideDocument>(initial);
   const [view, setView] = React.useState<'editor' | 'json'>('editor');
@@ -105,7 +130,7 @@ function Editor({ installationId, initial, canEdit }: { installationId: string; 
 
   const defs = preview.data?.definitions ?? [];
   const current = defs.find((d) => d.name === selected) ?? defs[0];
-  const entry = current ? ((doc[sectionOf(current.kind)] ?? {})[current.name] ?? {}) : {};
+  const entry = current ? (doc[sectionOf(current.kind)]?.[current.name] ?? {}) : {};
 
   const onForm = (field: string, value: unknown) => {
     if (!current) return;
@@ -121,7 +146,9 @@ function Editor({ installationId, initial, canEdit }: { installationId: string; 
 
   return (
     <div className="flex flex-col gap-6">
-      {!canEdit ? <ReadOnlyNote>You can look at the overrides but not change them.</ReadOnlyNote> : null}
+      {!canEdit ? (
+        <ReadOnlyNote>You can look at the overrides but not change them.</ReadOnlyNote>
+      ) : null}
       <Card aria-label="Overrides editor" className="gap-4">
         <CardHeader
           title="Overrides"
@@ -135,16 +162,36 @@ function Editor({ installationId, initial, canEdit }: { installationId: string; 
                   if (v === 'json') setRaw(JSON.stringify(doc, null, 2));
                   setView(v);
                 }}
-                options={[{ value: 'editor', label: 'Form' }, { value: 'json', label: 'Raw JSON' }]}
+                options={[
+                  { value: 'editor', label: 'Form' },
+                  { value: 'json', label: 'Raw JSON' },
+                ]}
               />
               {dirty ? <Tag tone="warn">Unsaved changes</Tag> : null}
-              <Button variant="outline" size="sm" disabled={!dirty} onClick={() => { setDoc(saved); setRaw(JSON.stringify(saved, null, 2)); }}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!dirty}
+                onClick={() => {
+                  setDoc(saved);
+                  setRaw(JSON.stringify(saved, null, 2));
+                }}
+              >
                 Revert
               </Button>
               <Button
                 size="sm"
-                disabled={!canEdit || !dirty || save.isPending || (view === 'json' && !validation.ok)}
-                onClick={() => save.mutate(doc, { onSuccess: () => { setSaved(doc); toast.success('Overrides saved'); } })}
+                disabled={
+                  !canEdit || !dirty || save.isPending || (view === 'json' && !validation.ok)
+                }
+                onClick={() =>
+                  save.mutate(doc, {
+                    onSuccess: () => {
+                      setSaved(doc);
+                      toast.success('Overrides saved');
+                    },
+                  })
+                }
               >
                 {save.isPending ? 'Saving…' : 'Save overrides'}
               </Button>
@@ -152,7 +199,10 @@ function Editor({ installationId, initial, canEdit }: { installationId: string; 
           }
         />
         {preview.data?.errors.length ? (
-          <ul role="alert" className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-[13px] text-coral-ink">
+          <ul
+            role="alert"
+            className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-[13px] text-coral-ink"
+          >
             {preview.data.errors.map((e) => (
               <li key={e}>{e}</li>
             ))}
@@ -160,13 +210,28 @@ function Editor({ installationId, initial, canEdit }: { installationId: string; 
         ) : null}
         {view === 'json' ? (
           <div className="flex flex-col gap-3">
-            <CodeEditor language="json" ariaLabel="Override document JSON" value={raw} onChange={canEdit ? onRaw : undefined} readOnly={!canEdit} jsonSchema={schema} height={360} />
+            <CodeEditor
+              language="json"
+              ariaLabel="Override document JSON"
+              value={raw}
+              onChange={canEdit ? onRaw : undefined}
+              readOnly={!canEdit}
+              jsonSchema={schema}
+              height={360}
+            />
             {validation.ok ? (
               <p className="m-0 text-caption font-medium text-mint-ink">Valid override document.</p>
             ) : (
-              <ul role="alert" aria-label="Validation errors" className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-[13px] text-coral-ink">
+              <ul
+                role="alert"
+                aria-label="Validation errors"
+                className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-[13px] text-coral-ink"
+              >
                 {validation.issues.map((i) => (
-                  <li key={`${i.path}-${i.message}`}>{i.path ? `${i.path}: ` : ''}{i.message}</li>
+                  <li key={`${i.path}-${i.message}`}>
+                    {i.path ? `${i.path}: ` : ''}
+                    {i.message}
+                  </li>
                 ))}
               </ul>
             )}
@@ -176,17 +241,22 @@ function Editor({ installationId, initial, canEdit }: { installationId: string; 
             <ul aria-label="Items" className="m-0 flex list-none flex-col gap-1 p-0">
               {defs.map((d) => {
                 const on = d.name === (current?.name ?? '');
-                const touched = Boolean((doc[sectionOf(d.kind)] ?? {})[d.name]);
+                const touched = Boolean(doc[sectionOf(d.kind)]?.[d.name]);
                 return (
                   <li key={`${d.kind}-${d.name}`}>
                     <button
                       type="button"
                       aria-pressed={on}
                       onClick={() => setSelected(d.name)}
-                      className={cn('flex h-10 w-full items-center gap-2 rounded-md px-3 text-left font-mono text-[13px]', on ? 'bg-tangerine-soft text-tangerine-ink' : 'hover:bg-sunken')}
+                      className={cn(
+                        'flex h-10 w-full items-center gap-2 rounded-md px-3 text-left font-mono text-[13px]',
+                        on ? 'bg-tangerine-soft text-tangerine-ink' : 'hover:bg-sunken',
+                      )}
                     >
                       <span className="flex-1 truncate">{d.name}</span>
-                      {touched ? <span className="size-2 rounded-full bg-tangerine" title="Overridden" /> : null}
+                      {touched ? (
+                        <span className="size-2 rounded-full bg-tangerine" title="Overridden" />
+                      ) : null}
                       {d.final === null ? <span className="sr-only">hidden</span> : null}
                     </button>
                   </li>
@@ -197,7 +267,9 @@ function Editor({ installationId, initial, canEdit }: { installationId: string; 
               <div className="flex min-w-0 flex-col gap-5">
                 {current.final === null ? (
                   <p className="m-0 rounded-md bg-sunken p-3 text-muted">
-                    {current.error ? `Not served: ${current.error}` : 'Hidden. This item is not served to AI tools.'}
+                    {current.error
+                      ? `Not served: ${current.error}`
+                      : 'Hidden. This item is not served to AI tools.'}
                   </p>
                 ) : null}
                 <DiffView
@@ -207,7 +279,12 @@ function Editor({ installationId, initial, canEdit }: { installationId: string; 
                   left={stableStringify(current.upstream)}
                   right={current.final ? stableStringify(current.final) : '(hidden)'}
                 />
-                <OverrideForm kind={current.kind} entry={entry as Record<string, unknown>} disabled={!canEdit} onChange={onForm} />
+                <OverrideForm
+                  kind={current.kind}
+                  entry={entry as Record<string, unknown>}
+                  disabled={!canEdit}
+                  onChange={onForm}
+                />
               </div>
             ) : (
               <p className="m-0 text-muted">Waiting for the server’s definitions…</p>
@@ -215,7 +292,10 @@ function Editor({ installationId, initial, canEdit }: { installationId: string; 
           </div>
         )}
       </Card>
-      <TryIt installationId={installationId} tools={defs.filter((d) => d.kind === 'tool' && d.final !== null)} />
+      <TryIt
+        installationId={installationId}
+        tools={defs.filter((d) => d.kind === 'tool' && d.final !== null)}
+      />
     </div>
   );
 }

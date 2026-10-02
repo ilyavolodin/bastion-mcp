@@ -1,10 +1,13 @@
-import { http, HttpResponse } from 'msw';
+import { HttpResponse, http } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { server } from '@/mocks/server';
-import { api, ApiError, buildQuery, configureApi, fetchAll, readCookie } from './client';
+import { ApiError, api, buildQuery, configureApi, fetchAll, readCookie } from './client';
 
 const problem = (status: number, body: Record<string, unknown>) =>
-  HttpResponse.json({ status, ...body }, { status, headers: { 'Content-Type': 'application/problem+json' } });
+  HttpResponse.json(
+    { status, ...body },
+    { status, headers: { 'Content-Type': 'application/problem+json' } },
+  );
 
 describe('api client (17.1, 9.2)', () => {
   it('9.2 sends the CSRF header from the cookie on state-changing calls only', async () => {
@@ -28,12 +31,21 @@ describe('api client (17.1, 9.2)', () => {
   it('17.1 turns problem+json into ApiError with field errors', async () => {
     server.use(
       http.post('*/api/v1/y', () =>
-        problem(422, { title: 'Invalid', code: 'validation_failed', detail: 'Bad', errors: [{ path: 'name', message: 'Required' }] }),
+        problem(422, {
+          title: 'Invalid',
+          code: 'validation_failed',
+          detail: 'Bad',
+          errors: [{ path: 'name', message: 'Required' }],
+        }),
       ),
     );
     const err = await api.post('/y', {}).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(err).toMatchObject({ status: 422, code: 'validation_failed', errors: [{ path: 'name', message: 'Required' }] });
+    expect(err).toMatchObject({
+      status: 422,
+      code: 'validation_failed',
+      errors: [{ path: 'name', message: 'Required' }],
+    });
   });
 
   it('17.1 remembers the ETag from a GET and sends it as If-Match', async () => {
@@ -69,7 +81,9 @@ describe('api client (17.1, 9.2)', () => {
     server.use(
       http.get('*/api/v1/p', ({ request }) => {
         const c = new URL(request.url).searchParams.get('cursor');
-        return HttpResponse.json(c ? { items: [3], nextCursor: null } : { items: [1, 2], nextCursor: 'n' });
+        return HttpResponse.json(
+          c ? { items: [3], nextCursor: null } : { items: [1, 2], nextCursor: 'n' },
+        );
       }),
     );
     expect(await fetchAll<number>('/p')).toEqual([1, 2, 3]);

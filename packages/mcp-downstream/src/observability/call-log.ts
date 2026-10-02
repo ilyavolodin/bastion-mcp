@@ -3,14 +3,12 @@ import type { CallOutcome } from '@bastion-mcp/core';
 import { BastionError } from '@bastion-mcp/core';
 import type { GuardResultRecord } from '@bastion-mcp/guards';
 import type { CallLogRow } from '@bastion-mcp/telemetry';
-import { safeParseCallLogRow } from '@bastion-mcp/telemetry';
-import { z } from 'zod';
 import type { CallLogPort, Logger } from '../ports';
 import type { OpContext } from '../types';
 
-const uuid = z.string().uuid();
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const uuidOrNull = (value: string | undefined): string | null =>
-  value !== undefined && uuid.safeParse(value).success ? value : null;
+  value !== undefined && UUID.test(value) ? value : null;
 
 /** Everything one operation learns while it runs; turned into a row exactly once, in a `finally`. */
 export class CallRecord {
@@ -124,15 +122,18 @@ export const writeCallLog = (
       traceId: span.traceId,
       spanId: span.spanId,
     };
-    const parsed = safeParseCallLogRow(candidate);
-    if (!parsed.success) {
-      deps.logger.warn('call log row dropped: it does not satisfy the call_log schema', {
-        method: record.method,
-        issues: parsed.error.issues.map((i) => i.path.join('.')),
-      });
+    // The row is built from typed values; only the one field the database cannot take as text (the principal uuid) is
+    // checked, so no schema parse runs on the hot path.
+    if (!UUID.test(candidate.principalId)) {
+      deps.logger.warn('call log row dropped: the principal id is not a uuid', { method: record.method });
       return;
     }
-    const row: CallLogRow = parsed.data;
+    // Requests that arrived on /mcp/c/* are tagged origin = plugin (25.9). call_log has no such column yet, so the
+    // tag travels as an extra property that the sink maps once the column exists.
+    const row = {
+      ...candidate,
+      ...(ctx.origin === 'plugin' ? { origin: 'plugin' as const } : {}),
+    } as CallLogRow;
     deps.callLog.append(row);
   } catch (error) {
     deps.logger.warn('call log row could not be written', { error: String(error) });

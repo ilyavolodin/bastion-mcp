@@ -54,13 +54,13 @@ export function CopyField({
       )}
     >
       <span
-        aria-label={label}
         className={cn(
           'min-w-0 flex-1 truncate text-[15px] leading-[22px] font-medium tabular-nums',
           mono && 'font-mono text-[12px] leading-[18px]',
         )}
       >
-        {value}
+        <span className="sr-only">{label}: </span>
+        <span>{value}</span>
       </span>
       <Button
         variant={tone === 'dark' ? 'ghost' : 'outline'}
@@ -72,7 +72,11 @@ export function CopyField({
           tone === 'dark' && 'bg-[#2e2e36] text-[#f4f4f6] hover:bg-[#2e2e36] hover:text-[#f4f4f6]',
         )}
       >
-        {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+        {copied ? (
+          <Check className="size-4" aria-hidden="true" />
+        ) : (
+          <Copy className="size-4" aria-hidden="true" />
+        )}
         {copied ? 'Copied' : buttonLabel}
       </Button>
       <span role="status" className="sr-only">

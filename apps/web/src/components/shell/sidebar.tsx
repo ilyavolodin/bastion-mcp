@@ -4,6 +4,7 @@ import {
   Globe,
   House,
   Layers,
+  LineChart,
   type LucideIcon,
   Plug,
   Server,
@@ -11,7 +12,6 @@ import {
   ShoppingBag,
   SlidersHorizontal,
   Users,
-  LineChart,
 } from 'lucide-react';
 import { useAuth } from '@/auth/auth';
 import { cn } from '@/lib/cn';
@@ -79,7 +79,9 @@ export function NavLinks({
     <>
       {groups.map((g) => (
         <div key={g} className="flex flex-col gap-1.5">
-          <span className={cn('px-3 pb-0.5 pt-4 text-overline first:pt-1', hide)}>{GROUP_LABEL[g]}</span>
+          <span className={cn('px-3 pb-0.5 pt-4 text-overline first:pt-1', hide)}>
+            {GROUP_LABEL[g]}
+          </span>
           {sections
             .filter((s) => SECTIONS[s].group === g)
             .map((s) => {
@@ -129,7 +131,9 @@ export function Sidebar() {
     >
       <div className="flex items-center gap-2.5 px-2.5 pb-4 pt-1 max-[1279px]:justify-center max-[1279px]:px-0">
         <BastionMark />
-        <span className="text-[18px] leading-6 font-semibold tracking-[-0.01em] max-[1279px]:hidden">Bastion</span>
+        <span className="text-[18px] leading-6 font-semibold tracking-[-0.01em] max-[1279px]:hidden">
+          Bastion
+        </span>
       </div>
       <NavLinks />
       <div className="min-h-6 flex-1" />

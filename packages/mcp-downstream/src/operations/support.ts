@@ -24,7 +24,6 @@ import type {
   UpstreamNotification,
 } from '@bastion-mcp/mcp-upstream';
 import {
-  clockContext,
   type InstallationData,
   type McpRequestContext,
   type ToolAnnotations,
@@ -88,6 +87,27 @@ export const installationDataOf = (info: InstallationInfo): InstallationData => 
   return data;
 };
 
+const zoneFormats = new Map<string, Intl.DateTimeFormat>();
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * `hour` and `weekday` for Cedar (10.3). UTC is computed arithmetically: building an `Intl.DateTimeFormat` per call (what
+ * `clockContext` does) cost about 14% of the CPU of a proxied call. Other zones reuse one formatter each.
+ */
+export const wallClock = (nowMs: number, timeZone = 'UTC'): { hour: number; weekday: number } => {
+  const date = new Date(nowMs);
+  if (timeZone === 'UTC') return { hour: date.getUTCHours(), weekday: date.getUTCDay() };
+  let format = zoneFormats.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', hourCycle: 'h23', weekday: 'short' });
+    zoneFormats.set(timeZone, format);
+  }
+  const parts = format.formatToParts(date);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+  const weekday = WEEKDAYS.indexOf(parts.find((p) => p.type === 'weekday')?.value ?? 'Sun');
+  return { hour, weekday: Math.max(weekday, 0) };
+};
+
 export const policyContextOf = (
   ctx: Pick<OpContext, 'principal' | 'clientInfo' | 'ip' | 'path'>,
   nowMs: number,
@@ -96,7 +116,7 @@ export const policyContextOf = (
   clientName: ctx.clientInfo?.name ?? '',
   ip: ctx.ip.length >= 2 ? ctx.ip : '0.0.0.0',
   authMethod: ctx.principal.authMethod,
-  ...clockContext(new Date(nowMs)),
+  ...wallClock(nowMs),
   endpoint: ctx.path ?? '',
 });
 

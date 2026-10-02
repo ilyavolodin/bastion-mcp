@@ -33,7 +33,11 @@ export function InstallationTile({ installation: i }: { installation: Installati
           {action.label}
         </span>
       ) : (
-        <Sparkline data={i.spark24} color={i.color} label={`${i.displayName} calls in the last 24 hours`} />
+        <Sparkline
+          data={i.spark24}
+          color={i.color}
+          label={`${i.displayName} calls in the last 24 hours`}
+        />
       )}
     </Link>
   );

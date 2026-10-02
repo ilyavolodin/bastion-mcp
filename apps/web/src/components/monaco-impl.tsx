@@ -12,15 +12,16 @@ import 'monaco-editor/editor/contrib/find/browser/findController.js';
 import 'monaco-editor/editor/contrib/folding/browser/folding.js';
 import 'monaco-editor/editor/contrib/hover/browser/hoverContribution.js';
 import 'monaco-editor/editor/contrib/suggest/browser/suggestController.js';
-import { jsonDefaults } from 'monaco-editor/language/json/monaco.contribution.js';
 import EditorWorker from 'monaco-editor/editor/editor.worker.js?worker';
 import JsonWorker from 'monaco-editor/language/json/json.worker.js?worker';
+import { jsonDefaults } from 'monaco-editor/language/json/monaco.contribution.js';
 import { useEffect } from 'react';
 import { registerCedar } from './cedar-language';
 import type { CodeEditorProps } from './code-editor';
 
 (self as unknown as { MonacoEnvironment: monaco.Environment }).MonacoEnvironment = {
-  getWorker: (_id: string, label: string) => (label === 'json' ? new JsonWorker() : new EditorWorker()),
+  getWorker: (_id: string, label: string) =>
+    label === 'json' ? new JsonWorker() : new EditorWorker(),
 };
 loader.config({ monaco });
 registerCedar(monaco);
@@ -77,14 +78,19 @@ export default function MonacoImpl({
       onChange={(v) => onChange?.(v ?? '')}
       onMount={(editor) => {
         const model = editor.getModel();
-        if (model && markers) monaco.editor.setModelMarkers(model, 'bastion', markers.map((m) => ({
-          startLineNumber: m.line,
-          endLineNumber: m.line,
-          startColumn: 1,
-          endColumn: 200,
-          message: m.message,
-          severity: monaco.MarkerSeverity.Error,
-        })));
+        if (model && markers)
+          monaco.editor.setModelMarkers(
+            model,
+            'bastion',
+            markers.map((m) => ({
+              startLineNumber: m.line,
+              endLineNumber: m.line,
+              startColumn: 1,
+              endColumn: 200,
+              message: m.message,
+              severity: monaco.MarkerSeverity.Error,
+            })),
+          );
         editor.getDomNode()?.setAttribute('aria-label', ariaLabel);
       }}
       options={{

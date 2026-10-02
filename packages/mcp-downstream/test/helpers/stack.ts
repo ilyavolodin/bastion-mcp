@@ -11,7 +11,7 @@ import {
   type ResolvedInstallation,
   type UpstreamRuntime,
 } from '@bastion-mcp/mcp-upstream';
-import type { EndpointPolicy, InstallationInfo } from '@bastion-mcp/router';
+import type { EndpointDefinition, EndpointPolicy, InstallationInfo } from '@bastion-mcp/router';
 import type { CallLogRow } from '@bastion-mcp/telemetry';
 import {
   type FakeLegacyHttpServer,
@@ -58,6 +58,8 @@ export type StackOptions = {
   shared?: SharedWorld;
   users?: string[];
   config?: Partial<DownstreamDeps['config']>;
+  /** Named endpoints per user, given that user's installation ids. */
+  named?: (installationIds: string[]) => EndpointDefinition[];
 };
 
 export type SharedWorld = {
@@ -185,7 +187,7 @@ export const startStack = async (options: StackOptions): Promise<Stack> => {
   const rows: CallLogRow[] = [];
   const rules: Rule[] = [...(options.rules ?? [])];
   const guardLayers = { current: options.guardLayers ?? ({} as ProfileLayers) };
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, forceCloseConnections: true });
   const httpPort = await freePort();
   const base = `http://127.0.0.1:${httpPort}`;
 
@@ -225,7 +227,10 @@ export const startStack = async (options: StackOptions): Promise<Stack> => {
     },
     endpointData: {
       configVersion: () => '1',
-      load: async (principal) => ({ installations: infos.get(principal.id) ?? [], namedEndpoints: [] }),
+      load: async (principal) => {
+        const list = infos.get(principal.id) ?? [];
+        return { installations: list, namedEndpoints: options.named ? options.named(list.map((i) => i.id)) : [] };
+      },
     },
     policy: { current: () => options.policy ?? allowAllPolicy },
     stateKeyring,

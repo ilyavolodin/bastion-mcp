@@ -104,7 +104,12 @@ export type Installation = {
   endpointUrl: string;
   toolCount: number;
   secrets: { name: string; set: boolean }[];
-  oauth: { provider: string; scopes: string[]; expiresAt: string | null; connected: boolean } | null;
+  oauth: {
+    provider: string;
+    scopes: string[];
+    expiresAt: string | null;
+    connected: boolean;
+  } | null;
   updatedAt: string;
 };
 
@@ -299,7 +304,11 @@ export type CallFilters = {
 
 // --- Stats (15.5 rollups) -----------------------------------------------------------------------
 export type StatsRange = '1h' | '24h' | '7d' | '14d' | '90d';
-export type StatsScope = { scope?: 'org' | 'team' | 'me'; teamId?: string; installationId?: string };
+export type StatsScope = {
+  scope?: 'org' | 'team' | 'me';
+  teamId?: string;
+  installationId?: string;
+};
 export type CallBucket = {
   t: string;
   calls: number;

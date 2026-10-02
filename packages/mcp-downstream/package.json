@@ -31,10 +31,14 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@bastion-mcp/sandbox": "workspace:*",
+    "@bastion-mcp/secrets": "workspace:*",
     "@bastion-mcp/testkit": "workspace:*",
     "@modelcontextprotocol/conformance": "0.1.16",
     "@modelcontextprotocol/sdk": "1.31.0",
     "@opentelemetry/context-async-hooks": "2.11.0",
-    "@opentelemetry/sdk-trace-base": "2.11.0"
+    "@opentelemetry/sdk-trace-base": "2.11.0",
+    "fast-check": "4.10.2",
+    "jose": "6.2.12"
   }
 }

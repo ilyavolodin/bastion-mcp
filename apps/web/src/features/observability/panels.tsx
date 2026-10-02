@@ -6,8 +6,8 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
-  ReferenceDot,
   Rectangle,
+  ReferenceDot,
   Sankey,
   Scatter,
   ScatterChart,
@@ -31,7 +31,8 @@ import { PHASE_COLOR } from '../activity/call-detail';
 const Topology = React.lazy(() => import('./topology'));
 
 type Args = { range: StatsRange } & StatsScope;
-const axisLabel = (range: StatsRange) => (range === '7d' || range === '14d' || range === '90d' ? dateLabel : hourLabel);
+const axisLabel = (range: StatsRange) =>
+  range === '7d' || range === '14d' || range === '90d' ? dateLabel : hourLabel;
 
 // --- Traffic flow (Sankey) -------------------------------------------------------------------------
 type SankeyNode = { name: string; errorRate?: number };
@@ -51,34 +52,62 @@ export const buildSankey = (flow: FlowStats) => {
   return { nodes, links };
 };
 
-type NodeProps = { x: number; y: number; width: number; height: number; index: number; payload: SankeyNode & { sourceLinks?: unknown[] } };
+type NodeProps = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  index: number;
+  payload: SankeyNode & { sourceLinks?: unknown[] };
+};
 const makeNodeShape = (clientCount: number) =>
   function SankeyNodeShape({ x, y, width, height, index, payload }: NodeProps) {
-  const isTarget = index >= clientCount;
-  const bad = (payload.errorRate ?? 0) > 0.1;
-  return (
-    <g>
-      <Rectangle x={x} y={y} width={width} height={height} fill={isTarget ? (bad ? 'var(--coral)' : 'var(--sky)') : 'var(--ink)'} fillOpacity={1} />
-      <text
-        x={isTarget ? x + width + 8 : x - 8}
-        y={y + height / 2}
-        textAnchor={isTarget ? 'start' : 'end'}
-        dominantBaseline="middle"
-        fontSize={12}
-        fill="var(--ink)"
-      >
-        {payload.name}
-      </text>
-    </g>
-  );
+    const isTarget = index >= clientCount;
+    const bad = (payload.errorRate ?? 0) > 0.1;
+    return (
+      <g>
+        <Rectangle
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          fill={isTarget ? (bad ? 'var(--coral)' : 'var(--sky)') : 'var(--ink)'}
+          fillOpacity={1}
+        />
+        <text
+          x={isTarget ? x + width + 8 : x - 8}
+          y={y + height / 2}
+          textAnchor={isTarget ? 'start' : 'end'}
+          dominantBaseline="middle"
+          fontSize={12}
+          fill="var(--ink)"
+        >
+          {payload.name}
+        </text>
+      </g>
+    );
   };
 
 type LinkProps = {
-  sourceX: number; targetX: number; sourceY: number; targetY: number;
-  sourceControlX: number; targetControlX: number; linkWidth: number;
+  sourceX: number;
+  targetX: number;
+  sourceY: number;
+  targetY: number;
+  sourceControlX: number;
+  targetControlX: number;
+  linkWidth: number;
   payload: { target: SankeyNode };
 };
-function SankeyLinkShape({ sourceX, targetX, sourceY, targetY, sourceControlX, targetControlX, linkWidth, payload }: LinkProps) {
+function SankeyLinkShape({
+  sourceX,
+  targetX,
+  sourceY,
+  targetY,
+  sourceControlX,
+  targetControlX,
+  linkWidth,
+  payload,
+}: LinkProps) {
   const bad = (payload.target.errorRate ?? 0) > 0.1;
   return (
     <path
@@ -101,13 +130,31 @@ export function TrafficPanel({ args }: { args: Args }) {
       title="Where calls go"
       legend={
         <>
-          <Legend items={[{ label: 'Healthy', color: 'var(--sky)', shape: 'line' }, { label: 'Errors', color: 'var(--coral)', shape: 'line' }]} />
-          <Segmented label="Traffic view" value={view} onChange={setView} options={[{ value: 'flow', label: 'Flow' }, { value: 'topology', label: 'Topology' }]} />
+          <Legend
+            items={[
+              { label: 'Healthy', color: 'var(--sky)', shape: 'line' },
+              { label: 'Errors', color: 'var(--coral)', shape: 'line' },
+            ]}
+          />
+          <Segmented
+            label="Traffic view"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'flow', label: 'Flow' },
+              { value: 'topology', label: 'Topology' },
+            ]}
+          />
         </>
       }
       table={{
         columns: ['Client', 'Server', 'Calls', 'Errors'],
-        rows: (flow?.links ?? []).map((l) => [l.client, flow?.installations.find((i) => i.id === l.installationId)?.name ?? l.installationId, l.calls, l.errors]),
+        rows: (flow?.links ?? []).map((l) => [
+          l.client,
+          flow?.installations.find((i) => i.id === l.installationId)?.name ?? l.installationId,
+          l.calls,
+          l.errors,
+        ]),
       }}
     >
       <QueryBoundary query={q} skeleton={<Skeleton className="h-[320px] w-full" />}>
@@ -143,13 +190,23 @@ export function HealthPanel({ args }: { args: Args }) {
   const max = Math.max(1, ...items.map((i) => i.calls));
   const span = (calls: number) => {
     const r = calls / max;
-    return r > 0.66 ? { c: 3, r: 2 } : r > 0.33 ? { c: 2, r: 2 } : r > 0.15 ? { c: 2, r: 1 } : { c: 1, r: 1 };
+    return r > 0.66
+      ? { c: 3, r: 2 }
+      : r > 0.33
+        ? { c: 2, r: 2 }
+        : r > 0.15
+          ? { c: 2, r: 1 }
+          : { c: 1, r: 1 };
   };
   return (
     <ChartCard
       title="Server health"
+      interactive
       legend={<span className="text-caption text-muted">Size = traffic</span>}
-      table={{ columns: ['Server', 'Calls', 'Error rate'], rows: items.map((i) => [i.name, i.calls, `${(i.errorRate * 100).toFixed(1)}%`]) }}
+      table={{
+        columns: ['Server', 'Calls', 'Error rate'],
+        rows: items.map((i) => [i.name, i.calls, `${(i.errorRate * 100).toFixed(1)}%`]),
+      }}
     >
       <QueryBoundary query={q} skeleton={<Skeleton className="h-[320px] w-full" />}>
         {() => (
@@ -169,8 +226,14 @@ export function HealthPanel({ args }: { args: Args }) {
                       tone === 'bad' && 'bg-coral',
                     )}
                   >
-                    <span className="truncate text-[13px] leading-[18px] font-semibold">{i.name}</span>
-                    <StatusDot tone={tone} label={HEALTH_LABEL[tone]} className="!text-inherit [&>span:first-child]:hidden" />
+                    <span className="truncate text-[13px] leading-[18px] font-semibold">
+                      {i.name}
+                    </span>
+                    <StatusDot
+                      tone={tone}
+                      label={HEALTH_LABEL[tone]}
+                      className="!text-inherit [&>span:first-child]:hidden"
+                    />
                   </Link>
                 </li>
               );
@@ -199,21 +262,57 @@ export function LatencyPanel({ args }: { args: Args }) {
           ]}
         />
       }
-      table={{ columns: ['Time', 'p50 (ms)', 'p95 (ms)', 'Cold start'], rows: data.map((b) => [fmt(b.t), b.p50, b.p95, b.coldStart ? 'yes' : '']) }}
+      table={{
+        columns: ['Time', 'p50 (ms)', 'p95 (ms)', 'Cold start'],
+        rows: data.map((b) => [fmt(b.t), b.p50, b.p95, b.coldStart ? 'yes' : '']),
+      }}
     >
       <QueryBoundary query={q} skeleton={<Skeleton className="h-[200px] w-full" />}>
         {() => (
           <AutoSize height={200}>
-            <ComposedChart data={data} margin={{ top: 14, right: 4, left: 0, bottom: 0 }} accessibilityLayer={false}>
+            <ComposedChart
+              data={data}
+              margin={{ top: 14, right: 4, left: 0, bottom: 0 }}
+              accessibilityLayer={false}
+            >
               <CartesianGrid vertical={false} stroke={GRID} />
-              <XAxis dataKey="t" tickFormatter={fmt} tick={AXIS_TICK} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={40} />
+              <XAxis
+                dataKey="t"
+                tickFormatter={fmt}
+                tick={AXIS_TICK}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+                minTickGap={40}
+              />
               <YAxis hide />
-              <Tooltip content={<ChartTooltip labelFormat={fmt} format={(v) => formatDuration(Number(v))} />} />
-              <Area dataKey="band" name="p50 to p95" stroke="none" fill="var(--tangerine-soft)" fillOpacity={1} isAnimationActive={false} />
-              <Line type="monotone" dataKey="p50" name="p50" stroke="var(--tangerine)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-              {data.filter((b) => b.coldStart).map((b) => (
-                <ReferenceDot key={b.t} x={b.t} y={b.p95} r={5} fill="var(--sky)" stroke="none" />
-              ))}
+              <Tooltip
+                content={
+                  <ChartTooltip labelFormat={fmt} format={(v) => formatDuration(Number(v))} />
+                }
+              />
+              <Area
+                dataKey="band"
+                name="p50 to p95"
+                stroke="none"
+                fill="var(--tangerine-soft)"
+                fillOpacity={1}
+                isAnimationActive={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="p50"
+                name="p50"
+                stroke="var(--tangerine)"
+                strokeWidth={2.5}
+                dot={false}
+                isAnimationActive={false}
+              />
+              {data
+                .filter((b) => b.coldStart)
+                .map((b) => (
+                  <ReferenceDot key={b.t} x={b.t} y={b.p95} r={5} fill="var(--sky)" stroke="none" />
+                ))}
             </ComposedChart>
           </AutoSize>
         )}
@@ -232,7 +331,13 @@ export function SandboxPanel({ args }: { args: Args }) {
   return (
     <ChartCard
       title="Sandboxes"
-      legend={d ? <Tag tone="info" className="h-6 text-[12px]">{d.driver}</Tag> : undefined}
+      legend={
+        d ? (
+          <Tag tone="info" className="h-6 text-[12px]">
+            {d.driver}
+          </Tag>
+        ) : undefined
+      }
       table={{
         columns: ['Time', 'Running sandboxes'],
         rows: (d?.running ?? []).map((r) => [fmt(r.t), r.count]),
@@ -242,7 +347,11 @@ export function SandboxPanel({ args }: { args: Args }) {
         {(s) => (
           <div className="flex flex-col gap-3">
             <AutoSize height={110}>
-              <AreaChart data={s.running} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} accessibilityLayer={false}>
+              <AreaChart
+                data={s.running}
+                margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
+                accessibilityLayer={false}
+              >
                 <defs>
                   <linearGradient id="sbArea" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--sky)" stopOpacity={0.3} />
@@ -252,18 +361,52 @@ export function SandboxPanel({ args }: { args: Args }) {
                 <XAxis dataKey="t" hide />
                 <YAxis hide />
                 <Tooltip content={<ChartTooltip labelFormat={fmt} />} />
-                <Area type="monotone" dataKey="count" name="Running" stroke="var(--sky)" strokeWidth={2.5} fill="url(#sbArea)" isAnimationActive={false} />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  name="Running"
+                  stroke="var(--sky)"
+                  strokeWidth={2.5}
+                  fill="url(#sbArea)"
+                  isAnimationActive={false}
+                />
               </AreaChart>
             </AutoSize>
             <span className="text-caption text-muted">Start time by phase</span>
             <AutoSize height={120}>
-              <ScatterChart margin={{ top: 0, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>
-                <XAxis type="number" dataKey="ms" tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={(v) => formatDuration(Number(v))} />
-                <YAxis type="category" dataKey="phase" width={64} tick={AXIS_TICK} axisLine={false} tickLine={false} allowDuplicatedCategory={false} interval={0} />
+              <ScatterChart
+                margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
+                accessibilityLayer={false}
+              >
+                <XAxis
+                  type="number"
+                  dataKey="ms"
+                  tick={AXIS_TICK}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => formatDuration(Number(v))}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="phase"
+                  width={64}
+                  tick={AXIS_TICK}
+                  axisLine={false}
+                  tickLine={false}
+                  allowDuplicatedCategory={false}
+                  interval={0}
+                />
                 <ZAxis range={[40, 40]} />
                 <Tooltip content={<ChartTooltip format={(v) => formatDuration(Number(v))} />} />
                 {PHASES.map((p) => (
-                  <Scatter key={p} name={p} data={s.starts.filter((x) => x.phase === p)} fill={PHASE_COLOR[p]} fillOpacity={0.75} isAnimationActive={false} />
+                  <Scatter
+                    key={p}
+                    name={p}
+                    data={s.starts.filter((x) => x.phase === p)}
+                    fill={PHASE_COLOR[p]}
+                    fillOpacity={0.75}
+                    isAnimationActive={false}
+                  />
                 ))}
               </ScatterChart>
             </AutoSize>

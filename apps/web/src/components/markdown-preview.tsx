@@ -1,4 +1,4 @@
-import * as React from 'react';
+import type * as React from 'react';
 
 /** A deliberately tiny, safe Markdown subset (headings, lists, code, paragraphs) for SKILL.md previews. */
 export function MarkdownPreview({ source }: { source: string }) {
@@ -10,7 +10,10 @@ export function MarkdownPreview({ source }: { source: string }) {
     if (!list) return;
     const Tag = list.ordered ? 'ol' : 'ul';
     blocks.push(
-      <Tag key={blocks.length} className={`m-0 pl-5 ${list.ordered ? 'list-decimal' : 'list-disc'}`}>
+      <Tag
+        key={blocks.length}
+        className={`m-0 pl-5 ${list.ordered ? 'list-decimal' : 'list-disc'}`}
+      >
         {list.items.map((t, i) => (
           <li key={`${i}-${t}`}>{t}</li>
         ))}
@@ -21,7 +24,14 @@ export function MarkdownPreview({ source }: { source: string }) {
   for (const line of lines) {
     if (line.startsWith('```')) {
       if (code) {
-        blocks.push(<pre key={blocks.length} className="m-0 overflow-x-auto rounded-md bg-sunken p-2.5 font-mono text-[12px]">{code.join('\n')}</pre>);
+        blocks.push(
+          <pre
+            key={blocks.length}
+            className="m-0 overflow-x-auto rounded-md bg-sunken p-2.5 font-mono text-[12px]"
+          >
+            {code.join('\n')}
+          </pre>,
+        );
         code = null;
       } else {
         flushList();
@@ -40,7 +50,12 @@ export function MarkdownPreview({ source }: { source: string }) {
       flushList();
       const level = (h[1] ?? '#').length;
       blocks.push(
-        <p key={blocks.length} role="heading" aria-level={level} className={`m-0 font-semibold ${level === 1 ? 'text-[18px]' : 'text-[15px]'}`}>
+        <p
+          key={blocks.length}
+          role="heading"
+          aria-level={level}
+          className={`m-0 font-semibold ${level === 1 ? 'text-[18px]' : 'text-[15px]'}`}
+        >
           {h[2]}
         </p>,
       );
@@ -55,7 +70,11 @@ export function MarkdownPreview({ source }: { source: string }) {
       flushList();
     } else {
       flushList();
-      blocks.push(<p key={blocks.length} className="m-0">{line}</p>);
+      blocks.push(
+        <p key={blocks.length} className="m-0">
+          {line}
+        </p>,
+      );
     }
   }
   flushList();

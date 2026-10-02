@@ -21,7 +21,11 @@ export function Field({
   error?: string | undefined;
   required?: boolean | undefined;
   className?: string;
-  children: (a: { id: string; describedBy: string | undefined; invalid: boolean }) => React.ReactNode;
+  children: (a: {
+    id: string;
+    describedBy: string | undefined;
+    invalid: boolean;
+  }) => React.ReactNode;
 }) {
   const id = React.useId();
   const helpId = help ? `${id}-help` : undefined;
@@ -32,7 +36,11 @@ export function Field({
         {label}
         {required ? <span className="text-coral-ink"> *</span> : null}
       </Label>
-      {children({ id, describedBy: [helpId, errId].filter(Boolean).join(' ') || undefined, invalid: Boolean(error) })}
+      {children({
+        id,
+        describedBy: [helpId, errId].filter(Boolean).join(' ') || undefined,
+        invalid: Boolean(error),
+      })}
       {help ? (
         <p id={helpId} className="m-0 text-caption text-muted">
           {help}
@@ -83,7 +91,10 @@ export function FieldsInputs<T extends FieldValues = Record<string, string>>({
           label={f.label}
           help={f.help}
           required={f.required}
-          error={(form.formState.errors as Record<string, { message?: string } | undefined>)[f.name]?.message}
+          error={
+            (form.formState.errors as Record<string, { message?: string } | undefined>)[f.name]
+              ?.message
+          }
         >
           {({ id, describedBy, invalid }) => (
             <Input

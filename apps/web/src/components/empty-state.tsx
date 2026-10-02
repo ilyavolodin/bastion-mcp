@@ -3,7 +3,12 @@ import type * as React from 'react';
 import { cn } from '@/lib/cn';
 import { Button } from './ui/button';
 
-type Action = { label: string; onClick?: () => void; to?: string; search?: Record<string, unknown> };
+type Action = {
+  label: string;
+  onClick?: () => void;
+  to?: string;
+  search?: Record<string, unknown>;
+};
 
 /**
  * "One next action per state" (18.1): every empty state, setup banner and error names one thing to do and

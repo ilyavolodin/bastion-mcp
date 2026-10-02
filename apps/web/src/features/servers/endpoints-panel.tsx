@@ -33,11 +33,14 @@ type Values = z.infer<typeof schema>;
 export function ToolCountWarning({ count, threshold }: { count: number; threshold: number }) {
   if (count <= threshold) return null;
   return (
-    <p role="status" className="m-0 flex items-start gap-2 rounded-md bg-tangerine-soft p-3 text-[13px] text-tangerine-ink">
+    <p
+      role="status"
+      className="m-0 flex items-start gap-2 rounded-md bg-tangerine-soft p-3 text-[13px] text-tangerine-ink"
+    >
       <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <span>
-        {count} tools is a lot: past {threshold}, AI tools get slower and pick the wrong tool more often. Remove a server
-        you do not need here.
+        {count} tools is a lot: past {threshold}, AI tools get slower and pick the wrong tool more
+        often. Remove a server you do not need here.
       </span>
     </p>
   );
@@ -62,10 +65,13 @@ function EndpointDialog({
     defaultValues: { name: endpoint?.name ?? '', installationIds: endpoint?.installationIds ?? [] },
   });
   React.useEffect(() => {
-    if (open) form.reset({ name: endpoint?.name ?? '', installationIds: endpoint?.installationIds ?? [] });
+    if (open)
+      form.reset({ name: endpoint?.name ?? '', installationIds: endpoint?.installationIds ?? [] });
   }, [open, endpoint, form]);
   const ids = form.watch('installationIds');
-  const tools = installations.filter((i) => ids.includes(i.id)).reduce((n, i) => n + i.toolCount, 0);
+  const tools = installations
+    .filter((i) => ids.includes(i.id))
+    .reduce((n, i) => n + i.toolCount, 0);
   const submit = form.handleSubmit(async (v) => {
     if (endpoint) await patch.mutateAsync(v);
     else await create.mutateAsync(v);
@@ -74,21 +80,36 @@ function EndpointDialog({
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title={endpoint ? `Edit ${endpoint.name}` : 'New endpoint'} description="A named endpoint carries only the servers you pick.">
+      <DialogContent
+        title={endpoint ? `Edit ${endpoint.name}` : 'New endpoint'}
+        description="A named endpoint carries only the servers you pick."
+      >
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           <Field label="Name" required error={form.formState.errors.name?.message}>
             {({ id, describedBy, invalid }) => (
-              <Input id={id} aria-describedby={describedBy} aria-invalid={invalid} {...form.register('name')} />
+              <Input
+                id={id}
+                aria-describedby={describedBy}
+                aria-invalid={invalid}
+                {...form.register('name')}
+              />
             )}
           </Field>
           <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
             <legend className="mb-1.5 text-[13px] font-medium">Servers</legend>
             {installations.map((i) => (
-              <label key={i.id} className="flex min-h-10 items-center gap-2.5 rounded-md px-2 hover:bg-sunken">
+              <label
+                key={i.id}
+                className="flex min-h-10 items-center gap-2.5 rounded-md px-2 hover:bg-sunken"
+              >
                 <Checkbox
                   checked={ids.includes(i.id)}
                   onCheckedChange={(c) =>
-                    form.setValue('installationIds', c ? [...ids, i.id] : ids.filter((x) => x !== i.id), { shouldValidate: true })
+                    form.setValue(
+                      'installationIds',
+                      c ? [...ids, i.id] : ids.filter((x) => x !== i.id),
+                      { shouldValidate: true },
+                    )
                   }
                 />
                 <span className="flex-1 text-label">{i.displayName}</span>
@@ -123,7 +144,10 @@ export function EndpointsPanel() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <p className="m-0 flex-1 text-muted">Each endpoint is one URL for your AI tools. The default carries everything you have set up.</p>
+        <p className="m-0 flex-1 text-muted">
+          Each endpoint is one URL for your AI tools. The default carries everything you have set
+          up.
+        </p>
         <Button variant="outline" onClick={() => setEditing('new')}>
           <Plus className="size-4" aria-hidden="true" />
           New endpoint
@@ -132,13 +156,23 @@ export function EndpointsPanel() {
       <QueryBoundary
         query={endpoints}
         isEmpty={(d) => d.length === 0}
-        empty={<EmptyState icon={<Network />} title="No endpoints yet" description="Install a server and your default endpoint appears." action={{ label: 'Browse the store', to: '/store' }} />}
+        empty={
+          <EmptyState
+            icon={<Network />}
+            title="No endpoints yet"
+            description="Install a server and your default endpoint appears."
+            action={{ label: 'Browse the store', to: '/store' }}
+          />
+        }
       >
         {(list) => (
           <div className="grid gap-4 lg:grid-cols-2">
             {list.map((e) => (
               <Card key={e.id} aria-label={e.name}>
-                <CardHeader title={e.name} actions={e.isDefault ? <Tag tone="info">Default</Tag> : undefined} />
+                <CardHeader
+                  title={e.name}
+                  actions={e.isDefault ? <Tag tone="info">Default</Tag> : undefined}
+                />
                 <CopyField value={e.url} label={`${e.name} URL`} tone="sunken" />
                 <div className="flex flex-wrap gap-1.5">
                   {e.installationIds.map((id) => {
@@ -156,7 +190,13 @@ export function EndpointsPanel() {
                       <Button variant="outline" size="sm" onClick={() => setEditing(e)}>
                         Edit
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => del.mutate(e.id, { onSuccess: () => toast.success('Endpoint removed') })}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          del.mutate(e.id, { onSuccess: () => toast.success('Endpoint removed') })
+                        }
+                      >
                         Remove
                       </Button>
                     </>

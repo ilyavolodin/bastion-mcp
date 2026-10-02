@@ -1,8 +1,14 @@
 /**
- * Methods the SDK's 2026-07-28 registry does not carry: the Tasks extension's `tasks/get`, `tasks/update` and
- * `tasks/cancel` (6.8). The SDK answers them `-32601` before any handler runs (its registry keeps `tasks/get` and
- * `tasks/cancel` as 2025-era vocabulary only), so Bastion serves them itself with the same validation: `Mcp-Method`
- * and `Mcp-Name` (the task id) against the body, the protocol version header against the `_meta` envelope.
+ * Requests Bastion serves itself on the modern era instead of through the SDK handler, because the SDK 2.2.0 cannot
+ * carry them (6.8):
+ *
+ * - `tasks/get`, `tasks/update` and `tasks/cancel`: the SDK's 2026-07-28 registry answers `-32601` for the first and last
+ *   before any handler runs (they are 2025-era vocabulary there).
+ * - `tools/call` from a client that declared the Tasks extension: the SDK validates every `tools/call` handler result as
+ *   a `CallToolResult`, which rejects a `CreateTaskResult` (`resultType: "task"`).
+ *
+ * The same validation the SDK ladder performs applies: `Mcp-Method` and `Mcp-Name` against the body, the protocol
+ * version header against the `_meta` envelope, the envelope itself.
  */
 import { PROTOCOL_VERSIONS } from '@bastion-mcp/core';
 import { TASKS_EXTENSION } from '@bastion-mcp/mcp-upstream';
@@ -11,16 +17,14 @@ import {
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY,
 } from '@modelcontextprotocol/server';
-import { context } from '@opentelemetry/api';
 import { z } from 'zod';
-import { currentRequestContext } from '../../context';
 import { isRecord } from '../../operations/support';
 import { toRpcErrorBody } from '../../rpc';
-import type { JsonObject } from '../../types';
+import type { JsonObject, OpOutcome } from '../../types';
 import type { Exchange, OpRunner } from '../contracts';
 import { modernOpContext } from './server';
 
-export const DIRECT_METHODS: ReadonlySet<string> = new Set(['tasks/get', 'tasks/update', 'tasks/cancel']);
+export const TASK_METHODS: ReadonlySet<string> = new Set(['tasks/get', 'tasks/update', 'tasks/cancel']);
 
 const envelopeSchema = z.looseObject({
   [PROTOCOL_VERSION_META_KEY]: z.string(),
@@ -32,110 +36,151 @@ const requestSchema = z.looseObject({
   jsonrpc: z.literal('2.0'),
   id: z.union([z.string(), z.number()]),
   method: z.string(),
-  params: z.looseObject({ taskId: z.string().min(1), _meta: z.unknown() }),
+  params: z.looseObject({
+    taskId: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
+    _meta: z.unknown(),
+  }),
 });
 
 const header = (value: string | string[] | undefined): string | undefined =>
   Array.isArray(value) ? value[0] : value;
 
-const send = (exchange: Exchange, status: number, body: unknown): void => {
-  const payload = JSON.stringify(body);
-  exchange.res.writeHead(status, {
-    'content-type': 'application/json',
-    'content-length': Buffer.byteLength(payload),
-  });
-  exchange.res.end(payload);
+const declaresTasks = (caps: unknown): boolean => {
+  const extensions = isRecord(caps) ? caps.extensions : undefined;
+  return isRecord(extensions) && TASKS_EXTENSION in extensions;
 };
 
-const reject = (
-  exchange: Exchange,
-  id: string | number | null,
-  status: number,
-  code: number,
-  message: string,
-  data?: Record<string, unknown>,
-): void =>
-  send(exchange, status, { jsonrpc: '2.0', id, error: { code, message, ...(data ? { data } : {}) } });
+/** True when this exchange is served here (decided from the `Mcp-Method` header and the declared extensions). */
+export const isDirectExchange = (exchange: Exchange): boolean => {
+  const method = header(exchange.req.headers['mcp-method']) ?? '';
+  if (TASK_METHODS.has(method)) return true;
+  if (method !== 'tools/call') return false;
+  const meta = exchange.rc.meta;
+  return declaresTasks(meta?.[CLIENT_CAPABILITIES_META_KEY]);
+};
 
-/** True when this exchange is for a method served here (checked on the `Mcp-Method` header, as the SDK does). */
-export const isDirectExchange = (exchange: Exchange): boolean =>
-  DIRECT_METHODS.has(header(exchange.req.headers['mcp-method']) ?? '');
+const frame = (message: unknown): string => `event: message\ndata: ${JSON.stringify(message)}\n\n`;
 
-export const createDirectHandler = (deps: {
-  run: OpRunner;
-  serverInfo: (rc: Exchange['rc']) => JsonObject;
-}) => ({
-  async handle(exchange: Exchange): Promise<void> {
-    const parsed = requestSchema.safeParse(exchange.body);
-    if (!parsed.success) return reject(exchange, null, 400, -32600, 'Invalid Request');
-    const { id, method, params } = parsed.data;
-    const headers = exchange.req.headers;
-    if (header(headers['mcp-method']) !== method) {
-      return reject(exchange, id, 400, -32020, 'Bad Request: the request headers and body disagree', {
-        mismatch: { header: header(headers['mcp-method']) ?? '(missing)', body: method },
+/** One JSON response, upgraded to an SSE stream when the operation emits notifications before it ends. */
+class Writer {
+  private sse = false;
+  constructor(private readonly exchange: Exchange) {}
+
+  emit(method: string, params?: JsonObject): void {
+    const { res } = this.exchange;
+    if (res.writableEnded || res.destroyed) return;
+    if (!this.sse) {
+      this.sse = true;
+      res.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache, no-transform',
+        connection: 'keep-alive',
       });
     }
-    if (header(headers['mcp-name']) !== params.taskId) {
-      return reject(exchange, id, 400, -32020, 'Bad Request: the request headers and body disagree', {
-        mismatch: { header: header(headers['mcp-name']) ?? '(missing)', body: params.taskId },
-      });
+    res.write(frame({ jsonrpc: '2.0', method, ...(params ? { params } : {}) }));
+  }
+
+  finish(status: number, body: unknown): void {
+    const { res } = this.exchange;
+    if (res.writableEnded || res.destroyed) return;
+    if (this.sse) {
+      res.write(frame(body));
+      res.end();
+      return;
     }
-    const envelope = envelopeSchema.safeParse(params._meta);
-    if (!envelope.success) return reject(exchange, id, 400, -32602, 'Invalid params: _meta envelope');
-    const version = header(headers['mcp-protocol-version']);
-    const claimed = envelope.data[PROTOCOL_VERSION_META_KEY];
-    if (version !== claimed || !(PROTOCOL_VERSIONS.modern as readonly string[]).includes(claimed)) {
-      return reject(exchange, id, 400, -32020, 'Bad Request: the request headers and body disagree', {
-        mismatch: { header: version ?? '(missing)', body: claimed },
-      });
-    }
-    const declared = envelope.data[CLIENT_CAPABILITIES_META_KEY];
-    const extensions = isRecord(declared) ? declared.extensions : undefined;
-    if (!isRecord(extensions) || !(TASKS_EXTENSION in extensions)) {
-      return reject(exchange, id, 404, -32601, 'Method not found');
-    }
-    const { _meta, ...rest } = params;
-    const rpcContext = {
-      mcpReq: {
-        id,
-        method,
-        _meta: _meta as never,
-        envelope: envelope.data as never,
-        signal: abortOnClose(exchange),
-        requestState: () => undefined,
-        send: undefined as never,
-        notify: async () => undefined,
-      },
-    };
-    try {
-      const outcome = await deps.run(
-        method,
-        rest as JsonObject,
-        modernOpContext(rpcContext as never, () => undefined),
-      );
-      const result = outcome.kind === 'complete' ? outcome.result : outcome.kind === 'task' ? outcome.task : {};
-      send(exchange, 200, {
-        jsonrpc: '2.0',
-        id,
-        result: {
-          ...(isRecord(result) ? result : {}),
-          resultType: 'complete',
-          _meta: { ...(isRecord(result) && isRecord(result._meta) ? result._meta : {}), 'io.modelcontextprotocol/serverInfo': deps.serverInfo(exchange.rc) },
-        },
-      });
-    } catch (error) {
-      const body = toRpcErrorBody(error);
-      send(exchange, 200, { jsonrpc: '2.0', id, error: body });
-    }
+    const payload = JSON.stringify(body);
+    res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) });
+    res.end(payload);
+  }
+}
+
+const withEnvelope = (result: JsonObject, serverInfo: JsonObject, resultType: string): JsonObject => ({
+  ...result,
+  resultType: typeof result.resultType === 'string' ? result.resultType : resultType,
+  _meta: {
+    ...(isRecord(result._meta) ? result._meta : {}),
+    'io.modelcontextprotocol/serverInfo': serverInfo,
   },
 });
 
-const abortOnClose = (exchange: Exchange): AbortSignal => {
-  const controller = new AbortController();
-  exchange.res.on('close', () => {
-    if (!exchange.res.writableFinished) controller.abort(new Error('client closed the request'));
-  });
-  return controller.signal;
+const toResult = (outcome: OpOutcome<unknown>, serverInfo: JsonObject): JsonObject => {
+  switch (outcome.kind) {
+    case 'complete':
+      return withEnvelope(isRecord(outcome.result) ? outcome.result : {}, serverInfo, 'complete');
+    case 'task':
+      return withEnvelope(outcome.task, serverInfo, 'task');
+    case 'input_required':
+      return withEnvelope(
+        {
+          ...(outcome.inputRequests === undefined ? {} : { inputRequests: outcome.inputRequests }),
+          requestState: outcome.requestState,
+        },
+        serverInfo,
+        'input_required',
+      );
+  }
 };
 
-export { context as _context };
+export const createDirectHandler = (deps: { run: OpRunner }) => ({
+  async handle(exchange: Exchange): Promise<void> {
+    const writer = new Writer(exchange);
+    const fail = (
+      id: string | number | null,
+      status: number,
+      code: number,
+      message: string,
+      data?: Record<string, unknown>,
+    ): void => writer.finish(status, { jsonrpc: '2.0', id, error: { code, message, ...(data ? { data } : {}) } });
+    const parsed = requestSchema.safeParse(exchange.body);
+    if (!parsed.success) return fail(null, 400, -32600, 'Invalid Request');
+    const { id, method, params } = parsed.data;
+    const headers = exchange.req.headers;
+    const isTask = TASK_METHODS.has(method);
+    const target = isTask ? params.taskId : params.name;
+    if (target === undefined) return fail(id, 400, -32602, `Invalid params: ${isTask ? 'taskId' : 'name'} is required`);
+    const mismatch = (headerValue: string | undefined, body: string) =>
+      fail(id, 400, -32020, 'Bad Request: the request headers and body disagree', {
+        mismatch: { header: headerValue ?? '(missing)', body },
+      });
+    if (header(headers['mcp-method']) !== method) return mismatch(header(headers['mcp-method']), method);
+    if (header(headers['mcp-name']) !== target) return mismatch(header(headers['mcp-name']), target);
+    const envelope = envelopeSchema.safeParse(params._meta);
+    if (!envelope.success) return fail(id, 400, -32602, 'Invalid params: _meta envelope');
+    const version = header(headers['mcp-protocol-version']);
+    const claimed = envelope.data[PROTOCOL_VERSION_META_KEY];
+    if (version !== claimed || !(PROTOCOL_VERSIONS.modern as readonly string[]).includes(claimed)) {
+      return mismatch(version, claimed);
+    }
+    if (isTask && !declaresTasks(envelope.data[CLIENT_CAPABILITIES_META_KEY])) {
+      return fail(id, 404, -32601, 'Method not found');
+    }
+    const { _meta, ...rest } = params;
+    const controller = new AbortController();
+    exchange.res.on('close', () => {
+      if (!exchange.res.writableFinished) controller.abort(new Error('client closed the request'));
+    });
+    const mcpReq = {
+      id,
+      method,
+      _meta: _meta as never,
+      envelope: envelope.data as never,
+      signal: controller.signal,
+      requestState: () => undefined,
+      send: undefined as never,
+      notify: async () => undefined,
+    };
+    const serverInfo = exchange.rc.resolved.endpoint.serverInfo as unknown as JsonObject;
+    try {
+      const outcome = await deps.run(
+        method,
+        // The MRTR retry fields stay in the params for the operation layer (6.5).
+        rest as JsonObject,
+        modernOpContext({ mcpReq } as never, (n) => writer.emit(n.method, n.params)),
+      );
+      writer.finish(200, { jsonrpc: '2.0', id, result: toResult(outcome, serverInfo) });
+    } catch (error) {
+      writer.finish(200, { jsonrpc: '2.0', id, error: toRpcErrorBody(error) });
+    }
+  },
+});

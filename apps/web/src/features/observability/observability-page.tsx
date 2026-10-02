@@ -1,8 +1,8 @@
 import { z } from 'zod';
+import type { StatsRange, StatsScope } from '@/api/types';
 import { useAuth } from '@/auth/auth';
 import { PageHeader } from '@/components/page-header';
 import { Segmented } from '@/components/primitives';
-import type { StatsRange, StatsScope } from '@/api/types';
 import { useSearchState } from '@/lib/search';
 import { HealthPanel, LatencyPanel, SandboxPanel, TrafficPanel } from './panels';
 
@@ -44,7 +44,11 @@ export function ObservabilityPage() {
               label="Time range"
               value={s.range}
               onChange={(v) => setS({ range: v })}
-              options={[{ value: '1h', label: '1h' }, { value: '24h', label: '24h' }, { value: '7d', label: '7d' }]}
+              options={[
+                { value: '1h', label: '1h' },
+                { value: '24h', label: '24h' },
+                { value: '7d', label: '7d' },
+              ]}
             />
           </div>
         }

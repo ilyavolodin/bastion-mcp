@@ -4,8 +4,8 @@ import { useMe, useUpdateMe } from '@/api/hooks';
 import type { Me, ThemePref, UiRole } from '@/api/types';
 import { ProblemScreen } from '@/components/problem';
 import { Skeleton } from '@/components/ui/skeleton';
-import { applyTheme, cachedTheme } from '@/lib/theme';
 import { canSee, type NavSection, uiRole } from '@/lib/roles';
+import { applyTheme, cachedTheme } from '@/lib/theme';
 
 type AuthValue = {
   me: Me;
@@ -53,7 +53,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
   const updateMe = useUpdateMe();
   const [previewEnabled] = React.useState(() => readPreviewEnabled());
-  const [preview, setPreview] = React.useState<UiRole | null>(() => (readPreviewEnabled() ? readPreviewRole() : null));
+  const [preview, setPreview] = React.useState<UiRole | null>(() =>
+    readPreviewEnabled() ? readPreviewRole() : null,
+  );
   const [localTheme, setLocalTheme] = React.useState<ThemePref | null>(null);
 
   const me = meQuery.data;

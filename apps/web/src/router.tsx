@@ -1,8 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, createRoute, createRouter } from '@tanstack/react-router';
 import * as React from 'react';
-import { Guard } from '@/components/role-gate';
 import { EmptyState } from '@/components/empty-state';
+import { Guard } from '@/components/role-gate';
 import { AppShell } from '@/components/shell/app-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { NavSection } from '@/lib/roles';
@@ -49,21 +49,69 @@ export const routeTree = root.addChildren([
   screen('/', 'home', () => import('@/features/home/home-page'), 'HomePage'),
   screen('/store', 'store', () => import('@/features/store/store-page'), 'StorePage'),
   screen('/servers', 'servers', () => import('@/features/servers/servers-page'), 'ServersPage'),
-  screen('/servers/$id', 'servers', () => import('@/features/servers/installation-page'), 'InstallationPage'),
-  screen('/activity', 'activity', () => import('@/features/activity/activity-page'), 'ActivityPage'),
-  screen('/observability', 'observability', () => import('@/features/observability/observability-page'), 'ObservabilityPage'),
-  screen('/security', 'security', () => import('@/features/security/security-page'), 'SecurityPage'),
+  screen(
+    '/servers/$id',
+    'servers',
+    () => import('@/features/servers/installation-page'),
+    'InstallationPage',
+  ),
+  screen(
+    '/activity',
+    'activity',
+    () => import('@/features/activity/activity-page'),
+    'ActivityPage',
+  ),
+  screen(
+    '/observability',
+    'observability',
+    () => import('@/features/observability/observability-page'),
+    'ObservabilityPage',
+  ),
+  screen(
+    '/security',
+    'security',
+    () => import('@/features/security/security-page'),
+    'SecurityPage',
+  ),
   screen('/catalog', 'catalog', () => import('@/features/catalog/catalog-page'), 'CatalogPage'),
-  screen('/catalog/$id', 'catalog', () => import('@/features/catalog/editor-page'), 'CatalogEditorPage'),
-  screen('/registry', 'registry', () => import('@/features/registry/registry-page'), 'RegistryPage'),
+  screen(
+    '/catalog/$id',
+    'catalog',
+    () => import('@/features/catalog/editor-page'),
+    'CatalogEditorPage',
+  ),
+  screen(
+    '/registry',
+    'registry',
+    () => import('@/features/registry/registry-page'),
+    'RegistryPage',
+  ),
   screen('/access', 'access', () => import('@/features/access/access-page'), 'AccessPage'),
-  screen('/settings', 'settings', () => import('@/features/settings/settings-page'), 'SettingsPage'),
+  screen(
+    '/settings',
+    'settings',
+    () => import('@/features/settings/settings-page'),
+    'SettingsPage',
+  ),
   screen('/plugins', 'plugins', () => import('@/features/plugins/plugins-page'), 'PluginsPage'),
-  screen('/plugins/marketplace/$id', 'plugins', () => import('@/features/plugins/marketplace-page'), 'MarketplacePage'),
-  screen('/plugins/edit/$id', 'plugins', () => import('@/features/plugins/plugin-editor-page'), 'PluginEditorPage'),
+  screen(
+    '/plugins/marketplace/$id',
+    'plugins',
+    () => import('@/features/plugins/marketplace-page'),
+    'MarketplacePage',
+  ),
+  screen(
+    '/plugins/edit/$id',
+    'plugins',
+    () => import('@/features/plugins/plugin-editor-page'),
+    'PluginEditorPage',
+  ),
 ]);
 
-export const createAppRouter = (queryClient: QueryClient, history?: Parameters<typeof createRouter>[0]['history']) =>
+export const createAppRouter = (
+  queryClient: QueryClient,
+  history?: Parameters<typeof createRouter>[0]['history'],
+) =>
   createRouter({
     routeTree,
     context: { queryClient },

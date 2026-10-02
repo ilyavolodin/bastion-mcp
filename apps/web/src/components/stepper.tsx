@@ -21,7 +21,10 @@ export function Stepper({
   const currentIndex = steps.findIndex((s) => s.id === current);
   const done = doneUpTo ?? currentIndex;
   return (
-    <nav aria-label={label} className="overflow-x-auto rounded-lg bg-surface px-5 py-3.5 shadow-card">
+    <nav
+      aria-label={label}
+      className="overflow-x-auto rounded-lg bg-surface px-5 py-3.5 shadow-card"
+    >
       <ol className="m-0 flex min-w-max list-none items-center p-0">
         {steps.map((s, k) => {
           const isDone = k < done && k !== currentIndex;
@@ -42,7 +45,11 @@ export function Stepper({
                     !isDone && !isCurrent && 'bg-sunken text-muted',
                   )}
                 >
-                  {isDone ? <Check className="size-3.5" strokeWidth={3} aria-hidden="true" /> : k + 1}
+                  {isDone ? (
+                    <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />
+                  ) : (
+                    k + 1
+                  )}
                   {isDone ? <span className="sr-only">done</span> : null}
                 </span>
                 <span

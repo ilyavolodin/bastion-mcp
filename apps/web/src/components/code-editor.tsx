@@ -19,7 +19,14 @@ export type CodeEditorProps = {
 const MonacoImpl = React.lazy(() => import('./monaco-impl'));
 
 /** Textarea used while Monaco loads, when it fails to load, and as the accessible fallback. */
-export function PlainEditor({ value, onChange, ariaLabel, height = 320, readOnly, className }: CodeEditorProps & { className?: string }) {
+export function PlainEditor({
+  value,
+  onChange,
+  ariaLabel,
+  height = 320,
+  readOnly,
+  className,
+}: CodeEditorProps & { className?: string }) {
   return (
     <textarea
       aria-label={ariaLabel}
@@ -28,12 +35,18 @@ export function PlainEditor({ value, onChange, ariaLabel, height = 320, readOnly
       spellCheck={false}
       onChange={(e) => onChange?.(e.target.value)}
       style={{ height }}
-      className={cn('w-full rounded-md border border-line-strong bg-surface p-3 font-mono text-[13px] leading-5 text-ink', className)}
+      className={cn(
+        'w-full rounded-md border border-line-strong bg-surface p-3 font-mono text-[13px] leading-5 text-ink',
+        className,
+      )}
     />
   );
 }
 
-class EditorBoundary extends React.Component<{ fallback: React.ReactNode; children: React.ReactNode }, { failed: boolean }> {
+class EditorBoundary extends React.Component<
+  { fallback: React.ReactNode; children: React.ReactNode },
+  { failed: boolean }
+> {
   override state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
@@ -47,9 +60,16 @@ class EditorBoundary extends React.Component<{ fallback: React.ReactNode; childr
 export function CodeEditor(props: CodeEditorProps) {
   const fallback = <PlainEditor {...props} />;
   return (
-    <div className="overflow-hidden rounded-md border border-line-strong" data-testid={`code-editor-${props.language}`}>
+    <div
+      className="overflow-hidden rounded-md border border-line-strong"
+      data-testid={`code-editor-${props.language}`}
+    >
       <EditorBoundary fallback={fallback}>
-        <React.Suspense fallback={<Skeleton className="w-full rounded-none" style={{ height: props.height ?? 320 }} />}>
+        <React.Suspense
+          fallback={
+            <Skeleton className="w-full rounded-none" style={{ height: props.height ?? 320 }} />
+          }
+        >
           <MonacoImpl {...props} />
         </React.Suspense>
       </EditorBoundary>

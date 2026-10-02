@@ -66,7 +66,10 @@ const prompt = z.strictObject({
   title: z.string().optional(),
   description: description.optional(),
   arguments: z
-    .record(z.string(), z.strictObject({ pinned: z.string().optional(), hidden: z.boolean().optional() }))
+    .record(
+      z.string(),
+      z.strictObject({ pinned: z.string().optional(), hidden: z.boolean().optional() }),
+    )
     .optional(),
   messagesTransform: z
     .strictObject({ prepend: z.array(message).optional(), append: z.array(message).optional() })
@@ -154,7 +157,13 @@ export const setToolField = (doc: OverrideDocument, tool: string, field: string,
   setItemField(doc, 'tools', tool, field, value);
 
 export const sectionOf = (kind: 'tool' | 'prompt' | 'resource' | 'template'): OverrideSection =>
-  kind === 'tool' ? 'tools' : kind === 'prompt' ? 'prompts' : kind === 'resource' ? 'resources' : 'resourceTemplates';
+  kind === 'tool'
+    ? 'tools'
+    : kind === 'prompt'
+      ? 'prompts'
+      : kind === 'resource'
+        ? 'resources'
+        : 'resourceTemplates';
 
 /** JSON Schema of the document for Monaco's inline validation. */
 export const overrideJsonSchema = (): Record<string, unknown> =>

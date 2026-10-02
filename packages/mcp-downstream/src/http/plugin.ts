@@ -23,9 +23,9 @@ import {
 } from '@bastion-mcp/router';
 import { SPAN_NAMES } from '@bastion-mcp/telemetry';
 import {
+  classifyInboundRequest,
   hostHeaderValidationResponse,
   isJsonContentType,
-  isLegacyRequest,
   originValidationResponse,
 } from '@modelcontextprotocol/server';
 import { type Tracer, SpanKind, SpanStatusCode } from '@opentelemetry/api';
@@ -277,7 +277,7 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
       await deps.track(() =>
         bastionRequestContext.run(rc, async () => {
           try {
-            await dispatch(exchange, toWebRequest(req, deps.baseUrl));
+            await dispatch(exchange);
           } catch (error) {
             deps.logger.error('mcp exchange failed', { error: String(error) });
             if (!reply.raw.headersSent) {
@@ -292,7 +292,7 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
       );
     };
 
-    const dispatch = async (exchange: Exchange, web: Request): Promise<void> => {
+    const dispatch = async (exchange: Exchange): Promise<void> => {
       const method = exchange.req.method ?? 'GET';
       if (method !== 'POST') {
         // Session operations of the 2025 transport; the modern era has none.
@@ -303,7 +303,7 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
         await deps.listen.handle(exchange);
         return;
       }
-      if (await isLegacyRequest(web, exchange.body)) {
+      if (isLegacy(exchange)) {
         await deps.legacy.handle(exchange);
         return;
       }
@@ -321,6 +321,35 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
     scope.all('/mcp/*', async (_req, reply) => reply.code(404).send({ error: 'not_found' }));
   });
 };
+
+/**
+ * The SDK's own classification step (`isLegacyRequest` is `classifyInboundRequest(...).kind === 'legacy'` over a web
+ * `Request`); calling it on the plain data avoids building a web `Request` per call. Ladder rejections go to the modern
+ * handler, which owns those error answers (see `adapters/modern/server.ts`).
+ */
+export const isLegacyExchange = (input: {
+  method: string;
+  headers: Record<string, string | string[] | undefined>;
+  body: unknown;
+}): boolean => {
+  const outcome = classifyInboundRequest({
+    httpMethod: input.method,
+    ...(header(input.headers['mcp-protocol-version']) === undefined
+      ? {}
+      : { protocolVersionHeader: header(input.headers['mcp-protocol-version']) as string }),
+    ...(header(input.headers['mcp-method']) === undefined
+      ? {}
+      : { mcpMethodHeader: header(input.headers['mcp-method']) as string }),
+    ...(header(input.headers['mcp-name']) === undefined
+      ? {}
+      : { mcpNameHeader: header(input.headers['mcp-name']) as string }),
+    body: input.body,
+  });
+  return outcome.kind === 'legacy';
+};
+
+const isLegacy = (exchange: Exchange): boolean =>
+  isLegacyExchange({ method: exchange.req.method ?? 'POST', headers: exchange.req.headers, body: exchange.body });
 
 const sendAuthError = async (reply: FastifyReply, error: unknown, logger: Logger): Promise<void> => {
   if (error instanceof AuthenticationError) {

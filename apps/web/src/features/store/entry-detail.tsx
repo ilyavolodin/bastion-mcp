@@ -2,13 +2,16 @@ import { Link } from '@tanstack/react-router';
 import { Globe, KeyRound, Link2, ScrollText, ShieldCheck, X } from 'lucide-react';
 import type * as React from 'react';
 import type { CapabilityItem, StoreEntryDetail } from '@/api/types';
-import { RoleGate } from '@/components/role-gate';
 import { ServerIcon, Tag } from '@/components/primitives';
+import { RoleGate } from '@/components/role-gate';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { RUNTIME_LABEL } from '@/lib/format';
 
-const ACCESS: Record<NonNullable<CapabilityItem['access']>, { label: string; tone: 'ok' | 'warn' | 'bad' }> = {
+const ACCESS: Record<
+  NonNullable<CapabilityItem['access']>,
+  { label: string; tone: 'ok' | 'warn' | 'bad' }
+> = {
   read: { label: 'Read-only', tone: 'ok' },
   write: { label: 'Writes', tone: 'warn' },
   destructive: { label: 'Destructive', tone: 'bad' },
@@ -59,7 +62,15 @@ function VersionLine({ count }: { count: number }) {
       {Array.from({ length: n }, (_, i) => {
         const x = n === 1 ? 150 : 10 + (140 * i) / (n - 1);
         const last = i === n - 1;
-        return <circle key={i} cx={x} cy="12" r={last ? 6 : 4} fill={last ? 'var(--tangerine)' : 'var(--line-strong)'} />;
+        return (
+          <circle
+            key={i}
+            cx={x}
+            cy="12"
+            r={last ? 6 : 4}
+            fill={last ? 'var(--tangerine)' : 'var(--line-strong)'}
+          />
+        );
       })}
     </svg>
   );
@@ -92,8 +103,8 @@ export function EntryDetail({
         <div className="min-w-0 flex-1">
           <h2 className="m-0 text-card-title">{entry.displayName}</h2>
           <p className="m-0 mt-0.5 text-caption text-muted">
-            {entry.runtime === 'remote' ? 'Remote MCP' : `${RUNTIME_LABEL[entry.runtime]} MCP`} · v{entry.version} · published by{' '}
-            {entry.publisher}
+            {entry.runtime === 'remote' ? 'Remote MCP' : `${RUNTIME_LABEL[entry.runtime]} MCP`} · v
+            {entry.version} · published by {entry.publisher}
           </p>
         </div>
         {onClose ? (
@@ -140,7 +151,8 @@ export function EntryDetail({
         </ul>
         {others.length > 0 ? (
           <p className="m-0 text-caption text-muted">
-            Also {others.length} {others.length === 1 ? 'prompt or resource' : 'prompts and resources'}.
+            Also {others.length}{' '}
+            {others.length === 1 ? 'prompt or resource' : 'prompts and resources'}.
           </p>
         ) : null}
       </section>
@@ -152,7 +164,10 @@ export function EntryDetail({
             <span className="text-caption text-muted">Nothing outside Bastion.</span>
           ) : (
             entry.egressHosts.map((h) => (
-              <span key={h} className="inline-flex h-[26px] items-center gap-1.5 rounded-full bg-sunken px-2.5 text-caption font-medium">
+              <span
+                key={h}
+                className="inline-flex h-[26px] items-center gap-1.5 rounded-full bg-sunken px-2.5 text-caption font-medium"
+              >
                 <Globe className="size-3 text-muted" aria-hidden="true" />
                 {h}
               </span>
@@ -167,7 +182,10 @@ export function EntryDetail({
             </span>
           ) : null}
           {entry.guards.map((g) => (
-            <span key={g} className="inline-flex h-[26px] items-center gap-1.5 rounded-full bg-sky-soft px-2.5 text-caption font-semibold text-sky-ink">
+            <span
+              key={g}
+              className="inline-flex h-[26px] items-center gap-1.5 rounded-full bg-sky-soft px-2.5 text-caption font-semibold text-sky-ink"
+            >
               <ShieldCheck className="size-3" aria-hidden="true" />
               {g}
             </span>
@@ -191,7 +209,9 @@ export function EntryDetail({
             <span className="text-[13px] font-semibold">Catalog entry</span>
             <div className="flex items-center gap-2.5">
               <VersionLine count={entry.versions.length} />
-              <span className="flex-1 text-caption text-muted">{entry.versions.length} versions</span>
+              <span className="flex-1 text-caption text-muted">
+                {entry.versions.length} versions
+              </span>
               <Link to={`/catalog/c-${entry.slug}`} className="text-label no-underline">
                 Edit
               </Link>

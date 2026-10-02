@@ -8,7 +8,8 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-grad-tangerine text-on-bright shadow-glow hover:text-on-bright hover:brightness-[1.03]',
+        primary:
+          'bg-grad-tangerine text-on-bright shadow-glow hover:text-on-bright hover:brightness-[1.03]',
         outline: 'border border-line-strong bg-surface text-ink hover:bg-sunken hover:text-ink',
         soft: 'bg-tangerine-soft text-tangerine-ink hover:text-tangerine-ink hover:brightness-[0.97]',
         danger: 'bg-coral text-on-bright hover:text-on-bright hover:brightness-[1.03]',

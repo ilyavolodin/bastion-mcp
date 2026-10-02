@@ -106,7 +106,8 @@ describe.skipIf(!dockerAvailable())('23.2 legacy downstream clients, all upstrea
     const c = await legacy();
     expect(textOf(await c.callTool({ name: 'legacy__ask', arguments: { q: 'x' } }))).toBe('action:decline');
     expect(textOf(await c.callTool({ name: 'legacy__sample', arguments: {} }))).toMatch(/^sample-error:-32601/);
-    expect(textOf(await c.callTool({ name: 'modern__ask', arguments: { q: 'x' } }))).toContain('action');
+    // A modern upstream refuses to ask a client that declared no elicitation: its -32021 passes through unchanged.
+    await expect(c.callTool({ name: 'modern__ask', arguments: { q: 'x' } })).rejects.toThrow(/elicitation/);
   });
 
   it('6.6 progress notifications arrive on the POST stream with the client token', async () => {
@@ -195,7 +196,7 @@ describe.skipIf(!dockerAvailable())('23.2 TS SDK v1.x (2025-06-18) downstream ag
       requestInit: { headers: { Authorization: `Bearer ${stack.users.alice?.token}` } },
     });
     const client = new V1Client({ name: 'v1-client', version: '1.0.0' }, { capabilities: {} });
-    await client.connect(transport);
+    await client.connect(transport as never);
     expect((await client.listTools()).tools.map((t) => t.name)).toContain('modern__echo');
     const out = await client.callTool({ name: 'modern__echo', arguments: { text: 'v1' } });
     expect(textOf(out)).toBe('v1');

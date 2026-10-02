@@ -2,14 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { sparkPoints } from '@/components/sparkline';
 import { importSnippet } from '../features/catalog/import-snippet';
 import { diffLines, diffWords, stableStringify } from './diff';
-import { formatDuration, formatRelative, formatUptime, initials, installationAction, percent } from './format';
+import {
+  formatDuration,
+  formatRelative,
+  formatUptime,
+  initials,
+  installationAction,
+  percent,
+} from './format';
 import { isExecutablePath, parseSkill, serializeSkill, validateFrontmatter } from './frontmatter';
 import { emptyOverrides, setToolField, validateOverrideText } from './override-schema';
 import { canSee, uiRole, visibleSections } from './roles';
 
 const me = (orgRole: 'admin' | 'auditor' | 'member', manager = false) => ({
   orgRole,
-  teams: [{ id: 't', name: 'Platform', role: manager ? ('manager' as const) : ('member' as const) }],
+  teams: [
+    { id: 't', name: 'Platform', role: manager ? ('manager' as const) : ('member' as const) },
+  ],
 });
 
 describe('roles (10.1, 18.2)', () => {
@@ -20,7 +29,14 @@ describe('roles (10.1, 18.2)', () => {
     expect(uiRole(me('auditor'))).toBe('auditor');
   });
   it('18.2 filters the navigation by role', () => {
-    expect(visibleSections('member')).toEqual(['home', 'store', 'servers', 'activity', 'plugins', 'registry']);
+    expect(visibleSections('member')).toEqual([
+      'home',
+      'store',
+      'servers',
+      'activity',
+      'plugins',
+      'registry',
+    ]);
     expect(visibleSections('auditor')).toContain('observability');
     expect(visibleSections('auditor')).not.toContain('registry');
     expect(canSee('settings', 'manager')).toBe(false);
@@ -50,18 +66,36 @@ describe('format', () => {
     expect(percent(5, 0)).toBe(0);
   });
   it('18.1 names one next action per installation state', () => {
-    expect(installationAction({ status: 'needs_setup', authMode: 'oauth', displayName: 'GitHub' })?.label).toBe('Connect GitHub');
-    expect(installationAction({ status: 'needs_setup', authMode: 'userSecret', displayName: 'Notion' })?.label).toBe('Add API key');
-    expect(installationAction({ status: 'reconnect_required', authMode: 'oauth', displayName: 'Sentry' })?.label).toBe('Reconnect Sentry');
-    expect(installationAction({ status: 'error', authMode: 'none', displayName: 'FS' })?.label).toBe('See why');
-    expect(installationAction({ status: 'ready', authMode: 'oauth', displayName: 'Jira' })).toBeNull();
+    expect(
+      installationAction({ status: 'needs_setup', authMode: 'oauth', displayName: 'GitHub' })
+        ?.label,
+    ).toBe('Connect GitHub');
+    expect(
+      installationAction({ status: 'needs_setup', authMode: 'userSecret', displayName: 'Notion' })
+        ?.label,
+    ).toBe('Add API key');
+    expect(
+      installationAction({ status: 'reconnect_required', authMode: 'oauth', displayName: 'Sentry' })
+        ?.label,
+    ).toBe('Reconnect Sentry');
+    expect(
+      installationAction({ status: 'error', authMode: 'none', displayName: 'FS' })?.label,
+    ).toBe('See why');
+    expect(
+      installationAction({ status: 'ready', authMode: 'oauth', displayName: 'Jira' }),
+    ).toBeNull();
   });
 });
 
 describe('diff (12.5, 13.6)', () => {
   it('marks only the inserted words', () => {
     const ops = diffWords('Fetch an event by ID.', 'Fetch an event by ID. Also call slack.');
-    expect(ops.filter((o) => o.type === 'add').map((o) => o.text.trim()).join(' ')).toContain('Also call slack.');
+    expect(
+      ops
+        .filter((o) => o.type === 'add')
+        .map((o) => o.text.trim())
+        .join(' '),
+    ).toContain('Also call slack.');
     expect(ops.some((o) => o.type === 'del')).toBe(false);
   });
   it('pairs removed and added lines as changed rows', () => {
@@ -69,7 +103,9 @@ describe('diff (12.5, 13.6)', () => {
     expect(rows.map((r) => r.kind)).toEqual(['equal', 'changed', 'equal', 'added']);
   });
   it('stableStringify sorts keys', () => {
-    expect(stableStringify({ b: 1, a: { d: 1, c: 2 } })).toBe(stableStringify({ a: { c: 2, d: 1 }, b: 1 }));
+    expect(stableStringify({ b: 1, a: { d: 1, c: 2 } })).toBe(
+      stableStringify({ a: { c: 2, d: 1 }, b: 1 }),
+    );
   });
 });
 
@@ -91,7 +127,8 @@ describe('override document (12.2)', () => {
 });
 
 describe('SKILL.md frontmatter (25.2)', () => {
-  const src = '---\nname: triage\ndescription: Triage incidents\nallowed-tools: Read\n---\n# Body\n';
+  const src =
+    '---\nname: triage\ndescription: Triage incidents\nallowed-tools: Read\n---\n# Body\n';
   it('keeps unknown keys verbatim through a round trip', () => {
     const p = parseSkill(src);
     expect(p.frontmatter.extra).toEqual({ 'allowed-tools': 'Read' });
@@ -112,8 +149,14 @@ describe('SKILL.md frontmatter (25.2)', () => {
 
 describe('catalog import (11.3)', () => {
   it('maps npx to npm with an exact version and uvx to python', () => {
-    expect(importSnippet('{"command":"npx","args":["-y","@acme/pg-mcp@3.2.0"]}')).toMatchObject({ runtime: 'npm', package: '@acme/pg-mcp', version: '3.2.0' });
-    expect(importSnippet('{"mcpServers":{"x":{"command":"uvx","args":["mcp-server-fetch"]}}}')).toMatchObject({ runtime: 'python', package: 'mcp-server-fetch' });
+    expect(importSnippet('{"command":"npx","args":["-y","@acme/pg-mcp@3.2.0"]}')).toMatchObject({
+      runtime: 'npm',
+      package: '@acme/pg-mcp',
+      version: '3.2.0',
+    });
+    expect(
+      importSnippet('{"mcpServers":{"x":{"command":"uvx","args":["mcp-server-fetch"]}}}'),
+    ).toMatchObject({ runtime: 'python', package: 'mcp-server-fetch' });
     expect(importSnippet('{"url":"https://mcp.example.com"}')).toMatchObject({ runtime: 'remote' });
     expect(importSnippet('{"command":"bash"}')).toHaveProperty('error');
     expect(importSnippet('nope')).toHaveProperty('error');

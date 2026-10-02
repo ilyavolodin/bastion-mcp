@@ -36,7 +36,12 @@ export const STEPS = [
 ] as const;
 type StepId = (typeof STEPS)[number]['id'];
 
-const searchSchema = z.object({ step: z.enum(STEPS.map((s) => s.id) as [StepId, ...StepId[]]).catch('source').default('source') });
+const searchSchema = z.object({
+  step: z
+    .enum(STEPS.map((s) => s.id) as [StepId, ...StepId[]])
+    .catch('source')
+    .default('source'),
+});
 
 const emptyDraft = (): Draft => ({
   displayName: '',
@@ -49,7 +54,9 @@ const emptyDraft = (): Draft => ({
   spec: defaultSpec(),
 });
 
-const fromEntry = (e: CatalogEntryDetail): { draft: Draft; version: CatalogVersion | undefined } => {
+const fromEntry = (
+  e: CatalogEntryDetail,
+): { draft: Draft; version: CatalogVersion | undefined } => {
   const version = e.versions.find((v) => v.id === e.draftVersionId) ?? e.versions[0];
   return {
     version,
@@ -69,7 +76,10 @@ const fromEntry = (e: CatalogEntryDetail): { draft: Draft; version: CatalogVersi
 function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
   const navigate = useNavigate();
   const [s, setS] = useSearchState(searchSchema);
-  const init = React.useMemo(() => (entry ? fromEntry(entry) : { draft: emptyDraft(), version: undefined }), [entry]);
+  const init = React.useMemo(
+    () => (entry ? fromEntry(entry) : { draft: emptyDraft(), version: undefined }),
+    [entry],
+  );
   const [draft, setDraft] = React.useState<Draft>(init.draft);
   const [dirty, setDirty] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -95,7 +105,11 @@ function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
       if (!entry) {
         const created = await create.mutateAsync(draft);
         toast.success('Draft saved');
-        void navigate({ to: `/catalog/${created.id}`, search: { step: s.step }, replace: true } as never);
+        void navigate({
+          to: `/catalog/${created.id}`,
+          search: { step: s.step },
+          replace: true,
+        } as never);
         return created.versions[0]?.id ?? null;
       }
       await api.patch(`/catalog/${entry.id}`, {
@@ -106,7 +120,9 @@ function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
         autoUpgrade: draft.autoUpgrade,
       });
       const v = version
-        ? await api.patch<CatalogVersion>(`/catalog/${entry.id}/versions/${version.id}`, { spec: draft.spec })
+        ? await api.patch<CatalogVersion>(`/catalog/${entry.id}/versions/${version.id}`, {
+            spec: draft.spec,
+          })
         : await api.post<CatalogVersion>(`/catalog/${entry.id}/versions`, { spec: draft.spec });
       setDirty(false);
       toast.success('Draft saved');
@@ -123,14 +139,27 @@ function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
       <PageHeader
         back={{ to: '/catalog', label: 'Catalog' }}
         title={draft.displayName || 'New entry'}
-        badge={<Tag tone={entry?.status === 'published' ? 'ok' : 'warn'}>{entry?.status === 'published' ? 'Published' : 'Draft'}</Tag>}
+        badge={
+          <Tag tone={entry?.status === 'published' ? 'ok' : 'warn'}>
+            {entry?.status === 'published' ? 'Published' : 'Draft'}
+          </Tag>
+        }
         actions={
-          <Button variant="outline" disabled={saving || (!dirty && Boolean(entry))} onClick={() => void save()}>
+          <Button
+            variant="outline"
+            disabled={saving || (!dirty && Boolean(entry))}
+            onClick={() => void save()}
+          >
             {saving ? 'Saving…' : 'Save draft'}
           </Button>
         }
       />
-      <Stepper steps={[...STEPS]} current={s.step} onSelect={(id) => setS({ step: id as StepId })} label="Catalog steps" />
+      <Stepper
+        steps={[...STEPS]}
+        current={s.step}
+        onSelect={(id) => setS({ step: id as StepId })}
+        label="Catalog steps"
+      />
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           {s.step === 'source' ? <SourceStep {...props} /> : null}
@@ -141,17 +170,39 @@ function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
           {s.step === 'security' ? <SecurityStep {...props} /> : null}
           {s.step === 'test' || s.step === 'publish' ? (
             entry && version ? (
-              <TestPanel entryId={entry.id} versionId={version.id} versionLabel={label} canRun onBeforeRun={async () => (dirty ? await save() : version.id)} />
+              <TestPanel
+                entryId={entry.id}
+                versionId={version.id}
+                versionLabel={label}
+                canRun
+                onBeforeRun={async () => (dirty ? await save() : version.id)}
+              />
             ) : (
               <div className="rounded-lg bg-surface p-5 shadow-card">
-                <p className="m-0 mb-3 text-muted">Save the draft to run its test. The test starts the server as you.</p>
-                <Button onClick={() => void save()} disabled={saving}>Save draft</Button>
+                <p className="m-0 mb-3 text-muted">
+                  Save the draft to run its test. The test starts the server as you.
+                </p>
+                <Button onClick={() => void save()} disabled={saving}>
+                  Save draft
+                </Button>
               </div>
             )
           ) : null}
           <div className="flex justify-between">
-            <Button variant="outline" disabled={stepIndex <= 0} onClick={() => setS({ step: STEPS[stepIndex - 1]?.id })}>Back</Button>
-            <Button variant="soft" disabled={stepIndex >= STEPS.length - 1} onClick={() => setS({ step: STEPS[stepIndex + 1]?.id })}>Next step</Button>
+            <Button
+              variant="outline"
+              disabled={stepIndex <= 0}
+              onClick={() => setS({ step: STEPS[stepIndex - 1]?.id })}
+            >
+              Back
+            </Button>
+            <Button
+              variant="soft"
+              disabled={stepIndex >= STEPS.length - 1}
+              onClick={() => setS({ step: STEPS[stepIndex + 1]?.id })}
+            >
+              Next step
+            </Button>
           </div>
         </div>
         <div className="flex min-w-0 flex-col gap-6">
@@ -161,9 +212,20 @@ function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
             versionLabel={label}
             canPublish={passing && Boolean(entry && version)}
             publishing={publish.isPending}
-            disabledReason={dirty ? 'Save and test this version to publish it.' : 'Publish needs a passing test of this exact version.'}
+            disabledReason={
+              dirty
+                ? 'Save and test this version to publish it.'
+                : 'Publish needs a passing test of this exact version.'
+            }
             entryId={entry?.id}
-            onPublish={() => publish.mutate(undefined, { onSuccess: () => { toast.success(`${draft.displayName} v${label} is in the Store`); void navigate({ to: '/catalog' }); } })}
+            onPublish={() =>
+              publish.mutate(undefined, {
+                onSuccess: () => {
+                  toast.success(`${draft.displayName} v${label} is in the Store`);
+                  void navigate({ to: '/catalog' });
+                },
+              })
+            }
           />
           <AutoInstallCard entryId={entry?.id} />
         </div>

@@ -2,9 +2,9 @@ import { ArrowUpRight, ShieldAlert, X } from 'lucide-react';
 import { useCall } from '@/api/hooks';
 import type { CallDetail, GuardFinding, TraceSpan } from '@/api/types';
 import { useAuth } from '@/auth/auth';
+import { Overline, Tag } from '@/components/primitives';
 import { ProblemAlert } from '@/components/problem';
 import { OutcomeBadge } from '@/components/status';
-import { Overline, Tag } from '@/components/primitives';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
@@ -37,11 +37,17 @@ function Waterfall({ detail }: { detail: CallDetail }) {
         {detail.spans.map((s) => (
           <li key={s.id} className="grid h-6 grid-cols-[128px_minmax(0,1fr)] items-center gap-2.5">
             <span className="truncate text-caption text-ink">{s.name}</span>
-            <span className="relative h-3 rounded-[4px] bg-sunken" title={`${s.name}: ${formatDuration(s.durationMs)}`}>
+            <span
+              className="relative h-3 rounded-[4px] bg-sunken"
+              title={`${s.name}: ${formatDuration(s.durationMs)}`}
+            >
               {s.phases ? (
                 <span
                   className="absolute inset-y-0 flex overflow-hidden rounded-[4px]"
-                  style={{ left: `${(s.startMs / total) * 100}%`, width: `${Math.max((s.durationMs / total) * 100, 0.6)}%` }}
+                  style={{
+                    left: `${(s.startMs / total) * 100}%`,
+                    width: `${Math.max((s.durationMs / total) * 100, 0.6)}%`,
+                  }}
                 >
                   {s.phases.map((p) => (
                     <span
@@ -57,7 +63,12 @@ function Waterfall({ detail }: { detail: CallDetail }) {
                   style={{
                     left: `${(s.startMs / total) * 100}%`,
                     width: `${(s.durationMs / total) * 100}%`,
-                    background: s.status === 'blocked' ? 'var(--coral)' : s.status === 'error' ? 'var(--sun)' : GROUP_COLOR[s.group],
+                    background:
+                      s.status === 'blocked'
+                        ? 'var(--coral)'
+                        : s.status === 'error'
+                          ? 'var(--sun)'
+                          : GROUP_COLOR[s.group],
                   }}
                 />
               )}
@@ -69,7 +80,10 @@ function Waterfall({ detail }: { detail: CallDetail }) {
           </li>
         ))}
       </ul>
-      <div className="grid grid-cols-[128px_minmax(0,1fr)] gap-2.5 text-[11px] text-muted" aria-hidden="true">
+      <div
+        className="grid grid-cols-[128px_minmax(0,1fr)] gap-2.5 text-[11px] text-muted"
+        aria-hidden="true"
+      >
         <span />
         <span className="flex justify-between">
           {ticks.map((t, i) => (
@@ -78,10 +92,17 @@ function Waterfall({ detail }: { detail: CallDetail }) {
         </span>
       </div>
       {detail.spans.some((s) => s.phases) ? (
-        <ul className="m-0 flex list-none flex-wrap gap-x-3 gap-y-1 p-0 text-[11px] text-muted" aria-label="Cold start phases">
+        <ul
+          className="m-0 flex list-none flex-wrap gap-x-3 gap-y-1 p-0 text-[11px] text-muted"
+          aria-label="Cold start phases"
+        >
           {Object.entries(PHASE_COLOR).map(([name, color]) => (
             <li key={name} className="inline-flex items-center gap-1">
-              <span className="size-2 rounded-full" style={{ background: color }} aria-hidden="true" />
+              <span
+                className="size-2 rounded-full"
+                style={{ background: color }}
+                aria-hidden="true"
+              />
               {name}
             </li>
           ))}
@@ -106,7 +127,11 @@ export function FindingBlock({ finding }: { finding: GuardFinding }) {
         <ShieldAlert className="size-4" aria-hidden="true" />
         {GUARD_LABEL[finding.guard]} · {finding.rule}
         <Tag tone="bad" className="ml-auto">
-          {finding.action === 'block' ? 'Blocked' : finding.action === 'redact' ? 'Redacted' : 'Warned'}
+          {finding.action === 'block'
+            ? 'Blocked'
+            : finding.action === 'redact'
+              ? 'Redacted'
+              : 'Warned'}
         </Tag>
       </div>
       <code className="font-mono text-[12px] leading-[18px] text-ink">
@@ -119,14 +144,25 @@ export function FindingBlock({ finding }: { finding: GuardFinding }) {
 }
 
 /** Call drawer: trace waterfall, guard findings, policy reasons, previews and the tracing link. */
-export function CallDetailPanel({ id, onClose, docked }: { id: string; onClose?: () => void; docked?: boolean }) {
+export function CallDetailPanel({
+  id,
+  onClose,
+  docked,
+}: {
+  id: string;
+  onClose?: () => void;
+  docked?: boolean;
+}) {
   const q = useCall(id);
   const { me } = useAuth();
   const d = q.data;
   return (
     <aside
       aria-label="Call detail"
-      className={cn('flex flex-col gap-[18px] bg-surface', docked && 'w-[420px] shrink-0 self-start rounded-lg p-[22px] shadow-float')}
+      className={cn(
+        'flex flex-col gap-[18px] bg-surface',
+        docked && 'w-[420px] shrink-0 self-start rounded-lg p-[22px] shadow-float',
+      )}
     >
       {q.isPending ? (
         <div role="status" aria-label="Loading call" className="flex flex-col gap-3">
@@ -141,12 +177,22 @@ export function CallDetailPanel({ id, onClose, docked }: { id: string; onClose?:
             <div className="min-w-0 flex-1">
               <div className="font-mono text-[15px] leading-[22px] font-semibold">{d.item}</div>
               <div className="text-caption text-muted">
-                {[d.installationName, d.client, formatClock(d.startedAt, true)].filter(Boolean).join(' · ')}
+                {[d.installationName, d.client, formatClock(d.startedAt, true)]
+                  .filter(Boolean)
+                  .join(' · ')}
               </div>
             </div>
-            <OutcomeBadge outcome={d.outcome} label={d.outcome === 'blocked' ? 'Blocked' : undefined} />
+            <OutcomeBadge
+              outcome={d.outcome}
+              label={d.outcome === 'blocked' ? 'Blocked' : undefined}
+            />
             {onClose ? (
-              <Button variant="sunken" size="icon-sm" onClick={onClose} aria-label="Close call detail">
+              <Button
+                variant="sunken"
+                size="icon-sm"
+                onClick={onClose}
+                aria-label="Close call detail"
+              >
                 <X className="size-4" aria-hidden="true" />
               </Button>
             ) : null}
@@ -156,7 +202,10 @@ export function CallDetailPanel({ id, onClose, docked }: { id: string; onClose?:
             <FindingBlock key={f.id} finding={f} />
           ))}
           {d.errorMessage ? (
-            <p role="alert" className="m-0 rounded-md bg-tangerine-soft p-3 text-[13px] text-tangerine-ink">
+            <p
+              role="alert"
+              className="m-0 rounded-md bg-tangerine-soft p-3 text-[13px] text-tangerine-ink"
+            >
               {d.errorMessage}
             </p>
           ) : null}
@@ -172,8 +221,12 @@ export function CallDetailPanel({ id, onClose, docked }: { id: string; onClose?:
           {d.previews ? (
             <section aria-label="Previews" className="flex flex-col gap-1.5">
               <Overline>Arguments and result (redacted)</Overline>
-              <pre className="m-0 overflow-x-auto rounded-md bg-sunken p-2.5 font-mono text-[12px]">{d.previews.args}</pre>
-              <pre className="m-0 overflow-x-auto rounded-md bg-sunken p-2.5 font-mono text-[12px]">{d.previews.result}</pre>
+              <pre className="m-0 overflow-x-auto rounded-md bg-sunken p-2.5 font-mono text-[12px]">
+                {d.previews.args}
+              </pre>
+              <pre className="m-0 overflow-x-auto rounded-md bg-sunken p-2.5 font-mono text-[12px]">
+                {d.previews.result}
+              </pre>
             </section>
           ) : null}
           {me.org.traceUiUrl ? (

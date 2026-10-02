@@ -1,5 +1,6 @@
 import * as Primitive from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronsUpDown, LogOut, Moon } from 'lucide-react';
+import { CSRF_COOKIE, CSRF_HEADER, readCookie } from '@/api/client';
 import { useAuth } from '@/auth/auth';
 import { Avatar } from '@/components/primitives';
 import {
@@ -12,7 +13,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/cn';
 import { roleLabel } from '@/lib/roles';
-import { CSRF_COOKIE, CSRF_HEADER, readCookie } from '@/api/client';
 
 export async function signOut(): Promise<void> {
   const csrf = readCookie(CSRF_COOKIE);
@@ -39,12 +39,20 @@ export function UserMenu({ collapsed }: { collapsed?: boolean }) {
           aria-label={`Account menu for ${me.name}`}
           className="flex w-full items-center gap-3 rounded-lg bg-sunken p-3 text-left"
         >
-          <Avatar name={me.name} size={36} color="var(--gradient-sunset)" className="!bg-grad-sunset text-[13px]" />
+          <Avatar
+            name={me.name}
+            size={36}
+            color="var(--gradient-sunset)"
+            className="!bg-grad-sunset text-[13px]"
+          />
           <span className={cn('flex min-w-0 flex-1 flex-col', collapsed && 'max-[1279px]:hidden')}>
             <span className="truncate text-label">{me.name}</span>
             <span className="truncate text-caption text-muted">{label}</span>
           </span>
-          <ChevronsUpDown className={cn('size-4 text-muted', collapsed && 'max-[1279px]:hidden')} aria-hidden="true" />
+          <ChevronsUpDown
+            className={cn('size-4 text-muted', collapsed && 'max-[1279px]:hidden')}
+            aria-hidden="true"
+          />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start">

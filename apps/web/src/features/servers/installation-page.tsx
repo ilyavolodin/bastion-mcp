@@ -22,7 +22,16 @@ import { OverridesTab } from './tabs/overrides-tab';
 import { OverviewTab } from './tabs/overview';
 import { SettingsTab } from './tabs/settings-tab';
 
-const TABS = ['overview', 'capabilities', 'overrides', 'connection', 'activity', 'logs', 'network', 'settings'] as const;
+const TABS = [
+  'overview',
+  'capabilities',
+  'overrides',
+  'connection',
+  'activity',
+  'logs',
+  'network',
+  'settings',
+] as const;
 const searchSchema = z.object({ tab: z.enum(TABS).catch('overview').default('overview') });
 
 function Body({ installation: i }: { installation: Installation }) {
@@ -44,7 +53,11 @@ function Body({ installation: i }: { installation: Installation }) {
               {RUNTIME_LABEL[i.runtime]}
               {i.package ? ` · ${i.package} ${i.versionLabel}` : ` · v${i.versionLabel}`}
             </Tag>
-            {i.isolation !== 'none' ? <Tag tone="info">{i.isolation === 'gvisor' ? 'gVisor sandbox' : 'Namespace sandbox'}</Tag> : null}
+            {i.isolation !== 'none' ? (
+              <Tag tone="info">
+                {i.isolation === 'gvisor' ? 'gVisor sandbox' : 'Namespace sandbox'}
+              </Tag>
+            ) : null}
             {i.ownerType === 'team' ? <Tag tone="berry">Team · {i.ownerName}</Tag> : null}
           </span>
         }
@@ -52,7 +65,11 @@ function Body({ installation: i }: { installation: Installation }) {
           <div className="flex items-center gap-2.5">
             {i.canManage ? (
               <label className="inline-flex h-11 items-center gap-2.5 rounded-md border border-line-strong bg-surface px-3.5 text-label">
-                <Switch checked={i.enabled} onCheckedChange={(v) => patch.mutate({ enabled: v })} aria-label={i.ownerType === 'team' ? 'Enabled for the team' : 'Enabled'} />
+                <Switch
+                  checked={i.enabled}
+                  onCheckedChange={(v) => patch.mutate({ enabled: v })}
+                  aria-label={i.ownerType === 'team' ? 'Enabled for the team' : 'Enabled'}
+                />
                 {i.ownerType === 'team' ? 'Enabled for the team' : 'Enabled'}
               </label>
             ) : null}
@@ -66,7 +83,10 @@ function Body({ installation: i }: { installation: Installation }) {
       {!i.canManage ? (
         <div role="note" className="flex items-center gap-3 rounded-md bg-sky-soft px-4 py-3">
           <Lock className="size-[18px] text-sky-ink" aria-hidden="true" />
-          <span>The {i.ownerName} team manages this server. You can hide it from your endpoint, but not change it.</span>
+          <span>
+            The {i.ownerName} team manages this server. You can hide it from your endpoint, but not
+            change it.
+          </span>
         </div>
       ) : null}
       <Tabs value={s.tab} onValueChange={(v) => setS({ tab: v as (typeof TABS)[number] })}>
@@ -80,14 +100,39 @@ function Body({ installation: i }: { installation: Installation }) {
           <TabsTrigger value="network">Network</TabsTrigger>
           {i.canManage ? <TabsTrigger value="settings">Settings</TabsTrigger> : null}
         </TabsList>
-        <TabsContent value="overview"><OverviewTab installation={i} goTo={(tab) => setS({ tab: tab as (typeof TABS)[number] })} /></TabsContent>
-        <TabsContent value="capabilities"><CapabilitiesTab installationId={i.id} /></TabsContent>
-        {showOverrides ? <TabsContent value="overrides"><OverridesTab installationId={i.id} /></TabsContent> : null}
-        <TabsContent value="connection"><ConnectionTab installation={i} /></TabsContent>
-        <TabsContent value="activity"><div className="flex flex-col gap-6"><CallExplorer fixedInstallationId={i.id} /></div></TabsContent>
-        <TabsContent value="logs"><LogsTab installation={i} /></TabsContent>
-        <TabsContent value="network"><NetworkTab installation={i} /></TabsContent>
-        {i.canManage ? <TabsContent value="settings"><SettingsTab installation={i} /></TabsContent> : null}
+        <TabsContent value="overview">
+          <OverviewTab
+            installation={i}
+            goTo={(tab) => setS({ tab: tab as (typeof TABS)[number] })}
+          />
+        </TabsContent>
+        <TabsContent value="capabilities">
+          <CapabilitiesTab installationId={i.id} />
+        </TabsContent>
+        {showOverrides ? (
+          <TabsContent value="overrides">
+            <OverridesTab installationId={i.id} />
+          </TabsContent>
+        ) : null}
+        <TabsContent value="connection">
+          <ConnectionTab installation={i} />
+        </TabsContent>
+        <TabsContent value="activity">
+          <div className="flex flex-col gap-6">
+            <CallExplorer fixedInstallationId={i.id} />
+          </div>
+        </TabsContent>
+        <TabsContent value="logs">
+          <LogsTab installation={i} />
+        </TabsContent>
+        <TabsContent value="network">
+          <NetworkTab installation={i} />
+        </TabsContent>
+        {i.canManage ? (
+          <TabsContent value="settings">
+            <SettingsTab installation={i} />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </>
   );
@@ -96,5 +141,9 @@ function Body({ installation: i }: { installation: Installation }) {
 export function InstallationPage() {
   const { id } = useParams({ strict: false }) as { id: string };
   const q = useInstallation(id);
-  return <QueryBoundary query={q} label="Loading server">{(i) => <Body installation={i} />}</QueryBoundary>;
+  return (
+    <QueryBoundary query={q} label="Loading server">
+      {(i) => <Body installation={i} />}
+    </QueryBoundary>
+  );
 }

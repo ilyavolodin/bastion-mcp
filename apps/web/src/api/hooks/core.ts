@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import type {
   ClientConfig,
@@ -49,7 +49,8 @@ export const useMarkNotificationRead = () =>
 export const useQuotas = () =>
   useQuery({
     queryKey: keys.quotas,
-    queryFn: ({ signal }) => api.get<{ items: Quota[] }>('/me/quotas', { signal }).then((r) => r.items),
+    queryFn: ({ signal }) =>
+      api.get<{ items: Quota[] }>('/me/quotas', { signal }).then((r) => r.items),
   });
 
 // --- Installations ------------------------------------------------------------------------------
@@ -84,9 +85,10 @@ export const useRestartInstallation = (id: string) =>
   useApiMutation(() => api.post<void>(`/installations/${id}/restart`), [keys.installation(id)]);
 
 export const useConnectInstallation = () =>
-  useApiMutation((id: string) => api.post<ConnectResult>(`/installations/${id}/connect`), [
-    keys.installations,
-  ]);
+  useApiMutation(
+    (id: string) => api.post<ConnectResult>(`/installations/${id}/connect`),
+    [keys.installations],
+  );
 
 export const useDisconnectInstallation = (id: string) =>
   useApiMutation(() => api.delete(`/installations/${id}/connection`), [keys.installations]);
@@ -143,7 +145,10 @@ export const useOverrides = (id: string) =>
 export const useSaveOverrides = (id: string) =>
   useApiMutation(
     (document: OverrideDocument) => api.put<void>(`/installations/${id}/overrides`, document),
-    [[...keys.installation(id), 'overrides'], [...keys.installation(id), 'capabilities']],
+    [
+      [...keys.installation(id), 'overrides'],
+      [...keys.installation(id), 'capabilities'],
+    ],
   );
 
 export const usePreviewOverrides = () =>
@@ -160,14 +165,16 @@ export const useTryTool = (id: string) =>
 export const useEndpoints = () => useQuery(listQuery<Endpoint>(keys.endpoints, '/endpoints'));
 
 export const useCreateEndpoint = () =>
-  useApiMutation((input: EndpointInput) => api.post<Endpoint>('/endpoints', input), [
-    keys.endpoints,
-  ]);
+  useApiMutation(
+    (input: EndpointInput) => api.post<Endpoint>('/endpoints', input),
+    [keys.endpoints],
+  );
 
 export const usePatchEndpoint = (id: string) =>
-  useApiMutation((patch: Partial<EndpointInput>) => api.patch<Endpoint>(`/endpoints/${id}`, patch), [
-    keys.endpoints,
-  ]);
+  useApiMutation(
+    (patch: Partial<EndpointInput>) => api.patch<Endpoint>(`/endpoints/${id}`, patch),
+    [keys.endpoints],
+  );
 
 export const useDeleteEndpoint = () =>
   useApiMutation((id: string) => api.delete(`/endpoints/${id}`), [keys.endpoints]);
@@ -185,7 +192,10 @@ export const useClientConfig = (endpointId: string | undefined, client: ClientId
 
 // --- Store --------------------------------------------------------------------------------------
 export const useStore = (q: string) =>
-  useQuery(listQuery<StoreEntry>(keys.store, '/store', q ? { q } : {}));
+  useQuery({
+    ...listQuery<StoreEntry>(keys.store, '/store', q ? { q } : {}),
+    placeholderData: keepPreviousData,
+  });
 
 export const useStoreEntry = (slug: string | null) =>
   useQuery({

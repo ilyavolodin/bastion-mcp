@@ -1,8 +1,8 @@
 import { Table2 } from 'lucide-react';
 import * as React from 'react';
 import { cn } from '@/lib/cn';
-import { Button } from './ui/button';
 import { Card, CardHeader } from './primitives';
+import { Button } from './ui/button';
 
 export type ChartTable = { columns: string[]; rows: (string | number)[][] };
 
@@ -19,6 +19,7 @@ export function ChartCard({
   description,
   actions,
   id,
+  interactive,
 }: {
   title: string;
   legend?: React.ReactNode;
@@ -28,11 +29,17 @@ export function ChartCard({
   description?: string;
   actions?: React.ReactNode;
   id?: string;
+  /** The content has focusable children (links): expose it as a group instead of a single image. */
+  interactive?: boolean;
 }) {
   const [asTable, setAsTable] = React.useState(false);
   const uid = React.useId();
   return (
-    <Card aria-labelledby={`${uid}-title`} className={cn('gap-3', className)} {...(id ? { id } : {})}>
+    <Card
+      aria-labelledby={`${uid}-title`}
+      className={cn('gap-3', className)}
+      {...(id ? { id } : {})}
+    >
       <CardHeader
         id={`${uid}-title`}
         title={title}
@@ -73,11 +80,18 @@ export function ChartCard({
                 <tr key={`${i}-${row[0]}`}>
                   {row.map((cell, j) =>
                     j === 0 ? (
-                      <th key={`${j}-${cell}`} scope="row" className="border-b border-line px-2 py-1.5 font-medium">
+                      <th
+                        key={`${j}-${cell}`}
+                        scope="row"
+                        className="border-b border-line px-2 py-1.5 font-medium"
+                      >
                         {cell}
                       </th>
                     ) : (
-                      <td key={`${j}-${cell}`} className="border-b border-line px-2 py-1.5 tabular-nums">
+                      <td
+                        key={`${j}-${cell}`}
+                        className="border-b border-line px-2 py-1.5 tabular-nums"
+                      >
                         {cell}
                       </td>
                     ),
@@ -86,6 +100,10 @@ export function ChartCard({
               ))}
             </tbody>
           </table>
+        </div>
+      ) : interactive ? (
+        <div role="group" aria-label={title}>
+          {children}
         </div>
       ) : (
         <div role="img" aria-label={`${title} chart. Use "View as table" for the values.`}>

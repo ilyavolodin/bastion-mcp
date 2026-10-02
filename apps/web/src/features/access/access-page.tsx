@@ -7,7 +7,13 @@ import { RoleGate } from '@/components/role-gate';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSearchState } from '@/lib/search';
-import { OAuthClientsTab, PeopleTab, RoleMappingTab, ServiceAccountsTab, TeamsTab } from './directory';
+import {
+  OAuthClientsTab,
+  PeopleTab,
+  RoleMappingTab,
+  ServiceAccountsTab,
+  TeamsTab,
+} from './directory';
 import { CedarDialog, RulesTab } from './rules';
 
 const TABS = ['people', 'teams', 'mapping', 'service', 'clients', 'rules'] as const;
@@ -43,12 +49,28 @@ export function AccessPage() {
           {role === 'admin' ? <TabsTrigger value="clients">OAuth clients</TabsTrigger> : null}
           <TabsTrigger value="rules">Tool rules</TabsTrigger>
         </TabsList>
-        <TabsContent value="people"><PeopleTab initialQuery={s.q} /></TabsContent>
-        <TabsContent value="teams"><TeamsTab /></TabsContent>
-        {role === 'admin' ? <TabsContent value="mapping"><RoleMappingTab /></TabsContent> : null}
-        <TabsContent value="service"><ServiceAccountsTab /></TabsContent>
-        {role === 'admin' ? <TabsContent value="clients"><OAuthClientsTab /></TabsContent> : null}
-        <TabsContent value="rules"><RulesTab /></TabsContent>
+        <TabsContent value="people">
+          <PeopleTab initialQuery={s.q} />
+        </TabsContent>
+        <TabsContent value="teams">
+          <TeamsTab />
+        </TabsContent>
+        {role === 'admin' ? (
+          <TabsContent value="mapping">
+            <RoleMappingTab />
+          </TabsContent>
+        ) : null}
+        <TabsContent value="service">
+          <ServiceAccountsTab />
+        </TabsContent>
+        {role === 'admin' ? (
+          <TabsContent value="clients">
+            <OAuthClientsTab />
+          </TabsContent>
+        ) : null}
+        <TabsContent value="rules">
+          <RulesTab />
+        </TabsContent>
       </Tabs>
       {role === 'admin' ? <CedarDialog open={cedar} onOpenChange={setCedar} /> : null}
     </>

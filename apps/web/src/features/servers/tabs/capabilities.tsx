@@ -20,7 +20,13 @@ export function CapabilitiesTab({ installationId }: { installationId: string }) 
     <QueryBoundary
       query={q}
       isEmpty={(d) => d.length === 0}
-      empty={<EmptyState icon={<Layers />} title="Nothing to show yet" description="The server has not listed any tools. Restart it from Settings." />}
+      empty={
+        <EmptyState
+          icon={<Layers />}
+          title="Nothing to show yet"
+          description="The server has not listed any tools. Restart it from Settings."
+        />
+      }
     >
       {(items) => (
         <div className="flex flex-col gap-6">

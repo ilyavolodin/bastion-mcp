@@ -26,7 +26,10 @@ export const SECTIONS = [
 type Section = (typeof SECTIONS)[number][0];
 
 const searchSchema = z.object({
-  section: z.enum(SECTIONS.map((s) => s[0]) as [Section, ...Section[]]).catch('org').default('org'),
+  section: z
+    .enum(SECTIONS.map((s) => s[0]) as [Section, ...Section[]])
+    .catch('org')
+    .default('org'),
 });
 
 const BODY: Record<Section, () => React.JSX.Element> = {
@@ -45,16 +48,27 @@ export function SettingsPage() {
   const Body = BODY[s.section];
   return (
     <>
-      <PageHeader title="Settings" subtitle="Organization-wide configuration. Only Admins see this page." />
+      <PageHeader
+        title="Settings"
+        subtitle="Organization-wide configuration. Only Admins see this page."
+      />
       <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <nav aria-label="Settings sections" className="flex flex-col gap-0.5 rounded-lg bg-surface p-2.5 shadow-card">
+        <nav
+          aria-label="Settings sections"
+          className="flex flex-col gap-0.5 rounded-lg bg-surface p-2.5 shadow-card"
+        >
           {SECTIONS.map(([id, label]) => (
             <button
               key={id}
               type="button"
               aria-current={id === s.section ? 'page' : undefined}
               onClick={() => setS({ section: id })}
-              className={cn('flex h-11 items-center rounded-md px-3 text-left text-label', id === s.section ? 'bg-grad-tangerine font-semibold text-on-bright' : 'hover:bg-sunken')}
+              className={cn(
+                'flex h-11 items-center rounded-md px-3 text-left text-label',
+                id === s.section
+                  ? 'bg-grad-tangerine font-semibold text-on-bright'
+                  : 'hover:bg-sunken',
+              )}
             >
               {label}
             </button>

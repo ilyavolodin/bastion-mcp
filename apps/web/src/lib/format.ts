@@ -101,4 +101,8 @@ export const AUTH_LABEL = {
   none: 'Ready to use',
 } as const;
 
-export const ISOLATION_LABEL = { none: 'No isolation', namespaces: 'Namespaces', gvisor: 'gVisor' } as const;
+export const ISOLATION_LABEL = {
+  none: 'No isolation',
+  namespaces: 'Namespaces',
+  gvisor: 'gVisor',
+} as const;

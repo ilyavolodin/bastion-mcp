@@ -59,12 +59,24 @@ export function DecisionsCard() {
             </Row>
           ) : null}
           {nDrift > 0 ? (
-            <Row count={nDrift} title="Tool definitions changed upstream" to="/security" action="Open">
-              {role === 'auditor' ? <span className="text-caption text-muted">View only</span> : null}
+            <Row
+              count={nDrift}
+              title="Tool definitions changed upstream"
+              to="/security"
+              action="Open"
+            >
+              {role === 'auditor' ? (
+                <span className="text-caption text-muted">View only</span>
+              ) : null}
             </Row>
           ) : null}
           {role === 'admin' && nApprovals > 0 ? (
-            <Row count={nApprovals} title="Plugin with executable content" to="/plugins" action="Approve" />
+            <Row
+              count={nApprovals}
+              title="Plugin with executable content"
+              to="/plugins"
+              action="Approve"
+            />
           ) : null}
         </ul>
       )}

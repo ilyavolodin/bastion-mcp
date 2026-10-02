@@ -7,7 +7,12 @@ import type {
 } from '@/api/types';
 
 const globToRegExp = (glob: string): RegExp =>
-  new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')}$`);
+  new RegExp(
+    `^${glob
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '.*')
+      .replace(/\?/g, '.')}$`,
+  );
 
 export const findOverride = (
   map: Record<string, Record<string, unknown>> | undefined,
@@ -35,7 +40,10 @@ const mapFor = (doc: OverrideDocument, kind: CapabilityItem['kind']) =>
 
 const GUARDED = /write|delete|run_query|post|create|fetch/;
 
-export const applyToCapability = (item: CapabilityItem, doc: OverrideDocument): EffectiveCapability => {
+export const applyToCapability = (
+  item: CapabilityItem,
+  doc: OverrideDocument,
+): EffectiveCapability => {
   const ov = findOverride(mapFor(doc, item.kind), item.name);
   const hidden = ov?.hidden === true;
   const keys = ov ? Object.keys(ov).filter((k) => k !== 'hidden') : [];
@@ -84,8 +92,16 @@ export const previewDefinitions = (
   const definitions = items.map((item): DefinitionPair => {
     const upstream = upstreamDefinition(item);
     const ov = findOverride(mapFor(doc, item.kind), item.name);
-    if (ov?.hidden === true) return { name: item.name, kind: item.kind, upstream, final: null, error: null };
-    if (!ov) return { name: item.name, kind: item.kind, upstream, final: structuredClone(upstream), error: null };
+    if (ov?.hidden === true)
+      return { name: item.name, kind: item.kind, upstream, final: null, error: null };
+    if (!ov)
+      return {
+        name: item.name,
+        kind: item.kind,
+        upstream,
+        final: structuredClone(upstream),
+        error: null,
+      };
     const final = structuredClone(upstream) as Record<string, unknown> & {
       inputSchema: { properties: Record<string, Record<string, unknown>>; required: string[] };
     };

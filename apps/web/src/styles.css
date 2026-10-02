@@ -1,8 +1,8 @@
-@import '@fontsource/poppins/400.css';
-@import '@fontsource/poppins/500.css';
-@import '@fontsource/poppins/600.css';
-@import '@fontsource/poppins/700.css';
-@import 'tailwindcss';
+@import "@fontsource/poppins/400.css";
+@import "@fontsource/poppins/500.css";
+@import "@fontsource/poppins/600.css";
+@import "@fontsource/poppins/700.css";
+@import "tailwindcss";
 
 /* Zest tokens (docs/design/zest-tokens.json): light is the default, dark is an opt-in per user. */
 :root {
@@ -41,12 +41,19 @@
   --gradient-berry: linear-gradient(135deg, #ff7aa8 0%, #d946ef 100%);
   --gradient-lagoon: linear-gradient(135deg, #2ee6c5 0%, #3d8bff 100%);
   --gradient-mint: linear-gradient(135deg, #5ee6a8 0%, #1bb5a2 100%);
-  --gradient-spectrum: linear-gradient(90deg, #ff8a1f 0%, #ffc23d 25%, #4c8dff 50%, #1bb5a2 75%, #e03fcb 100%);
+  --gradient-spectrum: linear-gradient(
+    90deg,
+    #ff8a1f 0%,
+    #ffc23d 25%,
+    #4c8dff 50%,
+    #1bb5a2 75%,
+    #e03fcb 100%
+  );
   --chart-grid: #e8eaf1;
   color-scheme: light;
 }
 
-:root[data-theme='dark'] {
+:root[data-theme="dark"] {
   --canvas: #121214;
   --surface: #1c1c20;
   --surface-sunken: #26262c;
@@ -81,8 +88,8 @@
 }
 
 @theme inline {
-  --font-sans: 'Poppins', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-sunken: var(--surface-sunken);

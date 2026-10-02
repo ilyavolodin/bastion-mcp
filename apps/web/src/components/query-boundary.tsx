@@ -34,13 +34,20 @@ export function QueryBoundary<T>({
       </div>
     );
   }
-  if (query.isError) return <ProblemAlert error={query.error} onRetry={() => void query.refetch()} />;
+  if (query.isError)
+    return <ProblemAlert error={query.error} onRetry={() => void query.refetch()} />;
   const data = query.data as T;
   if (empty && isEmpty?.(data)) return <>{empty}</>;
   return <>{children(data)}</>;
 }
 
-export const CardsSkeleton = ({ count = 4, className = 'h-36' }: { count?: number; className?: string }) => (
+export const CardsSkeleton = ({
+  count = 4,
+  className = 'h-36',
+}: {
+  count?: number;
+  className?: string;
+}) => (
   <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
     {Array.from({ length: count }, (_, i) => (
       <Skeleton key={i} className={className} />

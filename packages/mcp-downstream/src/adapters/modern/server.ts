@@ -24,7 +24,7 @@ import { currentRequestContext } from '../../context';
 import type { OperationDeps } from '../../operations/deps';
 import { serverCapabilities, tasksDeclared } from '../../operations/basic';
 import { isRecord } from '../../operations/support';
-import { toRpcErrorBody } from '../../rpc';
+import { MethodNotFoundError, toRpcErrorBody } from '../../rpc';
 import type { ClientCaps, ClientInfo, JsonObject, LoggingLevel, OpContext, OpOutcome } from '../../types';
 import type { OpRunner } from '../contracts';
 
@@ -41,6 +41,18 @@ const SDK_METHODS = [
   'resources/read',
   'completion/complete',
 ] as const;
+
+/** The capability the SDK requires before it accepts a handler for the method. */
+const CAPABILITY_OF: Record<string, 'tools' | 'prompts' | 'resources' | 'completions'> = {
+  'tools/list': 'tools',
+  'tools/call': 'tools',
+  'prompts/list': 'prompts',
+  'prompts/get': 'prompts',
+  'resources/list': 'resources',
+  'resources/templates/list': 'resources',
+  'resources/read': 'resources',
+  'completion/complete': 'completions',
+};
 
 const CACHEABLE = [
   'tools/list',
@@ -158,7 +170,13 @@ export const buildLowLevelServer = (deps: ModernAdapterDeps): Server => {
       .notify({ method: n.method, ...(n.params ? { params: n.params } : {}) } as never)
       .catch(() => undefined);
   };
+  const declared = (method: string): boolean => {
+    const needed = CAPABILITY_OF[method];
+    return needed === undefined || (caps as Record<string, unknown>)[needed] !== undefined;
+  };
   for (const method of SDK_METHODS) {
+    // A capability the endpoint does not declare means the method does not exist on it (7.6): -32601 from the fallback.
+    if (!declared(method)) continue;
     server.setRequestHandler(method, (async (
       request: { params?: JsonObject },
       c: ServerContext,
@@ -175,6 +193,7 @@ export const buildLowLevelServer = (deps: ModernAdapterDeps): Server => {
   // Methods the SDK does not know (skills/*, other extensions) reach the operation layer, which forwards them on
   // single-installation endpoints and answers -32601 elsewhere (6.3).
   server.fallbackRequestHandler = async (request, c) => {
+    if (!declared(request.method)) throw toProtocolError(new MethodNotFoundError(request.method));
     const params = withRetryFields((request.params ?? {}) as JsonObject, c);
     try {
       const outcome = await deps.run(request.method, params, modernOpContext(c, emitFor(c)));

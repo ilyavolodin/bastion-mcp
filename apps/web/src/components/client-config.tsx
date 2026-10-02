@@ -14,7 +14,13 @@ export const CLIENTS: { id: ClientId; name: string; badge: string }[] = [
 ];
 
 /** Copy-ready configuration for one client of one endpoint (Home, Install ready screen, Endpoints). */
-export function ClientConfigPanel({ endpointId, client }: { endpointId: string | undefined; client: ClientId }) {
+export function ClientConfigPanel({
+  endpointId,
+  client,
+}: {
+  endpointId: string | undefined;
+  client: ClientId;
+}) {
   const q = useClientConfig(endpointId, client);
   if (q.isPending) return <Skeleton className="h-28 w-full" />;
   if (q.isError) return <ProblemAlert error={q.error} onRetry={() => void q.refetch()} />;
@@ -22,7 +28,9 @@ export function ClientConfigPanel({ endpointId, client }: { endpointId: string |
   return (
     <div className="flex flex-col gap-3">
       <p className="m-0 text-[13px] text-muted">{cfg.instructions}</p>
-      {cfg.filename ? <span className="font-mono text-caption text-muted">{cfg.filename}</span> : null}
+      {cfg.filename ? (
+        <span className="font-mono text-caption text-muted">{cfg.filename}</span>
+      ) : null}
       {cfg.format === 'command' ? (
         <CopyField value={cfg.content} label={`${cfg.label} command`} tone="dark" mono />
       ) : (
@@ -31,7 +39,13 @@ export function ClientConfigPanel({ endpointId, client }: { endpointId: string |
             {cfg.content}
           </pre>
           <div className="mt-2">
-            <CopyField value={cfg.content} label={`${cfg.label} configuration`} tone="sunken" buttonLabel="Copy config" className="[&>span:first-child]:text-[13px]" />
+            <CopyField
+              value={cfg.content}
+              label={`${cfg.label} configuration`}
+              tone="sunken"
+              buttonLabel="Copy config"
+              className="[&>span:first-child]:text-[13px]"
+            />
           </div>
         </div>
       )}
@@ -40,7 +54,13 @@ export function ClientConfigPanel({ endpointId, client }: { endpointId: string |
 }
 
 /** Client chooser (radio-like pills) plus the panel for the chosen client. */
-export function ClientConfigTabs({ endpointId, initial = 'claude-desktop' }: { endpointId: string | undefined; initial?: ClientId }) {
+export function ClientConfigTabs({
+  endpointId,
+  initial = 'claude-desktop',
+}: {
+  endpointId: string | undefined;
+  initial?: ClientId;
+}) {
   const [client, setClient] = React.useState<ClientId>(initial);
   return (
     <div className="flex flex-col gap-3">
