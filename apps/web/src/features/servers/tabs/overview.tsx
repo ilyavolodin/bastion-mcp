@@ -236,13 +236,17 @@ export function OverviewTab({
         ) : null}
 
         <Card aria-label="Endpoint" className="gap-3">
-          <CardHeader title="Use it on its own" />
+          <CardHeader title="This server on its own" />
           <CopyField
-            value={installationUrl(me.org.host, installation.slug)}
+            value={installationUrl(me.org.baseUrl, installation.slug)}
             label="installation endpoint URL"
             tone="sunken"
           />
-          <p className="m-0 text-caption text-muted">Tool names stay unprefixed on this URL.</p>
+          <p className="m-0 text-caption text-muted">
+            Only needed when a client should connect to just this server: tool names stay exactly as
+            the server defines them. Most people use the main URL on Home, which includes this
+            server along with the rest.
+          </p>
         </Card>
 
         <Card aria-label="Latest errors" className="gap-2.5">

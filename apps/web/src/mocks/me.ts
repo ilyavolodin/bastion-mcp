@@ -21,6 +21,7 @@ export const buildMe = (role: UiRole): Me => {
     org: {
       name: 'Acme Corp',
       host: HOST,
+      baseUrl: `https://${HOST}`,
       traceUiUrl: 'https://traces.acme.dev/trace',
       toolWarnThreshold: 40,
     },

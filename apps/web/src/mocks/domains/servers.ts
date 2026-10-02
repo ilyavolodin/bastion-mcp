@@ -596,7 +596,7 @@ export const serversHandlers = [
       row.updatedAt = nowIso();
     }
     return HttpResponse.json({
-      authorizationUrl: `https://${getDb().me.org.host}/oauth/upstream/${row.slug}/authorize?state=demo`,
+      authorizationUrl: `${getDb().me.org.baseUrl}/oauth/upstream/${row.slug}/authorize?state=demo`,
     });
   }),
 
@@ -878,7 +878,7 @@ export const serversHandlers = [
     return HttpResponse.json(
       clientConfig(
         q.client,
-        `https://${getDb().me.org.host}/mcp/e/${row.slug}`,
+        `${getDb().me.org.baseUrl}/mcp/e/${row.slug}`,
         `bastion-${row.slug}`,
         q.auth,
       ),
@@ -889,7 +889,7 @@ export const serversHandlers = [
     const q = clientQuery(url);
     if (!q) return validation([{ path: '/client', message: 'Invalid option' }]);
     return HttpResponse.json(
-      clientConfig(q.client, `https://${getDb().me.org.host}/mcp`, 'bastion-default', q.auth),
+      clientConfig(q.client, `${getDb().me.org.baseUrl}/mcp`, 'bastion-default', q.auth),
     );
   }),
 

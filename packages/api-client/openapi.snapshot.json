@@ -5518,6 +5518,9 @@
                         "host": {
                           "type": "string"
                         },
+                        "baseUrl": {
+                          "type": "string"
+                        },
                         "traceUiUrl": {
                           "type": [
                             "string",
@@ -5531,6 +5534,7 @@
                       "required": [
                         "name",
                         "host",
+                        "baseUrl",
                         "traceUiUrl",
                         "toolWarnThreshold"
                       ],
@@ -5738,6 +5742,9 @@
                         "host": {
                           "type": "string"
                         },
+                        "baseUrl": {
+                          "type": "string"
+                        },
                         "traceUiUrl": {
                           "type": [
                             "string",
@@ -5751,6 +5758,7 @@
                       "required": [
                         "name",
                         "host",
+                        "baseUrl",
                         "traceUiUrl",
                         "toolWarnThreshold"
                       ],

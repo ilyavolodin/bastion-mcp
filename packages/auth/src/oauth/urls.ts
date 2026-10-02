@@ -1,11 +1,18 @@
 import { ENTERPRISE_MANAGED_EXTENSION } from './constants';
 
-/** URL builders for one deployment host (9.3). */
-export const issuerFor = (host: string): string => `https://${host}/oauth`;
-export const mcpResource = (host: string): string => `https://${host}/mcp`;
-export const apiResource = (host: string): string => `https://${host}/api`;
+/**
+ * URL builders for one deployment (9.3). The `host` argument is either a bare host (`bastion.example.com`, which means
+ * https) or the full public origin (`http://localhost:8080`). Pass the origin: an evaluation setup runs on plain http,
+ * and building `https://` URLs for it makes every OAuth client fail with "resource indicator is missing, or unknown".
+ */
+export const originOf = (hostOrOrigin: string): string =>
+  /^https?:\/\//i.test(hostOrOrigin) ? new URL(hostOrOrigin).origin : `https://${hostOrOrigin}`;
 
-/** RFC 8707: any URI under /mcp (exact or path child) or exactly /api. */
+export const issuerFor = (host: string): string => `${originOf(host)}/oauth`;
+export const mcpResource = (host: string): string => `${originOf(host)}/mcp`;
+export const apiResource = (host: string): string => `${originOf(host)}/api`;
+
+/** RFC 8707: any URI under /mcp (exact or path child) or exactly /api, on this deployment's own origin. */
 export const isAllowedResource = (host: string, resource: string): boolean => {
   let url: URL;
   try {
@@ -13,21 +20,21 @@ export const isAllowedResource = (host: string, resource: string): boolean => {
   } catch {
     return false;
   }
-  if (url.protocol !== 'https:' || url.host !== host || url.hash !== '') return false;
+  if (url.origin !== originOf(host) || url.hash !== '') return false;
   if (url.username || url.password) return false;
   const path = url.pathname;
   return path === '/api' || path === '/mcp' || path.startsWith('/mcp/');
 };
 
 export const connectUrl = (host: string, installationId: string): string =>
-  `https://${host}/connect/${encodeURIComponent(installationId)}`;
+  `${originOf(host)}/connect/${encodeURIComponent(installationId)}`;
 export const upstreamCallbackUrl = (host: string): string =>
-  `https://${host}/oauth/upstream/callback`;
+  `${originOf(host)}/oauth/upstream/callback`;
 export const upstreamClientMetadataUrl = (host: string): string =>
-  `https://${host}/oauth/upstream/client-metadata.json`;
-export const upstreamJwksUrl = (host: string): string => `https://${host}/oauth/upstream/jwks`;
+  `${originOf(host)}/oauth/upstream/client-metadata.json`;
+export const upstreamJwksUrl = (host: string): string => `${originOf(host)}/oauth/upstream/jwks`;
 export const idpCallbackUrl = (host: string, connectionId: string): string =>
-  `https://${host}/auth/callback/${connectionId}`;
+  `${originOf(host)}/auth/callback/${connectionId}`;
 
 /** Protected Resource Metadata for any exact path variant of /mcp (9.3, RFC 9728). */
 export const buildProtectedResourceMetadata = (input: {
@@ -36,7 +43,7 @@ export const buildProtectedResourceMetadata = (input: {
   path?: string;
   enterpriseManaged?: boolean;
 }): Record<string, unknown> => ({
-  resource: `https://${input.host}${input.path ?? '/mcp'}`,
+  resource: `${originOf(input.host)}${input.path ?? '/mcp'}`,
   authorization_servers: [issuerFor(input.host)],
   scopes_supported: ['mcp'],
   bearer_methods_supported: ['header'],

@@ -8,6 +8,7 @@ import type { Schemas } from '@/api/schema';
 import {
   defaultEndpointUrl,
   type InstallValues,
+  installationUrl,
   needsOauth,
   type StoreEntryDetailView,
   toInstallBody,
@@ -199,7 +200,7 @@ export function InstallFlow({
             ) : null}
             <Field
               label="URL name"
-              help={`Its own address is https://${me.org.host}/mcp/i/${installSlug || '…'}`}
+              help={`Its own address is ${installationUrl(me.org.baseUrl, installSlug || '…')}`}
               error={slugError}
             >
               {({ id, describedBy, invalid }) => (
@@ -255,7 +256,11 @@ export function InstallFlow({
                 {oauth && connect.isIdle ? '. It asks you to sign in on first use.' : '.'}
               </span>
             </div>
-            <CopyField value={defaultEndpointUrl(me.org.host)} label="endpoint URL" tone="sunken" />
+            <CopyField
+              value={defaultEndpointUrl(me.org.baseUrl)}
+              label="endpoint URL"
+              tone="sunken"
+            />
             <ClientConfigTabs />
             <div className="flex gap-2">
               {installation ? (

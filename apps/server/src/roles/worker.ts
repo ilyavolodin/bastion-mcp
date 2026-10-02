@@ -16,7 +16,7 @@ import { createInstallationRegistry } from '../adapters/upstream/installations';
 import { createPinChecker } from '../adapters/upstream/pin-checker';
 import { createRunnerTokenStore } from '../adapters/upstream/runner-tokens';
 import { createStderrLogger, createStderrSink } from '../adapters/upstream/stderr';
-import { publicHost, SERVER_VERSION } from '../config';
+import { publicOrigin, SERVER_VERSION } from '../config';
 import type {
   AuthServices,
   GuardService,
@@ -94,7 +94,7 @@ export const createWorker = async (
     credentials,
     connectUrls: {
       connectUrl: (_principal, installationId) =>
-        authConnectUrl(publicHost(config), installationId),
+        authConnectUrl(publicOrigin(config), installationId),
     },
     snapshots: infra.repos.snapshots,
     pins,

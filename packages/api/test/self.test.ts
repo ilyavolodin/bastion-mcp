@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildTestApi, type TestApi } from './helpers/harness';
+import { BASE_URL, buildTestApi, type TestApi } from './helpers/harness';
 import { W } from './helpers/world';
 
 let api: TestApi | undefined;
@@ -37,6 +37,14 @@ describe('17.2 GET /me and PATCH /me', () => {
       capabilities: { registry: true, publishOrgWide: true, personalInstalls: 'remoteOnly' },
     });
     expect(rec(rec(admin.body).org).traceUiUrl).toBeNull();
+  });
+
+  it('7.1 the org carries the public base URL with its scheme, so the console never guesses https', async () => {
+    api = await buildTestApi();
+    const admin = await api.call('admin', 'GET', '/me');
+    const org = rec(rec(admin.body).org);
+    expect(org.baseUrl).toBe(new URL(BASE_URL).origin);
+    expect(String(org.baseUrl).startsWith(BASE_URL.split('://')[0] as string)).toBe(true);
     const auditor = await api.call('auditor', 'GET', '/me');
     expect(rec(auditor.body).capabilities).toMatchObject({
       registry: false,

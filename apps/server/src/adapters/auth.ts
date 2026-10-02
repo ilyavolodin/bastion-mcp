@@ -114,7 +114,8 @@ export const createInstallationLookup = (infra: Infra): InstallationLookup => {
 
 export const createAuthServices = async (infra: Infra): Promise<AuthServices> => {
   const { config, repos, redis, logger, options } = infra;
-  const host = new URL(config.publicUrl).host;
+  // The public ORIGIN (scheme included): OAuth issuer, resources and callbacks must use the scheme clients really use.
+  const publicOrigin = new URL(config.publicUrl).origin;
   const keyStore = repos.keyStore;
   if (!keyStore) throw new Error('repositories were created without a secret vault');
   const scimStore = repos.scim;
@@ -184,7 +185,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
   // --- authorization server -------------------------------------------------------------------------------
   const settings = await repos.orgSettings.getAll();
   const authorizationServer = await createAuthorizationServer({
-    host,
+    host: publicOrigin,
     orgName: settings.org.displayName,
     models: repos.oidcModels,
     signingKeys: keyStore,
@@ -228,7 +229,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
 
   // --- IdP login, tokens, minted credentials --------------------------------------------------------------
   const idpDeps = {
-    host,
+    host: publicOrigin,
     connections: repos.idpConnections,
     secrets: infra.secretStore,
     fetch: outboundFetch,
@@ -241,7 +242,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
   // --- upstream OAuth broker ------------------------------------------------------------------------------
   const installationLookup = createInstallationLookup(infra);
   const broker = new UpstreamOAuthBroker({
-    host,
+    host: publicOrigin,
     orgName: settings.org.displayName,
     stateKeyring,
     secrets: infra.secretStore,
@@ -255,7 +256,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
     ...(options.allowInsecureHttp ? { allowInsecureHttp: true } : {}),
   });
   const minted = new IdpMintedTokens({
-    host,
+    host: publicOrigin,
     idpClients,
     vault: idpTokens,
     broker,
@@ -276,7 +277,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
     },
   };
   const credentials = new UpstreamCredentialResolver({
-    host,
+    host: publicOrigin,
     secrets: secretResolver,
     broker,
     minted,

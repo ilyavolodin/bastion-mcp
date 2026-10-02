@@ -42,6 +42,7 @@ const meSchema = z.object({
   org: z.object({
     name: z.string(),
     host: z.string(),
+    baseUrl: z.string(),
     traceUiUrl: z.string().nullable(),
     toolWarnThreshold: z.number(),
   }),

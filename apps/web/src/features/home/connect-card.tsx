@@ -41,13 +41,14 @@ export function ConnectCard() {
         <div className="flex-1">
           <h2 className="m-0 text-[22px] leading-[30px] font-semibold">Connect your AI tools</h2>
           <p className="m-0 mt-1 max-w-[520px]">
-            One URL carries every server you’ve installed. Sign in once from your client; Bastion
-            handles each server’s credentials.
+            Add this one URL to your AI tool and you get every server you’ve installed. Sign in
+            once; Bastion handles each server’s credentials. Tool names are prefixed with their
+            server (for example <code>n8n__run_workflow</code>) so servers never clash.
           </p>
         </div>
         <NetworkArt />
       </div>
-      <CopyField value={defaultEndpointUrl(me.org.host)} label="endpoint URL" />
+      <CopyField value={defaultEndpointUrl(me.org.baseUrl)} label="endpoint URL" />
       <div className="flex flex-wrap gap-2" role="group" aria-label="One-click client setup">
         {CLIENTS.map((c) => (
           <button
@@ -64,7 +65,8 @@ export function ConnectCard() {
         ))}
       </div>
       <p className="m-0 text-caption">
-        Need only a few servers in one client? Create a named endpoint in My servers.
+        This is the URL to use. Want only some servers in one client, or one server on its own?
+        Create a named endpoint in My servers, or use that server’s own address on its page.
       </p>
       <Dialog open={client !== null} onOpenChange={(o) => !o && setClient(null)}>
         <DialogContent

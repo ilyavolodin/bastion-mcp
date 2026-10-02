@@ -31,6 +31,9 @@ export const defaultWorkerId = (env: Record<string, string | undefined>): string
 
 export const publicHost = (config: BastionConfig): string => new URL(config.publicUrl).host;
 
+/** Scheme and host as clients reach Bastion (`http://localhost:8080` in an evaluation): the base of every OAuth URL. */
+export const publicOrigin = (config: BastionConfig): string => new URL(config.publicUrl).origin;
+
 /**
  * Knobs that are not deployment configuration: tests and embedders set them. Production reads none of them.
  */

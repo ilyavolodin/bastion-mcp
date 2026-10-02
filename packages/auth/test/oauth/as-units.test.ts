@@ -11,11 +11,17 @@ import {
   defaultClientIp,
   isCimdHostAllowed,
 } from '../../src/oauth/as/registration';
+import { resourceServerInfo } from '../../src/oauth/as/resource-server';
 import { mintTestAccessToken } from '../../src/oauth/test-support';
 import {
+  apiResource,
   buildProtectedResourceMetadata,
   connectUrl,
+  idpCallbackUrl,
   isAllowedResource,
+  issuerFor,
+  mcpResource,
+  upstreamCallbackUrl,
 } from '../../src/oauth/urls';
 import { MemoryOidcModels, MemoryPolicies, MemorySigningKeys } from './fakes';
 
@@ -83,6 +89,48 @@ describe('9.3 resource policy (RFC 8707)', () => {
 
   it('6.5 builds the connect URL', () => {
     expect(connectUrl(HOST, 'abc-1')).toBe('https://bastion.test/connect/abc-1');
+  });
+});
+
+describe('9.3 a deployment on plain http (a local evaluation) uses its real origin', () => {
+  const ORIGIN = 'http://localhost:8080';
+
+  it('9.3 builds every URL from the origin, not from a guessed https', () => {
+    expect(issuerFor(ORIGIN)).toBe('http://localhost:8080/oauth');
+    expect(mcpResource(ORIGIN)).toBe('http://localhost:8080/mcp');
+    expect(apiResource(ORIGIN)).toBe('http://localhost:8080/api');
+    expect(connectUrl(ORIGIN, 'abc-1')).toBe('http://localhost:8080/connect/abc-1');
+    expect(upstreamCallbackUrl(ORIGIN)).toBe('http://localhost:8080/oauth/upstream/callback');
+    expect(idpCallbackUrl(ORIGIN, 'c1')).toBe('http://localhost:8080/auth/callback/c1');
+  });
+
+  it('9.3 a bare host still means https, and a trailing slash on an origin is ignored', () => {
+    expect(mcpResource('bastion.test')).toBe('https://bastion.test/mcp');
+    expect(mcpResource('http://localhost:8080/')).toBe('http://localhost:8080/mcp');
+  });
+
+  it.each([
+    ['http://localhost:8080/mcp', true],
+    ['http://localhost:8080/mcp/i/n8n', true],
+    ['http://localhost:8080/api', true],
+    ['https://localhost:8080/mcp', false],
+    ['http://localhost:9090/mcp', false],
+    ['http://localhost:8080/other', false],
+  ])('9.3 the resource %s is allowed: %s', (url, expected) => {
+    expect(isAllowedResource(ORIGIN, url)).toBe(expected);
+  });
+
+  it('9.3 protected resource metadata names the http resource and the http issuer', () => {
+    const doc = buildProtectedResourceMetadata({ host: ORIGIN, orgName: 'Bastion' });
+    expect(doc.resource).toBe('http://localhost:8080/mcp');
+    expect(doc.authorization_servers).toEqual(['http://localhost:8080/oauth']);
+    const sub = buildProtectedResourceMetadata({ host: ORIGIN, orgName: 'B', path: '/mcp/i/n8n' });
+    expect(sub.resource).toBe('http://localhost:8080/mcp/i/n8n');
+  });
+
+  it('9.3 resource server info recognises the api resource of an http origin', () => {
+    expect(resourceServerInfo(ORIGIN, 'http://localhost:8080/api').scope).toContain('api:read');
+    expect(resourceServerInfo(ORIGIN, 'http://localhost:8080/mcp').scope).toContain('mcp');
   });
 });
 

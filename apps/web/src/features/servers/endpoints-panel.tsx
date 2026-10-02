@@ -16,6 +16,7 @@ import {
   defaultEndpointUrl,
   type EndpointValues,
   type EndpointView,
+  endpointUrl,
   type InstallationView,
   toEndpointBody,
   toEndpointPatch,
@@ -137,7 +138,7 @@ function EndpointDialog({
           <Field
             label="URL name"
             required
-            help={`Its address is https://${me.org.host}/mcp/e/${form.watch('slug') || '…'}`}
+            help={`Its address is ${endpointUrl(me.org.baseUrl, form.watch('slug') || '…')}`}
             error={form.formState.errors.slug?.message}
           >
             {({ id, describedBy, invalid }) => (
@@ -231,8 +232,9 @@ export function EndpointsPanel() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <p className="m-0 flex-1 text-muted">
-          Each endpoint is one URL for your AI tools. The default carries everything you have set
-          up.
+          An endpoint is one URL for your AI tools. The default endpoint carries every server you
+          have set up and is the one to use. Add a named endpoint to give a client only some servers
+          (a client with many tools can pick the right one more reliably from a short list).
         </p>
         <Button variant="outline" onClick={() => setEditing('new')}>
           <Plus className="size-4" aria-hidden="true" />
@@ -242,7 +244,7 @@ export function EndpointsPanel() {
       <Card aria-label="Default endpoint">
         <CardHeader title="Default endpoint" actions={<Tag tone="info">Default</Tag>} />
         <CopyField
-          value={defaultEndpointUrl(me.org.host)}
+          value={defaultEndpointUrl(me.org.baseUrl)}
           label="Default endpoint URL"
           tone="sunken"
         />

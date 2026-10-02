@@ -240,11 +240,11 @@ export const useTryTool = (id: string) =>
 export const useEndpoints = () => {
   const me = useMe();
   return useQuery({
-    queryKey: [...keys.endpoints, me.data?.org.host ?? ''],
+    queryKey: [...keys.endpoints, me.data?.org.baseUrl ?? ''],
     enabled: me.isSuccess,
     queryFn: async ({ signal }): Promise<EndpointView[]> =>
       (await fetchAll('/endpoints', undefined, 20, signal)).map((e) =>
-        toEndpointView(e, me.data?.org.host ?? ''),
+        toEndpointView(e, me.data?.org.baseUrl ?? ''),
       ),
   });
 };

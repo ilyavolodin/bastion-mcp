@@ -20,7 +20,8 @@ export const registerConnectRoutes = async (app: FastifyInstance, deps: UiDeps) 
   const { infra, auth } = deps;
   const { logger } = infra;
   const lookup = createInstallationLookup(infra);
-  const host = new URL(infra.config.publicUrl).host;
+  // The auth URL builders take the public origin (scheme included), not a bare host.
+  const host = new URL(infra.config.publicUrl).origin;
 
   /** The installation's owner or a member of the owning team may connect their own account (9.6). */
   const mayConnect = async (installationId: string, userId: string, teams: readonly string[]) => {

@@ -17,7 +17,13 @@ export type MeView = {
   status: string;
   teams: Array<{ teamId: string; role: string; slug?: string; displayName?: string }>;
   /** Org display data the console needs without the Admin-only `/settings` (18). */
-  org: { name: string; host: string; traceUiUrl: string | null; toolWarnThreshold: number };
+  org: {
+    name: string;
+    host: string;
+    baseUrl: string;
+    traceUiUrl: string | null;
+    toolWarnThreshold: number;
+  };
   /** Cedar-derived flags the UI cannot infer from the role (10.1, 11.7). */
   capabilities: {
     registry: boolean;
@@ -59,6 +65,8 @@ export const getMe = async (ctx: ReadCtx): Promise<MeView> => {
     org: {
       name: settings.org.displayName,
       host: new URL(deps.config.baseUrl).host,
+      /** Scheme and host as clients reach Bastion (`http://localhost:8080` in an evaluation): the console builds every URL from it. */
+      baseUrl: new URL(deps.config.baseUrl).origin,
       traceUiUrl: deps.config.traceUiUrl ?? null,
       toolWarnThreshold: settings.endpoints.toolWarnThreshold,
     },

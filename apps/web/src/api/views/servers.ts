@@ -159,14 +159,17 @@ export const toInstallationView = (
   };
 };
 
-/** The URL an installation answers on by itself (7.1): `/mcp/i/<slug>` on the org host. */
-export const installationUrl = (host: string, slug: string): string =>
-  `https://${host}/mcp/i/${slug}`;
+/**
+ * The URL an installation answers on by itself (7.1): `/mcp/i/<slug>`. Every URL is built from the server's own public
+ * base URL (scheme included), never from a guessed scheme: an evaluation setup runs on `http://localhost`.
+ */
+export const installationUrl = (baseUrl: string, slug: string): string =>
+  `${baseUrl}/mcp/i/${slug}`;
 
 /** The default endpoint carries everything the caller has set up. */
-export const defaultEndpointUrl = (host: string): string => `https://${host}/mcp`;
+export const defaultEndpointUrl = (baseUrl: string): string => `${baseUrl}/mcp`;
 
-export const endpointUrl = (host: string, slug: string): string => `https://${host}/mcp/e/${slug}`;
+export const endpointUrl = (baseUrl: string, slug: string): string => `${baseUrl}/mcp/e/${slug}`;
 
 /** Names of the secrets an installation already has a value for. */
 export const secretsSet = (row: Pick<Installation, 'secretRefs'>): Set<string> =>

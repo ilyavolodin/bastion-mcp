@@ -125,10 +125,16 @@ describe('installation view', () => {
     expect(v).toMatchObject({ runtime: 'npm', package: '@acme/pg-mcp', versionLabel: '3.2.0' });
   });
 
-  it('7.1 the URLs follow the router forms on the org host', () => {
-    expect(defaultEndpointUrl('b.acme.dev')).toBe('https://b.acme.dev/mcp');
-    expect(endpointUrl('b.acme.dev', 'eng')).toBe('https://b.acme.dev/mcp/e/eng');
-    expect(installationUrl('b.acme.dev', 'jira')).toBe('https://b.acme.dev/mcp/i/jira');
+  it('7.1 the URLs follow the router forms on the public base URL, scheme included', () => {
+    expect(defaultEndpointUrl('https://b.acme.dev')).toBe('https://b.acme.dev/mcp');
+    expect(endpointUrl('https://b.acme.dev', 'eng')).toBe('https://b.acme.dev/mcp/e/eng');
+    expect(installationUrl('https://b.acme.dev', 'jira')).toBe('https://b.acme.dev/mcp/i/jira');
+  });
+
+  it('7.1 an http base URL (a local evaluation) is never rewritten to https', () => {
+    expect(defaultEndpointUrl('http://localhost:8080')).toBe('http://localhost:8080/mcp');
+    expect(installationUrl('http://localhost:8080', 'n8n')).toBe('http://localhost:8080/mcp/i/n8n');
+    expect(endpointUrl('http://localhost:8080', 'eng')).toBe('http://localhost:8080/mcp/e/eng');
   });
 
   it('11.4 a secret is set when the installation has a reference to it', () => {
