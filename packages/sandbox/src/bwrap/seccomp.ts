@@ -67,7 +67,12 @@ const SYSCALLS: Record<string, { x86_64?: number; aarch64?: number }> = {
 
 export const knownSyscalls = (): string[] => Object.keys(SYSCALLS);
 
-const ACTIONS = ['SCMP_ACT_ALLOW', 'SCMP_ACT_ERRNO', 'SCMP_ACT_KILL', 'SCMP_ACT_KILL_PROCESS'] as const;
+const ACTIONS = [
+  'SCMP_ACT_ALLOW',
+  'SCMP_ACT_ERRNO',
+  'SCMP_ACT_KILL',
+  'SCMP_ACT_KILL_PROCESS',
+] as const;
 
 export const seccompProfileSchema = z.object({
   defaultAction: z.enum(['SCMP_ACT_ALLOW', 'SCMP_ACT_ERRNO']),
@@ -130,7 +135,11 @@ export const compileSeccomp = (profileInput: unknown, arch: SeccompArch): BpfIns
   ];
   if (arch === 'x86_64') {
     // x32 ABI syscalls (nr | 0x40000000) would bypass a number-based denylist.
-    program.push(ins(BPF.LD_W_ABS, OFFSET.nr), ins(BPF.JSET_K, X32_SYSCALL_BIT, 0, 1), ins(BPF.RET_K, RET.KILL_PROCESS));
+    program.push(
+      ins(BPF.LD_W_ABS, OFFSET.nr),
+      ins(BPF.JSET_K, X32_SYSCALL_BIT, 0, 1),
+      ins(BPF.RET_K, RET.KILL_PROCESS),
+    );
   }
   for (const entry of profile.syscalls) {
     const action = retValue(entry.action, entry.errnoRet);
@@ -166,7 +175,9 @@ export const compileSeccomp = (profileInput: unknown, arch: SeccompArch): BpfIns
     }
   }
   const defaultRet =
-    profile.defaultAction === 'SCMP_ACT_ALLOW' ? RET.ALLOW : RET.ERRNO | (profile.defaultErrnoRet ?? 1);
+    profile.defaultAction === 'SCMP_ACT_ALLOW'
+      ? RET.ALLOW
+      : RET.ERRNO | (profile.defaultErrnoRet ?? 1);
   program.push(ins(BPF.RET_K, defaultRet));
   if (program.length > 4096) throw new Error('seccomp program exceeds BPF_MAXINSNS');
   return program;
@@ -191,8 +202,10 @@ export const hostSeccompArch = (arch: string = process.arch): SeccompArch => {
   throw new Error(`seccomp filter is not generated for architecture ${arch}`);
 };
 
-export const generateSeccompBpf = (profile: unknown, arch: SeccompArch = hostSeccompArch()): Buffer =>
-  serializeBpf(compileSeccomp(profile, arch));
+export const generateSeccompBpf = (
+  profile: unknown,
+  arch: SeccompArch = hostSeccompArch(),
+): Buffer => serializeBpf(compileSeccomp(profile, arch));
 
 /** Minimal interpreter for the subset of BPF used above; the unit tests use it to verify decisions. */
 export const evaluateSeccomp = (

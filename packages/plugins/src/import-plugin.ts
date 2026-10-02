@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { PluginValidationError } from './errors';
-import { isSemver, type McpServerComponent, type PluginManifest, parsePluginManifest } from './manifest';
+import {
+  isSemver,
+  type McpServerComponent,
+  type PluginManifest,
+  parsePluginManifest,
+} from './manifest';
 import { decodeUtf8, type PluginFile } from './types';
 
 const CLAUDE_ONLY_ROOTS = ['commands', 'agents', 'hooks', 'output-styles'];
@@ -60,7 +65,9 @@ export const importPluginTree = (
 ): { manifest: PluginManifest; files: PluginFile[] } => {
   const raw =
     readJson(files, '.claude-plugin/plugin.json') ?? readJson(files, 'plugin.json') ?? undefined;
-  const meta = looseManifest.safeParse(raw ?? (fallback.name ? { name: fallback.name } : undefined));
+  const meta = looseManifest.safeParse(
+    raw ?? (fallback.name ? { name: fallback.name } : undefined),
+  );
   if (!meta.success) throw new PluginValidationError('plugin manifest with a name is required');
   const version = meta.data.version ?? fallback.version ?? '0.0.0';
   if (!isSemver(version)) {
@@ -89,7 +96,9 @@ export const importPluginTree = (
     ...serversFrom(readJson(files, '.mcp.json')),
     ...serversFrom(readJson(files, 'mcp.json')),
   ];
-  const unique = [...new Map(servers.map((s) => [s.kind === 'bastion' ? s.slug : s.name, s])).values()];
+  const unique = [
+    ...new Map(servers.map((s) => [s.kind === 'bastion' ? s.slug : s.name, s])).values(),
+  ];
   const manifest = parsePluginManifest({
     name: meta.data.name,
     version,

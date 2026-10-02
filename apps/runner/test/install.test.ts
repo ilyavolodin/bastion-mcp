@@ -42,7 +42,15 @@ describe('8.3 install plans', () => {
     expect(plan.commands).toEqual([
       {
         command: 'npm',
-        args: ['ci', '--prefix', '/opt/mcp', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts'],
+        args: [
+          'ci',
+          '--prefix',
+          '/opt/mcp',
+          '--omit=dev',
+          '--no-audit',
+          '--no-fund',
+          '--ignore-scripts',
+        ],
       },
     ]);
   });
@@ -86,15 +94,19 @@ describe('8.3 install plans', () => {
   });
 
   it('8.3 pypi without lockfile installs identifier==version', () => {
-    const plan = buildUvPlan(parse({ runtime: 'pypi', identifier: 'mcp-server-fetch', version: '2025.1' }));
+    const plan = buildUvPlan(
+      parse({ runtime: 'pypi', identifier: 'mcp-server-fetch', version: '2025.1' }),
+    );
     expect(plan.commands[1]?.args.at(-1)).toBe('mcp-server-fetch==2025.1');
   });
 
   it('8.7 a lockfile of the wrong kind is refused', () => {
-    expect(() => buildNpmPlan(parse({ lockfile: lock('uv-requirements', 'x') }))).toThrow(InstallError);
-    expect(() => buildUvPlan(parse({ runtime: 'pypi', lockfile: lock('npm-shrinkwrap', 'x') }))).toThrow(
+    expect(() => buildNpmPlan(parse({ lockfile: lock('uv-requirements', 'x') }))).toThrow(
       InstallError,
     );
+    expect(() =>
+      buildUvPlan(parse({ runtime: 'pypi', lockfile: lock('npm-shrinkwrap', 'x') })),
+    ).toThrow(InstallError);
   });
 
   it('8.7 lockfile integrity: a sha256 mismatch fails before any command runs', () => {
@@ -113,7 +125,9 @@ describe('8.3 npm bin resolution', () => {
     expect(resolveNpmBinName({ bin: { run: 'a.js' } }, 'pkg', undefined)).toBe('run');
     expect(resolveNpmBinName({ bin: { a: 'a', b: 'b' } }, 'pkg', 'b')).toBe('b');
     expect(resolveNpmBinName({ bin: { pkg: 'a', b: 'b' } }, 'pkg', undefined)).toBe('pkg');
-    expect(() => resolveNpmBinName({ bin: { a: 'a', b: 'b' } }, 'pkg', undefined)).toThrow(/several/);
+    expect(() => resolveNpmBinName({ bin: { a: 'a', b: 'b' } }, 'pkg', undefined)).toThrow(
+      /several/,
+    );
     expect(() => resolveNpmBinName({ bin: { a: 'a' } }, 'pkg', 'zzz')).toThrow(/no bin/);
     expect(() => resolveNpmBinName({ bin: './x' }, 'pkg', 'other')).toThrow(/no bin/);
     expect(() => resolveNpmBinName({}, 'pkg', undefined)).toThrow(/no bin/);
@@ -172,7 +186,10 @@ describe('8.3 installer execution', () => {
       const pkgDir = path.join(root, 'node_modules', '@scope', 'server-x');
       const { mkdir } = await import('node:fs/promises');
       await mkdir(pkgDir, { recursive: true });
-      await writeFile(path.join(pkgDir, 'package.json'), JSON.stringify({ bin: { 'server-x': 'i.js' } }));
+      await writeFile(
+        path.join(pkgDir, 'package.json'),
+        JSON.stringify({ bin: { 'server-x': 'i.js' } }),
+      );
       return { code: 0, output: '' };
     };
     const details: string[] = [];
@@ -183,26 +200,39 @@ describe('8.3 installer execution', () => {
     );
     expect(calls[0]?.slice(0, 2)).toEqual(['npm', 'ci']);
     expect(await readFile(path.join(root, 'npm-shrinkwrap.json'), 'utf8')).toBe('{"a":1}');
-    expect(resolved).toEqual({ command: path.join(root, 'node_modules', '.bin', 'server-x'), args: ['--stdio'] });
+    expect(resolved).toEqual({
+      command: path.join(root, 'node_modules', '.bin', 'server-x'),
+      args: ['--stdio'],
+    });
     expect(details).toEqual(['npm ci']);
   });
 
   it('8.3 pypi resolves /opt/mcp/.venv/bin/<bin>', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'runner-install-'));
     const installer = createInstaller({ root, exec: async () => ({ code: 0, output: '' }) });
-    const resolved = await installer.install(parse({ runtime: 'pypi', identifier: 'mcp-server-fetch', bin: 'mcp-fetch' }), {
-      signal: new AbortController().signal,
-      env: {},
-      onDetail: () => {},
-    });
+    const resolved = await installer.install(
+      parse({ runtime: 'pypi', identifier: 'mcp-server-fetch', bin: 'mcp-fetch' }),
+      {
+        signal: new AbortController().signal,
+        env: {},
+        onDetail: () => {},
+      },
+    );
     expect(resolved.command).toBe(`${root}/.venv/bin/mcp-fetch`);
   });
 
   it('8.3 a failing command surfaces its output as an InstallError', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'runner-install-'));
-    const installer = createInstaller({ root, exec: async () => ({ code: 1, output: 'E404 not found' }) });
+    const installer = createInstaller({
+      root,
+      exec: async () => ({ code: 1, output: 'E404 not found' }),
+    });
     await expect(
-      installer.install(parse(), { signal: new AbortController().signal, env: {}, onDetail: () => {} }),
+      installer.install(parse(), {
+        signal: new AbortController().signal,
+        env: {},
+        onDetail: () => {},
+      }),
     ).rejects.toThrow(/E404/);
   });
 
@@ -218,7 +248,11 @@ describe('8.3 installer execution', () => {
     });
     const bad = { kind: 'npm-shrinkwrap', content: '{}', sha256: 'b'.repeat(64) };
     await expect(
-      installer.install(parse({ lockfile: bad }), { signal: new AbortController().signal, env: {}, onDetail: () => {} }),
+      installer.install(parse({ lockfile: bad }), {
+        signal: new AbortController().signal,
+        env: {},
+        onDetail: () => {},
+      }),
     ).rejects.toThrow(/integrity/);
     expect(ran).toBe(false);
   });
@@ -227,7 +261,11 @@ describe('8.3 installer execution', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'runner-install-'));
     const installer = createInstaller({ root, exec: async () => ({ code: 0, output: '' }) });
     await expect(
-      installer.install(parse(), { signal: new AbortController().signal, env: {}, onDetail: () => {} }),
+      installer.install(parse(), {
+        signal: new AbortController().signal,
+        env: {},
+        onDetail: () => {},
+      }),
     ).rejects.toThrow(/not found/);
   });
 });

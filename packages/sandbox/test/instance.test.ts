@@ -41,33 +41,62 @@ describe('8.6 instance state machine', () => {
     expect(s).toEqual({ kind: 'absent' });
   });
   it('8.6 failed start goes through failed to absent; a crash drops to absent', () => {
-    expect(apply({ kind: 'absent' }, { type: 'start' }, { type: 'phase', phase: 'installing' }, { type: 'fail' })).toEqual({
+    expect(
+      apply(
+        { kind: 'absent' },
+        { type: 'start' },
+        { type: 'phase', phase: 'installing' },
+        { type: 'fail' },
+      ),
+    ).toEqual({
       kind: 'failed',
       phase: 'installing',
     });
-    expect(apply({ kind: 'failed', phase: 'binding' }, { type: 'reset' })).toEqual({ kind: 'absent' });
+    expect(apply({ kind: 'failed', phase: 'binding' }, { type: 'reset' })).toEqual({
+      kind: 'absent',
+    });
     expect(apply({ kind: 'ready' }, { type: 'crashed' })).toEqual({ kind: 'absent' });
   });
   it('8.6 rejects invalid transitions', () => {
     expect(instanceStateMachine({ kind: 'ready' }, { type: 'start' }).ok).toBe(false);
-    expect(instanceStateMachine({ kind: 'starting', phase: 'installing' }, { type: 'phase', phase: 'binding' }).ok).toBe(false);
-    expect(instanceStateMachine({ kind: 'starting', phase: 'installing' }, { type: 'connected' }).ok).toBe(false);
+    expect(
+      instanceStateMachine(
+        { kind: 'starting', phase: 'installing' },
+        { type: 'phase', phase: 'binding' },
+      ).ok,
+    ).toBe(false);
+    expect(
+      instanceStateMachine({ kind: 'starting', phase: 'installing' }, { type: 'connected' }).ok,
+    ).toBe(false);
     expect(instanceStateMachine({ kind: 'absent' }, { type: 'idleTimeout' }).ok).toBe(false);
     expect(instanceStateMachine({ kind: 'absent' }, { type: 'stop' }).ok).toBe(false);
     expect(instanceStateMachine({ kind: 'ready' }, { type: 'stopped' }).ok).toBe(false);
     expect(instanceStateMachine({ kind: 'ready' }, { type: 'fail' }).ok).toBe(false);
-    expect(instanceStateMachine({ kind: 'starting', phase: 'claiming' }, { type: 'crashed' }).ok).toBe(false);
+    expect(
+      instanceStateMachine({ kind: 'starting', phase: 'claiming' }, { type: 'crashed' }).ok,
+    ).toBe(false);
     expect(instanceStateMachine({ kind: 'ready' }, { type: 'reset' }).ok).toBe(false);
     expect(instanceStateMachine({ kind: 'absent' }, { type: 'activity' }).ok).toBe(false);
-    expect(instanceStateMachine({ kind: 'absent' }, { type: 'phase', phase: 'binding' }).ok).toBe(false);
+    expect(instanceStateMachine({ kind: 'absent' }, { type: 'phase', phase: 'binding' }).ok).toBe(
+      false,
+    );
   });
   it('8.6 property: the machine never leaves the known state set', () => {
     const events: fc.Arbitrary<InstanceEvent> = fc.oneof(
       fc.constantFrom<InstanceEvent>(
-        { type: 'start' }, { type: 'connected' }, { type: 'idleTimeout' }, { type: 'activity' },
-        { type: 'stop' }, { type: 'stopped' }, { type: 'fail' }, { type: 'crashed' }, { type: 'reset' },
+        { type: 'start' },
+        { type: 'connected' },
+        { type: 'idleTimeout' },
+        { type: 'activity' },
+        { type: 'stop' },
+        { type: 'stopped' },
+        { type: 'fail' },
+        { type: 'crashed' },
+        { type: 'reset' },
       ),
-      fc.constantFrom(...START_PHASES_ORDER).map((phase): InstanceEvent => ({ type: 'phase', phase })),
+      fc
+        .constantFrom(...START_PHASES_ORDER)
+        .map((phase): InstanceEvent => ({ type: 'phase', phase })),
     );
     fc.assert(
       fc.property(fc.array(events, { maxLength: 40 }), (list) => {
@@ -114,7 +143,12 @@ describe('8.6 failure backoff', () => {
 
 describe('8.6 LRU eviction', () => {
   const mk = (id: string, over: Partial<InstanceSummary>): InstanceSummary => ({
-    id, userId: 'u1', state: 'idle', lastUsedAt: 100, inflight: 0, ...over,
+    id,
+    userId: 'u1',
+    state: 'idle',
+    lastUsedAt: 100,
+    inflight: 0,
+    ...over,
   });
   it('8.6 picks the least recently used idle-eligible instance of that user', () => {
     const list = [

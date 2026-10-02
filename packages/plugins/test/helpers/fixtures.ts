@@ -10,7 +10,7 @@ const goldenDir = join(here, '..', 'golden');
 
 /** Golden-file assertion; run with `UPDATE_GOLDEN=1` to (re)write the files, then review the diff. */
 export const expectGolden = (name: string, actual: string): void => {
-  const path = join(goldenDir, name);
+  const path = join(goldenDir, `${name}.golden`);
   if (process.env.UPDATE_GOLDEN === '1' || !existsSync(path)) {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, actual);

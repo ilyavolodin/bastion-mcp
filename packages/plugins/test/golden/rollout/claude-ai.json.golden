@@ -1,0 +1,22 @@
+{
+  "client": "claude-ai",
+  "steps": [
+    "Add https://github.com/acme/mirror under Organization settings > Plugins & skills > Marketplaces.",
+    "Set each plugin's availability to the value listed below.",
+    "Optional: add https://mcp.example.com/mcp as an organization custom connector."
+  ],
+  "plugins": [
+    {
+      "name": "code-review",
+      "setTo": "Installed by default"
+    },
+    {
+      "name": "toolbox",
+      "setTo": "Required"
+    },
+    {
+      "name": "notes",
+      "setTo": "Available"
+    }
+  ]
+}

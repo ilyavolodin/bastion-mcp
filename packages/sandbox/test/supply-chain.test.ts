@@ -69,13 +69,21 @@ describe('8.7 lockfile capture plans', () => {
     expect(plan.kind).toBe('npm-shrinkwrap');
   });
   it('8.7 pypi: uv pip compile --generate-hashes', () => {
-    const plan = buildLockfileCapturePlan({ runtime: 'pypi', identifier: 'mcp-server-fetch', version: '1.0' });
-    expect(plan.command.args).toEqual(expect.arrayContaining(['pip', 'compile', '--generate-hashes']));
+    const plan = buildLockfileCapturePlan({
+      runtime: 'pypi',
+      identifier: 'mcp-server-fetch',
+      version: '1.0',
+    });
+    expect(plan.command.args).toEqual(
+      expect.arrayContaining(['pip', 'compile', '--generate-hashes']),
+    );
     expect(plan.files[0]).toEqual({ path: 'requirements.in', content: 'mcp-server-fetch==1.0\n' });
     expect(plan.kind).toBe('uv-requirements');
   });
   it('8.7 refuses to plan a capture for a range', () => {
-    expect(() => buildLockfileCapturePlan({ runtime: 'npm', identifier: 'x', version: '^1.0.0' })).toThrow();
+    expect(() =>
+      buildLockfileCapturePlan({ runtime: 'npm', identifier: 'x', version: '^1.0.0' }),
+    ).toThrow();
   });
   it('8.7 the captured content is stored with its sha256 and verifies', () => {
     const plan = buildLockfileCapturePlan({ runtime: 'npm', identifier: 'x', version: '1.0.0' });
@@ -95,8 +103,13 @@ describe('8.7 pinned package extraction', () => {
     ]);
   });
   it('8.7 reads lockfileVersion 1 `dependencies` trees', () => {
-    const v1 = JSON.stringify({ dependencies: { a: { version: '1.0.0', dependencies: { b: { version: '2.0.0' } } } } });
-    expect(extractNpmPackages(v1).map((p) => `${p.name}@${p.version}`)).toEqual(['a@1.0.0', 'b@2.0.0']);
+    const v1 = JSON.stringify({
+      dependencies: { a: { version: '1.0.0', dependencies: { b: { version: '2.0.0' } } } },
+    });
+    expect(extractNpmPackages(v1).map((p) => `${p.name}@${p.version}`)).toEqual([
+      'a@1.0.0',
+      'b@2.0.0',
+    ]);
   });
   it('8.7 rejects a malformed npm lockfile', () => {
     expect(() => extractNpmPackages('nope')).toThrow(/JSON/);
@@ -124,13 +137,19 @@ const osvFetch = (vulns: Record<string, string[]>) => async (_url: unknown, init
   const body = JSON.parse(String(init?.body)) as { queries: { package: { name: string } }[] };
   return new Response(
     JSON.stringify({
-      results: body.queries.map((q) => ({ vulns: (vulns[q.package.name] ?? []).map((id) => ({ id })) })),
+      results: body.queries.map((q) => ({
+        vulns: (vulns[q.package.name] ?? []).map((id) => ({ id })),
+      })),
     }),
   );
 };
 
 describe('8.7 checkLockfile', () => {
-  const lock = { kind: 'npm-shrinkwrap' as const, content: SHRINKWRAP, sha256: sha256Hex(SHRINKWRAP) };
+  const lock = {
+    kind: 'npm-shrinkwrap' as const,
+    content: SHRINKWRAP,
+    sha256: sha256Hex(SHRINKWRAP),
+  };
 
   it('8.7 fails on an integrity mismatch before anything else', async () => {
     await expect(checkLockfile({ ...lock, sha256: 'f'.repeat(64) })).rejects.toThrow(/sha256/);
@@ -149,13 +168,19 @@ describe('8.7 checkLockfile', () => {
     expect(result.malicious[0]?.advisoryIds).toEqual(['MAL-2025-1']);
   });
   it('8.7 ordinary CVEs do not block', async () => {
-    const result = await checkLockfile(lock, { osvCheck: true, fetch: osvFetch({ a: ['GHSA-1'] }) });
+    const result = await checkLockfile(lock, {
+      osvCheck: true,
+      fetch: osvFetch({ a: ['GHSA-1'] }),
+    });
     expect(result.ok).toBe(true);
     expect(result.osvChecked).toBe(true);
   });
   it('8.7 an OSV failure fails closed', async () => {
     await expect(
-      checkLockfile(lock, { osvCheck: true, fetch: async () => new Response('x', { status: 500 }) }),
+      checkLockfile(lock, {
+        osvCheck: true,
+        fetch: async () => new Response('x', { status: 500 }),
+      }),
     ).rejects.toThrow(/OSV/);
   });
   it('8.7 uv lockfiles must carry hashes', async () => {
@@ -175,12 +200,18 @@ describe('8.7 checkLockfile', () => {
 
 describe('8.7 broken marking', () => {
   it('8.7 a lockfile that no longer installs marks the version broken', () => {
-    expect(shouldMarkBroken({ hasLockfile: true, succeeded: false, failedPhase: 'installing' })).toBe(true);
+    expect(
+      shouldMarkBroken({ hasLockfile: true, succeeded: false, failedPhase: 'installing' }),
+    ).toBe(true);
   });
   it('8.7 spawn failures, successes and unlocked installs do not', () => {
-    expect(shouldMarkBroken({ hasLockfile: true, succeeded: false, failedPhase: 'starting' })).toBe(false);
+    expect(shouldMarkBroken({ hasLockfile: true, succeeded: false, failedPhase: 'starting' })).toBe(
+      false,
+    );
     expect(shouldMarkBroken({ hasLockfile: true, succeeded: true })).toBe(false);
-    expect(shouldMarkBroken({ hasLockfile: false, succeeded: false, failedPhase: 'installing' })).toBe(false);
+    expect(
+      shouldMarkBroken({ hasLockfile: false, succeeded: false, failedPhase: 'installing' }),
+    ).toBe(false);
   });
   it('8.7 unlocked installs only where policy allows', () => {
     expect(mayInstallWithoutLockfile({ allowUnlockedInstalls: false })).toBe(false);

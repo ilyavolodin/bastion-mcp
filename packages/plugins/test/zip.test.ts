@@ -1,5 +1,5 @@
-import { zipSync } from 'fflate';
 import fc from 'fast-check';
+import { zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import {
   exportZip,
@@ -11,13 +11,18 @@ import {
 } from '../src';
 import { SKILL_MD } from './helpers/fixtures';
 
-const rawZip = (entries: Record<string, [Uint8Array, { os?: number; attrs?: number }?]>): Uint8Array => {
+const rawZip = (
+  entries: Record<string, [Uint8Array, { os?: number; attrs?: number }?]>,
+): Uint8Array => {
   const input: Record<string, [Uint8Array, { os?: number; attrs?: number }]> = {};
   for (const [name, [data, opts]] of Object.entries(entries)) input[name] = [data, opts ?? {}];
   return zipSync(input);
 };
 const bytes = (s: string): Uint8Array => new TextEncoder().encode(s);
-const unixAttrs = (mode: number): { os: number; attrs: number } => ({ os: 3, attrs: (mode << 16) >>> 0 });
+const unixAttrs = (mode: number): { os: number; attrs: number } => ({
+  os: 3,
+  attrs: (mode << 16) >>> 0,
+});
 
 describe('25.3 zip import', () => {
   it('25.3 round-trips a skill directory through exportZip and importZip, keeping exec bits', () => {
@@ -36,28 +41,38 @@ describe('25.3 zip import', () => {
 
   it('25.2 rejects zip-slip, absolute paths and backslashes', () => {
     for (const name of ['../evil.txt', 'a/../../evil.txt', '/abs.txt', 'a\\b.txt', 'C:/x.txt']) {
-      expect(() => importZip(rawZip({ [name]: [bytes('x')] })), name).toThrow(PluginValidationError);
+      expect(() => importZip(rawZip({ [name]: [bytes('x')] })), name).toThrow(
+        PluginValidationError,
+      );
     }
   });
 
   it('25.2 rejects symlinks and special files recorded in the Unix mode', () => {
-    expect(() => importZip(rawZip({ link: [bytes('target'), unixAttrs(0o120777)] }))).toThrow(/symlink/);
+    expect(() => importZip(rawZip({ link: [bytes('target'), unixAttrs(0o120777)] }))).toThrow(
+      /symlink/,
+    );
     expect(() => importZip(rawZip({ dev: [bytes(''), unixAttrs(0o060000)] }))).toThrow(/special/);
   });
 
   it('25.2 rejects duplicate entries', () => {
     const a = rawZip({ 'a.txt': [bytes('1')] });
     // two entries with the same normalized path: ./a.txt and a.txt
-    expect(() => importZip(rawZip({ 'a.txt': [bytes('1')], './a.txt': [bytes('2')] }))).toThrow(/duplicate/);
+    expect(() => importZip(rawZip({ 'a.txt': [bytes('1')], './a.txt': [bytes('2')] }))).toThrow(
+      /duplicate/,
+    );
     expect(a.length).toBeGreaterThan(0);
   });
 
   it('25.2 enforces limits from the central directory before inflating', () => {
     const limits = { maxUnpackedBytes: 1000, maxFiles: 2, maxFileBytes: 600 };
-    expect(() => importZip(rawZip({ a: [bytes('1')], b: [bytes('2')], c: [bytes('3')] }), { limits })).toThrow(/files/);
+    expect(() =>
+      importZip(rawZip({ a: [bytes('1')], b: [bytes('2')], c: [bytes('3')] }), { limits }),
+    ).toThrow(/files/);
     expect(() => importZip(rawZip({ a: [new Uint8Array(601)] }), { limits })).toThrow(/larger/);
     expect(() =>
-      importZip(rawZip({ a: [new Uint8Array(500).fill(7)], b: [new Uint8Array(600).fill(9)] }), { limits }),
+      importZip(rawZip({ a: [new Uint8Array(500).fill(7)], b: [new Uint8Array(600).fill(9)] }), {
+        limits,
+      }),
     ).toThrow(/unpacked/);
   });
 
@@ -92,11 +107,15 @@ describe('25.3 zip import', () => {
   });
 
   it('25.3 strips a single wrapping directory but keeps known plugin roots', () => {
-    const wrapped = importZip(rawZip({ 'my-skill/SKILL.md': [bytes(SKILL_MD('my-skill'))], 'my-skill/a.md': [bytes('a')] }));
+    const wrapped = importZip(
+      rawZip({ 'my-skill/SKILL.md': [bytes(SKILL_MD('my-skill'))], 'my-skill/a.md': [bytes('a')] }),
+    );
     expect(wrapped.map((f) => f.path)).toEqual(['SKILL.md', 'a.md']);
     const plugin = importZip(rawZip({ 'skills/x/SKILL.md': [bytes('s')] }));
     expect(plugin.map((f) => f.path)).toEqual(['skills/x/SKILL.md']);
-    expect(importZip(rawZip({ 'w/a.md': [bytes('a')] }), { stripWrapper: false })[0]?.path).toBe('w/a.md');
+    expect(importZip(rawZip({ 'w/a.md': [bytes('a')] }), { stripWrapper: false })[0]?.path).toBe(
+      'w/a.md',
+    );
     const mixed = [textFile('d/a', ''), textFile('b', '')];
     expect(stripWrapperDirectory(mixed)).toBe(mixed);
   });
@@ -141,14 +160,24 @@ describe('25.5 deterministic archives', () => {
   it('25.5 property: export then import returns the same tree', () => {
     fc.assert(
       fc.property(
-        fc.uniqueArray(fc.tuple(fc.stringMatching(/^[a-z0-9]{1,6}(\/[a-z0-9]{1,6}){0,2}$/), fc.uint8Array({ maxLength: 40 })), {
-          selector: ([p]) => p,
-          minLength: 2,
-          maxLength: 6,
-        }),
+        fc.uniqueArray(
+          fc.tuple(
+            fc.stringMatching(/^[a-z0-9]{1,6}(\/[a-z0-9]{1,6}){0,2}$/),
+            fc.uint8Array({ maxLength: 40 }),
+          ),
+          {
+            selector: ([p]) => p,
+            minLength: 2,
+            maxLength: 6,
+          },
+        ),
         (entries) => {
           fc.pre(entries.every(([p]) => !entries.some(([q]) => q.startsWith(`${p}/`))));
-          const input: PluginFile[] = entries.map(([path, content]) => ({ path, content, mode: 'file' }));
+          const input: PluginFile[] = entries.map(([path, content]) => ({
+            path,
+            content,
+            mode: 'file',
+          }));
           const back = importZip(exportZip(input), { stripWrapper: false });
           expect(back.map((f) => [f.path, Buffer.from(f.content).toString('hex')]).sort()).toEqual(
             input.map((f) => [f.path, Buffer.from(f.content).toString('hex')]).sort(),

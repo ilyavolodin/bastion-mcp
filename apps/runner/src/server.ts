@@ -149,7 +149,10 @@ export const createRunner = (options: RunnerOptions): Runner => {
     apply('stopped');
   };
 
-  const handleStart = async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
+  const handleStart = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> => {
     let parsed: StartRequest;
     try {
       parsed = startRequestSchema.parse(await readBody(req));
@@ -215,7 +218,10 @@ export const createRunner = (options: RunnerOptions): Runner => {
     } catch (error) {
       server = undefined;
       apply('stopped');
-      event('failed', redactSecrets(error instanceof Error ? error.message : String(error), secrets));
+      event(
+        'failed',
+        redactSecrets(error instanceof Error ? error.message : String(error), secrets),
+      );
     } finally {
       starting = undefined;
       res.end();
@@ -280,7 +286,8 @@ export const createRunner = (options: RunnerOptions): Runner => {
       { method: 'GET', path: url.pathname },
       verifyBearer(req.headers.authorization, token),
     );
-    if (!decision.allow) return reject(decision.status, decision.reason.replace(/[^\x20-\x7e]/g, ''));
+    if (!decision.allow)
+      return reject(decision.status, decision.reason.replace(/[^\x20-\x7e]/g, ''));
     if (url.pathname !== '/v1/stdio') return reject(404, 'Not Found');
     const offered = String(req.headers['sec-websocket-protocol'] ?? '')
       .split(',')

@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { StartRequest } from '@bastion-mcp/sandbox/protocol';
@@ -46,7 +46,8 @@ export const buildNpmPlan = (req: StartRequest, root: string = MCP_ROOT): Instal
     2,
   );
   if (req.lockfile) {
-    if (req.lockfile.kind !== 'npm-shrinkwrap') throw new InstallError('npm needs an npm-shrinkwrap lockfile');
+    if (req.lockfile.kind !== 'npm-shrinkwrap')
+      throw new InstallError('npm needs an npm-shrinkwrap lockfile');
     return {
       files: [
         { path: 'package.json', content: packageJson },
@@ -66,14 +67,23 @@ export const buildUvPlan = (req: StartRequest, root: string = MCP_ROOT): Install
   const python = `${venv}/bin/python`;
   const venvCmd: PlannedCommand = { command: 'uv', args: ['venv', venv, '--python', '3.13'] };
   if (req.lockfile) {
-    if (req.lockfile.kind !== 'uv-requirements') throw new InstallError('pypi needs a uv-requirements lockfile');
+    if (req.lockfile.kind !== 'uv-requirements')
+      throw new InstallError('pypi needs a uv-requirements lockfile');
     return {
       files: [{ path: 'requirements.txt', content: req.lockfile.content }],
       commands: [
         venvCmd,
         {
           command: 'uv',
-          args: ['pip', 'install', '--python', python, '--require-hashes', '-r', `${root}/requirements.txt`],
+          args: [
+            'pip',
+            'install',
+            '--python',
+            python,
+            '--require-hashes',
+            '-r',
+            `${root}/requirements.txt`,
+          ],
         },
       ],
     };
@@ -82,7 +92,10 @@ export const buildUvPlan = (req: StartRequest, root: string = MCP_ROOT): Install
     files: [],
     commands: [
       venvCmd,
-      { command: 'uv', args: ['pip', 'install', '--python', python, `${req.identifier}==${req.version}`] },
+      {
+        command: 'uv',
+        args: ['pip', 'install', '--python', python, `${req.identifier}==${req.version}`],
+      },
     ],
   };
 };
@@ -99,7 +112,8 @@ export const resolveNpmBinName = (
   const unscoped = identifier.replace(/^@[^/]+\//, '');
   const { bin } = packageJson;
   if (typeof bin === 'string') {
-    if (requested && requested !== unscoped) throw new InstallError(`package has no bin "${requested}"`);
+    if (requested && requested !== unscoped)
+      throw new InstallError(`package has no bin "${requested}"`);
     return unscoped;
   }
   if (typeof bin === 'object' && bin !== null) {
@@ -182,9 +196,7 @@ export const redactSecrets = (text: string, secrets: readonly string[]): string 
       text,
     );
 
-export const createInstaller = (
-  options: { root?: string; exec?: ExecFn } = {},
-): Installer => {
+export const createInstaller = (options: { root?: string; exec?: ExecFn } = {}): Installer => {
   const root = options.root ?? MCP_ROOT;
   const exec = options.exec ?? defaultExec;
   return {

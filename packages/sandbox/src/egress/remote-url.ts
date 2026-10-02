@@ -49,7 +49,8 @@ export const assertSafeRemoteUrl = async (
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     return fail('scheme', `remote URL scheme ${url.protocol} is not allowed`);
   }
-  if (url.username || url.password) return fail('credentials', 'remote URL must not embed credentials');
+  if (url.username || url.password)
+    return fail('credentials', 'remote URL must not embed credentials');
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (url.protocol === 'http:') {
     const allowed = options.insecureHosts.map((h) => h.toLowerCase());

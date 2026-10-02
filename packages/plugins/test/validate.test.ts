@@ -11,7 +11,12 @@ import {
   textFile,
 } from '../src';
 
-const pass = (id: TestStepResult['id']): TestStepResult => ({ id, status: 'passed', summary: '', findings: [] });
+const pass = (id: TestStepResult['id']): TestStepResult => ({
+  id,
+  status: 'passed',
+  summary: '',
+  findings: [],
+});
 
 describe('25.3 test step', () => {
   it('25.3 builds the claude plugin validate command plan for a sandbox (no network)', () => {
@@ -26,7 +31,9 @@ describe('25.3 test step', () => {
       timeoutMs: 120_000,
     });
     expect(plan.files[0]?.path).toBe('my-plugin/.claude-plugin/plugin.json');
-    expect(claudeValidatePlan({ claudeFiles: [], pluginDirName: 'x', timeoutMs: 5 }).timeoutMs).toBe(5);
+    expect(
+      claudeValidatePlan({ claudeFiles: [], pluginDirName: 'x', timeoutMs: 5 }).timeoutMs,
+    ).toBe(5);
   });
 
   it('25.3 maps the validate exit code to a step', () => {
@@ -37,9 +44,14 @@ describe('25.3 test step', () => {
   });
 
   it('25.3 aggregates results: all required steps must run and pass', () => {
-    const all = (['claude-validate', 'agent-plugins-schema', 'guards', 'osv', 'classification'] as const).map(pass);
+    const all = (
+      ['claude-validate', 'agent-plugins-schema', 'guards', 'osv', 'classification'] as const
+    ).map(pass);
     expect(aggregateTestReport(all)).toMatchObject({ passed: true, missing: [] });
-    expect(aggregateTestReport(all.slice(1))).toMatchObject({ passed: false, missing: ['claude-validate'] });
+    expect(aggregateTestReport(all.slice(1))).toMatchObject({
+      passed: false,
+      missing: ['claude-validate'],
+    });
     const failing = [...all.slice(1), { ...pass('claude-validate'), status: 'failed' as const }];
     expect(aggregateTestReport(failing).passed).toBe(false);
     const skipped = [...all.slice(1), { ...pass('claude-validate'), status: 'skipped' as const }];
@@ -91,11 +103,33 @@ describe('25.3 OSV check inputs', () => {
   it('25.3 extracts exact packages from every supported format', () => {
     const packages = collectOsvPackages([
       textFile('package-lock.json', lock),
-      textFile('package.json', JSON.stringify({ dependencies: { pinned: '1.0.0', ranged: '^1.0.0' }, devDependencies: { dev: '2.0.0-rc.1' } })),
-      textFile('requirements.txt', '# c\nrequests==2.31.0 ; python_version>"3"\nflask[async]==3.0.0\nloose>=1\n'),
-      textFile('yarn.lock', '"@s/y@^1.0.0", "@s/y@^1.1.0":\n  version "1.2.0"\n\nplain@^2:\n  version "2.0.1"\n'),
-      textFile('pnpm-lock.yaml', "packages:\n  /old@1.0.0:\n    resolution: {}\n  '@sc/new@3.1.0(react@18.0.0)':\n    resolution: {}\n"),
-      textFile('v1/package-lock.json', JSON.stringify({ dependencies: { v1dep: { version: '1.1.1', dependencies: { nested: { version: '0.0.1' } } } } })),
+      textFile(
+        'package.json',
+        JSON.stringify({
+          dependencies: { pinned: '1.0.0', ranged: '^1.0.0' },
+          devDependencies: { dev: '2.0.0-rc.1' },
+        }),
+      ),
+      textFile(
+        'requirements.txt',
+        '# c\nrequests==2.31.0 ; python_version>"3"\nflask[async]==3.0.0\nloose>=1\n',
+      ),
+      textFile(
+        'yarn.lock',
+        '"@s/y@^1.0.0", "@s/y@^1.1.0":\n  version "1.2.0"\n\nplain@^2:\n  version "2.0.1"\n',
+      ),
+      textFile(
+        'pnpm-lock.yaml',
+        "packages:\n  /old@1.0.0:\n    resolution: {}\n  '@sc/new@3.1.0(react@18.0.0)':\n    resolution: {}\n",
+      ),
+      textFile(
+        'v1/package-lock.json',
+        JSON.stringify({
+          dependencies: {
+            v1dep: { version: '1.1.1', dependencies: { nested: { version: '0.0.1' } } },
+          },
+        }),
+      ),
       textFile('bad/package.json', '{nope'),
     ]);
     const names = packages.map((p) => `${p.ecosystem}:${p.name}@${p.version}`);
@@ -119,20 +153,32 @@ describe('25.3 OSV check inputs', () => {
     expect(names.some((n) => n.includes('loose'))).toBe(false);
   });
 
-  const osvResponse = (vulns: ({ id: string }[] | undefined)[]): typeof fetch => async () =>
-    new Response(JSON.stringify({ results: vulns.map((v) => (v ? { vulns: v } : {})) }), { status: 200 });
+  const osvResponse =
+    (vulns: ({ id: string }[] | undefined)[]): typeof fetch =>
+    async () =>
+      new Response(JSON.stringify({ results: vulns.map((v) => (v ? { vulns: v } : {})) }), {
+        status: 200,
+      });
 
   it('25.3 passes when there are no dependency files without calling OSV', async () => {
-    const step = await runOsvStep([textFile('a.md', 'x')], { fetch: async () => { throw new Error('no network'); } });
+    const step = await runOsvStep([textFile('a.md', 'x')], {
+      fetch: async () => {
+        throw new Error('no network');
+      },
+    });
     expect(step).toMatchObject({ id: 'osv', status: 'passed' });
   });
 
   it('25.3 fails the step on known-malicious (MAL-) advisories, not on ordinary CVEs', async () => {
     const files = [textFile('requirements.txt', 'evil==1.0.0\nok==2.0.0\n')];
-    const bad = await runOsvStep(files, { fetch: osvResponse([[{ id: 'MAL-2024-1' }], [{ id: 'GHSA-xxxx' }]]) });
+    const bad = await runOsvStep(files, {
+      fetch: osvResponse([[{ id: 'MAL-2024-1' }], [{ id: 'GHSA-xxxx' }]]),
+    });
     expect(bad.status).toBe('failed');
     expect(bad.findings[0]?.message).toContain('evil@1.0.0');
-    const good = await runOsvStep(files, { fetch: osvResponse([undefined, [{ id: 'GHSA-xxxx' }]]) });
+    const good = await runOsvStep(files, {
+      fetch: osvResponse([undefined, [{ id: 'GHSA-xxxx' }]]),
+    });
     expect(good.status).toBe('passed');
   });
 
@@ -142,6 +188,9 @@ describe('25.3 OSV check inputs', () => {
         throw new Error('offline');
       },
     });
-    expect(step).toMatchObject({ status: 'failed', summary: expect.stringContaining('could not complete') });
+    expect(step).toMatchObject({
+      status: 'failed',
+      summary: expect.stringContaining('could not complete'),
+    });
   });
 });

@@ -78,7 +78,8 @@ export const classifyFile = (file: PluginFile): ClassifiedFile => {
     reason,
   });
   if (file.mode === 'executable') return executable('has the exec bit');
-  if (file.content[0] === 0x23 && file.content[1] === 0x21) return executable('starts with a shebang');
+  if (file.content[0] === 0x23 && file.content[1] === 0x21)
+    return executable('starts with a shebang');
   if (segments(file.path).includes('scripts')) return executable('lives under scripts/');
   if (isHookPath(file.path)) return executable('hook definition');
   const name = basename(file.path);
@@ -100,7 +101,9 @@ export const classifyFiles = (files: readonly PluginFile[]): ClassifiedFile[] =>
   files.map(classifyFile);
 
 /** Manifest components that run code locally, as pseudo-paths `plugin.json#...`. */
-export const classifyManifest = (manifest: PluginManifest): (ClassifiedFile & { digest: string })[] => {
+export const classifyManifest = (
+  manifest: PluginManifest,
+): (ClassifiedFile & { digest: string })[] => {
   const out: (ClassifiedFile & { digest: string })[] = [];
   for (const server of manifest.mcpServers) {
     if (server.kind === 'stdio') {

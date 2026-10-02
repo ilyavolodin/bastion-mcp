@@ -1,3 +1,4 @@
+import { sha256Hex } from '@bastion-mcp/core';
 import { PluginStateError } from './errors';
 import type { Clock, MarketplaceRow, MarketplaceStore, ReleaseStore } from './ports';
 import { systemClock } from './ports';
@@ -8,7 +9,6 @@ import {
   type ReleaseRecord,
 } from './release';
 import type { ReleaseItem } from './render';
-import { sha256Hex } from '@bastion-mcp/core';
 
 const marketplaceInfo = (m: MarketplaceRow) => ({
   slug: m.slug,
@@ -33,12 +33,17 @@ export const rebuildRelease = async (input: {
   parentCommit?: string | undefined;
   gitdir?: string | undefined;
 }): Promise<BuiltRelease> => {
-  const built = await buildRelease(input.items, input.record.seq, new Date(input.record.releaseTime), {
-    host: input.host,
-    marketplace: marketplaceInfo(input.marketplace),
-    parentCommit: input.parentCommit,
-    gitdir: input.gitdir,
-  });
+  const built = await buildRelease(
+    input.items,
+    input.record.seq,
+    new Date(input.record.releaseTime),
+    {
+      host: input.host,
+      marketplace: marketplaceInfo(input.marketplace),
+      parentCommit: input.parentCommit,
+      gitdir: input.gitdir,
+    },
+  );
   const a = built.record;
   const b = input.record;
   if (
@@ -71,7 +76,8 @@ export class ReleaseService {
 
   private async requireMarketplace(id: string): Promise<MarketplaceRow> {
     const marketplace = await this.deps.marketplaces.getById(id);
-    if (!marketplace) throw new PluginStateError('MARKETPLACE_NOT_FOUND', 'marketplace not found', 404);
+    if (!marketplace)
+      throw new PluginStateError('MARKETPLACE_NOT_FOUND', 'marketplace not found', 404);
     return marketplace;
   }
 

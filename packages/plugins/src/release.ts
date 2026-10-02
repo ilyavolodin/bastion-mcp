@@ -1,5 +1,5 @@
-import { mkdtemp, rm } from 'node:fs/promises';
 import * as nodeFs from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sha256Hex } from '@bastion-mcp/core';
@@ -9,14 +9,17 @@ import {
   baseUrl,
   type ItemPolicy,
   jsonBytes,
-  renderMarketplace,
-  type RenderContext,
   type ReleaseItem,
+  type RenderContext,
+  renderMarketplace,
 } from './render';
 import { decodeUtf8, type PluginFile } from './types';
 import { exportZip } from './zip';
 
-export const BASTION_COMMITTER = { name: 'Bastion', email: 'noreply@bastion-mcp.github.io' } as const;
+export const BASTION_COMMITTER = {
+  name: 'Bastion',
+  email: 'noreply@bastion-mcp.github.io',
+} as const;
 
 /** What `marketplace_releases` stores (16.2); hashes are lowercase hex. */
 export type ReleaseRecord = {
@@ -98,7 +101,8 @@ const writeTree = async (fs: Fs, gitdir: string, files: readonly PluginFile[]): 
   }
   const write = async (node: Node): Promise<string> => {
     const entries: { mode: string; path: string; oid: string; type: 'blob' | 'tree' }[] = [];
-    for (const b of node.blobs) entries.push({ mode: b.mode, path: b.name, oid: b.oid, type: 'blob' });
+    for (const b of node.blobs)
+      entries.push({ mode: b.mode, path: b.name, oid: b.oid, type: 'blob' });
     for (const [name, child] of node.dirs) {
       entries.push({ mode: '040000', path: name, oid: await write(child), type: 'tree' });
     }
@@ -142,7 +146,13 @@ export const commitRelease = async (options: {
     },
   });
   await git.writeRef({ fs, gitdir, ref: 'refs/heads/main', value: oid, force: true });
-  await git.writeRef({ fs, gitdir, ref: `refs/tags/release-${options.seq}`, value: oid, force: true });
+  await git.writeRef({
+    fs,
+    gitdir,
+    ref: `refs/tags/release-${options.seq}`,
+    value: oid,
+    force: true,
+  });
   return oid;
 };
 
@@ -164,7 +174,8 @@ export const buildRelease = async (
   releaseTime: Date,
   options: BuildReleaseOptions,
 ): Promise<BuiltRelease> => {
-  if (!Number.isInteger(seq) || seq < 1) throw new PluginValidationError('release seq must be >= 1');
+  if (!Number.isInteger(seq) || seq < 1)
+    throw new PluginValidationError('release seq must be >= 1');
   const content = buildReleaseContent(items, options);
   const temp = options.gitdir ? undefined : await mkdtemp(join(tmpdir(), 'bastion-release-'));
   const gitdir = options.gitdir ?? join(temp ?? '', 'repo.git');
@@ -212,7 +223,8 @@ export const renderHttpsManifest = (
   const origin = baseUrl(options.host);
   for (const plugin of manifest.plugins) {
     const archive = release.archives[plugin.name];
-    if (!archive) throw new PluginValidationError('release has no archive', { plugin: plugin.name });
+    if (!archive)
+      throw new PluginValidationError('release has no archive', { plugin: plugin.name });
     plugin.source = {
       source: 'archive',
       url: `${origin}/plugins/${options.slug}/archives/${archiveFileName(plugin.name, archive.version)}`,

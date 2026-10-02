@@ -37,9 +37,7 @@ export type InstanceEvent =
   /** Backoff elapsed or the user clicked Restart. */
   | { type: 'reset' };
 
-export type InstanceTransition =
-  | { ok: true; state: InstanceState }
-  | { ok: false; reason: string };
+export type InstanceTransition = { ok: true; state: InstanceState } | { ok: false; reason: string };
 
 const no = (state: InstanceState, event: InstanceEvent): InstanceTransition => ({
   ok: false,

@@ -7,7 +7,7 @@ import {
 import type { ValidateFunction } from 'ajv';
 import Ajv2020 from 'ajv/dist/2020';
 import { parse as parseYaml } from 'yaml';
-import { classifyFiles, type ClassifiedFile } from './classify';
+import { type ClassifiedFile, classifyFiles } from './classify';
 import { AGENT_MCP_SCHEMA, AGENT_PLUGIN_SCHEMA } from './schemas';
 import { decodeUtf8, type PluginFile } from './types';
 
@@ -73,7 +73,10 @@ const checkJson = (
   }
   if (!validate(data)) {
     for (const e of validate.errors ?? []) {
-      findings.push({ path: file.path, message: `${e.instancePath || '/'} ${e.message ?? 'invalid'}` });
+      findings.push({
+        path: file.path,
+        message: `${e.instancePath || '/'} ${e.message ?? 'invalid'}`,
+      });
     }
   }
 };
@@ -87,12 +90,18 @@ export const validateAgentPluginsRendering = (files: readonly PluginFile[]): Tes
   const manifest = files.find((f) => f.path === 'plugin.json');
   if (!manifest) findings.push({ message: 'plugin.json is missing' });
   checkJson(manifest, validatePlugin, findings);
-  checkJson(files.find((f) => f.path === 'mcp.json'), validateMcp, findings);
+  checkJson(
+    files.find((f) => f.path === 'mcp.json'),
+    validateMcp,
+    findings,
+  );
   return {
     id: 'agent-plugins-schema',
     status: findings.length === 0 ? 'passed' : 'failed',
     summary:
-      findings.length === 0 ? 'plugin.json and mcp.json match the schemas' : `${findings.length} schema errors`,
+      findings.length === 0
+        ? 'plugin.json and mcp.json match the schemas'
+        : `${findings.length} schema errors`,
     findings,
   };
 };
@@ -149,7 +158,8 @@ export const listTextFiles = (files: readonly PluginFile[]): { path: string; tex
   return out;
 };
 
-const DEP_FILE = /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lock|requirements[^/]*\.txt)$/;
+const DEP_FILE =
+  /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lock|requirements[^/]*\.txt)$/;
 
 /** `package.json`, lockfiles and `requirements*.txt` for the OSV check (25.3). */
 export const listDependencyFiles = (files: readonly PluginFile[]): PluginFile[] =>
@@ -166,11 +176,18 @@ const fromPackageLock = (data: unknown): OsvPackage[] => {
   for (const [key, info] of Object.entries(lock.packages ?? {})) {
     const idx = key.lastIndexOf('node_modules/');
     if (idx < 0 || info.link || !info.version) continue;
-    out.push({ ecosystem: 'npm', name: key.slice(idx + 'node_modules/'.length), version: info.version });
+    out.push({
+      ecosystem: 'npm',
+      name: key.slice(idx + 'node_modules/'.length),
+      version: info.version,
+    });
   }
-  const walk = (deps: Record<string, { version?: string; dependencies?: unknown }> | undefined): void => {
+  const walk = (
+    deps: Record<string, { version?: string; dependencies?: unknown }> | undefined,
+  ): void => {
     for (const [name, info] of Object.entries(deps ?? {})) {
-      if (info.version && EXACT.test(info.version)) out.push({ ecosystem: 'npm', name, version: info.version });
+      if (info.version && EXACT.test(info.version))
+        out.push({ ecosystem: 'npm', name, version: info.version });
       walk(info.dependencies as typeof deps);
     }
   };
@@ -185,7 +202,8 @@ const fromPackageJson = (data: unknown): OsvPackage[] => {
     const deps = pkg[field];
     if (typeof deps !== 'object' || deps === null) continue;
     for (const [name, range] of Object.entries(deps)) {
-      if (typeof range === 'string' && EXACT.test(range)) out.push({ ecosystem: 'npm', name, version: range });
+      if (typeof range === 'string' && EXACT.test(range))
+        out.push({ ecosystem: 'npm', name, version: range });
     }
   }
   return out;
@@ -209,7 +227,12 @@ const fromYarnLock = (text: string): OsvPackage[] => {
       names = line
         .slice(0, -1)
         .split(',')
-        .map((s) => s.trim().replace(/^"|"$/g, '').replace(/@[^@]*$/, ''))
+        .map((s) =>
+          s
+            .trim()
+            .replace(/^"|"$/g, '')
+            .replace(/@[^@]*$/, ''),
+        )
         .filter(Boolean);
     } else {
       const v = /^\s+version:?\s+"?([^"\s]+)"?/.exec(line);
@@ -264,13 +287,18 @@ export const runOsvStep = async (
     return { id: 'osv', status: 'passed', summary: 'no dependency files', findings: [] };
   }
   try {
-    const results = await checkPackagesAgainstOsv(packages, options.fetch ? { fetch: options.fetch } : {});
+    const results = await checkPackagesAgainstOsv(
+      packages,
+      options.fetch ? { fetch: options.fetch } : {},
+    );
     const bad = findMaliciousAdvisories(results);
     return {
       id: 'osv',
       status: bad.length === 0 ? 'passed' : 'failed',
       summary:
-        bad.length === 0 ? `${packages.length} packages checked` : `${bad.length} malicious packages`,
+        bad.length === 0
+          ? `${packages.length} packages checked`
+          : `${bad.length} malicious packages`,
       findings: bad.map((r) => ({
         message: `${r.package.name}@${r.package.version}: ${r.advisoryIds.join(', ')}`,
       })),

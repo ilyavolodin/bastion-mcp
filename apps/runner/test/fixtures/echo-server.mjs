@@ -32,7 +32,8 @@ rl.on('line', (line) => {
       break;
     case 'flood': {
       const n = Number(msg.params?.count ?? 0);
-      for (let i = 0; i < n; i += 1) send({ jsonrpc: '2.0', method: 'notifications/flood', params: { i } });
+      for (let i = 0; i < n; i += 1)
+        send({ jsonrpc: '2.0', method: 'notifications/flood', params: { i } });
       send({ jsonrpc: '2.0', id: msg.id, result: { flooded: n } });
       break;
     }
@@ -40,6 +41,10 @@ rl.on('line', (line) => {
       process.exit(3);
       break;
     default:
-      send({ jsonrpc: '2.0', id: msg.id, result: { echo: msg.params ?? null, method: msg.method } });
+      send({
+        jsonrpc: '2.0',
+        id: msg.id,
+        result: { echo: msg.params ?? null, method: msg.method },
+      });
   }
 });

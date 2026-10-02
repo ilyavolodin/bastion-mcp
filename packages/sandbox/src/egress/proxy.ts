@@ -6,13 +6,13 @@ import { type Span, SpanStatusCode, trace } from '@opentelemetry/api';
 import { type Clock, systemClock } from '../types';
 import { type EgressAuditEvent, type EgressAuditSink, shouldAudit } from './audit';
 import {
+  mirrorRules as buildMirrorRules,
   canonicalHost,
-  decideResolved,
   type DenyReason,
+  decideResolved,
   type EgressPolicy,
   type EgressPolicyStore,
   type EgressProtocol,
-  mirrorRules as buildMirrorRules,
   parseHostPort,
   parseProxyAuthorization,
   verifyEgressToken,
@@ -102,7 +102,9 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
 
   const emitAudit = (event: EgressAuditEvent): void => {
     const sampled = shouldAudit(event.decision, {
-      ...(options.allowedSampleRate === undefined ? {} : { allowedRate: options.allowedSampleRate }),
+      ...(options.allowedSampleRate === undefined
+        ? {}
+        : { allowedRate: options.allowedSampleRate }),
       ...(options.random ? { random: options.random } : {}),
     });
     if (!sampled) return;
@@ -152,7 +154,12 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
       : { allowed: false, reason: decision.reason, resolvedIp };
   };
 
-  const startSpan = (protocol: EgressProtocol, host: string, port: number, instanceId: string): Span =>
+  const startSpan = (
+    protocol: EgressProtocol,
+    host: string,
+    port: number,
+    instanceId: string,
+  ): Span =>
     tracer().startSpan(`egress ${protocol === 'connect' ? 'CONNECT' : 'HTTP'} ${host}`, {
       attributes: {
         'bastion.instance.id': instanceId,
@@ -199,7 +206,8 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
   };
 
   const identifyByHeader =
-    (header: string | undefined) => async (): Promise<Identity | 'bad-credentials' | 'unknown-instance'> => {
+    (header: string | undefined) =>
+    async (): Promise<Identity | 'bad-credentials' | 'unknown-instance'> => {
       const creds = parseProxyAuthorization(header);
       if (!creds) return 'bad-credentials';
       const policy = await options.policies.get(creds.instanceId);
@@ -209,15 +217,13 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
         : 'bad-credentials';
     };
 
-  const identifyFixed = (instanceId: string) => async (): Promise<Identity | 'unknown-instance'> => {
-    const policy = await options.policies.get(instanceId);
-    return policy ? { instanceId, policy } : 'unknown-instance';
-  };
+  const identifyFixed =
+    (instanceId: string) => async (): Promise<Identity | 'unknown-instance'> => {
+      const policy = await options.policies.get(instanceId);
+      return policy ? { instanceId, policy } : 'unknown-instance';
+    };
 
-  const deny = (
-    socket: net.Socket | http.ServerResponse,
-    reason: DenyReason,
-  ): void => {
+  const deny = (socket: net.Socket | http.ServerResponse, reason: DenyReason): void => {
     const status =
       reason === 'bad-credentials' || reason === 'unknown-instance'
         ? '407 Proxy Authentication Required'
@@ -236,7 +242,10 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     ];
     if (socket instanceof http.ServerResponse) {
       const code = Number(status.slice(0, 3));
-      socket.writeHead(code, Object.fromEntries(headers.map((h) => h.split(': ') as [string, string])));
+      socket.writeHead(
+        code,
+        Object.fromEntries(headers.map((h) => h.split(': ') as [string, string])),
+      );
       socket.end(body);
     } else {
       socket.end(`HTTP/1.1 ${status}\r\n${headers.join('\r\n')}\r\n\r\n${body}`);
@@ -257,7 +266,14 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     const startedAt = clock.now();
     const span = startSpan('connect', parsed.host, parsed.port, auth.instanceId);
     const counters: Counters = { up: 0, down: 0 };
-    const base = { span, startedAt, identity: auth, protocol: 'connect' as const, ...parsed, counters };
+    const base = {
+      span,
+      startedAt,
+      identity: auth,
+      protocol: 'connect' as const,
+      ...parsed,
+      counters,
+    };
     const outcome = await evaluate(auth, parsed, 'connect');
     if (!outcome.allowed) {
       finish({ ...base, resolvedIp: outcome.resolvedIp, decision: 'deny', reason: outcome.reason });
@@ -333,7 +349,15 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     const startedAt = clock.now();
     const span = startSpan('http', host, port, auth.instanceId);
     const counters: Counters = { up: 0, down: 0 };
-    const base = { span, startedAt, identity: auth, protocol: 'http' as const, host, port, counters };
+    const base = {
+      span,
+      startedAt,
+      identity: auth,
+      protocol: 'http' as const,
+      host,
+      port,
+      counters,
+    };
     const outcome = await evaluate(auth, { host, port }, 'http');
     if (!outcome.allowed) {
       req.resume();
@@ -401,7 +425,9 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
   };
 
   const makeServer = (
-    identifyFor: (req: http.IncomingMessage) => () => Promise<Identity | 'bad-credentials' | 'unknown-instance'>,
+    identifyFor: (
+      req: http.IncomingMessage,
+    ) => () => Promise<Identity | 'bad-credentials' | 'unknown-instance'>,
   ): http.Server => {
     const server = http.createServer((req, res) => {
       handleRequest(identifyFor(req), req, res).catch(() => {

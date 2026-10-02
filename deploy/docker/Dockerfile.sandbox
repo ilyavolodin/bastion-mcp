@@ -1,0 +1,35 @@
+# ghcr.io/bastion-mcp/sandbox-runtime (tdd 20.1): node:24-bookworm-slim + uv + Python 3.13 + git + runner.mjs + tini.
+# Runs as uid 1000 and is compatible with readOnlyRootFilesystem: every writable path is a volume
+# (/tmp, /opt/mcp, /home/sandbox, /workspace). Build context: the repository root.
+#   docker build -f deploy/docker/Dockerfile.sandbox -t sandbox-runtime .
+
+FROM node:24-bookworm-slim AS runner-build
+WORKDIR /src
+RUN corepack enable
+COPY . .
+RUN pnpm install --frozen-lockfile --filter bastion-runner... \
+ && pnpm --filter bastion-runner build
+
+FROM node:24-bookworm-slim
+ARG UV_VERSION=0.8.22
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_LINK_MODE=copy \
+    NPM_CONFIG_UPDATE_NOTIFIER=false
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates git tini curl \
+ && rm -rf /var/lib/apt/lists/* \
+ && curl -fsSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-$(uname -m)-unknown-linux-gnu.tar.gz" \
+    | tar -xz --strip-components=1 -C /usr/local/bin \
+ && UV_PYTHON_DOWNLOADS=automatic uv python install 3.13 \
+ && chmod -R a+rX /opt/uv-python \
+ && apt-get purge -y curl && apt-get autoremove -y \
+ && mkdir -p /opt/bastion /opt/mcp /workspace /home/sandbox /run/bastion \
+ && chown 1000:1000 /opt/mcp /workspace /home/sandbox
+COPY --from=runner-build /src/apps/runner/dist/runner.mjs /opt/bastion/runner.mjs
+USER 1000:1000
+ENV HOME=/home/sandbox
+WORKDIR /workspace
+EXPOSE 8080
+ENTRYPOINT ["tini", "--"]
+CMD ["node", "/opt/bastion/runner.mjs", "--listen", "0.0.0.0:8080"]

@@ -1,5 +1,7 @@
+export * from './bwrap';
 export * from './egress';
 export * from './instance-state';
+export * from './kubernetes';
 export * from './protocol';
 export * from './runner-client';
 export * from './stderr';

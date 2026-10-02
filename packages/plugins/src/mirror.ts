@@ -1,3 +1,4 @@
+import { PluginStateError } from './errors';
 import type { GitRepositoryCache } from './git-cache';
 import type {
   Clock,
@@ -8,14 +9,14 @@ import type {
   ReleaseStore,
 } from './ports';
 import { systemClock } from './ports';
-import { PluginStateError } from './errors';
 
 /** Retry backoff of failed mirror pushes (25.5), in minutes; the last value repeats. */
 export const MIRROR_BACKOFF_MINUTES = [1, 5, 15, 60] as const;
 
 export const backoffMs = (attempts: number): number => {
   const minutes =
-    MIRROR_BACKOFF_MINUTES[Math.min(Math.max(attempts, 1), MIRROR_BACKOFF_MINUTES.length) - 1] ?? 60;
+    MIRROR_BACKOFF_MINUTES[Math.min(Math.max(attempts, 1), MIRROR_BACKOFF_MINUTES.length) - 1] ??
+    60;
   return minutes * 60_000;
 };
 
@@ -59,7 +60,8 @@ export class MirrorPusher {
   /** Pushes the latest release. `force: true` ignores the backoff (manual push), never `diverged`. */
   async push(marketplaceId: string, options: { force?: boolean } = {}): Promise<MirrorState> {
     const marketplace = await this.deps.marketplaces.getById(marketplaceId);
-    if (!marketplace) throw new PluginStateError('MARKETPLACE_NOT_FOUND', 'marketplace not found', 404);
+    if (!marketplace)
+      throw new PluginStateError('MARKETPLACE_NOT_FOUND', 'marketplace not found', 404);
     const target = marketplace.mirror;
     if (!target) throw new PluginStateError('MIRROR_NOT_CONFIGURED', 'no mirror target', 409);
     const now = this.now();

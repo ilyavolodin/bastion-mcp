@@ -1,7 +1,7 @@
+import * as nodeFs from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import * as nodeFs from 'node:fs';
 import git, { type HttpClient } from 'isomorphic-git';
 import { z } from 'zod';
 import { PluginValidationError } from './errors';
@@ -172,10 +172,13 @@ export const discoverItems = (files: readonly PluginFile[]): DiscoveredItem[] =>
       items.push(item);
     }
   };
-  const claude = claudeMarketplace.safeParse(parseJsonFile(files, '.claude-plugin/marketplace.json'));
+  const claude = claudeMarketplace.safeParse(
+    parseJsonFile(files, '.claude-plugin/marketplace.json'),
+  );
   if (claude.success) {
     for (const p of claude.data.plugins) {
-      if (typeof p.source === 'string') add({ kind: 'plugin', dir: cleanDir(p.source), name: p.name });
+      if (typeof p.source === 'string')
+        add({ kind: 'plugin', dir: cleanDir(p.source), name: p.name });
       else add({ kind: 'plugin', dir: '', name: p.name, external: true });
     }
   }
@@ -185,7 +188,10 @@ export const discoverItems = (files: readonly PluginFile[]): DiscoveredItem[] =>
   if (agents.success) {
     for (const p of agents.data.plugins) {
       const path = typeof p.source === 'string' ? p.source : p.source.path;
-      if (typeof path === 'string' && (typeof p.source === 'string' || p.source.source === 'local')) {
+      if (
+        typeof path === 'string' &&
+        (typeof p.source === 'string' || p.source.source === 'local')
+      ) {
         add({ kind: 'plugin', dir: cleanDir(path), name: p.name });
       } else add({ kind: 'plugin', dir: '', name: p.name, external: true });
     }

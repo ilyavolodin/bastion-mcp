@@ -1,6 +1,6 @@
 import { crc32 } from 'node:zlib';
 import { PLUGIN_LIMITS } from '@bastion-mcp/core';
-import { type Zippable, unzipSync, zipSync } from 'fflate';
+import { unzipSync, type Zippable, zipSync } from 'fflate';
 import { PluginValidationError } from './errors';
 import { enforceLimits, normalizePath, type PluginLimits } from './paths';
 import { type PluginFile, sortFiles } from './types';
@@ -121,7 +121,10 @@ export const importZip = (
     if (declaredTotal > limits.maxUnpackedBytes) {
       throw new PluginValidationError(`unpacked size above ${limits.maxUnpackedBytes} bytes`);
     }
-    if (entry.size > RATIO_FLOOR_BYTES && entry.size / Math.max(1, entry.compressedSize) > MAX_RATIO) {
+    if (
+      entry.size > RATIO_FLOOR_BYTES &&
+      entry.size / Math.max(1, entry.compressedSize) > MAX_RATIO
+    ) {
       throw new PluginValidationError('compression ratio too high (zip bomb)', { path });
     }
     wanted.set(path, {
@@ -155,7 +158,8 @@ export const importZip = (
     }
     files.push({ path: meta.path, content, mode: meta.executable ? 'executable' : 'file' });
   }
-  if (files.length !== wanted.size) throw new PluginValidationError('zip entries could not be read');
+  if (files.length !== wanted.size)
+    throw new PluginValidationError('zip entries could not be read');
   const result = options.stripWrapper === false ? files : stripWrapperDirectory(files);
   enforceLimits(result, limits);
   return sortFiles(result);

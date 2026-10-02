@@ -14,7 +14,7 @@ import type {
   ReleaseStore,
 } from './ports';
 import { systemClock } from './ports';
-import { archiveFileName, renderHttpsManifest, type ReleaseRecord } from './release';
+import { archiveFileName, type ReleaseRecord, renderHttpsManifest } from './release';
 import type { ReleaseService } from './release-service';
 
 export const BASIC_REALM = 'Bastion plugins';
@@ -133,7 +133,8 @@ export const createPluginsHandler = (
     if (!secret) return unauthorized();
     const principal = await deps.access.authenticate(secret);
     if (!principal) return unauthorized();
-    if (!principal.scopes.includes(SCOPES.pluginsRead)) return text(403, 'scope plugins:read required');
+    if (!principal.scopes.includes(SCOPES.pluginsRead))
+      return text(403, 'scope plugins:read required');
 
     const marketplace = await deps.marketplaces.getBySlug(route.slug);
     if (!marketplace || !(await deps.access.canView(principal, marketplace))) return notFound();
@@ -168,7 +169,8 @@ export const createPluginsHandler = (
       return response;
     }
 
-    if (request.method !== 'GET' && request.method !== 'HEAD') return text(405, 'method not allowed');
+    if (request.method !== 'GET' && request.method !== 'HEAD')
+      return text(405, 'method not allowed');
     const selected = await selectRelease(marketplace, url);
     if (selected instanceof Response) return selected;
     const built = await deps.releaseService.getBuilt(marketplace, selected);
@@ -231,7 +233,9 @@ export const toNodeListener =
     const request = new Request(new URL(req.url ?? '/', origin), {
       method,
       headers,
-      ...(hasBody ? { body: Readable.toWeb(req) as ReadableStream<Uint8Array>, duplex: 'half' } : {}),
+      ...(hasBody
+        ? { body: Readable.toWeb(req) as ReadableStream<Uint8Array>, duplex: 'half' }
+        : {}),
     });
     handler(request)
       .then(async (response) => {
@@ -241,7 +245,9 @@ export const toNodeListener =
           return;
         }
         res.statusCode = response.status;
-        response.headers.forEach((value, name) => res.setHeader(name, value));
+        response.headers.forEach((value, name) => {
+          res.setHeader(name, value);
+        });
         if (!response.body) {
           res.end();
           return;

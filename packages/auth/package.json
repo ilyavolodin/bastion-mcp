@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
@@ -12,9 +14,15 @@
   "dependencies": {
     "@bastion-mcp/core": "workspace:*",
     "@bastion-mcp/secrets": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
+    "jose": "6.2.12",
+    "oidc-provider": "9.12.2",
+    "openid-client": "6.8.8",
+    "re2": "1.27.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@bastion-mcp/testkit": "workspace:*"
+    "@bastion-mcp/testkit": "workspace:*",
+    "@types/oidc-provider": "9.5.0"
   }
 }

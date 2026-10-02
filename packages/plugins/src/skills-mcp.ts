@@ -1,6 +1,6 @@
-import { decodeUtf8 } from './types';
+import { type ReleaseItem, renderPlugin } from './render';
 import { parseSkillMd } from './skill';
-import { renderPlugin, type ReleaseItem } from './render';
+import { decodeUtf8 } from './types';
 
 /** MCP Skills extension id and its capability object, declared on every endpoint (25.8). */
 export const SKILLS_EXTENSION_ID = 'io.modelcontextprotocol/skills';
@@ -146,7 +146,9 @@ export const readSkillResource = (
     .sort((a, b) => (a.path < b.path ? -1 : 1));
   if (below.length === 0) return undefined;
   return {
-    contents: below.map((f) => toContent(skillUri(parsed.plugin, skill.skill, f.path), f.path, f.content)),
+    contents: below.map((f) =>
+      toContent(skillUri(parsed.plugin, skill.skill, f.path), f.path, f.content),
+    ),
   };
 };
 

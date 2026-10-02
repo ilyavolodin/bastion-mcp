@@ -76,7 +76,11 @@ export const aggregateUsage = (
   const latestByUser = new Map<string, { ts: number; seq: number }>();
   for (const event of [...events].sort((a, b) => a.ts.getTime() - b.ts.getTime())) {
     const client = classifyClient(event.userAgent);
-    const usage = (perClient[client] ??= { installs: 0, updates: 0, fetches: 0, users: 0 });
+    let usage = perClient[client];
+    if (!usage) {
+      usage = { installs: 0, updates: 0, fetches: 0, users: 0 };
+      perClient[client] = usage;
+    }
     usage.fetches += 1;
     if (event.principalId === null) continue;
     const key = `${client}\u0000${event.principalId}`;

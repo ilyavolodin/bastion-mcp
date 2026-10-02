@@ -61,7 +61,10 @@ export const reviewItem = (): ReleaseItem => ({
     {
       slug: 'style-guide',
       name: 'style-guide',
-      files: [textFile('SKILL.md', SKILL_MD('style-guide')), textFile('assets/rules.txt', 'rules\n')],
+      files: [
+        textFile('SKILL.md', SKILL_MD('style-guide')),
+        textFile('assets/rules.txt', 'rules\n'),
+      ],
     },
   ],
 });
@@ -76,7 +79,9 @@ export const toolboxItem = (): ReleaseItem => ({
     description: 'Local helpers',
     displayName: 'Toolbox',
     skills: [{ kind: 'inline', path: 'skills/lint' }],
-    mcpServers: [{ kind: 'stdio', name: 'lint', command: 'node', args: ['server.js'], env: { MODE: 'ci' } }],
+    mcpServers: [
+      { kind: 'stdio', name: 'lint', command: 'node', args: ['server.js'], env: { MODE: 'ci' } },
+    ],
   }),
   files: [
     textFile('skills/lint/SKILL.md', SKILL_MD('lint')),

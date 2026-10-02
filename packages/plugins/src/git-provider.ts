@@ -10,10 +10,15 @@ const run = (
   timeoutMs: number,
 ): Promise<RunResult> =>
   new Promise((resolve) => {
-    execFile(git, args, { env, timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
-      const code = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
-      resolve({ code, stdout, stderr });
-    });
+    execFile(
+      git,
+      args,
+      { env, timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        const code = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
+        resolve({ code, stdout, stderr });
+      },
+    );
   });
 
 export type GitBinaryProviderOptions = {
@@ -56,7 +61,8 @@ export const createGitBinaryProvider = (options: GitBinaryProviderOptions = {}):
         envFor(target, token),
         timeoutMs,
       );
-      if (result.code !== 0) throw new Error(`git ls-remote failed: ${result.stderr.trim().slice(0, 300)}`);
+      if (result.code !== 0)
+        throw new Error(`git ls-remote failed: ${result.stderr.trim().slice(0, 300)}`);
       const line = result.stdout.split('\n').find((l) => l.trim().length > 0);
       return line ? (line.split(/\s+/)[0] ?? null) : null;
     },

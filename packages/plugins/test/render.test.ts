@@ -3,8 +3,8 @@ import {
   classificationStep,
   decodeUtf8,
   mapPolicy,
-  parsePluginManifest,
   PluginValidationError,
+  parsePluginManifest,
   renderMarketplace,
   renderPlugin,
   textFile,
@@ -82,7 +82,10 @@ describe('25.4 generated repository layout', () => {
       ['toolbox', 'mcp.json'],
     ] as const) {
       const file = render.files.find((x) => x.path === `plugins/${p}/${f}`);
-      expectGolden(`plugins/${p}/${f.replace('.mcp', 'dot-mcp')}`, text(file?.content ?? new Uint8Array()));
+      expectGolden(
+        `plugins/${p}/${f.replace('.mcp', 'dot-mcp')}`,
+        text(file?.content ?? new Uint8Array()),
+      );
     }
   });
 
@@ -128,7 +131,12 @@ describe('25.4 generated repository layout', () => {
       description: 'Review code',
     });
     const pj = (name: string) =>
-      JSON.parse(text(render.files.find((f) => f.path === `plugins/${name}/.claude-plugin/plugin.json`)?.content ?? new Uint8Array()));
+      JSON.parse(
+        text(
+          render.files.find((f) => f.path === `plugins/${name}/.claude-plugin/plugin.json`)
+            ?.content ?? new Uint8Array(),
+        ),
+      );
     expect(pj('code-review').installationPreference).toBe('auto_install');
     expect(pj('toolbox').installationPreference).toBe('required');
     expect(pj('notes').installationPreference).toBeUndefined();
@@ -151,10 +159,17 @@ describe('25.4 generated repository layout', () => {
 
   it('25.2 extensions.com.openai fields land only in the Agent Plugins plugin.json', () => {
     const rendered = renderPlugin(reviewItem(), 'mcp.example.com');
-    const agents = JSON.parse(text(rendered.files.find((f) => f.path === 'plugin.json')?.content ?? new Uint8Array()));
+    const agents = JSON.parse(
+      text(rendered.files.find((f) => f.path === 'plugin.json')?.content ?? new Uint8Array()),
+    );
     expect(agents.extensions).toEqual({ 'com.openai': { category: 'Engineering' } });
     expect(agents.apps).toBe('./apps.json');
-    const claude = JSON.parse(text(rendered.files.find((f) => f.path === '.claude-plugin/plugin.json')?.content ?? new Uint8Array()));
+    const claude = JSON.parse(
+      text(
+        rendered.files.find((f) => f.path === '.claude-plugin/plugin.json')?.content ??
+          new Uint8Array(),
+      ),
+    );
     expect(claude.extensions).toBeUndefined();
     expect(claude.author).toEqual({ name: 'Acme' });
   });
@@ -164,7 +179,11 @@ describe('25.4 generated repository layout', () => {
     expect(() => renderPlugin(bad, 'h')).toThrow(PluginValidationError);
     const dup = {
       ...plainItem(),
-      files: [...plainItem().files, textFile('claude/hooks/hooks.json', '{}'), textFile('openai/hooks/hooks.json', '{}')],
+      files: [
+        ...plainItem().files,
+        textFile('claude/hooks/hooks.json', '{}'),
+        textFile('openai/hooks/hooks.json', '{}'),
+      ],
     };
     expect(() => renderPlugin(dup, 'h')).toThrow(/twice/);
   });
@@ -182,18 +201,35 @@ describe('25.4 generated repository layout', () => {
   it('25.4 accepts a host with a scheme and trailing slash', () => {
     const r = renderPlugin(reviewItem(), 'https://mcp.example.com/');
     const mcp = r.files.find((f) => f.path === '.mcp.json');
-    expect(text(mcp?.content ?? new Uint8Array())).toContain('"https://mcp.example.com/mcp/c/github"');
+    expect(text(mcp?.content ?? new Uint8Array())).toContain(
+      '"https://mcp.example.com/mcp/c/github"',
+    );
   });
 
   it('25.4 a manifest with an empty marketplace still renders both manifests', () => {
     const empty = renderMarketplace([], ctx);
-    expect(empty.files.map((f) => f.path)).toEqual(['.agents/plugins/marketplace.json', '.claude-plugin/marketplace.json']);
+    expect(empty.files.map((f) => f.path)).toEqual([
+      '.agents/plugins/marketplace.json',
+      '.claude-plugin/marketplace.json',
+    ]);
     expect(JSON.parse(text(empty.claudeManifest)).plugins).toEqual([]);
   });
 
   it('25.4 author-supplied JSON keys are sorted so output does not depend on key order', () => {
-    const a = { ...toolboxItem(), manifest: parsePluginManifest({ ...toolboxItem().manifest, claude: { pluginJson: { b: 1, a: { y: 1, x: 2 } } } }) };
-    const b = { ...toolboxItem(), manifest: parsePluginManifest({ ...toolboxItem().manifest, claude: { pluginJson: { a: { x: 2, y: 1 }, b: 1 } } }) };
+    const a = {
+      ...toolboxItem(),
+      manifest: parsePluginManifest({
+        ...toolboxItem().manifest,
+        claude: { pluginJson: { b: 1, a: { y: 1, x: 2 } } },
+      }),
+    };
+    const b = {
+      ...toolboxItem(),
+      manifest: parsePluginManifest({
+        ...toolboxItem().manifest,
+        claude: { pluginJson: { a: { x: 2, y: 1 }, b: 1 } },
+      }),
+    };
     const pa = renderPlugin(a, 'h').files.find((f) => f.path === '.claude-plugin/plugin.json');
     const pb = renderPlugin(b, 'h').files.find((f) => f.path === '.claude-plugin/plugin.json');
     expect(text(pa?.content ?? new Uint8Array())).toBe(text(pb?.content ?? new Uint8Array()));
@@ -219,7 +255,9 @@ describe('25.3 Agent Plugins schema validation (vendored schemas)', () => {
     expect(bad.findings.length).toBeGreaterThanOrEqual(4);
     expect(bad.findings.some((f) => f.path === 'mcp.json')).toBe(true);
     expect(validateAgentPluginsRendering([]).findings[0]?.message).toMatch(/missing/);
-    expect(validateAgentPluginsRendering([textFile('plugin.json', '{oops')]).findings[0]?.message).toMatch(/JSON/);
+    expect(
+      validateAgentPluginsRendering([textFile('plugin.json', '{oops')]).findings[0]?.message,
+    ).toMatch(/JSON/);
   });
 
   it('25.3 classification step lists executable files for the approver', () => {

@@ -6,10 +6,10 @@ import {
   importPluginTree,
   isSemver,
   normalizePath,
+  PluginValidationError,
   parseOpenAiYaml,
   parsePluginManifest,
   parseSkillMd,
-  PluginValidationError,
   renderSkillMd,
   standaloneSkillPlugin,
   textFile,
@@ -24,7 +24,9 @@ describe('25.2 skills: SKILL.md', () => {
     expect(() => parseSkillMd('---\nname: Bad Name\ndescription: x\n---\n')).toThrow(/name/);
     expect(() => parseSkillMd('---\n- a\n---\n')).toThrow(/mapping/);
     expect(() => parseSkillMd('---\nname: [\n---\n')).toThrow(/YAML/);
-    expect(() => parseSkillMd(`---\nname: a\ndescription: ${'x'.repeat(1025)}\n---\n`)).toThrow(/1024/);
+    expect(() => parseSkillMd(`---\nname: a\ndescription: ${'x'.repeat(1025)}\n---\n`)).toThrow(
+      /1024/,
+    );
   });
 
   it('25.2 keeps every other frontmatter key verbatim, including allowed-tools and context', () => {
@@ -67,7 +69,9 @@ describe('25.2 plugin manifest', () => {
     for (const version of ['v1', '1.0', 'latest', '01.0.0']) {
       expect(() => parsePluginManifest({ ...base, version })).toThrow(PluginValidationError);
     }
-    expect(() => parsePluginManifest({ ...base, name: 'My_Plugin' })).toThrow(PluginValidationError);
+    expect(() => parsePluginManifest({ ...base, name: 'My_Plugin' })).toThrow(
+      PluginValidationError,
+    );
   });
 
   it('25.2 models skill references (pinned or following current) and inline skills', () => {
@@ -121,39 +125,63 @@ describe('25.2 plugin manifest', () => {
     });
     expect(plugin.manifest.name).toBe('notes');
     expect(plugin.manifest.skills).toEqual([{ kind: 'inline', path: 'skills/notes' }]);
-    expect(plugin.files.map((f) => f.path)).toEqual(['skills/notes/SKILL.md', 'skills/notes/references/a.md']);
+    expect(plugin.files.map((f) => f.path)).toEqual([
+      'skills/notes/SKILL.md',
+      'skills/notes/references/a.md',
+    ]);
   });
 });
 
 describe('25.2 paths and limits', () => {
   it('25.2 normalizes paths and rejects absolute, .., backslash, NUL and .git paths', () => {
     expect(normalizePath('./a//b/./c.md')).toBe('a/b/c.md');
-    for (const bad of ['/etc/passwd', 'C:/x', '../x', 'a/../../x', 'a\\b', 'a\0b', '.git/config', 'a/.GIT/x', '', '.', 'dir/']) {
+    for (const bad of [
+      '/etc/passwd',
+      'C:/x',
+      '../x',
+      'a/../../x',
+      'a\\b',
+      'a\0b',
+      '.git/config',
+      'a/.GIT/x',
+      '',
+      '.',
+      'dir/',
+    ]) {
       expect(() => normalizePath(bad), bad).toThrow(PluginValidationError);
     }
   });
 
   it('25.2 property: normalized paths never contain .. or leading slashes and are stable', () => {
     fc.assert(
-      fc.property(fc.array(fc.stringMatching(/^[a-zA-Z0-9._ -]{1,8}$/), { minLength: 1, maxLength: 5 }), (parts) => {
-        try {
-          const out = normalizePath(parts.join('/'));
-          expect(out.startsWith('/')).toBe(false);
-          expect(out.split('/')).not.toContain('..');
-          expect(normalizePath(out)).toBe(out);
-        } catch (error) {
-          expect(error).toBeInstanceOf(PluginValidationError);
-        }
-      }),
+      fc.property(
+        fc.array(fc.stringMatching(/^[a-zA-Z0-9._ -]{1,8}$/), { minLength: 1, maxLength: 5 }),
+        (parts) => {
+          try {
+            const out = normalizePath(parts.join('/'));
+            expect(out.startsWith('/')).toBe(false);
+            expect(out.split('/')).not.toContain('..');
+            expect(normalizePath(out)).toBe(out);
+          } catch (error) {
+            expect(error).toBeInstanceOf(PluginValidationError);
+          }
+        },
+      ),
     );
   });
 
   const limits = { maxUnpackedBytes: 100, maxFiles: 3, maxFileBytes: 60 };
 
   it('25.2 enforces the file count, per-file and unpacked limits', () => {
-    const f = (path: string, n: number) => ({ path, content: new Uint8Array(n), mode: 'file' as const });
+    const f = (path: string, n: number) => ({
+      path,
+      content: new Uint8Array(n),
+      mode: 'file' as const,
+    });
     expect(() => enforceLimits([f('a', 1), f('b', 1), f('c', 1)], limits)).not.toThrow();
-    expect(() => enforceLimits([f('a', 1), f('b', 1), f('c', 1), f('d', 1)], limits)).toThrow(/files/);
+    expect(() => enforceLimits([f('a', 1), f('b', 1), f('c', 1), f('d', 1)], limits)).toThrow(
+      /files/,
+    );
     expect(() => enforceLimits([f('a', 61)], limits)).toThrow(/larger/);
     expect(() => enforceLimits([f('a', 60), f('b', 50)], limits)).toThrow(/unpacked/);
     expect(() => enforceLimits([f('a', 1), f('a', 1)], limits)).toThrow(/duplicate/);
@@ -161,7 +189,11 @@ describe('25.2 paths and limits', () => {
   });
 
   it('25.2 uses the PLUGIN_LIMITS defaults (20 MiB, 2000 files, 5 MiB per file)', () => {
-    const big = { path: 'big.bin', content: new Uint8Array(5 * 1024 * 1024 + 1), mode: 'file' as const };
+    const big = {
+      path: 'big.bin',
+      content: new Uint8Array(5 * 1024 * 1024 + 1),
+      mode: 'file' as const,
+    };
     expect(() => enforceLimits([big])).toThrow(/larger/);
     const many = Array.from({ length: 2001 }, (_, i) => textFile(`f${i}`, ''));
     expect(() => enforceLimits(many)).toThrow(/files/);
@@ -171,8 +203,19 @@ describe('25.2 paths and limits', () => {
 describe('25.3 import of an existing plugin directory', () => {
   it('25.3 converts a Claude-layout plugin to the authored form', () => {
     const imported = importPluginTree([
-      textFile('.claude-plugin/plugin.json', JSON.stringify({ name: 'x-plugin', version: '2.1.0', description: 'D' })),
-      textFile('.mcp.json', JSON.stringify({ mcpServers: { a: { url: 'https://a.example/mcp' }, b: { command: 'node', args: ['s.js'] } } })),
+      textFile(
+        '.claude-plugin/plugin.json',
+        JSON.stringify({ name: 'x-plugin', version: '2.1.0', description: 'D' }),
+      ),
+      textFile(
+        '.mcp.json',
+        JSON.stringify({
+          mcpServers: {
+            a: { url: 'https://a.example/mcp' },
+            b: { command: 'node', args: ['s.js'] },
+          },
+        }),
+      ),
       textFile('skills/one/SKILL.md', SKILL_MD('one')),
       textFile('commands/go.md', 'go'),
       textFile('hooks/hooks.json', '{}'),
@@ -202,7 +245,9 @@ describe('25.3 import of an existing plugin directory', () => {
       importPluginTree([textFile('plugin.json', JSON.stringify({ name: 'p', version: 'latest' }))]),
     ).toThrow(/semver/);
     expect(() => importPluginTree([textFile('README.md', 'x')])).toThrow(/name/);
-    expect(importPluginTree([textFile('README.md', 'x')], { name: 'fallback' }).manifest.version).toBe('0.0.0');
+    expect(
+      importPluginTree([textFile('README.md', 'x')], { name: 'fallback' }).manifest.version,
+    ).toBe('0.0.0');
     expect(() => importPluginTree([textFile('plugin.json', '{bad')])).toThrow(/JSON/);
     expect(encodeText('x')).toBeInstanceOf(Uint8Array);
   });

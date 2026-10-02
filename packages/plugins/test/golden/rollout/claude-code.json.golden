@@ -1,0 +1,25 @@
+{
+  "client": "claude-code",
+  "managedSettings": {
+    "extraKnownMarketplaces": {
+      "acme-tools": {
+        "source": {
+          "source": "git",
+          "url": "https://mcp.example.com/plugins/acme-tools.git"
+        },
+        "autoUpdate": true
+      }
+    },
+    "enabledPlugins": {
+      "toolbox@acme-tools": true
+    }
+  },
+  "strictKnownMarketplacesEntry": {
+    "source": "git",
+    "url": "https://mcp.example.com/plugins/acme-tools.git"
+  },
+  "gitCredentialLine": "git config --global credential.https://mcp.example.com.helper \"/usr/local/bin/bastion-credential\"",
+  "installCommands": [
+    "claude plugin install code-review@acme-tools"
+  ]
+}

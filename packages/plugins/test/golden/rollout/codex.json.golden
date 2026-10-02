@@ -1,0 +1,8 @@
+{
+  "client": "codex",
+  "commands": [
+    "codex plugin marketplace add https://mcp.example.com/plugins/acme-tools.git"
+  ],
+  "gitCredentialLine": "git config --global credential.https://mcp.example.com.helper \"<path>/bastion-credential\"",
+  "requirementsToml": "[marketplaces]\nrestrict_to_allowed_sources = true\n\n[marketplaces.allowed_sources.acme-tools]\nsource = \"git\"\nurl = \"https://mcp.example.com/plugins/acme-tools.git\"\n"
+}

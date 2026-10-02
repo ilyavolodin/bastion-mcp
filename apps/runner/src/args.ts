@@ -1,4 +1,6 @@
-export type ListenTarget = { kind: 'tcp'; host: string; port: number } | { kind: 'unix'; path: string };
+export type ListenTarget =
+  | { kind: 'tcp'; host: string; port: number }
+  | { kind: 'unix'; path: string };
 
 export type RunnerArgs = { listen: ListenTarget; egress: { socketPath: string } | undefined };
 

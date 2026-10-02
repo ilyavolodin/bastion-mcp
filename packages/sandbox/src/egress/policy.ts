@@ -76,7 +76,12 @@ export const parseHostPort = (
   }
   if (host === '' || /[\s/\\@]/.test(host)) return null;
   const port = portText === undefined ? defaultPort : Number(portText);
-  if (!Number.isInteger(port) || port < 1 || port > 65535 || (portText !== undefined && !/^\d+$/.test(portText))) {
+  if (
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65535 ||
+    (portText !== undefined && !/^\d+$/.test(portText))
+  ) {
     return null;
   }
   return { host: host.toLowerCase().replace(/\.$/, ''), port };
@@ -134,7 +139,9 @@ export const matchName = (input: {
 };
 
 export const cidrRules = (allow: readonly string[]): string[] =>
-  allow.filter((rule) => tryParseEgressRule(rule)?.kind === 'cidr').map((r) => r.trim().toLowerCase());
+  allow
+    .filter((rule) => tryParseEgressRule(rule)?.kind === 'cidr')
+    .map((r) => r.trim().toLowerCase());
 
 export type ResolvedDecision =
   | { allowed: true; address: string; via: 'allowlist' | 'mirror' | 'cidr' }

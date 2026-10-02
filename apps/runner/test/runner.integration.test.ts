@@ -94,7 +94,9 @@ describe('8.3 runner (real HTTP + WebSocket, fake stdio server)', () => {
   it('8.3 rejects /v1/start before bind and a malformed start body', async () => {
     await expect(collect(client.start(START))).rejects.toMatchObject({ status: 409 });
     await client.bind(TOKEN);
-    await expect(collect(client.start({ runtime: 'npm' } as never))).rejects.toMatchObject({ status: 400 });
+    await expect(collect(client.start({ runtime: 'npm' } as never))).rejects.toMatchObject({
+      status: 400,
+    });
   });
 
   it('8.3 start streams installing, starting and ready as NDJSON', async () => {
@@ -118,7 +120,9 @@ describe('8.3 runner (real HTTP + WebSocket, fake stdio server)', () => {
     expect(events.at(-1)?.detail).toContain('[redacted]');
     expect(events.at(-1)?.detail).not.toContain('secret-env-value');
     expect(await client.health()).toEqual({ state: 'bound' });
-    await expect(startAndWait(client, START, { installation: 'i1' })).rejects.toThrow(/npm ci failed/);
+    await expect(startAndWait(client, START, { installation: 'i1' })).rejects.toThrow(
+      /npm ci failed/,
+    );
   });
 
   it('8.3 start fails when the resolved command cannot spawn', async () => {
@@ -287,7 +291,9 @@ describe('8.3 runner (real HTTP + WebSocket, fake stdio server)', () => {
 
   it('8.3 unknown routes answer 404 once bound and authenticated', async () => {
     await client.bind(TOKEN);
-    const res = await fetch(`http://${address}/nope`, { headers: { authorization: `Bearer ${TOKEN}` } });
+    const res = await fetch(`http://${address}/nope`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
     expect(res.status).toBe(404);
   });
 });
@@ -308,7 +314,10 @@ describe('8.3 runner on a Unix socket', () => {
 describe('8.5 egress forwarder', () => {
   it('8.5 relays bytes from 127.0.0.1:<port> to the egress socket', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'egress-sock-'));
-    const sock = process.platform === 'win32' ? `\\\\.\\pipe\\bastion-test-${process.pid}` : path.join(dir, 'e.sock');
+    const sock =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\bastion-test-${process.pid}`
+        : path.join(dir, 'e.sock');
     const upstream = net.createServer((c) => c.on('data', (d) => c.write(`echo:${d.toString()}`)));
     await new Promise<void>((resolve) => upstream.listen(sock, resolve));
     const fwd = await startEgressForwarder({ socketPath: sock, port: 0 });

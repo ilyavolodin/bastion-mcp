@@ -29,7 +29,9 @@ export const parseSkillMd = (text: string): ParsedSkill => {
   if (!record.success) throw new PluginValidationError('SKILL.md frontmatter must be a mapping');
   const { name, description } = record.data;
   if (typeof name !== 'string' || name.length === 0 || name.length > 64 || !SKILL_NAME.test(name)) {
-    throw new PluginValidationError('frontmatter `name` is required (kebab-case, at most 64 chars)');
+    throw new PluginValidationError(
+      'frontmatter `name` is required (kebab-case, at most 64 chars)',
+    );
   }
   if (typeof description !== 'string' || description.trim().length === 0) {
     throw new PluginValidationError('frontmatter `description` is required');

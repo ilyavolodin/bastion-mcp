@@ -1,9 +1,8 @@
+import { mkdtemp } from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
-import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { sha256Hex } from '../src/supply-chain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createEgressProxy,
@@ -11,6 +10,7 @@ import {
   type EgressPolicy,
   type EgressProxy,
 } from '../src/egress';
+import { sha256Hex } from '../src/supply-chain';
 
 const TOKEN = 'egress-token-1';
 const auth = (instance = 'inst-1', token = TOKEN) =>
@@ -110,7 +110,10 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
   });
 
   const connect = (host: string, port: number, header = auth()) =>
-    connectHead(proxyPort, `CONNECT ${host}:${port} HTTP/1.1\r\nHost: ${host}:${port}\r\nProxy-Authorization: ${header}\r\n\r\n`);
+    connectHead(
+      proxyPort,
+      `CONNECT ${host}:${port} HTTP/1.1\r\nHost: ${host}:${port}\r\nProxy-Authorization: ${header}\r\n\r\n`,
+    );
 
   it('8.8 CONNECT to an allowlisted host tunnels bytes without interception and audits bytes each way', async () => {
     const result = await new Promise<string>((resolve) => {
@@ -153,7 +156,12 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
     const r = await connect('evil.test', 443);
     expect(r.head).toContain('403 Forbidden');
     expect(r.head).toContain('X-Bastion-Egress-Reason: not-allowlisted');
-    expect(audit[0]).toMatchObject({ decision: 'deny', reason: 'not-allowlisted', host: 'evil.test', bytesUp: 0 });
+    expect(audit[0]).toMatchObject({
+      decision: 'deny',
+      reason: 'not-allowlisted',
+      host: 'evil.test',
+      bytesUp: 0,
+    });
     expect(connectedTo).toEqual([]);
   });
 
@@ -188,7 +196,11 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
       connect: () => net.connect({ host: '127.0.0.1', port: targetPort }),
     });
     const { port } = await rebuilt.listenTcp(0, '127.0.0.1');
-    const ask = () => connectHead(port, `CONNECT registry.npmjs.org:443 HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`);
+    const ask = () =>
+      connectHead(
+        port,
+        `CONNECT registry.npmjs.org:443 HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`,
+      );
     policy = { ...(policy as EgressPolicy), phase: 'installing' };
     expect((await ask()).head).toContain('200');
     policy = { ...(policy as EgressPolicy), phase: 'running' };
@@ -211,16 +223,25 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
       connect: () => net.connect({ host: '127.0.0.1', port: 1 }),
     });
     const { port } = await failing.listenTcp(0, '127.0.0.1');
-    const r = await connectHead(port, `CONNECT ok.test:${targetPort} HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`);
+    const r = await connectHead(
+      port,
+      `CONNECT ok.test:${targetPort} HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`,
+    );
     expect(r.head).toContain('502');
     expect(audit[0]).toMatchObject({ decision: 'deny', reason: 'connect-failed' });
     await failing.close();
   });
 
   it('8.8 rejects malformed CONNECT targets', async () => {
-    const r = await connectHead(proxyPort, `CONNECT /x/y HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`);
+    const r = await connectHead(
+      proxyPort,
+      `CONNECT /x/y HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`,
+    );
     expect(r.head).toContain('400');
-    const r2 = await connectHead(proxyPort, `CONNECT a:99999 HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`);
+    const r2 = await connectHead(
+      proxyPort,
+      `CONNECT a:99999 HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`,
+    );
     expect(r2.head).toContain('400');
   });
 
@@ -234,7 +255,12 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
     expect(r.head.toLowerCase()).toContain('x-seen-proxy-auth: none');
     expect(r.body).toBe('hello GET /path?q=1');
     expect(resolveCalls).toEqual(['web.test']);
-    expect(audit[0]).toMatchObject({ protocol: 'http', host: 'web.test', decision: 'allow', resolvedIp: '127.0.0.1' });
+    expect(audit[0]).toMatchObject({
+      protocol: 'http',
+      host: 'web.test',
+      decision: 'allow',
+      resolvedIp: '127.0.0.1',
+    });
   });
 
   it('8.8 forwards request bodies for absolute-form POST', async () => {
@@ -255,17 +281,32 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
 
   it('8.8 plain HTTP is denied for non-allowlisted hosts, private resolutions and bad forms', async () => {
     resolved['evil.test'] = ['93.184.216.40'];
-    const denied = await rawRequest(proxyPort, `GET http://evil.test/ HTTP/1.1\r\nHost: evil.test\r\nProxy-Authorization: ${auth()}\r\nConnection: close\r\n\r\n`);
+    const denied = await rawRequest(
+      proxyPort,
+      `GET http://evil.test/ HTTP/1.1\r\nHost: evil.test\r\nProxy-Authorization: ${auth()}\r\nConnection: close\r\n\r\n`,
+    );
     expect(denied.head).toContain('403');
     policy = { ...(policy as EgressPolicy), allow: [`web.test:${httpPort}`] };
     resolved['web.test'] = ['10.1.1.1'];
-    const ssrf = await rawRequest(proxyPort, `GET http://web.test:${httpPort}/ HTTP/1.1\r\nHost: web.test\r\nProxy-Authorization: ${auth()}\r\nConnection: close\r\n\r\n`);
+    const ssrf = await rawRequest(
+      proxyPort,
+      `GET http://web.test:${httpPort}/ HTTP/1.1\r\nHost: web.test\r\nProxy-Authorization: ${auth()}\r\nConnection: close\r\n\r\n`,
+    );
     expect(ssrf.head).toContain('403');
-    const origin = await rawRequest(proxyPort, `GET /relative HTTP/1.1\r\nHost: x\r\nProxy-Authorization: ${auth()}\r\nConnection: close\r\n\r\n`);
+    const origin = await rawRequest(
+      proxyPort,
+      `GET /relative HTTP/1.1\r\nHost: x\r\nProxy-Authorization: ${auth()}\r\nConnection: close\r\n\r\n`,
+    );
     expect(origin.head).toContain('400');
-    const https = await rawRequest(proxyPort, `GET https://web.test/ HTTP/1.1\r\nHost: x\r\nProxy-Authorization: ${auth()}\r\nConnection: close\r\n\r\n`);
+    const https = await rawRequest(
+      proxyPort,
+      `GET https://web.test/ HTTP/1.1\r\nHost: x\r\nProxy-Authorization: ${auth()}\r\nConnection: close\r\n\r\n`,
+    );
     expect(https.head).toContain('400');
-    const noauth = await rawRequest(proxyPort, `GET http://web.test/ HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`);
+    const noauth = await rawRequest(
+      proxyPort,
+      `GET http://web.test/ HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`,
+    );
     expect(noauth.head).toContain('407');
   });
 
@@ -286,7 +327,9 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
     expect(reply).toContain('200 Connection Established');
     const unknown = await proxy.listenUnix(path.join(dir, 'ghost.sock'), 'ghost');
     const denied = await new Promise<string>((resolve) => {
-      const s = net.connect(path.join(dir, 'ghost.sock'), () => s.write(`CONNECT ok.test:${targetPort} HTTP/1.1\r\n\r\n`));
+      const s = net.connect(path.join(dir, 'ghost.sock'), () =>
+        s.write(`CONNECT ok.test:${targetPort} HTTP/1.1\r\n\r\n`),
+      );
       s.on('data', (d) => {
         resolve(d.toString());
         s.destroy();
@@ -300,23 +343,37 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
   it('8.8 audit failures never break the data path', async () => {
     const flaky = createEgressProxy({
       policies: { get: async () => policy },
-      audit: { record: () => { throw new Error('db down'); } },
+      audit: {
+        record: () => {
+          throw new Error('db down');
+        },
+      },
       resolver: async () => ['93.184.216.34'],
       connect: () => net.connect({ host: '127.0.0.1', port: targetPort }),
       allowedSampleRate: 1,
     });
     const { port } = await flaky.listenTcp(0, '127.0.0.1');
-    const r = await connectHead(port, `CONNECT ok.test:${targetPort} HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`);
+    const r = await connectHead(
+      port,
+      `CONNECT ok.test:${targetPort} HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`,
+    );
     expect(r.head).toContain('200');
     await flaky.close();
     const asyncFail = createEgressProxy({
       policies: { get: async () => policy },
-      audit: { record: async () => { throw new Error('db down'); } },
+      audit: {
+        record: async () => {
+          throw new Error('db down');
+        },
+      },
       resolver: async () => ['93.184.216.99'],
       connect: () => net.connect({ host: '127.0.0.1', port: targetPort }),
     });
     const second = await asyncFail.listenTcp(0, '127.0.0.1');
-    const denied = await connectHead(second.port, `CONNECT other.test:443 HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`);
+    const denied = await connectHead(
+      second.port,
+      `CONNECT other.test:443 HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`,
+    );
     expect(denied.head).toContain('403');
     await asyncFail.close();
   });

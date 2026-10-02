@@ -1,6 +1,6 @@
-import type { PluginFile } from './types';
-import type { ItemPolicy, ReleaseItem } from './render';
 import type { ReleaseRecord } from './release';
+import type { ItemPolicy, ReleaseItem } from './render';
+import type { PluginFile } from './types';
 
 /**
  * Ports (CONTRIBUTING rule 6): `@bastion-mcp/db` and the apps implement these; this package stays

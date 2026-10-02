@@ -92,7 +92,12 @@ export class MemoryReleaseStore implements ReleaseStore {
   async list(marketplaceId: string): Promise<ReleaseRecord[]> {
     return [...(this.records.get(marketplaceId) ?? [])];
   }
-  async insert(marketplaceId: string, record: ReleaseRecord, _refs: ReleaseItemRef[]): Promise<void> {
+  async insert(
+    marketplaceId: string,
+    record: ReleaseRecord,
+    _refs: ReleaseItemRef[],
+    _createdBy?: string | null,
+  ): Promise<void> {
     const list = this.records.get(marketplaceId) ?? [];
     if (list.some((r) => r.seq === record.seq)) {
       throw new PluginStateError('RELEASE_EXISTS', 'releases are immutable');
@@ -100,7 +105,9 @@ export class MemoryReleaseStore implements ReleaseStore {
     list.push(record);
     this.records.set(marketplaceId, list);
     if (this.marketplaces) {
-      this.marketplaces.snapshots.set(`${marketplaceId}:${record.seq}`, [...this.marketplaces.current]);
+      this.marketplaces.snapshots.set(`${marketplaceId}:${record.seq}`, [
+        ...this.marketplaces.current,
+      ]);
     }
   }
 }

@@ -1,0 +1,20 @@
+{
+  "name": "@bastion-mcp/router",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@bastion-mcp/core": "workspace:*",
+    "@bastion-mcp/overrides": "workspace:*",
+    "@bastion-mcp/policy": "workspace:*",
+    "zod": "4.6.5"
+  }
+}

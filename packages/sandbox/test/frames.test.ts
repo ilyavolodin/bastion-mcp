@@ -17,7 +17,11 @@ describe('8.3 stdio frames', () => {
   });
 
   it('8.3 encodes exit frames with null code or signal', () => {
-    expect(JSON.parse(exitFrame(null, 'SIGKILL'))).toEqual({ t: 'x', code: null, signal: 'SIGKILL' });
+    expect(JSON.parse(exitFrame(null, 'SIGKILL'))).toEqual({
+      t: 'x',
+      code: null,
+      signal: 'SIGKILL',
+    });
     expect(JSON.parse(exitFrame(3, null))).toEqual({ t: 'x', code: 3, signal: null });
   });
 
@@ -38,7 +42,9 @@ describe('8.3 stdio frames', () => {
   it('8.3 a worker may only send message frames', () => {
     expect(decodeFrame('{"t":"e","d":"x"}', 'toRunner').ok).toBe(false);
     expect(decodeFrame('{"t":"x","code":0,"signal":null}', 'toRunner').ok).toBe(false);
-    expect(decodeFrame('{"t":"m","d":{"jsonrpc":"2.0","id":1,"method":"x"}}', 'toRunner').ok).toBe(true);
+    expect(decodeFrame('{"t":"m","d":{"jsonrpc":"2.0","id":1,"method":"x"}}', 'toRunner').ok).toBe(
+      true,
+    );
   });
 
   it.each([

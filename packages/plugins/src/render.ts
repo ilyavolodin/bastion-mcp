@@ -1,6 +1,6 @@
 import type { MARKETPLACE_ITEM_POLICIES } from '@bastion-mcp/core';
 import { PluginValidationError } from './errors';
-import { mcpServerKey, type McpServerComponent, type PluginManifest } from './manifest';
+import { type McpServerComponent, mcpServerKey, type PluginManifest } from './manifest';
 import { encodeText, type PluginFile, sortFiles } from './types';
 
 export type ItemPolicy = (typeof MARKETPLACE_ITEM_POLICIES)[number];
@@ -55,7 +55,8 @@ export const sortKeys = (value: unknown): unknown => {
 };
 
 /** Pretty JSON with a trailing newline: the single serialization of every generated manifest. */
-export const jsonBytes = (value: unknown): Uint8Array => encodeText(`${JSON.stringify(value, null, 2)}\n`);
+export const jsonBytes = (value: unknown): Uint8Array =>
+  encodeText(`${JSON.stringify(value, null, 2)}\n`);
 
 /** The manifest mapping table of 25.4. */
 export const mapPolicy = (
@@ -65,9 +66,15 @@ export const mapPolicy = (
     case 'available':
       return { agentsInstallation: 'AVAILABLE' };
     case 'installedByDefault':
-      return { claudeInstallationPreference: 'auto_install', agentsInstallation: 'INSTALLED_BY_DEFAULT' };
+      return {
+        claudeInstallationPreference: 'auto_install',
+        agentsInstallation: 'INSTALLED_BY_DEFAULT',
+      };
     case 'required':
-      return { claudeInstallationPreference: 'required', agentsInstallation: 'INSTALLED_BY_DEFAULT' };
+      return {
+        claudeInstallationPreference: 'required',
+        agentsInstallation: 'INSTALLED_BY_DEFAULT',
+      };
   }
 };
 
@@ -213,7 +220,10 @@ export const renderPlugin = (item: ReleaseItem, host: string): RenderedPlugin =>
   )) {
     if (!CLAUDE_RESERVED_KEYS.has(k)) claudeJson[k] = v;
   }
-  put({ path: '.claude-plugin/plugin.json', content: jsonBytes(claudeJson), mode: 'file' }, 'claude');
+  put(
+    { path: '.claude-plugin/plugin.json', content: jsonBytes(claudeJson), mode: 'file' },
+    'claude',
+  );
 
   const agentsJson: Record<string, unknown> = {
     $schema: AGENT_PLUGIN_SCHEMA_URL,
@@ -234,9 +244,11 @@ export const renderPlugin = (item: ReleaseItem, host: string): RenderedPlugin =>
   put({ path: 'plugin.json', content: jsonBytes(agentsJson), mode: 'file' }, 'openai');
 
   const claudeMcp = renderClaudeMcp(manifest, host);
-  if (claudeMcp !== undefined) put({ path: '.mcp.json', content: jsonBytes(claudeMcp), mode: 'file' }, 'claude');
+  if (claudeMcp !== undefined)
+    put({ path: '.mcp.json', content: jsonBytes(claudeMcp), mode: 'file' }, 'claude');
   const agentsMcp = renderAgentsMcp(manifest, host);
-  if (agentsMcp !== undefined) put({ path: 'mcp.json', content: jsonBytes(agentsMcp), mode: 'file' }, 'openai');
+  if (agentsMcp !== undefined)
+    put({ path: 'mcp.json', content: jsonBytes(agentsMcp), mode: 'file' }, 'openai');
 
   const all = sortFiles([...out.values()]);
   return {

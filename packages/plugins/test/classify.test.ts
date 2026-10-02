@@ -5,8 +5,8 @@ import {
   classifyFiles,
   classifyVersion,
   executableEntries,
-  parsePluginManifest,
   type PluginVersionContent,
+  parsePluginManifest,
   requiresAdminApproval,
   reviewedDiff,
   reviewedDiffSha256,
@@ -18,7 +18,13 @@ const cls = (path: string, text: string, mode: 'file' | 'executable' = 'file') =
   classifyFile(textFile(path, text, mode)).classification;
 
 const manifest = (extra: Record<string, unknown> = {}) =>
-  parsePluginManifest({ name: 'p', version: '1.0.0', description: 'd', displayName: 'P', ...extra });
+  parsePluginManifest({
+    name: 'p',
+    version: '1.0.0',
+    description: 'd',
+    displayName: 'P',
+    ...extra,
+  });
 
 describe('25.2 executable-content classification', () => {
   it('25.2 treats Markdown, text and JSON data as plain', () => {
@@ -48,17 +54,28 @@ describe('25.2 executable-content classification', () => {
   });
 
   it('25.2 flags SKILL.md bodies with the !`command` injection', () => {
-    expect(cls('SKILL.md', SKILL_MD('a').replace('Body.', 'Branch: !`git branch`'))).toBe('executable');
+    expect(cls('SKILL.md', SKILL_MD('a').replace('Body.', 'Branch: !`git branch`'))).toBe(
+      'executable',
+    );
     expect(cls('SKILL.md', SKILL_MD('a').replace('Body.', '```!\nls\n```'))).toBe('executable');
-    expect(cls('SKILL.md', SKILL_MD('a').replace('Body.', 'Say hello! `code` is fine'))).toBe('plain');
+    expect(cls('SKILL.md', SKILL_MD('a').replace('Body.', 'Say hello! `code` is fine'))).toBe(
+      'plain',
+    );
   });
 
   it('25.2 flags SKILL.md allowed-tools that pre-approve Bash', () => {
-    for (const tools of ['Bash', 'Read Bash(git:*)', '[Read, "Bash(npm test)"]', 'Bash(git status:*), Read']) {
+    for (const tools of [
+      'Bash',
+      'Read Bash(git:*)',
+      '[Read, "Bash(npm test)"]',
+      'Bash(git status:*), Read',
+    ]) {
       expect(cls('SKILL.md', SKILL_MD('a', `allowed-tools: ${tools}\n`)), tools).toBe('executable');
     }
     expect(cls('SKILL.md', SKILL_MD('a', 'allowed-tools: Read Grep\n'))).toBe('plain');
-    expect(cls('SKILL.md', SKILL_MD('a', 'allowed-tools:\n  - Read\n  - Bash\n'))).toBe('executable');
+    expect(cls('SKILL.md', SKILL_MD('a', 'allowed-tools:\n  - Read\n  - Bash\n'))).toBe(
+      'executable',
+    );
     expect(cls('SKILL.md', SKILL_MD('a', 'allowed-tools: BashOutput\n'))).toBe('plain');
     // Unparsable frontmatter falls back to a text search.
     expect(cls('SKILL.md', '---\nname: [\nallowed-tools: Bash\n---\n')).toBe('executable');
@@ -79,7 +96,11 @@ describe('25.2 executable-content classification', () => {
     const out = classifyFiles([textFile('a.md', 'a'), textFile('scripts/b.sh', 'b')]);
     expect(out).toEqual([
       { path: 'a.md', classification: 'plain', reason: expect.any(String) },
-      { path: 'scripts/b.sh', classification: 'executable', reason: expect.stringContaining('scripts') },
+      {
+        path: 'scripts/b.sh',
+        classification: 'executable',
+        reason: expect.stringContaining('scripts'),
+      },
     ]);
   });
 
@@ -118,7 +139,9 @@ describe('10.1 / 25.2 approval gate', () => {
       manifest: manifest({ mcpServers: [{ kind: 'stdio', name: 's', command: 'x' }] }),
       files: [textFile('scripts/run.sh', 'echo 2'), textFile('scripts/new.sh', 'n')],
     };
-    expect(reviewedDiff(undefined, v1).map((d) => [d.path, d.change])).toEqual([['scripts/run.sh', 'added']]);
+    expect(reviewedDiff(undefined, v1).map((d) => [d.path, d.change])).toEqual([
+      ['scripts/run.sh', 'added'],
+    ]);
     expect(reviewedDiff(v1, v2).map((d) => [d.path, d.change])).toEqual([
       ['plugin.json#mcpServers/s', 'added'],
       ['scripts/new.sh', 'added'],
@@ -144,8 +167,14 @@ describe('10.1 / 25.2 approval gate', () => {
   });
 
   it('25.2 mode changes of an executable file are part of the diff', () => {
-    const a: PluginVersionContent = { manifest: manifest(), files: [textFile('bin/x', 'd', 'executable')] };
-    const b: PluginVersionContent = { manifest: manifest(), files: [textFile('bin/x', 'd', 'executable')] };
+    const a: PluginVersionContent = {
+      manifest: manifest(),
+      files: [textFile('bin/x', 'd', 'executable')],
+    };
+    const b: PluginVersionContent = {
+      manifest: manifest(),
+      files: [textFile('bin/x', 'd', 'executable')],
+    };
     expect(reviewedDiff(a, b)).toEqual([]);
   });
 });

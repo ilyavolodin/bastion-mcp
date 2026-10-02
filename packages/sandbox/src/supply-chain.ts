@@ -30,7 +30,9 @@ export const isExactVersion = (version: string): boolean => EXACT_VERSION.test(v
 
 export const validateExactVersion = (version: string): string => {
   if (!isExactVersion(version)) {
-    throw new SupplyChainError(`"${version}" is not an exact version (ranges, tags and latest are rejected)`);
+    throw new SupplyChainError(
+      `"${version}" is not an exact version (ranges, tags and latest are rejected)`,
+    );
   }
   return version;
 };
@@ -192,7 +194,8 @@ export const parseRequirements = (content: string): ParsedRequirement[] => {
     }
     if (line.startsWith('-')) continue;
     const match = REQUIREMENT.exec(line);
-    if (!match) throw new SupplyChainError(`requirements line is not pinned with ==: "${line.slice(0, 80)}"`);
+    if (!match)
+      throw new SupplyChainError(`requirements line is not pinned with ==: "${line.slice(0, 80)}"`);
     current = { name: match[1] as string, version: match[2] as string, hashes: [] };
     for (const inlineHash of line.matchAll(/--hash=(sha256:[0-9a-f]{64})/g)) {
       current.hashes.push(inlineHash[1] as string);
@@ -219,7 +222,9 @@ export const extractPinnedPackages = (lockfile: Lockfile): OsvPackage[] =>
 export const assertAllRequirementsHashed = (content: string): void => {
   const missing = parseRequirements(content).filter((r) => r.hashes.length === 0);
   if (missing.length > 0) {
-    throw new SupplyChainError(`requirements without hashes: ${missing.map((m) => m.name).join(', ')}`);
+    throw new SupplyChainError(
+      `requirements without hashes: ${missing.map((m) => m.name).join(', ')}`,
+    );
   }
 };
 

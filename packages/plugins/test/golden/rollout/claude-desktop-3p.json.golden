@@ -1,0 +1,21 @@
+{
+  "client": "claude-desktop-3p",
+  "allowedPluginMarketplaces": {
+    "gitEntry": {
+      "source": "git",
+      "url": "https://mcp.example.com/plugins/acme-tools.git",
+      "ref": "cccccccccccccccccccccccccccccccccccccccc",
+      "credentialKind": "credentialHelper",
+      "credentialHelper": "/usr/local/bin/bastion-credential",
+      "installationPreference": "auto_install"
+    },
+    "urlEntry": {
+      "source": "url",
+      "url": "https://mcp.example.com/plugins/acme-tools/marketplace.json?release=4",
+      "manifestSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "credentialKind": "credentialHelper",
+      "credentialHelper": "/usr/local/bin/bastion-credential",
+      "installationPreference": "auto_install"
+    }
+  }
+}

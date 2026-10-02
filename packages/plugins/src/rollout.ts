@@ -3,7 +3,13 @@ import type { MarketplaceRow } from './ports';
 import type { ReleaseRecord } from './release';
 import { baseUrl, type ItemPolicy } from './render';
 
-export const ROLLOUT_CLIENTS = ['claude-code', 'claude-desktop-3p', 'codex', 'claude-ai', 'chatgpt'] as const;
+export const ROLLOUT_CLIENTS = [
+  'claude-code',
+  'claude-desktop-3p',
+  'codex',
+  'claude-ai',
+  'chatgpt',
+] as const;
 export type RolloutClient = (typeof ROLLOUT_CLIENTS)[number];
 
 export type RolloutOptions = {
@@ -48,7 +54,11 @@ export type RolloutConfig =
       gitCredentialLine: string;
       requirementsToml: string;
     }
-  | { client: 'claude-ai' | 'chatgpt'; steps: string[]; plugins: { name: string; setTo: string }[] };
+  | {
+      client: 'claude-ai' | 'chatgpt';
+      steps: string[];
+      plugins: { name: string; setTo: string }[];
+    };
 
 const mirrorUrl = (m: MarketplaceRow): string | undefined =>
   m.mirror
@@ -82,7 +92,9 @@ export const renderRollout = (
         managedSettings: {
           extraKnownMarketplaces: { [slug]: { source: { source: 'git', url }, autoUpdate: true } },
           enabledPlugins: Object.fromEntries(
-            release.items.filter((i) => i.policy === 'required').map((i) => [`${i.name}@${slug}`, true as const]),
+            release.items
+              .filter((i) => i.policy === 'required')
+              .map((i) => [`${i.name}@${slug}`, true as const]),
           ),
         },
         strictKnownMarketplacesEntry: { source: 'git', url },
@@ -144,7 +156,7 @@ export const renderRollout = (
           mirror
             ? `Add ${mirror} under Organization settings > Plugins & skills > Marketplaces.`
             : 'Configure a mirror target for this marketplace first (GitHub or GitLab).',
-          'Set each plugin\'s availability to the value listed below.',
+          "Set each plugin's availability to the value listed below.",
           `Optional: add ${baseUrl(options.host)}/mcp as an organization custom connector.`,
         ],
         plugins: release.items.map((i) => ({ name: i.name, setTo: POLICY_LABEL[i.policy] })),
