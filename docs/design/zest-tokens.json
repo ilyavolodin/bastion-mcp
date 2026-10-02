@@ -1,0 +1,482 @@
+{
+  "name": "Zest",
+  "version": 1,
+  "color": {
+    "themes": [
+      {
+        "id": "light",
+        "name": "Light"
+      },
+      {
+        "id": "dark",
+        "name": "Dark"
+      }
+    ],
+    "tokens": [
+      {
+        "name": "canvas",
+        "value": {
+          "light": "#f4f5fa",
+          "dark": "#121214"
+        },
+        "usage": "Page background behind cards; the sidebar and top bar sit on it too."
+      },
+      {
+        "name": "surface",
+        "value": {
+          "light": "#ffffff",
+          "dark": "#1c1c20"
+        },
+        "usage": "Cards, menus, the sidebar panel."
+      },
+      {
+        "name": "surface-sunken",
+        "value": {
+          "light": "#f4f5fa",
+          "dark": "#26262c"
+        },
+        "usage": "Inside a card: search fields, tab tracks, the empty allocation bar track."
+      },
+      {
+        "name": "line",
+        "value": {
+          "light": "#e8eaf1",
+          "dark": "#2e2e36"
+        },
+        "usage": "Hairlines between rows, card dividers. Decorative only \u2014 never the only edge of a control."
+      },
+      {
+        "name": "line-strong",
+        "value": {
+          "light": "#848aa3",
+          "dark": "#6c6e80"
+        },
+        "usage": "Control edges that must be seen: the dashed Add tile, outlined buttons, unchecked toggles. 3:1 on surface and canvas."
+      },
+      {
+        "name": "ink",
+        "value": {
+          "light": "#171a3a",
+          "dark": "#f4f4f6"
+        },
+        "usage": "Headings, figures and body copy on canvas, surface and surface-sunken."
+      },
+      {
+        "name": "ink-muted",
+        "value": {
+          "light": "#5f6580",
+          "dark": "#a7a9b8"
+        },
+        "usage": "Secondary labels, axis ticks, metadata, section overlines on canvas, surface and surface-sunken."
+      },
+      {
+        "name": "on-bright",
+        "value": {
+          "light": "#171a3a",
+          "dark": "#171a3a"
+        },
+        "usage": "Text and icons on every bright fill and gradient: tangerine, coral, mint, sky, teal, berry, sun. Same deep ink in both themes."
+      },
+      {
+        "name": "tangerine",
+        "value": {
+          "light": "#ff8a1f",
+          "dark": "#ff9433"
+        },
+        "usage": "The signature hue. Fills: primary buttons, active nav, selected tab, chart line. Never as text \u2014 use tangerine-ink."
+      },
+      {
+        "name": "tangerine-soft",
+        "value": {
+          "light": "#ffebd6",
+          "dark": "#3b2412"
+        },
+        "usage": "Tinted ground: soft buttons, the selected payment card wash, the selected tab in a quiet track."
+      },
+      {
+        "name": "tangerine-ink",
+        "value": {
+          "light": "#b24700",
+          "dark": "#ffa855"
+        },
+        "usage": "Orange text and icons on surface, canvas and tangerine-soft; also the focus ring."
+      },
+      {
+        "name": "sun",
+        "value": {
+          "light": "#ffc23d",
+          "dark": "#ffc84f"
+        },
+        "usage": "Warm gradient stop and highlight dots. Fill only."
+      },
+      {
+        "name": "coral",
+        "value": {
+          "light": "#ff6b6b",
+          "dark": "#ff7a7a"
+        },
+        "usage": "Destructive or outbound actions (Send, Remove) as a fill."
+      },
+      {
+        "name": "coral-soft",
+        "value": {
+          "light": "#ffe4e4",
+          "dark": "#3a1b1d"
+        },
+        "usage": "Tinted ground behind coral-ink."
+      },
+      {
+        "name": "coral-ink",
+        "value": {
+          "light": "#c42b2b",
+          "dark": "#ff9a9a"
+        },
+        "usage": "Negative deltas and error text on surface, canvas and coral-soft."
+      },
+      {
+        "name": "mint",
+        "value": {
+          "light": "#2bc48a",
+          "dark": "#34d399"
+        },
+        "usage": "Positive fill: success dots, gains in charts."
+      },
+      {
+        "name": "mint-soft",
+        "value": {
+          "light": "#dcf7eb",
+          "dark": "#0f2a20"
+        },
+        "usage": "Tinted ground behind mint-ink."
+      },
+      {
+        "name": "mint-ink",
+        "value": {
+          "light": "#0a7a4d",
+          "dark": "#4ee0a3"
+        },
+        "usage": "Positive deltas (+14.5%) and success text on surface, canvas and mint-soft."
+      },
+      {
+        "name": "sky",
+        "value": {
+          "light": "#4c8dff",
+          "dark": "#5b9bff"
+        },
+        "usage": "Second series colour: ETH in allocation, secondary chart line."
+      },
+      {
+        "name": "sky-soft",
+        "value": {
+          "light": "#e3edff",
+          "dark": "#15233a"
+        },
+        "usage": "Tinted ground behind sky-ink."
+      },
+      {
+        "name": "sky-ink",
+        "value": {
+          "light": "#1d5ad0",
+          "dark": "#8cb8ff"
+        },
+        "usage": "Info text and links on surface, canvas and sky-soft."
+      },
+      {
+        "name": "teal",
+        "value": {
+          "light": "#1bb5a2",
+          "dark": "#2cc9b5"
+        },
+        "usage": "Third series colour: stablecoins (USDT) in allocation and legends."
+      },
+      {
+        "name": "berry",
+        "value": {
+          "light": "#e03fcb",
+          "dark": "#ea5ad8"
+        },
+        "usage": "Fourth series colour: Other in allocation; the pink end of the berry gradient."
+      },
+      {
+        "name": "berry-soft",
+        "value": {
+          "light": "#fbe4f7",
+          "dark": "#33152f"
+        },
+        "usage": "Tinted ground behind berry-ink."
+      },
+      {
+        "name": "berry-ink",
+        "value": {
+          "light": "#a31b91",
+          "dark": "#f59ae9"
+        },
+        "usage": "Accent text on surface, canvas and berry-soft."
+      },
+      {
+        "name": "link",
+        "value": "{sky-ink}",
+        "usage": "Links \u2014 an alias of sky-ink."
+      }
+    ]
+  },
+  "type": {
+    "fonts": [],
+    "families": {
+      "sans": "\"Poppins\", ui-sans-serif, system-ui, \"Segoe UI\", sans-serif"
+    },
+    "groups": [
+      {
+        "name": "Headings",
+        "family": "sans",
+        "note": "Poppins from Google Fonts, weights 400/500/600/700. Headings are semibold, never bold.",
+        "styles": [
+          {
+            "name": "page-title",
+            "fontSize": "28px",
+            "lineHeight": "36px",
+            "fontWeight": 600,
+            "letterSpacing": "-0.01em",
+            "sample": "Wallet",
+            "usage": "One per screen, top-left of the content area."
+          },
+          {
+            "name": "card-title",
+            "fontSize": "17px",
+            "lineHeight": "24px",
+            "fontWeight": 600,
+            "sample": "My wallets",
+            "usage": "Card headings, beside an icon or a control."
+          }
+        ]
+      },
+      {
+        "name": "Figures",
+        "family": "sans",
+        "note": "Money and quantities. Always tabular numerals (font-variant-numeric: tabular-nums).",
+        "styles": [
+          {
+            "name": "figure-xl",
+            "fontSize": "32px",
+            "lineHeight": "40px",
+            "fontWeight": 700,
+            "letterSpacing": "-0.02em",
+            "sample": "$1,180,577.24",
+            "usage": "The one headline number on a card \u2014 the total balance."
+          },
+          {
+            "name": "figure-lg",
+            "fontSize": "24px",
+            "lineHeight": "32px",
+            "fontWeight": 700,
+            "letterSpacing": "-0.01em",
+            "sample": "108.61 BTC",
+            "usage": "Per-asset amounts on asset cards."
+          },
+          {
+            "name": "figure-sm",
+            "fontSize": "14px",
+            "lineHeight": "20px",
+            "fontWeight": 600,
+            "sample": "+$4,245.45",
+            "usage": "Deltas and inline amounts."
+          }
+        ]
+      },
+      {
+        "name": "Text",
+        "family": "sans",
+        "styles": [
+          {
+            "name": "body",
+            "fontSize": "14px",
+            "lineHeight": "22px",
+            "fontWeight": 400,
+            "sample": "Your balance moved 3.2% since this morning.",
+            "usage": "Everything else."
+          },
+          {
+            "name": "label",
+            "fontSize": "14px",
+            "lineHeight": "20px",
+            "fontWeight": 500,
+            "sample": "Liquidity pools",
+            "usage": "Nav items, button labels, tab labels."
+          },
+          {
+            "name": "caption",
+            "fontSize": "12px",
+            "lineHeight": "16px",
+            "fontWeight": 400,
+            "sample": "1 BTC = $19,509.23",
+            "usage": "Metadata, axis ticks, card-holder lines."
+          },
+          {
+            "name": "overline",
+            "fontSize": "11px",
+            "lineHeight": "16px",
+            "fontWeight": 600,
+            "letterSpacing": "0.1em",
+            "sample": "PAGES",
+            "usage": "Sidebar section headings, in ink-muted, uppercase."
+          }
+        ]
+      }
+    ]
+  },
+  "spacing": {
+    "note": "4px base; cards breathe at space-5.",
+    "tokens": [
+      {
+        "name": "space-1",
+        "value": "4px",
+        "usage": "Icon-to-number gaps, legend dot to label."
+      },
+      {
+        "name": "space-2",
+        "value": "8px",
+        "usage": "Between a label and its value; inside chips and tabs."
+      },
+      {
+        "name": "space-3",
+        "value": "12px",
+        "usage": "Between buttons in a row; nav item inner padding."
+      },
+      {
+        "name": "space-4",
+        "value": "16px",
+        "usage": "Stacked rows inside a card."
+      },
+      {
+        "name": "space-5",
+        "value": "20px",
+        "usage": "Card padding."
+      },
+      {
+        "name": "space-6",
+        "value": "24px",
+        "usage": "Gutters between cards; page padding."
+      },
+      {
+        "name": "space-8",
+        "value": "32px",
+        "usage": "Between page sections."
+      }
+    ]
+  },
+  "radius": {
+    "note": "Generously rounded, never sharp; pills for anything that toggles.",
+    "tokens": [
+      {
+        "name": "radius-sm",
+        "value": "6px",
+        "usage": "Tabs, chips, the allocation bar ends."
+      },
+      {
+        "name": "radius-md",
+        "value": "10px",
+        "usage": "Buttons, inputs, nav items."
+      },
+      {
+        "name": "radius-lg",
+        "value": "16px",
+        "usage": "Cards, the chart tooltip."
+      },
+      {
+        "name": "radius-xl",
+        "value": "20px",
+        "usage": "Payment cards and hero tiles."
+      },
+      {
+        "name": "radius-full",
+        "value": "9999px",
+        "usage": "Avatars, toggles, token icons, legend dots."
+      }
+    ]
+  },
+  "shadow": {
+    "note": "Soft and warm in light; in dark, cards separate by surface, and glows carry the colour.",
+    "tokens": [
+      {
+        "name": "shadow-card",
+        "value": {
+          "light": "0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14",
+          "dark": "0 1px 2px #00000066"
+        },
+        "usage": "Cards at rest."
+      },
+      {
+        "name": "shadow-float",
+        "value": {
+          "light": "0 10px 30px -8px #171a3a33",
+          "dark": "0 12px 32px -6px #000000cc"
+        },
+        "usage": "Tooltips, menus, the chart callout."
+      },
+      {
+        "name": "glow-tangerine",
+        "value": {
+          "light": "0 8px 20px -6px #ff7a1a8c",
+          "dark": "0 8px 22px -6px #ff7a1aa6"
+        },
+        "usage": "Under the active nav item and primary buttons \u2014 the playful lift."
+      },
+      {
+        "name": "glow-berry",
+        "value": {
+          "light": "0 8px 20px -6px #d946ef73",
+          "dark": "0 8px 22px -6px #d946ef99"
+        },
+        "usage": "Under berry-gradient tiles."
+      },
+      {
+        "name": "focus-ring",
+        "value": {
+          "light": "0 0 0 2px #ffffff, 0 0 0 4px #b24700",
+          "dark": "0 0 0 2px #1c1c20, 0 0 0 4px #ffa855"
+        },
+        "usage": "Keyboard focus: a 2px surface gap then 2px solid tangerine-ink (3:1+ on every surface)."
+      }
+    ]
+  },
+  "gradient": {
+    "note": "Gradients are fills, never text. Every gradient keeps on-bright legible from end to end.",
+    "tokens": [
+      {
+        "name": "gradient-tangerine",
+        "value": "linear-gradient(135deg, #ffc23d 0%, #ff8a1f 55%, #ff7a1a 100%)",
+        "usage": "Primary buttons, active nav, selected tab, the selected payment card. The default gradient."
+      },
+      {
+        "name": "gradient-sunset",
+        "value": "linear-gradient(135deg, #ff9a3c 0%, #ff5f7e 100%)",
+        "usage": "Hero tiles and promo banners; one per screen."
+      },
+      {
+        "name": "gradient-berry",
+        "value": "linear-gradient(135deg, #ff7aa8 0%, #d946ef 100%)",
+        "usage": "Payment cards, achievement tiles."
+      },
+      {
+        "name": "gradient-lagoon",
+        "value": "linear-gradient(135deg, #2ee6c5 0%, #3d8bff 100%)",
+        "usage": "Payment cards, info tiles. Teal to blue \u2014 stop at blue, never purple."
+      },
+      {
+        "name": "gradient-mint",
+        "value": "linear-gradient(135deg, #5ee6a8 0%, #1bb5a2 100%)",
+        "usage": "Success tiles, the gain area in a chart."
+      },
+      {
+        "name": "gradient-spectrum",
+        "value": "linear-gradient(90deg, #ff8a1f 0%, #ffc23d 25%, #4c8dff 50%, #1bb5a2 75%, #e03fcb 100%)",
+        "usage": "Thin decorative rules: the top edge of a hero card, a loading bar. Not for data."
+      },
+      {
+        "name": "gradient-area",
+        "value": "linear-gradient(180deg, rgba(255,138,31,0.32) 0%, rgba(255,138,31,0) 100%)",
+        "usage": "Fill under a chart line (the AreaChart draws its own SVG version)."
+      }
+    ]
+  }
+}

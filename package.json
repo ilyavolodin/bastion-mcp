@@ -19,7 +19,9 @@
     "boundaries": "depcruise packages --config .dependency-cruiser.cjs",
     "db:generate": "pnpm --filter @bastion-mcp/db generate",
     "db:migrate": "pnpm --filter @bastion-mcp/db migrate:dev",
-    "check": "pnpm lint && pnpm typecheck && pnpm boundaries && pnpm test"
+    "check": "pnpm lint && pnpm typecheck && pnpm boundaries && pnpm test",
+    "test:scripts": "vitest run --root scripts",
+    "must-coverage": "tsx scripts/check-must-coverage.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
