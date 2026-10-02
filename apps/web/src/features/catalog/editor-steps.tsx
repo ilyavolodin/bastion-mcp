@@ -32,7 +32,7 @@ import {
   type VariableDraft,
 } from './draft';
 import { importSnippet } from './import-snippet';
-import { NewTeamButton, useEditorTeams } from './team-picker';
+import { NEW_TEAM_LABEL, NEW_TEAM_VALUE, useEditorTeams, useNewTeamDialog } from './team-picker';
 
 export type { Draft };
 
@@ -180,6 +180,7 @@ export function SourceStep({ draft, onChange, readOnly, errors, existing }: Prop
   const [slugEdited, setSlugEdited] = React.useState(Boolean(existing));
   const { role } = useAuth();
   const owners = useEditorTeams();
+  const newTeam = useNewTeamDialog((team) => onChange({ ...draft, ownerTeamId: team.id }));
   const s = draft.spec;
   const ownerName = owners.teams.find((t) => t.id === draft.ownerTeamId)?.name;
   return (
@@ -256,7 +257,11 @@ export function SourceStep({ draft, onChange, readOnly, errors, existing }: Prop
               aria-describedby={describedBy}
               disabled={readOnly || existing}
               value={draft.ownerTeamId ?? ''}
-              onChange={(e) => onChange({ ...draft, ownerTeamId: e.target.value || null })}
+              onChange={(e) =>
+                e.target.value === NEW_TEAM_VALUE
+                  ? newTeam.open()
+                  : onChange({ ...draft, ownerTeamId: e.target.value || null })
+              }
             >
               {role === 'admin' || !draft.ownerTeamId ? (
                 <option value="" disabled={role !== 'admin'}>
@@ -271,15 +276,13 @@ export function SourceStep({ draft, onChange, readOnly, errors, existing }: Prop
               {draft.ownerTeamId && !ownerName ? (
                 <option value={draft.ownerTeamId}>{draft.ownerTeamId}</option>
               ) : null}
+              {owners.canCreate && !existing && !readOnly ? (
+                <option value={NEW_TEAM_VALUE}>{NEW_TEAM_LABEL}</option>
+              ) : null}
             </Select>
           )}
         </Field>
-        {owners.canCreate && !existing && !readOnly ? (
-          <NewTeamButton
-            onCreated={(team) => onChange({ ...draft, ownerTeamId: team.id })}
-            label="New team"
-          />
-        ) : null}
+        {newTeam.dialog}
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Runtime">

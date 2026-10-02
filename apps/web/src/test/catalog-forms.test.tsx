@@ -319,7 +319,7 @@ describe('Teams in the catalog editor (11.1, 10.1)', () => {
     const capture = captureRequests();
     const { user } = await renderRoute('/catalog/new?step=publish');
     const card = within(await screen.findByRole('region', { name: 'Publish' }));
-    await user.click(card.getByRole('button', { name: 'New team' }));
+    await user.selectOptions(card.getByLabelText('Add team'), 'New team…');
     const dialog = await screen.findByRole('dialog', { name: 'New team' });
     await user.type(within(dialog).getByLabelText(/Team name/), 'Field engineering');
     expect(within(dialog).getByLabelText(/URL name/)).toHaveValue('field-engineering');
@@ -342,10 +342,25 @@ describe('Teams in the catalog editor (11.1, 10.1)', () => {
     capture.stop();
   });
 
-  it('10.1 a Manager has no New team action: only an Admin creates teams', async () => {
-    const { user } = await renderRoute('/catalog/new?step=publish', { role: 'manager' });
+  it('10.1 a Manager is not offered New team: only an Admin creates teams, and no extra buttons exist', async () => {
+    await renderRoute('/catalog/new?step=publish', { role: 'manager' });
     const card = within(await screen.findByRole('region', { name: 'Publish' }));
-    expect(card.queryByRole('button', { name: 'New team' })).toBeNull();
-    expect(user).toBeDefined();
+    expect(card.queryByRole('button', { name: /New team/ })).toBeNull();
+    expect(
+      within(card.getByLabelText('Add team'))
+        .queryAllByRole('option')
+        .map((o) => o.textContent),
+    ).not.toContain('New team…');
+  });
+
+  it('10.1 admins get one New team entry per picker, never a standalone button', async () => {
+    await renderRoute('/catalog/new?step=publish');
+    const card = within(await screen.findByRole('region', { name: 'Publish' }));
+    expect(card.queryByRole('button', { name: /New team/ })).toBeNull();
+    expect(
+      within(card.getByLabelText('Add team'))
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toContain('New team…');
   });
 });

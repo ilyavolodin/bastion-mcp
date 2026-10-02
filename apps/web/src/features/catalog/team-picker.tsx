@@ -1,8 +1,6 @@
-import { Plus } from 'lucide-react';
 import * as React from 'react';
 import { useTeamOptions } from '@/api/hooks';
 import { useAuth } from '@/auth/auth';
-import { Button } from '@/components/ui/button';
 import { NewTeamDialog } from '@/features/access/directory';
 
 export type TeamOption = { id: string; name: string };
@@ -21,22 +19,21 @@ export const useEditorTeams = (): { teams: TeamOption[]; canCreate: boolean; loa
   return { teams, canCreate: role === 'admin', loading: all.isLoading };
 };
 
-/** "New team" next to a team picker: opens the team form and hands back the created team. */
-export function NewTeamButton({
-  onCreated,
-  label = 'New team',
-}: {
-  onCreated: (team: TeamOption) => void;
-  label?: string;
-}) {
-  const [open, setOpen] = React.useState(false);
-  return (
-    <>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Plus className="size-4" aria-hidden="true" />
-        {label}
-      </Button>
-      <NewTeamDialog open={open} onOpenChange={setOpen} onCreated={onCreated} />
-    </>
-  );
+/** Value of the "New team…" entry that team pickers show to Admins (one entry point, no extra buttons). */
+export const NEW_TEAM_VALUE = '__new_team__';
+export const NEW_TEAM_LABEL = 'New team…';
+
+/**
+ * The create-team form behind the "New team…" entry of a picker: `open()` shows it, `dialog` must be rendered once
+ * next to the picker, and `onCreated` receives the created team.
+ */
+export function useNewTeamDialog(onCreated: (team: TeamOption) => void): {
+  open: () => void;
+  dialog: React.ReactNode;
+} {
+  const [isOpen, setOpen] = React.useState(false);
+  return {
+    open: () => setOpen(true),
+    dialog: <NewTeamDialog open={isOpen} onOpenChange={setOpen} onCreated={onCreated} />,
+  };
 }

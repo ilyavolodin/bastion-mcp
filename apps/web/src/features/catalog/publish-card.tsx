@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { PolicyDialog, PreviewSummary } from './auto-install';
 import type { Draft } from './draft';
-import { NewTeamButton } from './team-picker';
+import { NEW_TEAM_LABEL, NEW_TEAM_VALUE, useNewTeamDialog } from './team-picker';
 
 type Props = {
   draft: Pick<Draft, 'visibility' | 'risk' | 'autoUpgrade'>;
@@ -35,6 +35,14 @@ export function PublishCard({
 }: Props) {
   const { me, role } = useAuth();
   const teams = useTeamOptions();
+  const newTeam = useNewTeamDialog((team) =>
+    onChange({
+      visibility: {
+        ...draft.visibility,
+        teamIds: [...new Set([...draft.visibility.teamIds, team.id])],
+      },
+    }),
+  );
   // A team created a moment ago may not be in the refetched list yet: it still shows, by id, until the list catches up.
   const selected = draft.visibility.teamIds.map((id) => ({
     id,
@@ -98,15 +106,16 @@ export function PublishCard({
             aria-label="Add team"
             value=""
             className="h-7 w-auto rounded-full border-dashed py-0 text-caption"
-            onChange={(e) =>
-              e.target.value &&
+            onChange={(e) => {
+              if (e.target.value === NEW_TEAM_VALUE) return newTeam.open();
+              if (!e.target.value) return;
               onChange({
                 visibility: {
                   ...draft.visibility,
                   teamIds: [...draft.visibility.teamIds, e.target.value],
                 },
-              })
-            }
+              });
+            }}
           >
             <option value="">+ Add team</option>
             {(teams.data ?? [])
@@ -116,19 +125,9 @@ export function PublishCard({
                   {t.name}
                 </option>
               ))}
+            {role === 'admin' ? <option value={NEW_TEAM_VALUE}>{NEW_TEAM_LABEL}</option> : null}
           </Select>
-          {role === 'admin' ? (
-            <NewTeamButton
-              onCreated={(team) =>
-                onChange({
-                  visibility: {
-                    ...draft.visibility,
-                    teamIds: [...new Set([...draft.visibility.teamIds, team.id])],
-                  },
-                })
-              }
-            />
-          ) : null}
+          {newTeam.dialog}
           {selected.length === 0 && (teams.data ?? []).length === 0 ? (
             <span className="w-full text-caption text-muted">
               {role === 'admin'

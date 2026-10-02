@@ -13,11 +13,8 @@ test('creating a team from the catalog editor works end to end', async ({ page }
     identifier: 'team-test-mcp',
   });
 
-  // Owner: "New team" on the Source step creates and selects the team.
-  await page
-    .getByRole('region', { name: 'Source' })
-    .getByRole('button', { name: 'New team' })
-    .click();
+  // Owner: the "New team…" entry of the Owner picker creates and selects the team.
+  await page.getByLabel('Owner').selectOption({ label: 'New team…' });
   const dialog = page.getByRole('dialog', { name: 'New team' });
   await dialog.getByLabel(/Team name/).fill(team1);
   await expect(dialog.getByLabel(/URL name/)).toHaveValue(/^platform-engineering-/);
@@ -26,12 +23,9 @@ test('creating a team from the catalog editor works end to end', async ({ page }
   await expect(page.getByLabel('Owner')).toContainText(`Team · ${team1}`);
   await expect(page.getByLabel('Owner')).toHaveValue(/.+/);
 
-  // Audience: "New team" on the Publish card adds a second team to "Selected teams" and shows it as a chip.
+  // Audience: the "New team…" entry of the Add team picker adds a second team to "Selected teams" and shows it as a chip.
   await goStep(page, /Publish/);
-  await page
-    .getByRole('region', { name: 'Publish' })
-    .getByRole('button', { name: 'New team' })
-    .click();
+  await page.getByLabel('Add team').selectOption({ label: 'New team…' });
   await dialog.getByLabel(/Team name/).fill(team2);
   await dialog.getByRole('button', { name: 'Create team' }).click();
   await expect(dialog).toBeHidden();
