@@ -44,6 +44,43 @@ export type ErrorContext = {
 
 const HTTP_AUTH = new Set([401, 403]);
 
+/**
+ * A JSON-RPC error an upstream sent with an HTTP error status (404, 400...). The SDK reports those as
+ * `Error POSTing to endpoint: {json}` instead of a protocol error, so the body is read back here (6.9: upstream
+ * JSON-RPC errors pass through).
+ */
+const rpcErrorInBody = (
+  error: unknown,
+): { code: number; message: string; data?: unknown } | undefined => {
+  const candidates: string[] = [];
+  const data = (error as { data?: unknown }).data;
+  if (typeof data === 'object' && data !== null) {
+    const text = (data as { text?: unknown }).text;
+    if (typeof text === 'string') candidates.push(text);
+  }
+  const message = error instanceof Error ? error.message : '';
+  const brace = message.indexOf('{');
+  if (brace >= 0) candidates.push(message.slice(brace));
+  for (const text of candidates) {
+    try {
+      const parsed = JSON.parse(text) as {
+        error?: { code?: unknown; message?: unknown; data?: unknown };
+      };
+      const e = parsed.error;
+      if (e && typeof e.code === 'number' && typeof e.message === 'string') {
+        return {
+          code: e.code,
+          message: e.message,
+          ...(e.data === undefined ? {} : { data: e.data }),
+        };
+      }
+    } catch {
+      // not JSON: try the next candidate
+    }
+  }
+  return undefined;
+};
+
 const httpStatusOf = (error: unknown): number | undefined => {
   if (typeof error !== 'object' || error === null) return undefined;
   const status = (error as { status?: unknown }).status;
@@ -96,6 +133,8 @@ export const mapUpstreamError = async (
         connectUrl: ctx.connectUrl ? await ctx.connectUrl() : '',
       });
     }
+    const rpc = rpcErrorInBody(error);
+    if (rpc) return new UpstreamRpcError(rpc.code, rpc.message, rpc.data);
     return new UpstreamUnavailableError(
       sanitizeUpstreamErrorMessage(error.message),
       { installation: ctx.installation },

@@ -1,4 +1,9 @@
-import { BastionError, MAX_LIST_ITEMS_PER_INSTALLATION, TIMEOUTS_MS } from '@bastion-mcp/core';
+import {
+  BastionError,
+  MAX_LIST_ITEMS_PER_INSTALLATION,
+  TIMEOUTS_MS,
+  UpstreamUnavailableError,
+} from '@bastion-mcp/core';
 import {
   chooseListSource,
   diffSnapshots,
@@ -431,7 +436,16 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
         }, RESULT_KEY[method]);
       } catch (error) {
         // An upstream that does not implement a list (-32601) simply has none of that kind.
-        if (error instanceof BastionError && error.mcpCode === -32601) return undefined;
+        if (error instanceof BastionError && error.mcpCode === -32601) {
+          // Prompts and resources are optional. A server that does not know `tools/list` is almost always not an
+          // MCP endpoint at that URL, and "no tools" would hide that.
+          if (method !== 'tools/list') return undefined;
+          throw new UpstreamUnavailableError(
+            `the server answered "${error.message}" to tools/list: check that the URL is an MCP endpoint (Streamable HTTP) and not another path of the same service`,
+            { installation: installation.slug },
+            error,
+          );
+        }
         throw error;
       }
     };

@@ -1,3 +1,5 @@
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import {
   ERROR_CODES,
   UpstreamAuthRequiredError,
@@ -86,6 +88,143 @@ describe.skipIf(!dockerAvailable())(
         params,
         ctx: ctxOf({ installationId: installation.installationId, endpointId: 'ep-1', ...ctx }),
       });
+
+    // --- tools-only servers (n8n style) ------------------------------------------------------------------------
+
+    it('6.9 11.3 a tools-only server that rejects prompts/list with an HTTP 404 still lists its tools', async () => {
+      const rpcError = (id: unknown) =>
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32601, message: 'Method not found' },
+        });
+      const toolsOnly = http.createServer((req, res) => {
+        let raw = '';
+        req.on('data', (c) => {
+          raw += c;
+        });
+        req.on('end', () => {
+          const m = raw ? (JSON.parse(raw) as { id?: unknown; method?: string }) : {};
+          const send = (status: number, body: string) => {
+            res.writeHead(status, { 'content-type': 'application/json' });
+            res.end(body);
+          };
+          if (m.method === 'server/discover') return send(404, rpcError(m.id));
+          if (m.method === 'initialize') {
+            return send(
+              200,
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: m.id,
+                result: {
+                  protocolVersion: '2025-06-18',
+                  capabilities: { tools: {} },
+                  serverInfo: { name: 'tools-only', version: '1' },
+                },
+              }),
+            );
+          }
+          if (m.method === 'notifications/initialized') return send(202, '');
+          if (m.method === 'tools/list') {
+            return send(
+              200,
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: m.id,
+                result: { tools: [{ name: 'run', inputSchema: { type: 'object' } }] },
+              }),
+            );
+          }
+          // Everything else is an HTTP error that carries a JSON-RPC error, like n8n's MCP endpoint.
+          return send(404, rpcError(m.id));
+        });
+      });
+      await new Promise<void>((resolve) => toolsOnly.listen(0, '127.0.0.1', resolve));
+      try {
+        const port = (toolsOnly.address() as AddressInfo).port;
+        const w = world();
+        const inst = w.installations.add(
+          installationOf(remoteSpec(`http://127.0.0.1:${port}/mcp`), {
+            installationId: 'inst-n8n',
+            slug: 'n8n',
+          }),
+        );
+        const a = await worker(w, 'w1');
+        const out = await a.runtime.lists.listItems({ id: inst.installationId } as never, {
+          principalId: principal.userId,
+          endpointId: 'installation:inst-n8n',
+        });
+        expect(out.status).toBe('ok');
+        if (out.status === 'ok') {
+          expect(out.items.tools.map((t) => t.name)).toEqual(['run']);
+          expect(out.items.prompts).toEqual([]);
+        }
+      } finally {
+        await new Promise((resolve) => toolsOnly.close(resolve));
+      }
+    });
+
+    it('11.3 a server that rejects tools/list says so, naming the method and what to check', async () => {
+      const notMcp = http.createServer((req, res) => {
+        let raw = '';
+        req.on('data', (c) => {
+          raw += c;
+        });
+        req.on('end', () => {
+          const m = raw ? (JSON.parse(raw) as { id?: unknown; method?: string }) : {};
+          if (m.method === 'initialize') {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            return res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: m.id,
+                result: {
+                  protocolVersion: '2025-06-18',
+                  capabilities: { tools: {} },
+                  serverInfo: { name: 'x', version: '1' },
+                },
+              }),
+            );
+          }
+          if (m.method === 'notifications/initialized') {
+            res.writeHead(202);
+            return res.end();
+          }
+          res.writeHead(404, { 'content-type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: m.id,
+              error: { code: -32601, message: 'Method not found' },
+            }),
+          );
+        });
+      });
+      await new Promise<void>((resolve) => notMcp.listen(0, '127.0.0.1', resolve));
+      try {
+        const port = (notMcp.address() as AddressInfo).port;
+        const w = world();
+        const inst = w.installations.add(
+          installationOf(remoteSpec(`http://127.0.0.1:${port}/mcp`), {
+            installationId: 'inst-bad',
+            slug: 'bad',
+          }),
+        );
+        const a = await worker(w, 'w1');
+        const out = await a.runtime.lists.listItems({ id: inst.installationId } as never, {
+          principalId: principal.userId,
+          endpointId: 'installation:inst-bad',
+        });
+        expect(out.status).toBe('degraded');
+        if (out.status === 'degraded') {
+          expect(out.detail).toContain('tools/list');
+          expect(out.detail).toContain('Method not found');
+          expect(out.detail).toMatch(/MCP endpoint/);
+        }
+      } finally {
+        await new Promise((resolve) => notMcp.close(resolve));
+      }
+    });
 
     // --- modern remote ------------------------------------------------------------------------------------------
 

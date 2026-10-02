@@ -350,7 +350,9 @@ describe.skipIf(!dockerAvailable())(
       expect(names).not.toContain('echo');
       expect(names).toContain('whoami');
       const block = await mk({ ok: false, changed: ['echo'], action: 'block' });
-      expect(block).toEqual({ status: 'degraded', code: 'pin_drift_blocked' });
+      expect(block).toMatchObject({ status: 'degraded', code: 'pin_drift_blocked' });
+      // 11.3: the reason reaches the person who has to approve the drift.
+      expect(block.status === 'degraded' && block.detail).toBeTruthy();
       const warn = await mk({ ok: false, changed: ['echo'], action: 'warn' });
       if (warn.status !== 'ok') throw new Error('expected ok');
       expect((warn.items.tools as { name: string }[]).map((t) => t.name)).toContain('echo');
