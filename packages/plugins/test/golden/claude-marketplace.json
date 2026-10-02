@@ -1,0 +1,26 @@
+{
+  "name": "acme-tools",
+  "owner": {
+    "name": "Acme"
+  },
+  "metadata": {
+    "description": "Acme approved plugins"
+  },
+  "plugins": [
+    {
+      "name": "code-review",
+      "source": "./plugins/code-review",
+      "description": "Review code"
+    },
+    {
+      "name": "toolbox",
+      "source": "./plugins/toolbox",
+      "description": "Local helpers"
+    },
+    {
+      "name": "notes",
+      "source": "./plugins/notes",
+      "description": "Note taking"
+    }
+  ]
+}

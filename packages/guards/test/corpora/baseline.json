@@ -1,0 +1,7 @@
+{
+  "description": "Recorded baseline for the default deterministic profile (23.3). Raise it when detection improves; never lower it to make a change pass.",
+  "profile": "ORG_DEFAULT_PROFILE",
+  "injectionSamples": 37,
+  "detectionRate": 0.78,
+  "maxFalsePositiveRate": 0.01
+}

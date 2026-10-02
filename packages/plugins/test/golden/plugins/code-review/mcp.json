@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "github": {
+      "type": "streamable-http",
+      "url": "https://mcp.example.com/mcp/c/github"
+    },
+    "docs": {
+      "type": "streamable-http",
+      "url": "https://docs.example.com/mcp"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "code-review",
+  "version": "1.2.0",
+  "description": "Review code",
+  "installationPreference": "auto_install",
+  "author": {
+    "name": "Acme"
+  }
+}

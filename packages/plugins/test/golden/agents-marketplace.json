@@ -1,0 +1,40 @@
+{
+  "name": "acme-tools",
+  "interface": {
+    "displayName": "Acme Tools"
+  },
+  "plugins": [
+    {
+      "name": "code-review",
+      "source": {
+        "source": "local",
+        "path": "./plugins/code-review"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_FIRST_USE"
+      }
+    },
+    {
+      "name": "toolbox",
+      "source": {
+        "source": "local",
+        "path": "./plugins/toolbox"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_FIRST_USE"
+      }
+    },
+    {
+      "name": "notes",
+      "source": {
+        "source": "local",
+        "path": "./plugins/notes"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      }
+    }
+  ]
+}

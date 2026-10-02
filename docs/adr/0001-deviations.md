@@ -38,3 +38,15 @@ the package graph, which `dependency-cruiser` still enforces (5.3).
 
 TypeScript 5.9 and Vitest 3 follow section 5.1. Prisma is pinned to the stable 7.10.0 line (the `latest`
 dist-tag currently points at an 8.0 release candidate).
+
+## 5. Cedar schema and policy generation (`packages/policy`)
+
+- **Per-action resource types.** `seeTool`/`callTool` apply to `Tool`; prompt actions to `Prompt`; resource actions to
+  `Resource`; `useInstallation` to `Installation`. The spec lists all four types for every action, under which the
+  10.3 example policies fail strict validation (`resource.destructive` does not exist on the other types).
+- **`User.managedTeams: Set<Team>`** is added so templates can express "manager of team T".
+- **Read-only views** of org settings, users, teams, IdP, guards and limits use `seeCatalog` on `Org` (no action exists).
+- **Self-service routes** (`/me`, own tokens, own grants) have no Cedar action.
+- **Org-wide publishing and manager call-log visibility** are data-driven (`orgWidePublisherIds`,
+  `settings.logsManagerVisibility`), because management actions have an empty context.
+- Managers edit entries whose owner team they manage; "edit own entries" is not implemented (no creator attribute).

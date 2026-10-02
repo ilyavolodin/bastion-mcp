@@ -1,0 +1,23 @@
+{
+  "name": "@bastion-mcp/guards",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@bastion-mcp/core": "workspace:*",
+    "picomatch": "4.0.7",
+    "re2": "1.27.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/picomatch": "4.0.3"
+  }
+}

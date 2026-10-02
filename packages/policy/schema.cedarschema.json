@@ -1,0 +1,476 @@
+{
+  "Bastion": {
+    "commonTypes": {
+      "McpContext": {
+        "type": "Record",
+        "attributes": {
+          "clientId": {
+            "type": "String",
+            "required": true
+          },
+          "clientName": {
+            "type": "String",
+            "required": true
+          },
+          "ip": {
+            "type": "Extension",
+            "name": "ipaddr",
+            "required": true
+          },
+          "authMethod": {
+            "type": "String",
+            "required": true
+          },
+          "hour": {
+            "type": "Long",
+            "required": true
+          },
+          "weekday": {
+            "type": "Long",
+            "required": true
+          },
+          "endpoint": {
+            "type": "String",
+            "required": true
+          },
+          "call": {
+            "type": "EntityOrCommon",
+            "name": "ToolCall",
+            "required": false
+          }
+        }
+      }
+    },
+    "entityTypes": {
+      "Org": {},
+      "Team": {
+        "memberOfTypes": ["Org"],
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "slug": {
+              "type": "String",
+              "required": true
+            }
+          }
+        }
+      },
+      "User": {
+        "memberOfTypes": ["Team", "Org"],
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "role": {
+              "type": "String",
+              "required": true
+            },
+            "active": {
+              "type": "Boolean",
+              "required": true
+            },
+            "emailDomain": {
+              "type": "String",
+              "required": true
+            },
+            "managedTeams": {
+              "type": "Set",
+              "element": {
+                "type": "EntityOrCommon",
+                "name": "Team"
+              },
+              "required": true
+            }
+          }
+        }
+      },
+      "ServiceAccount": {
+        "memberOfTypes": ["Team", "Org"],
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "active": {
+              "type": "Boolean",
+              "required": true
+            }
+          }
+        }
+      },
+      "CatalogEntry": {
+        "memberOfTypes": ["Org"],
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "ownerTeam": {
+              "type": "EntityOrCommon",
+              "name": "Team",
+              "required": false
+            },
+            "visibility": {
+              "type": "String",
+              "required": true
+            },
+            "risk": {
+              "type": "String",
+              "required": true
+            }
+          }
+        }
+      },
+      "Installation": {
+        "memberOfTypes": ["CatalogEntry"],
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "ownerUser": {
+              "type": "EntityOrCommon",
+              "name": "User",
+              "required": false
+            },
+            "ownerTeam": {
+              "type": "EntityOrCommon",
+              "name": "Team",
+              "required": false
+            },
+            "ownerService": {
+              "type": "EntityOrCommon",
+              "name": "ServiceAccount",
+              "required": false
+            },
+            "scope": {
+              "type": "String",
+              "required": true
+            }
+          }
+        }
+      },
+      "Tool": {
+        "memberOfTypes": ["Installation"],
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "name": {
+              "type": "String",
+              "required": true
+            },
+            "readOnly": {
+              "type": "Boolean",
+              "required": true
+            },
+            "destructive": {
+              "type": "Boolean",
+              "required": true
+            },
+            "openWorld": {
+              "type": "Boolean",
+              "required": true
+            }
+          }
+        }
+      },
+      "Prompt": {
+        "memberOfTypes": ["Installation"],
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "name": {
+              "type": "String",
+              "required": true
+            }
+          }
+        }
+      },
+      "Resource": {
+        "memberOfTypes": ["Installation"],
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "uri": {
+              "type": "String",
+              "required": true
+            }
+          }
+        }
+      },
+      "Endpoint": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "owner": {
+              "type": "EntityOrCommon",
+              "name": "User",
+              "required": true
+            }
+          }
+        }
+      },
+      "ToolCall": {
+        "tags": {
+          "type": "String"
+        }
+      }
+    },
+    "actions": {
+      "useInstallation": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Installation"],
+          "context": {
+            "type": "McpContext"
+          }
+        }
+      },
+      "seeTool": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Tool"],
+          "context": {
+            "type": "McpContext"
+          }
+        }
+      },
+      "callTool": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Tool"],
+          "context": {
+            "type": "McpContext"
+          }
+        }
+      },
+      "seePrompt": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Prompt"],
+          "context": {
+            "type": "McpContext"
+          }
+        }
+      },
+      "getPrompt": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Prompt"],
+          "context": {
+            "type": "McpContext"
+          }
+        }
+      },
+      "seeResource": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Resource"],
+          "context": {
+            "type": "McpContext"
+          }
+        }
+      },
+      "readResource": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Resource"],
+          "context": {
+            "type": "McpContext"
+          }
+        }
+      },
+      "subscribeResource": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Resource"],
+          "context": {
+            "type": "McpContext"
+          }
+        }
+      },
+      "complete": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Prompt", "Resource"],
+          "context": {
+            "type": "McpContext"
+          }
+        }
+      },
+      "seeCatalog": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "catalog.create": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "catalog.update": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "catalog.publish": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "catalog.delete": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "marketplace.manage": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "plugin.approveExecutable": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "installation.manage": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "override.edit": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "policy.edit": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "guard.edit": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "user.manage": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "team.manage": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "registry.install": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "logs.view": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "audit.view": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "settings.edit": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      },
+      "secrets.manage": {
+        "appliesTo": {
+          "principalTypes": ["User", "ServiceAccount"],
+          "resourceTypes": ["Org", "Team", "CatalogEntry", "Installation", "User"],
+          "context": {
+            "type": "Record",
+            "attributes": {}
+          }
+        }
+      }
+    }
+  }
+}

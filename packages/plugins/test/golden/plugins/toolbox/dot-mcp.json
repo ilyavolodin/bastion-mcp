@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "lint": {
+      "command": "node",
+      "args": [
+        "server.js"
+      ],
+      "env": {
+        "MODE": "ci"
+      }
+    }
+  }
+}

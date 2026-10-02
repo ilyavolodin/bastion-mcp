@@ -8,6 +8,7 @@ export * from './ids';
 export * from './naming';
 export * from './net';
 export * from './org-settings';
+export * from './osv';
 export * from './request-state';
 export * from './server-spec';
 export * from './template';
