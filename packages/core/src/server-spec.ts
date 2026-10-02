@@ -108,7 +108,7 @@ export const upstreamAuthSchema = z.discriminatedUnion('mode', [
 ]);
 
 /** Exact versions only: semver and PEP 440 shapes; ranges, tags and `latest` are rejected (8.7). */
-const EXACT_VERSION = /^\d+(?:\.\d+)+(?:[-+._]?[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$/;
+export const EXACT_VERSION = /^\d+(?:\.\d+)+(?:[-+._]?[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$/;
 const exactVersion = z.string().regex(EXACT_VERSION, 'must be an exact version');
 
 const remoteSpec = z.object({
@@ -199,3 +199,6 @@ export const serverSpecSchema = z
   });
 
 export const parseServerSpec = (input: unknown): ServerSpec => serverSpecSchema.parse(input);
+
+/** True for semver and PEP 440 exact versions; ranges, tags and `latest` are rejected (8.7). */
+export const isExactVersion = (version: string): boolean => EXACT_VERSION.test(version);

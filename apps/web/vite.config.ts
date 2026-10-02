@@ -21,6 +21,7 @@ export const sharedAlias = {
   // schemas, so it imports these two browser-safe modules directly.
   '@bastion-mcp/core/constants': here('../../packages/core/src/constants.ts'),
   '@bastion-mcp/core/org-settings': here('../../packages/core/src/org-settings.ts'),
+  '@bastion-mcp/core/ids': here('../../packages/core/src/ids.ts'),
 };
 
 export default defineConfig(({ mode }) => {

@@ -618,6 +618,7 @@ model CallLog {
   resultPreview    Json?    @map("result_preview")
   traceId          String?  @map("trace_id")
   spanId           String?  @map("span_id")
+  origin           String   @default("direct")
 
   @@id([ts, id])
   @@index([principalId, ts(sort: Desc)])

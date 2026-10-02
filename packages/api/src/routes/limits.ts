@@ -8,6 +8,7 @@ import {
   usageQuerySchema,
   usageResultSchema,
 } from '../schemas/limits';
+import { asRow, limitRuleRow, pageOf } from '../schemas/rows';
 import { createLimitRule, limitRules, ruleUsage, updateLimitRule } from '../services/limits';
 import { org, versionOf } from './shared';
 
@@ -19,7 +20,7 @@ export const limitsRoutes: RouteDefinition[] = [
     url: '/limit-rules',
     tag: TAG,
     summary: 'List limit rules',
-    schema: { query: listQuerySchema, response: itemPage },
+    schema: { query: listQuerySchema, response: pageOf('LimitRulePage', limitRuleRow) },
     authz: authz.on('org.view', org),
     handler: (ctx) => limitRules.list(ctx, ctx.query),
   }),
@@ -28,7 +29,7 @@ export const limitsRoutes: RouteDefinition[] = [
     url: '/limit-rules',
     tag: TAG,
     summary: 'Create a limit rule',
-    schema: { body: limitRuleCreateSchema, response: itemSchema },
+    schema: { body: limitRuleCreateSchema, response: asRow(limitRuleRow) },
     authz: authz.on('limits.write', org),
     handler: (ctx) => createLimitRule(ctx, ctx.body),
   }),
@@ -37,7 +38,7 @@ export const limitsRoutes: RouteDefinition[] = [
     url: '/limit-rules/{id}',
     tag: TAG,
     summary: 'Update a limit rule',
-    schema: { params: idParams, body: limitRulePatchSchema, response: itemSchema },
+    schema: { params: idParams, body: limitRulePatchSchema, response: asRow(limitRuleRow) },
     authz: authz.on('limits.write', org),
     version: versionOf('limit_rules'),
     handler: (ctx) => updateLimitRule(ctx, ctx.params.id, ctx.body),

@@ -40,18 +40,30 @@ All network access lives in `src/api/`:
 - `client.ts`: typed fetch wrapper (CSRF double submit with `x-bastion-csrf` from `bastion_csrf`, RFC 9457
   problem+json to `ApiError`, ETag remembered per path and sent as `If-Match`, cursor pagination via
   `fetchAll`, timeout and abort on every call, 401 redirect to `/auth/login`).
-- `types.ts`: DTOs written by hand from 17.2 and the data model.
+- `types.ts`: view-model DTOs; `me.ts` maps the generated `GET /me` response.
 - `hooks/*.ts`: TanStack Query hooks, one per route group.
 - `events.ts`: SSE subscription and cache updates.
 
-To switch to the generated client: add `@bastion-mcp/api-client` to `package.json`, re-implement `request()` in
-`client.ts` on top of it (keeping the `ApiError` mapping, CSRF header and ETag handling), and replace the
-hand-written DTOs in `types.ts` by re-exports of the generated schema types. Screens and hooks do not change.
+`client.ts` is implemented on `createApiClient` from `@bastion-mcp/api-client` (keeping the `ApiError` mapping,
+CSRF header and ETag/If-Match). `api.get/post/...` accept only paths that exist in the OpenAPI document for that
+method (`ApiPath`), `GET /me` is typed by the generated response (`src/api/me.ts`, `src/mocks/me-response.ts`), and
+`src/api/route-contract.test.ts` fails when the UI or an MSW handler uses a route that is not in
+`packages/api-client/openapi.json`.
 
-Routes the UI uses that are not in 17.2 (assumptions to confirm when the OpenAPI document lands):
-`POST /policy-rules/preview` (live affected count), `PATCH /catalog/{id}/versions/{vid}` (edit a draft),
-`GET /catalog?needsApproval=true` (executable-content approvals), `POST /installations/{id}/egress` (request
-access) and the `/me` fields `org.traceUiUrl`, `org.toolWarnThreshold` and `capabilities.*`.
+Reconciliation decisions (also in `docs/adr/0001-deviations.md`, section 7):
+
+| UI assumption | Decision |
+| --- | --- |
+| `POST /policy-rules/preview` | Removed; the rule dialog points to the policy simulator. |
+| `PATCH /catalog/{id}/versions/{vid}` | Added to the API (draft-only edit, `catalog.update`). |
+| `GET /catalog?needsApproval=true` | Replaced: plugin entries, then draft versions, keeping `approval.status === 'pending'`. |
+| `POST /installations/{id}/egress` | Removed; the Network tab shows `GET .../egress` decisions grouped per host. |
+| `/me` `org.*`, `capabilities.*` | Added to the API's `GET /me`. |
+| theme in `PATCH /me` | Per-browser (`localStorage`); `PATCH /me` edits `displayName` only. |
+
+Known follow-up: many request and response bodies are still written by hand in `types.ts` (the generated response
+types for list and detail routes are loose `{ id, updatedAt, ... }` objects) and several form bodies differ from the
+API's, for example `POST /teams` (`slug`, `displayName`) and catalog versions (`serverSpec`, `label`).
 
 `@bastion-mcp/core` is imported for constants and the org-settings schema only, through the two browser-safe
 subpaths `@bastion-mcp/core/constants` and `@bastion-mcp/core/org-settings` (aliased in `vite.config.ts` and

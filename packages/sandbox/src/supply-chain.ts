@@ -1,11 +1,12 @@
-import { createHash } from 'node:crypto';
 import {
   checkPackagesAgainstOsv,
   type FetchFn,
   findMaliciousAdvisories,
+  isExactVersion,
   type OsvPackage,
   type OsvPackageResult,
   type PackageSpec,
+  sha256Hex,
 } from '@bastion-mcp/core';
 import { z } from 'zod';
 
@@ -22,11 +23,7 @@ export class SupplyChainError extends Error {
 }
 
 // --- exact versions ---------------------------------------------------------------------------------------------
-// Mirrors the regex of `packageSpec.version` in core/server-spec.ts (not exported there).
-const EXACT_VERSION = /^\d+(?:\.\d+)+(?:[-+._]?[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$/;
-
-/** True for semver and PEP 440 exact versions; ranges, tags and `latest` are rejected (8.7). */
-export const isExactVersion = (version: string): boolean => EXACT_VERSION.test(version);
+export { isExactVersion };
 
 export const validateExactVersion = (version: string): string => {
   if (!isExactVersion(version)) {
@@ -38,8 +35,7 @@ export const validateExactVersion = (version: string): string => {
 };
 
 // --- integrity ----------------------------------------------------------------------------------------------------
-export const sha256Hex = (content: string): string =>
-  createHash('sha256').update(content).digest('hex');
+export { sha256Hex };
 
 export const lockfileSha256 = sha256Hex;
 

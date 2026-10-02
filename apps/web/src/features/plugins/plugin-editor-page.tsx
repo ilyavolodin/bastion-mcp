@@ -4,15 +4,15 @@ import * as React from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import {
+  type CatalogEntryDetail,
   useCatalogEntry,
   useCatalogFile,
   useCatalogFiles,
+  useCatalogVersion,
   usePublish,
   useSaveFile,
-  useTestResult,
 } from '@/api/hooks';
-import type { CatalogEntryDetail } from '@/api/types';
-import { useAuth } from '@/auth/auth';
+import { editableVersion, isPassing } from '@/api/views/catalog';
 import { PlainEditor } from '@/components/code-editor';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/form';
@@ -32,7 +32,7 @@ import {
 } from '@/lib/frontmatter';
 import { useSearchState } from '@/lib/search';
 import { PublishCard } from '../catalog/publish-card';
-import { isPassing, TestPanel } from '../catalog/test-panel';
+import { TestPanel } from '../catalog/test-panel';
 
 const STEPS = [
   { id: 'files', label: 'Files' },
@@ -135,18 +135,19 @@ function SkillForm({
 }
 
 function FilesStep({
-  entry,
+  entryId,
   versionId,
   readOnly,
 }: {
-  entry: CatalogEntryDetail;
+  entryId: string;
   versionId: string;
   readOnly: boolean;
 }) {
-  const files = useCatalogFiles(entry.id, versionId);
+  const files = useCatalogFiles(entryId, versionId);
   const [selected, setSelected] = React.useState('SKILL.md');
-  const file = useCatalogFile(entry.id, versionId, selected);
-  const save = useSaveFile(entry.id, versionId);
+  const file = useCatalogFile(entryId, versionId, selected);
+  const save = useSaveFile(entryId, versionId);
+  const executable = file.data?.classification === 'executable';
   const [text, setText] = React.useState('');
   React.useEffect(() => {
     if (file.data) setText(file.data.content);
@@ -222,7 +223,7 @@ function FilesStep({
             content={file.data.content}
             onSave={(c) =>
               save.mutate(
-                { path: selected, content: c },
+                { path: selected, content: c, executable },
                 { onSuccess: () => toast.success('SKILL.md saved') },
               )
             }
@@ -242,7 +243,7 @@ function FilesStep({
               disabled={readOnly || save.isPending}
               onClick={() =>
                 save.mutate(
-                  { path: selected, content: text },
+                  { path: selected, content: text, executable },
                   { onSuccess: () => toast.success(`${selected} saved`) },
                 )
               }
@@ -256,20 +257,21 @@ function FilesStep({
   );
 }
 
-function Editor({ entry }: { entry: CatalogEntryDetail }) {
+function Editor({ detail }: { detail: CatalogEntryDetail }) {
   const navigate = useNavigate();
-  const { role } = useAuth();
   const [s, setS] = useSearchState(searchSchema);
-  const version = entry.versions.find((v) => v.id === entry.draftVersionId) ?? entry.versions[0];
+  const { entry } = detail;
+  const version = editableVersion(detail.versions);
   const publish = usePublish(entry.id, version?.id ?? '');
-  const test = useTestResult(entry.id, version?.id ?? null);
+  const current = useCatalogVersion(entry.id, version?.id);
   const [vis, setVis] = React.useState({
     visibility: entry.visibility,
     risk: entry.risk,
     autoUpgrade: entry.autoUpgrade,
   });
   const label = version?.label ?? '0.1.0';
-  const needsApproval = version?.executableApproval === 'pending' || entry.executable;
+  const approval = current.data?.approval?.status;
+  const needsApproval = approval === 'pending' || approval === 'stale';
   if (!version)
     return (
       <EmptyState
@@ -297,7 +299,11 @@ function Editor({ entry }: { entry: CatalogEntryDetail }) {
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
         <div className="min-w-0">
           {s.step === 'files' ? (
-            <FilesStep entry={entry} versionId={version.id} readOnly={false} />
+            <FilesStep
+              entryId={entry.id}
+              versionId={version.id}
+              readOnly={version.status !== 'draft'}
+            />
           ) : null}
           {s.step !== 'files' ? (
             <TestPanel entryId={entry.id} versionId={version.id} versionLabel={label} canRun />
@@ -308,21 +314,26 @@ function Editor({ entry }: { entry: CatalogEntryDetail }) {
           onChange={(p) => setVis({ ...vis, ...p })}
           versionLabel={label}
           noun={'v'}
-          canPublish={isPassing(test.data, label)}
+          canPublish={
+            version.status === 'draft' && isPassing(current.data?.testResult) && !needsApproval
+          }
           publishing={publish.isPending}
-          disabledReason="Publish needs a passing test of this exact version."
+          disabledReason={
+            needsApproval
+              ? 'An Admin approves the executable files with their diff before this publishes.'
+              : 'Publish needs a passing test of this exact version.'
+          }
           entryId={entry.id}
           onPublish={() =>
-            publish.mutate(undefined, {
-              onSuccess: () => {
-                toast.success(
-                  needsApproval && role !== 'admin'
-                    ? 'Sent to an Admin for approval with the diff'
-                    : `${entry.displayName} v${label} published`,
-                );
-                void navigate({ to: '/plugins' });
+            publish.mutate(
+              { visibility: vis.visibility },
+              {
+                onSuccess: () => {
+                  toast.success(`${entry.displayName} v${label} published`);
+                  void navigate({ to: '/plugins' });
+                },
               },
-            })
+            )
           }
         />
       </div>
@@ -345,5 +356,5 @@ export function PluginEditorPage() {
       </>
     );
   }
-  return <QueryBoundary query={q}>{(e) => <Editor key={e.id} entry={e} />}</QueryBoundary>;
+  return <QueryBoundary query={q}>{(d) => <Editor key={d.entry.id} detail={d} />}</QueryBoundary>;
 }

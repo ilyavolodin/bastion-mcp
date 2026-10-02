@@ -699,9 +699,9 @@ The Helm chart creates, in namespace `bastion-sandboxes`:
 
 - One `SandboxWarmPool` per template (`replicas` default 5, 2, 0), plus one `bastion-runtime-<size>-pvc` pool per size with `replicas: 0` for persistent workspaces.
 
-**Start.** The worker creates a `SandboxClaim` named `bst-<instanceId first 12 hex>` with `warmPoolRef` set to the size's pool, labels `bastion-mcp.github.io/instance`, `/installation` and `/user-hash` (SHA-256 of the user ID, first 16 hex), and `lifecycle.shutdownPolicy: Delete` with `shutdownTime` = now + 24 h (refreshed hourly while in use). It watches the claim until `status.sandbox.podIPs` or `serviceFQDN` is set, then binds and starts the runner on port 8080.
+**Start.** The worker creates a `SandboxClaim` named `bst-<last 12 hex of instanceId>` with `warmPoolRef` set to the size's pool, labels `bastion-mcp.github.io/instance`, `/installation` and `/user-hash` (SHA-256 of the user ID, first 16 hex), and `lifecycle.shutdownPolicy: Delete` with `shutdownTime` = now + 24 h (refreshed hourly while in use). It watches the claim until `status.sandbox.podIPs` or `serviceFQDN` is set, then binds and starts the runner on port 8080.
 
-**Persistent workspaces.** Entries with `workspace.persistent: true` use a `SandboxClaim` named `bsp-<installationId first 12 hex>` against the size's `bastion-runtime-<size>-pvc` warm pool (`replicas: 0`, so every claim gets a fresh sandbox), with `spec.volumeClaimTemplates` (`sizeMiB`) and no `shutdownTime`. The templates set `volumeClaimTemplates``Policy: Allowed`, so the template's NetworkPolicy still applies. On idle the worker patches the bound `Sandbox` (`status.sandbox.name`) to `spec.operatingMode: Suspended` (the controller deletes the pod and keeps the PVC); the next call sets `Running`. Deleting the installation deletes the claim, its `Sandbox` and its PVC.
+**Persistent workspaces.** Entries with `workspace.persistent: true` use a `SandboxClaim` named `bsp-<last 12 hex of installationId>` against the size's `bastion-runtime-<size>-pvc` warm pool (`replicas: 0`, so every claim gets a fresh sandbox), with `spec.volumeClaimTemplates` (`sizeMiB`) and no `shutdownTime`. The templates set `volumeClaimTemplates``Policy: Allowed`, so the template's NetworkPolicy still applies. On idle the worker patches the bound `Sandbox` (`status.sandbox.name`) to `spec.operatingMode: Suspended` (the controller deletes the pod and keeps the PVC); the next call sets `Running`. Deleting the installation deletes the claim, its `Sandbox` and its PVC.
 
 **RBAC.** The worker's ServiceAccount has a Role in `bastion-sandboxes` for `sandboxclaims` and `sandboxes` (create, get, list, watch, patch, delete), `sandboxtemplates` and `sandboxwarmpools` (get, list), and `pods`, `pods/log` (get, list). Nothing cluster-wide.
 
@@ -1873,7 +1873,7 @@ The ui role serves a JSON REST API at `/api/v1`, described by an OpenAPI 3.1 doc
 |  Service accounts and tokens  |  `GET/POST /service-accounts`, `PATCH/DELETE /service-accounts/{id}`, `POST /service-accounts/{id}/credentials`, `GET/POST /tokens` (PATs of the caller), `DELETE /tokens/{id}`  | 
 |  Identity providers  |  `GET/POST /idp-connections`, `GET/PATCH/DELETE /idp-connections/{id}`, `POST /idp-connections/{id}/test`, `GET/POST /scim-tokens`, `DELETE /scim-tokens/{id}`  | 
 |  OAuth clients  |  `GET /oauth-clients`, `PATCH /oauth-clients/{id}` (pre-approve, block), `POST /oauth-clients` (pre-register), `GET /me/oauth-grants`, `DELETE /me/oauth-grants/{id}`  | 
-|  Catalog  |  `GET/POST /catalog`, `GET/PATCH/DELETE /catalog/{id}`, `GET/POST /catalog/{id}/versions`, `GET /catalog/{id}/versions/{vid}`, `POST /catalog/{id}/versions/{vid}/test`, `GET /catalog/{id}/versions/{vid}/test` (stream), `POST /catalog/{id}/versions/{vid}/publish`, `POST /catalog/import` (server.json, client config snippet, or registry reference)  | 
+|  Catalog  |  `GET/POST /catalog`, `GET/PATCH/DELETE /catalog/{id}`, `GET/POST /catalog/{id}/versions`, `GET/PATCH /catalog/{id}/versions/{vid}` (PATCH edits a draft in place), `POST /catalog/{id}/versions/{vid}/test`, `GET /catalog/{id}/versions/{vid}/test` (stream), `POST /catalog/{id}/versions/{vid}/publish`, `POST /catalog/import` (server.json, client config snippet, or registry reference)  | 
 |  Store  |  `GET /store`, `GET /store/{slug}`  | 
 |  Installations  |  `GET/POST /installations`, `GET/PATCH/DELETE /installations/{id}`, `POST /installations/{id}/restart`, `GET /installations/{id}/tools`, `/prompts`, `/resources`, `/templates` (final definitions), `POST /installations/{id}/try` (call a tool, get a prompt or read a resource through the full pipeline), `GET /installations/{id}/logs` (stderr tail, SSE), `GET /installations/{id}/egress`, `POST /installations/{id}/connect` (returns the upstream OAuth URL), `DELETE /installations/{id}/connection`, `PUT /installations/{id}/secrets/{name}`  | 
 |  Endpoints  |  `GET/POST /endpoints`, `GET/PATCH/DELETE /endpoints/{id}`, `GET /endpoints/{id}/client-config?client=claude-desktop` (or `claude-code`, `cursor`, `vscode`)  | 
@@ -2023,7 +2023,10 @@ Deployment-level settings come from environment variables (or the same keys in `
 |  `BASTION_PROMETHEUS_PORT`  |  none  |  Enables a Prometheus endpoint  | 
 |  `BASTION_TRACE_UI_URL`  |  none  |  Template like `https://grafana.acme.com/explore?traceId={traceId}`  | 
 |  `BASTION_LOG_LEVEL`  |  `info`  |  pino level  | 
-|  `OTEL_EXPORTER_OTLP_ENDPOINT` and the other standard `OTEL_*` variables  |  unset  |  Standard OTEL configuration  | 
+|  `BASTION_WORKER_ID`  |  hostname and pid  |  Reported as `service.instance.id`  | 
+|  `BASTION_VERSION`  |  package version  |  Reported as `service.version`  | 
+|  `BASTION_ENVIRONMENT`  |  `production`  |  Reported as `deployment.environment.name`  | 
+|  `OTEL_EXPORTER_OTLP_ENDPOINT` and the other standard `OTEL_*` variables  |  unset  |  Standard OTEL configuration; `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER` and `OTEL_LOGS_EXPORTER` set to `none` turn that signal's export off, `OTEL_SDK_DISABLED=true` turns telemetry off  | 
 Also read: `BASTION_CONFIG_FILE` (optional YAML file with the same keys), `BASTION_DATABASE_REPLICA_URL` (optional read replica for dashboards, 21.1), `BASTION_INTERNAL_SECRET_PREVIOUS` (accepted during secret rotation, 22.3), and `BASTION_GIT_CACHE_DIR` (plugin git channel cache, mounted by the Helm chart as a 10 GiB emptyDir on ui pods, default `/var/cache/bastion/git`, 25.5).
 
 ### 19.2 Org settings (UI-managed)

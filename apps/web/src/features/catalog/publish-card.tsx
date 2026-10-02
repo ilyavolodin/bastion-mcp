@@ -1,6 +1,5 @@
 import * as React from 'react';
-import { useAutoInstallPolicies, usePreviewAutoInstall, useTeams } from '@/api/hooks';
-import type { CatalogDraftInput } from '@/api/types';
+import { useAutoInstallPolicies, usePreviewAutoInstall, useTeamOptions } from '@/api/hooks';
 import { useAuth } from '@/auth/auth';
 import { Card, CardHeader, Chip } from '@/components/primitives';
 import { RoleGate } from '@/components/role-gate';
@@ -8,12 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { PolicyDialog, PreviewSummary } from './auto-install';
+import type { Draft } from './draft';
 
 type Props = {
-  draft: Pick<CatalogDraftInput, 'visibility' | 'risk' | 'autoUpgrade'>;
-  onChange: (
-    patch: Partial<Pick<CatalogDraftInput, 'visibility' | 'risk' | 'autoUpgrade'>>,
-  ) => void;
+  draft: Pick<Draft, 'visibility' | 'risk' | 'autoUpgrade'>;
+  onChange: (patch: Partial<Pick<Draft, 'visibility' | 'risk' | 'autoUpgrade'>>) => void;
   versionLabel: string;
   canPublish: boolean;
   publishing: boolean;
@@ -35,7 +33,7 @@ export function PublishCard({
   noun = 'v',
 }: Props) {
   const { me, role } = useAuth();
-  const teams = useTeams();
+  const teams = useTeamOptions();
   const selected = (teams.data ?? []).filter((t) => draft.visibility.teamIds.includes(t.id));
   const orgWide = draft.visibility.org;
   const mayOrgWide = me.capabilities.publishOrgWide || role === 'admin';
@@ -152,22 +150,13 @@ export function AutoInstallCard({ entryId }: { entryId: string | undefined }) {
   const policies = useAutoInstallPolicies();
   const preview = usePreviewAutoInstall();
   const [open, setOpen] = React.useState(false);
-  const mine = (policies.data ?? []).filter((p) => p.entryId === entryId);
+  const mine = (policies.data ?? []).filter((p) => p.catalogEntryId === entryId);
   const first = mine[0];
   const { mutate } = preview;
+  const firstId = first?.id;
   React.useEffect(() => {
-    if (first)
-      mutate({
-        id: first.id,
-        policy: {
-          entryId: first.entryId,
-          targets: first.targets,
-          mode: first.mode,
-          existingUsers: first.existingUsers,
-          scope: first.scope,
-        },
-      });
-  }, [first, mutate]);
+    if (firstId) mutate({ id: firstId, changes: {} });
+  }, [firstId, mutate]);
   return (
     <Card aria-label="Auto-install preview" className="gap-3.5">
       <CardHeader title="Auto-install" />
@@ -179,9 +168,7 @@ export function AutoInstallCard({ entryId }: { entryId: string | undefined }) {
                 {t.label}
               </Chip>
             ))}
-            <Chip>
-              {first.existingUsers === 'applyNow' ? 'New and existing people' : 'New people only'}
-            </Chip>
+            <Chip>{first.applyToExisting ? 'New and existing people' : 'New people only'}</Chip>
           </div>
           <PreviewSummary preview={preview.data} />
         </>

@@ -164,6 +164,45 @@ describe('11.1 versions', () => {
     expect(got.status).toBe(200);
   });
 
+  it('11.1 edits a draft version in place with If-Match and refuses published versions', async () => {
+    api = await buildTestApi();
+    const ok = await api.call('managerOwn', 'PATCH', '/catalog/entry-team-a/versions/ver-team-a', {
+      headers: { 'if-match': '*' },
+      body: { changelog: 'edited', serverSpec: REMOTE_SPEC },
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ id: 'ver-team-a', status: 'draft', changelog: 'edited' });
+    expect(api.publisher.messages.at(-1)?.message).toBe('{"topic":"catalog"}');
+    const published = await api.call(
+      'managerOwn',
+      'PATCH',
+      '/catalog/entry-team-a/versions/ver-team-a-pub',
+      { headers: { 'if-match': '*' }, body: { changelog: 'nope' } },
+    );
+    expect(published.status).toBe(409);
+    expect(published.body).toMatchObject({ code: 'version_immutable' });
+    const clash = await api.call(
+      'managerOwn',
+      'PATCH',
+      '/catalog/entry-team-a/versions/ver-team-a',
+      {
+        headers: { 'if-match': '*' },
+        body: { label: (await api.store.get('catalog_versions', 'ver-team-a-pub'))?.label },
+      },
+    );
+    expect(clash.status).toBe(409);
+    const missing = await api.call(
+      'managerOwn',
+      'PATCH',
+      '/catalog/entry-team-b/versions/ver-team-a',
+      {
+        headers: { 'if-match': '*' },
+        body: { changelog: 'x' },
+      },
+    );
+    expect([403, 404]).toContain(missing.status);
+  });
+
   it('8.7 rejects an invalid server spec', async () => {
     api = await buildTestApi();
     const res = await api.call('admin', 'POST', '/catalog/entry-team-a/versions', {

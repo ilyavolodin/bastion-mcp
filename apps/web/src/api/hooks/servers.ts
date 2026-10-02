@@ -1,58 +1,24 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../client';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { legacyApi as api } from '../client';
 import type {
   ClientConfig,
   ClientId,
   ConnectResult,
   EffectiveCapability,
+  EgressEntry,
   EgressHost,
-  EgressRequest,
   Endpoint,
   EndpointInput,
   Installation,
   InstallationInput,
   InstallationPatch,
-  Me,
-  Notification,
-  OrgSettings,
   OverrideDocument,
   OverridePreview,
-  Quota,
   StoreEntry,
   StoreEntryDetail,
-  ThemePref,
   TryResult,
 } from '../types';
 import { keys, listQuery, useApiMutation } from './base';
-
-// --- Session and self -----------------------------------------------------------------------------
-export const useMe = () =>
-  useQuery({
-    queryKey: keys.me,
-    queryFn: ({ signal }) => api.get<Me>('/me', { signal }),
-    staleTime: 5 * 60_000,
-    retry: false,
-  });
-
-export const useUpdateMe = () =>
-  useApiMutation((patch: { theme: ThemePref }) => api.patch<Me>('/me', patch), [keys.me]);
-
-export const useNotifications = () =>
-  useQuery(listQuery<Notification>(keys.notifications, '/me/notifications', { limit: 50 }));
-
-export const useMarkNotificationRead = () =>
-  useApiMutation(
-    (id: string) => api.post<void>(`/me/notifications/${id}/read`),
-    [keys.notifications],
-  );
-
-export const useQuotas = () =>
-  useQuery({
-    queryKey: keys.quotas,
-    queryFn: ({ signal }) =>
-      api.get<{ items: Quota[] }>('/me/quotas', { signal }).then((r) => r.items),
-  });
-
 // --- Installations ------------------------------------------------------------------------------
 export const useInstallations = () =>
   useQuery(listQuery<Installation>(keys.installations, '/installations'));
@@ -116,21 +82,32 @@ export const useCapabilities = (id: string) =>
     },
   });
 
+/** Recent egress decisions grouped per host: the latest decision wins (8.8). */
+export const groupEgress = (entries: EgressEntry[]): EgressHost[] => {
+  const byHost = new Map<string, { entry: EgressEntry; count: number }>();
+  for (const entry of entries) {
+    const seen = byHost.get(entry.host);
+    byHost.set(entry.host, {
+      entry: !seen || entry.ts >= seen.entry.ts ? entry : seen.entry,
+      count: (seen?.count ?? 0) + 1,
+    });
+  }
+  return [...byHost.values()].map(({ entry, count }) => ({
+    host: entry.host,
+    status: entry.decision === 'allowed' ? 'allowed' : 'denied',
+    reason: `${count} recent ${count === 1 ? 'connection' : 'connections'} on port ${entry.port}`,
+    lastSeenAt: entry.ts,
+  }));
+};
+
 export const useEgress = (id: string) =>
   useQuery({
     queryKey: [...keys.installation(id), 'egress'],
     queryFn: ({ signal }) =>
-      api.get<{ hosts: EgressHost[]; requests: EgressRequest[] }>(`/installations/${id}/egress`, {
-        signal,
-      }),
+      api
+        .get<{ items: EgressEntry[] }>(`/installations/${id}/egress`, { signal })
+        .then((r) => groupEgress(r.items)),
   });
-
-export const useRequestEgress = (id: string) =>
-  useApiMutation(
-    (input: { host: string; reason: string }) =>
-      api.post<EgressRequest>(`/installations/${id}/egress`, input),
-    [[...keys.installation(id), 'egress']],
-  );
 
 export const useOverrides = (id: string) =>
   useQuery({
@@ -203,15 +180,3 @@ export const useStoreEntry = (slug: string | null) =>
     enabled: Boolean(slug),
     queryFn: ({ signal }) => api.get<StoreEntryDetail>(`/store/${slug}`, { signal }),
   });
-
-// --- Settings (read by many screens) ---------------------------------------------------------------
-export const useSettings = () =>
-  useQuery({
-    queryKey: keys.settings,
-    queryFn: ({ signal }) => api.get<OrgSettings>('/settings', { signal }),
-  });
-
-export const useInvalidate = () => {
-  const qc = useQueryClient();
-  return (key: readonly unknown[]) => qc.invalidateQueries({ queryKey: key });
-};

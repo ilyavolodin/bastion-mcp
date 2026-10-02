@@ -200,6 +200,40 @@ export const createVersion = async (
   return row;
 };
 
+export const updateVersion = async (
+  ctx: WriteCtx,
+  entryId: string,
+  versionId: string,
+  body: {
+    label?: string | undefined;
+    serverSpec?: unknown;
+    installForm?: unknown;
+    changelog?: string | null | undefined;
+  },
+): Promise<Row> => {
+  const version = await requireVersion(ctx, entryId, versionId, ctx.tx.store);
+  assertDraft(version);
+  if (body.label !== undefined && body.label !== version.label) {
+    const clash = await ctx.tx.store.find('catalog_versions', { entryId, label: body.label });
+    if (clash.length > 0)
+      throw new ConflictApiError('this version label already exists', 'version_exists');
+  }
+  const changes = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
+  const row = await ctx.tx.store.update('catalog_versions', versionId, {
+    ...changes,
+    // A changed spec invalidates the earlier automatic test (11.2).
+    ...(body.serverSpec === undefined ? {} : { testResult: null }),
+  });
+  await ctx.tx.audit({
+    action: 'catalog.version.update',
+    targetType: 'catalog_version',
+    targetId: versionId,
+    diff: { entryId, changed: Object.keys(changes) },
+  });
+  ctx.tx.configChanged('catalog');
+  return row;
+};
+
 const assertDraft = (version: Row): void => {
   if (version.status !== 'draft') {
     throw new ConflictApiError('published versions are immutable (11.1)', 'version_immutable');

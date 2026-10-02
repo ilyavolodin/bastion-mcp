@@ -71,7 +71,11 @@ export type CallLogRow = {
   resultPreview?: unknown;
   traceId?: string | null | undefined;
   spanId?: string | null | undefined;
+  /** `plugin` for calls through `/mcp/c/{catalogSlug}` (7.1); default `direct`. */
+  origin?: (typeof CALL_ORIGINS)[number] | undefined;
 };
+
+export const CALL_ORIGINS = ['direct', 'plugin'] as const;
 
 const INSERT_CHUNK = 1000;
 
@@ -104,6 +108,7 @@ const rowData = (r: CallLogRow): Prisma.CallLogCreateManyInput => ({
   resultPreview: toJsonOrNull(r.resultPreview),
   traceId: r.traceId ?? null,
   spanId: r.spanId ?? null,
+  origin: r.origin ?? 'direct',
 });
 
 // --- call_log: read side ---------------------------------------------------------------------------------------------------
@@ -133,6 +138,7 @@ export type CallSummary = {
   bytesOut: number;
   traceId: string | null;
   spanId: string | null;
+  origin: string;
 };
 
 export type CallDetail = CallSummary & {
@@ -185,6 +191,7 @@ const SUMMARY_SELECT = {
   bytesOut: true,
   traceId: true,
   spanId: true,
+  origin: true,
 } as const;
 
 const callCursor = (cursor: string | undefined): { ts: Date; id: string } | undefined => {

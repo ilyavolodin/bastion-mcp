@@ -2,7 +2,8 @@ import { Link } from '@tanstack/react-router';
 import { Layers, Plus } from 'lucide-react';
 import { z } from 'zod';
 import { useCatalog } from '@/api/hooks';
-import type { CatalogEntry, CatalogStatus } from '@/api/types';
+import type { CatalogStatus } from '@/api/schema';
+import type { CatalogEntryView } from '@/api/views/catalog';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { ServerIcon, Tag } from '@/components/primitives';
@@ -25,10 +26,10 @@ const STATUS: Record<CatalogStatus, { tone: 'ok' | 'warn' | 'neutral' | 'bad'; l
   archived: { tone: 'bad', label: 'Archived' },
 };
 
-export const editorPath = (e: Pick<CatalogEntry, 'id' | 'kind'>) =>
+export const editorPath = (e: Pick<CatalogEntryView, 'id' | 'kind'>) =>
   e.kind === 'mcp_server' ? `/catalog/${e.id}` : `/plugins/edit/${e.id}`;
 
-function EntryRow({ e }: { e: CatalogEntry }) {
+function EntryRow({ e }: { e: CatalogEntryView }) {
   const s = STATUS[e.status];
   return (
     <li className="flex items-center gap-3.5 border-b border-line py-3 last:border-b-0">
@@ -43,10 +44,13 @@ function EntryRow({ e }: { e: CatalogEntry }) {
         <div className="truncate text-caption text-muted">{e.description || '—'}</div>
       </div>
       <Tag>{e.kind === 'mcp_server' ? 'Server' : e.kind === 'plugin' ? 'Plugin' : 'Skill'}</Tag>
-      {e.executable ? <Tag tone="bad">Runs code</Tag> : null}
       <Tag tone={s.tone}>{s.label}</Tag>
       <span className="w-20 text-right text-caption text-muted max-md:hidden">
-        {e.currentVersion ? `v${e.currentVersion}` : 'unpublished'}
+        {e.currentVersion
+          ? `v${e.currentVersion}`
+          : e.currentVersionId
+            ? 'published'
+            : 'unpublished'}
       </span>
       <span className="w-28 text-right text-caption text-muted max-lg:hidden">
         {e.ownerTeamName ?? 'Org'} · {formatRelative(e.updatedAt)}

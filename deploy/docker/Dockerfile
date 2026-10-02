@@ -4,8 +4,9 @@
 #
 # BUILD CONTRACT with the workspace (apps/server and apps/web do not exist yet in this repository; this file
 # assumes the following and must be updated together with them):
-#   1. `pnpm db:generate` generates the Prisma client (packages/db).
-#   2. `pnpm --filter @bastion-mcp/web build` writes the SPA to apps/web/dist; this file copies it to
+#   1. `pnpm db:generate` generates the Prisma client (packages/db); `pnpm --filter @bastion-mcp/api-client generate`
+#      generates the API types the SPA is typechecked against (both outputs are ignored by git and the context).
+#   2. `pnpm --filter @bastion-mcp/web exec vite build` (the typecheck half of `build` is CI) writes the SPA to apps/web/dist; this file copies it to
 #      apps/server/public (served by @fastify/static).
 #   3. `pnpm --filter @bastion-mcp/server build` bundles apps/server with tsdown/esbuild into
 #      apps/server/dist/main.js and apps/server/dist/otel.js (ESM, target node24). Workspace packages and the
@@ -24,15 +25,24 @@ ARG NODE_IMAGE=node:24-bookworm-slim
 FROM ${NODE_IMAGE} AS build
 WORKDIR /src
 ENV CI=true
-RUN corepack enable
+RUN corepack enable \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 # Lockfile and manifests first so the install layer caches until dependencies change.
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
+# tsconfig.base.json and vitest.shared.ts are extended/imported by every workspace package (prisma generate, vite, tsdown).
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.json vitest.shared.ts ./
 COPY apps ./apps
+# The server bundles the sandbox seccomp profile (inlined at build time).
+COPY deploy/docker/sandbox-seccomp.json ./deploy/docker/sandbox-seccomp.json
 COPY packages ./packages
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 RUN pnpm db:generate
-RUN pnpm --filter @bastion-mcp/web build \
+# The SPA is typechecked against the generated API types (src/generated is excluded from the build context).
+RUN pnpm --filter @bastion-mcp/api-client generate
+# Typechecking is CI (`pnpm typecheck`); the image build only bundles the SPA.
+RUN pnpm --filter @bastion-mcp/web exec vite build \
  && mkdir -p apps/server/public \
  && cp -r apps/web/dist/. apps/server/public/
 RUN pnpm --filter @bastion-mcp/server build

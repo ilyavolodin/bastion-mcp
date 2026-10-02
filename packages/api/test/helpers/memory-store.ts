@@ -1,6 +1,7 @@
 import { NotFoundApiError } from '../../src/errors';
 import { decodeOffset, encodeOffset } from '../../src/framework/conventions';
 import type { Collection, ListQuery, Page, ResourceStore, Row } from '../../src/ports';
+import { COLUMN_DEFAULTS, HAS_CREATED_AT } from './column-defaults';
 
 type Tables = Map<Collection, Map<string, Row>>;
 
@@ -76,9 +77,21 @@ export class MemoryStore implements ResourceStore {
   ): Promise<Row> {
     this.seq += 1;
     const id = data.id ?? `${collection}-${this.seq}`;
-    const row: Row = { ...data, id, updatedAt: this.stamp() };
+    const row: Row = { ...this.defaults(collection, id), ...data, id, updatedAt: this.stamp() };
     this.table(collection).set(id, row);
     return row;
+  }
+
+  /** What the database fills for columns the caller leaves out (see `column-defaults.ts`). */
+  private defaults(collection: Collection, id: string): Record<string, unknown> {
+    return {
+      // The OAuth client policy is keyed by its client id (`apps/server` store, `key: ['clientId']`).
+      ...(collection === 'oauth_clients' ? { clientId: id } : {}),
+      ...(COLUMN_DEFAULTS[collection] ?? {}),
+      ...(HAS_CREATED_AT.has(collection)
+        ? { createdAt: new Date(this.base + this.tick).toISOString() }
+        : {}),
+    };
   }
 
   async update(collection: Collection, id: string, patch: Record<string, unknown>): Promise<Row> {
@@ -90,7 +103,7 @@ export class MemoryStore implements ResourceStore {
   }
 
   async upsert(collection: Collection, id: string, data: Record<string, unknown>): Promise<Row> {
-    const row: Row = { ...data, id, updatedAt: this.stamp() };
+    const row: Row = { ...this.defaults(collection, id), ...data, id, updatedAt: this.stamp() };
     this.table(collection).set(id, row);
     return row;
   }

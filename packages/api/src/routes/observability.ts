@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DEFAULT_LIMIT, listQuerySchema, MAX_LIMIT, pageSchema } from '../framework/conventions';
 import { authz, defineRoute, type RouteDefinition, RouteReply } from '../framework/route';
 import { idParams } from '../schemas/common';
+import { callRecord, findingRecord, pageOf, untyped } from '../schemas/rows';
 import { auditChoice, renderAuditExport } from '../services/audit';
 import {
   callChoice,
@@ -96,7 +97,7 @@ export const observabilityRoutes: RouteDefinition[] = [
     url: '/calls',
     tag: TAG,
     summary: 'Call log with filters (user, team, installation, item, outcome, time range)',
-    schema: { query: callsQuery, response: pageSchema(callSchema) },
+    schema: { query: callsQuery, response: untyped(pageOf('CallRecordPage', callRecord)) },
     authz: authz.oneOf(['logs.org', 'logs.team', 'logs.user'], callsChoice),
     handler: (ctx) =>
       ctx.deps.observability.calls.list({
@@ -116,7 +117,7 @@ export const observabilityRoutes: RouteDefinition[] = [
     url: '/calls/{id}',
     tag: TAG,
     summary: 'One call',
-    schema: { params: idParams, response: callSchema },
+    schema: { params: idParams, response: untyped(callRecord) },
     authz: authz.oneOf(['logs.org', 'logs.user'], callChoice),
     handler: (ctx) => getCall(ctx.deps, ctx.params.id),
   }),
@@ -131,7 +132,7 @@ export const observabilityRoutes: RouteDefinition[] = [
     summary: 'Security findings (guards, drift, egress)',
     schema: {
       query: z.object({ ...pageQuery, ...range }),
-      response: pageSchema(z.looseObject({ id: z.string() })),
+      response: untyped(pageOf('FindingPage', findingRecord)),
     },
     authz: authz.on('logs.org', org),
     handler: (ctx) =>

@@ -30,7 +30,7 @@ export {
 } from './generate';
 export type { PolicyDataSource, PrincipalDirectory } from './ports';
 export type { Grant, RouteAction, RouteResourceKind, RouteRole } from './routes';
-export { ROUTE_ACTIONS } from './routes';
+export { ROUTE_ACTIONS, serviceAccountGrant } from './routes';
 export type {
   InvocationAction,
   ManagementAction,

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../client';
+import { legacyApi as api } from '../client';
 import type { Marketplace, MarketplaceDetail, RolloutConfig } from '../types';
 import { keys, listQuery, useApiMutation } from './base';
 

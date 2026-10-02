@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import * as React from 'react';
-import { useMe, useUpdateMe } from '@/api/hooks';
+import { useMe } from '@/api/hooks';
 import type { Me, ThemePref, UiRole } from '@/api/types';
 import { ProblemScreen } from '@/components/problem';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -51,7 +51,6 @@ const readPreviewRole = (): UiRole | null => {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const meQuery = useMe();
   const qc = useQueryClient();
-  const updateMe = useUpdateMe();
   const [previewEnabled] = React.useState(() => readPreviewEnabled());
   const [preview, setPreview] = React.useState<UiRole | null>(() =>
     readPreviewEnabled() ? readPreviewRole() : null,
@@ -59,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [localTheme, setLocalTheme] = React.useState<ThemePref | null>(null);
 
   const me = meQuery.data;
-  const theme: ThemePref = localTheme ?? me?.theme ?? cachedTheme() ?? 'light';
+  const theme: ThemePref = localTheme ?? cachedTheme() ?? 'light';
   React.useEffect(() => applyTheme(theme), [theme]);
 
   const setPreviewRole = React.useCallback((role: UiRole | null) => {
@@ -72,16 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const setTheme = React.useCallback(
-    (t: ThemePref) => {
-      setLocalTheme(t);
-      updateMe.mutate(
-        { theme: t },
-        { onSuccess: () => setLocalTheme(null), onError: () => setLocalTheme(null) },
-      );
-    },
-    [updateMe],
-  );
+  const setTheme = React.useCallback((t: ThemePref) => setLocalTheme(t), []);
 
   const value = React.useMemo<AuthValue | null>(() => {
     if (!me) return null;

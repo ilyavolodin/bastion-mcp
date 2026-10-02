@@ -1,3 +1,5 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import { assertOutboundUrl, createSafeFetch } from '../../src/oauth/safe-fetch';
 
@@ -51,5 +53,40 @@ describe('SSRF guard for OAuth endpoints (9.6, 23.3)', () => {
     await expect(safe(new URL('https://127.0.0.1/'))).rejects.toThrow();
     await expect(safe(new Request('https://127.0.0.1/'))).rejects.toThrow();
     expect(inner).toHaveBeenCalledOnce();
+  });
+});
+
+describe('DNS pinning (8.8, 8.9)', () => {
+  it('8.9 connects to the address that was checked, not to a second resolution', async () => {
+    const server = createServer((_req, res) => res.end('pinned'));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    // Rebinding stub: the first answer is the (admin-allowed) loopback address, every later answer is public.
+    let calls = 0;
+    const rebinding = async (): Promise<string[]> => {
+      calls += 1;
+      return calls === 1 ? ['127.0.0.1'] : ['93.184.216.34'];
+    };
+    try {
+      const safe = createSafeFetch(fetch, {
+        lookup: rebinding,
+        addressPolicy: { allowCidrs: ['127.0.0.0/8'] },
+        allowHttpToAllowedCidrs: true,
+        timeoutMs: 3000,
+      });
+      // `rebind.test` does not resolve on the system resolver: only the pinned lookup can connect.
+      const response = await safe(`http://rebind.test:${port}/x`);
+      expect(await response.text()).toBe('pinned');
+      expect(calls).toBe(1);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('8.9 hands the inner fetch a dispatcher pinned to the validated address', async () => {
+    const inner = vi.fn(async (_input: unknown, _init?: RequestInit) => new Response('ok'));
+    const safe = createSafeFetch(inner as unknown as typeof fetch, { lookup });
+    await safe('https://idp.example/x');
+    expect(inner.mock.calls[0]?.[1]).toHaveProperty('dispatcher');
   });
 });

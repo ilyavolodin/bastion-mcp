@@ -81,6 +81,9 @@ const envSchema = z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
     BASTION_GIT_CACHE_DIR: z.string().default('/var/cache/bastion/git'),
+    BASTION_WORKER_ID: optionalString,
+    BASTION_VERSION: optionalString,
+    BASTION_ENVIRONMENT: z.string().min(1).default('production'),
     BASTION_CONFIG_FILE: optionalString,
   })
   .superRefine((env, ctx) => {
@@ -160,6 +163,11 @@ const toConfig = (env: z.infer<typeof envSchema>) => {
     traceUiUrl: env.BASTION_TRACE_UI_URL,
     logLevel: env.BASTION_LOG_LEVEL,
     gitCacheDir: env.BASTION_GIT_CACHE_DIR,
+    /** Undefined means hostname plus pid (set by the process entry). */
+    workerId: env.BASTION_WORKER_ID,
+    /** Undefined means the package version. */
+    version: env.BASTION_VERSION,
+    environment: env.BASTION_ENVIRONMENT,
   };
 };
 

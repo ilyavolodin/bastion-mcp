@@ -38,13 +38,13 @@ const assertHexId = (id: string): string => {
   return h;
 };
 
-/** `bst-<instanceId first 12 hex>` (8.4). */
+/** `bst-<last 12 hex of instanceId>`: the random tail of a UUIDv7 (the head is a timestamp; see ADR 0001) (8.4). */
 export const instanceClaimName = (instanceId: string): string =>
-  `bst-${assertHexId(instanceId).slice(0, 12)}`;
+  `bst-${assertHexId(instanceId).slice(-12)}`;
 
-/** `bsp-<installationId first 12 hex>` (8.4). */
+/** `bsp-<last 12 hex of installationId>` (8.4). */
 export const persistentClaimName = (installationId: string): string =>
-  `bsp-${assertHexId(installationId).slice(0, 12)}`;
+  `bsp-${assertHexId(installationId).slice(-12)}`;
 
 export const isPersistentClaimName = (name: string): boolean => name.startsWith('bsp-');
 

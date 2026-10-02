@@ -54,7 +54,14 @@ const version = (id: string, entryId: string, label: string, status: string, ext
   ...extra,
 });
 
-const passed = { status: 'passed', steps: [] };
+const passed = {
+  id: 'run-seed',
+  versionId: 'seed',
+  status: 'passed',
+  steps: [],
+  startedAt: '2026-01-01T00:00:00.000Z',
+  finishedAt: '2026-01-01T00:00:05.000Z',
+};
 
 /**
  * Catalog fixtures (11.1): team A, org-wide and team B server entries, each with a draft and (for team A)

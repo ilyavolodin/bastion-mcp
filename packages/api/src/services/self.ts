@@ -3,6 +3,8 @@ import { parseRule, subjectIdsFor, type Usage } from '@bastion-mcp/limits';
 import { ApiError, NotFoundApiError } from '../errors';
 import type { Row } from '../ports/store';
 import { nowIso, type ReadCtx, type WriteCtx } from './crud';
+import { orgResource } from './resources';
+import { getSettings } from './settings';
 
 export type MeView = {
   id: string;
@@ -14,6 +16,14 @@ export type MeView = {
   displayName: string;
   status: string;
   teams: Array<{ teamId: string; role: string; slug?: string; displayName?: string }>;
+  /** Org display data the console needs without the Admin-only `/settings` (18). */
+  org: { name: string; host: string; traceUiUrl: string | null; toolWarnThreshold: number };
+  /** Cedar-derived flags the UI cannot infer from the role (10.1, 11.7). */
+  capabilities: {
+    registry: boolean;
+    publishOrgWide: boolean;
+    personalInstalls: 'off' | 'remoteOnly' | 'all';
+  };
   updatedAt: string;
 };
 
@@ -34,6 +44,8 @@ export const getMe = async (ctx: ReadCtx): Promise<MeView> => {
       };
     }),
   );
+  const { settings } = await getSettings(deps);
+  const org = orgResource();
   return {
     id: principal.id,
     type: principal.type,
@@ -44,6 +56,17 @@ export const getMe = async (ctx: ReadCtx): Promise<MeView> => {
     displayName: String(row.displayName ?? row.slug ?? principal.id),
     status: String(row.status ?? 'active'),
     teams,
+    org: {
+      name: settings.org.displayName,
+      host: new URL(deps.config.baseUrl).host,
+      traceUiUrl: deps.config.traceUiUrl ?? null,
+      toolWarnThreshold: settings.endpoints.toolWarnThreshold,
+    },
+    capabilities: {
+      registry: ctx.can('registry.install', org),
+      publishOrgWide: ctx.can('catalog.publish', org),
+      personalInstalls: settings.personalInstalls,
+    },
     updatedAt: row.updatedAt,
   };
 };

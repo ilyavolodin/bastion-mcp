@@ -58,9 +58,23 @@ export const storeListQuery = listQuerySchema.extend({
   kind: z.enum(CATALOG_KINDS).optional(),
 });
 
+/** What the installer fills in (11.4): plain variables and per-user secrets, as `deriveInstallForm` produces them. */
+export const installFormVariable = z.looseObject({
+  name: z.string(),
+  label: z.string().optional(),
+  description: z.string().optional(),
+  required: z.boolean().optional(),
+  default: z.string().optional(),
+  choices: z.array(z.string()).optional(),
+});
+export const installFormSecret = z.looseObject({
+  name: z.string(),
+  label: z.string().optional(),
+  description: z.string().optional(),
+});
 export const installFormSchema = z.object({
-  variables: z.array(z.looseObject({ name: z.string() })).default([]),
-  secrets: z.array(z.looseObject({ name: z.string() })).default([]),
+  variables: z.array(installFormVariable).default([]),
+  secrets: z.array(installFormSecret).default([]),
 });
 
 export const versionCreateSchema = z.object({
@@ -69,6 +83,14 @@ export const versionCreateSchema = z.object({
   serverSpec: serverSpecSchema.nullable().default(null),
   installForm: installFormSchema.default({ variables: [], secrets: [] }),
   changelog: z.string().max(10000).nullable().default(null),
+});
+
+/** `PATCH /catalog/{id}/versions/{vid}`: any subset of the draft's fields. */
+export const versionPatchSchema = z.object({
+  label: z.string().trim().min(1).max(64).optional(),
+  serverSpec: serverSpecSchema.nullable().optional(),
+  installForm: installFormSchema.optional(),
+  changelog: z.string().max(10000).nullable().optional(),
 });
 
 /** Bodies of actions whose every field is optional: a missing or null body means `{}`. */

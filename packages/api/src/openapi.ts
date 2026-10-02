@@ -49,6 +49,28 @@ export type OpenApiDoc = {
 
 type Operation = { responses?: Record<string, unknown> };
 
+const REF = /#\/components\/schemas\/([A-Za-z0-9_.-]+)/g;
+
+/**
+ * Drops component schemas no operation reaches (zod registers every named schema for input and output; only the
+ * variants that a route uses belong in the document).
+ */
+export const pruneUnusedSchemas = (doc: OpenApiDoc): void => {
+  const schemas = (doc.components?.schemas ?? {}) as Record<string, unknown>;
+  const used = new Set<string>(['Problem']);
+  const visit = (value: unknown): void => {
+    for (const match of JSON.stringify(value).matchAll(REF)) {
+      const name = match[1];
+      if (name === undefined || used.has(name)) continue;
+      used.add(name);
+      visit(schemas[name]);
+    }
+  };
+  visit(doc.paths);
+  visit(schemas.Problem);
+  for (const name of Object.keys(schemas)) if (!used.has(name)) delete schemas[name];
+};
+
 /**
  * Adds the RFC 9457 problem schema, the security schemes and the shared error responses to the generated
  * document (17.1). Pure so that it can be tested and reused by the export script.
@@ -61,6 +83,7 @@ export const decorateOpenApi = <T extends OpenApiDoc>(doc: T): T => {
   components.schemas = { ...schemas, Problem: problem };
   components.securitySchemes = SECURITY_SCHEMES;
   doc.components = components;
+  pruneUnusedSchemas(doc);
   for (const item of Object.values(doc.paths ?? {})) {
     if (!item) continue;
     for (const method of METHODS) {

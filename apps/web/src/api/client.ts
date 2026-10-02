@@ -1,8 +1,12 @@
 /**
- * The only module that talks to the network. A thin typed fetch wrapper: CSRF double-submit (9.2),
- * RFC 9457 problem+json errors, ETag / If-Match (17.1), cursor pagination and a timeout on every call.
- * Swapping to the generated `@bastion-mcp/api-client` means re-implementing `request` here.
+ * The only module that talks to the network. A thin wrapper over the generated `@bastion-mcp/api-client`:
+ * CSRF double-submit (9.2), RFC 9457 problem+json mapped to `ApiError`, ETag / If-Match (17.1), cursor
+ * pagination and a timeout on every call. Paths are checked against the OpenAPI document at compile time
+ * (`ApiPath`), so a call to a route the API does not have is a type error.
  */
+import { ApiProblemError, createApiClient, type PathsWith } from '@bastion-mcp/api-client';
+import type { BodyOf, ItemOf, QueryOf, ResOf } from './schema';
+
 export const API_BASE = '/api/v1';
 export const CSRF_COOKIE = 'bastion_csrf';
 export const CSRF_HEADER = 'x-bastion-csrf';
@@ -47,6 +51,14 @@ export class ApiError extends Error {
     return this.status === 412 || this.status === 409;
   }
 }
+
+type Fill<P extends string> = P extends `${infer A}{${string}}${infer B}`
+  ? `${A}${string}${Fill<B>}`
+  : P;
+/** A concrete path (`/teams/abc`) of an operation with method `M` in the OpenAPI document. */
+export type ApiPath<M extends 'get' | 'post' | 'put' | 'patch' | 'delete'> = Fill<
+  Extract<PathsWith<M>, string>
+>;
 
 type Primitive = string | number | boolean | null | undefined;
 export type Query = Record<string, Primitive | Primitive[]>;
@@ -133,45 +145,80 @@ export const parseProblem = async (res: Response): Promise<ApiError> => {
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
+type DynamicClient = Record<
+  HttpMethod,
+  (
+    path: string,
+    options: {
+      query?: Record<string, unknown>;
+      body?: unknown;
+      ifMatch?: string;
+      idempotencyKey?: string;
+      signal?: AbortSignal;
+    },
+  ) => Promise<{ data: unknown; etag: string | undefined }>
+>;
+
+const generated = createApiClient({
+  baseUrl: API_BASE,
+  csrf: () => readCookie(CSRF_COOKIE) ?? undefined,
+  // Late-bound so tests and MSW can replace the global fetch.
+  fetch: (input, init) => globalThis.fetch(input, init),
+}) as unknown as DynamicClient;
+
+const cleanQuery = (query: Query | undefined): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(query ?? {})) {
+    const list = (Array.isArray(value) ? value : [value]).filter(
+      (v) => v !== undefined && v !== null && v !== '',
+    );
+    if (list.length > 0) out[key] = Array.isArray(value) ? list : list[0];
+  }
+  return out;
+};
+
+const fromProblem = (e: ApiProblemError): ApiError =>
+  new ApiError({
+    status: e.status,
+    code: e.code,
+    title: e.problem.title,
+    detail: e.problem.detail,
+    type: e.problem.type,
+    errors: e.fieldErrors.map((f) => ({ path: f.path, message: f.message })),
+  });
+
 export async function request<T>(
   method: string,
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json, application/problem+json' };
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (MUTATING.has(method)) {
-    const csrf = readCookie(CSRF_COOKIE);
-    if (csrf) headers[CSRF_HEADER] = csrf;
-    if (method !== 'POST') {
-      const etag = options.etag ?? etags.get(path);
-      if (etag) headers['If-Match'] = etag;
-    }
-    if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
-  }
+  const verb = method.toLowerCase() as HttpMethod;
+  const ifMatch =
+    MUTATING.has(method) && method !== 'POST' ? (options.etag ?? etags.get(path)) : undefined;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const onAbort = () => controller.abort();
   options.signal?.addEventListener('abort', onAbort);
   try {
-    const res = await fetch(`${API_BASE}${path}${buildQuery(options.query)}`, {
-      method,
-      headers,
-      credentials: 'same-origin',
+    const res = await generated[verb](path, {
+      query: cleanQuery(options.query),
+      ...(options.body !== undefined ? { body: options.body } : {}),
+      ...(ifMatch ? { ifMatch } : {}),
+      ...(MUTATING.has(method) && options.idempotencyKey
+        ? { idempotencyKey: options.idempotencyKey }
+        : {}),
       signal: controller.signal,
-      ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
     });
-    if (!res.ok) {
-      const err = await parseProblem(res);
+    if (res.etag) etags.set(path, res.etag);
+    return res.data as T;
+  } catch (e) {
+    if (e instanceof ApiProblemError) {
+      const err = fromProblem(e);
       if (err.isUnauthorized) hooks.onUnauthorized();
       throw err;
     }
-    const etag = res.headers.get('etag');
-    if (etag) etags.set(path, etag);
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
-  } catch (e) {
     if (e instanceof ApiError) throw e;
     if (controller.signal.aborted && !options.signal?.aborted) {
       throw new ApiError({ status: 408, code: 'timeout', title: 'The request timed out' });
@@ -189,22 +236,85 @@ export async function request<T>(
   }
 }
 
+/** The generated query type of an operation, loosened so callers may pass `null`/`undefined` for unset filters. */
+export type LooseQuery<Q> = [Q] extends [never] ? undefined : { [K in keyof Q]?: Q[K] | null };
+
+type Opts<M extends 'get' | 'post' | 'put' | 'patch' | 'delete', P extends string> = Omit<
+  RequestOptions,
+  'query' | 'body'
+> & { query?: LooseQuery<QueryOf<M, P>> };
+
+/**
+ * The typed client: the path decides the request body, the query and the response type, all from the generated
+ * OpenAPI types. A call to a route or a body that the API does not have is a compile error.
+ */
 export const api = {
-  get: <T>(path: string, options?: RequestOptions) => request<T>('GET', path, options),
-  post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
-    request<T>('POST', path, { ...options, ...(body !== undefined ? { body } : {}) }),
-  put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
-    request<T>('PUT', path, { ...options, ...(body !== undefined ? { body } : {}) }),
-  patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
-    request<T>('PATCH', path, { ...options, ...(body !== undefined ? { body } : {}) }),
-  delete: <T = void>(path: string, options?: RequestOptions) => request<T>('DELETE', path, options),
+  get: <P extends ApiPath<'get'>>(path: P, options?: Opts<'get', P>) =>
+    request<ResOf<'get', P>>('GET', path, options as RequestOptions | undefined),
+  post: <P extends ApiPath<'post'>>(path: P, body?: BodyOf<'post', P>, options?: Opts<'post', P>) =>
+    request<ResOf<'post', P>>('POST', path, {
+      ...(options as RequestOptions | undefined),
+      ...(body !== undefined ? { body } : {}),
+    }),
+  put: <P extends ApiPath<'put'>>(path: P, body?: BodyOf<'put', P>, options?: Opts<'put', P>) =>
+    request<ResOf<'put', P>>('PUT', path, {
+      ...(options as RequestOptions | undefined),
+      ...(body !== undefined ? { body } : {}),
+    }),
+  patch: <P extends ApiPath<'patch'>>(
+    path: P,
+    body?: BodyOf<'patch', P>,
+    options?: Opts<'patch', P>,
+  ) =>
+    request<ResOf<'patch', P>>('PATCH', path, {
+      ...(options as RequestOptions | undefined),
+      ...(body !== undefined ? { body } : {}),
+    }),
+  delete: <P extends ApiPath<'delete'>>(path: P, options?: Opts<'delete', P>) =>
+    request<ResOf<'delete', P>>('DELETE', path, options as RequestOptions | undefined),
 };
 
 export type CursorPage<T> = { items: T[]; nextCursor: string | null };
 
-/** Follows `nextCursor` until exhausted (bounded by `maxPages`). */
-export async function fetchAll<T>(
-  path: string,
+/** Follows `nextCursor` until exhausted (bounded by `maxPages`); items are typed by the operation's page. */
+export async function fetchAll<P extends ApiPath<'get'>>(
+  path: P,
+  query?: LooseQuery<QueryOf<'get', P>>,
+  maxPages = 20,
+  signal?: AbortSignal,
+): Promise<ItemOf<ResOf<'get', P>>[]> {
+  const out: ItemOf<ResOf<'get', P>>[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < maxPages; i++) {
+    const page: CursorPage<ItemOf<ResOf<'get', P>>> = (await request('GET', path, {
+      query: { limit: 500, ...(query as Query | undefined), cursor },
+      ...(signal ? { signal } : {}),
+    })) as CursorPage<ItemOf<ResOf<'get', P>>>;
+    out.push(...page.items);
+    if (!page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return out;
+}
+
+/**
+ * The pre-reconciliation client: the caller names the response type by hand. Only screens that have not moved to
+ * the typed `api` above use it; it disappears with the last of them.
+ */
+export const legacyApi = {
+  get: <T>(path: ApiPath<'get'>, options?: RequestOptions) => request<T>('GET', path, options),
+  post: <T>(path: ApiPath<'post'>, body?: unknown, options?: RequestOptions) =>
+    request<T>('POST', path, { ...options, ...(body !== undefined ? { body } : {}) }),
+  put: <T>(path: ApiPath<'put'>, body?: unknown, options?: RequestOptions) =>
+    request<T>('PUT', path, { ...options, ...(body !== undefined ? { body } : {}) }),
+  patch: <T>(path: ApiPath<'patch'>, body?: unknown, options?: RequestOptions) =>
+    request<T>('PATCH', path, { ...options, ...(body !== undefined ? { body } : {}) }),
+  delete: <T = void>(path: ApiPath<'delete'>, options?: RequestOptions) =>
+    request<T>('DELETE', path, options),
+};
+
+export async function legacyFetchAll<T>(
+  path: ApiPath<'get'>,
   query: Query = {},
   maxPages = 20,
   signal?: AbortSignal,
@@ -212,7 +322,7 @@ export async function fetchAll<T>(
   const out: T[] = [];
   let cursor: string | null = null;
   for (let i = 0; i < maxPages; i++) {
-    const page: CursorPage<T> = await api.get<CursorPage<T>>(path, {
+    const page: CursorPage<T> = await legacyApi.get<CursorPage<T>>(path, {
       query: { limit: 500, ...query, cursor },
       ...(signal ? { signal } : {}),
     });

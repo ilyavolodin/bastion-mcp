@@ -1,166 +1,157 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../client';
-import type {
-  CustomPolicy,
-  IdpConnection,
-  IdpTestResult,
-  LimitRule,
-  ModelGuardConfig,
-  OAuthClient,
-  OrgSettings,
-  PolicyRule,
-  PolicyRuleInput,
-  PolicyValidation,
-  RoleMappingInput,
-  RoleMappingRule,
-  ServiceAccount,
-  SimulationInput,
-  SimulationResult,
-  SystemStatus,
-  Team,
-  User,
-} from '../types';
-import { keys, listQuery, useApiMutation } from './base';
+import { api, fetchAll } from '../client';
+import type { Body, Schemas, TeamRole } from '../schema';
+import { buildDirectory, type Directory, filterUsers } from '../views/access';
+import { keys, pagedQuery, useApiMutation } from './base';
+
+/** How many team detail requests run at once while the directory loads. */
+const FAN_OUT = 6;
+
+/**
+ * People and teams, joined. `GET /users` has no team list and `GET /teams` has no members, so the directory reads
+ * both lists and every team's detail (`GET /teams/{id}`); a team the caller may not read is left out.
+ */
+const loadDirectory = async (signal: AbortSignal): Promise<Directory> => {
+  const [users, teams] = await Promise.all([
+    fetchAll('/users', undefined, 20, signal),
+    fetchAll('/teams', undefined, 20, signal),
+  ]);
+  const details: Schemas['TeamDetail'][] = [];
+  for (let i = 0; i < teams.length; i += FAN_OUT) {
+    const batch = await Promise.all(
+      teams
+        .slice(i, i + FAN_OUT)
+        .map((t) => api.get(`/teams/${t.id}`, { signal }).catch(() => null)),
+    );
+    for (const d of batch) if (d) details.push(d);
+  }
+  return buildDirectory(users, details);
+};
+
+const directoryQuery = (enabled: boolean) => ({
+  queryKey: [...keys.teams, 'directory'],
+  queryFn: ({ signal }: { signal: AbortSignal }) => loadDirectory(signal),
+  enabled,
+});
 
 export const useUsers = (params: { q?: string; teamId?: string } = {}, enabled = true) =>
-  useQuery({ ...listQuery<User>(keys.users, '/users', params), enabled });
+  useQuery({
+    ...directoryQuery(enabled),
+    select: (d) => filterUsers(d.users, params),
+  });
+
 export const useTeams = (enabled = true) =>
-  useQuery({ ...listQuery<Team>(keys.teams, '/teams'), enabled });
+  useQuery({ ...directoryQuery(enabled), select: (d) => d.teams });
+
+const INVALIDATE_DIRECTORY = [keys.teams, keys.users];
 
 export const useCreateTeam = () =>
-  useApiMutation((input: { name: string }) => api.post<Team>('/teams', input), [keys.teams]);
+  useApiMutation(
+    (input: Body<'post', '/teams'>) => api.post('/teams', input),
+    INVALIDATE_DIRECTORY,
+  );
+
 export const useSetMember = () =>
   useApiMutation(
-    (input: { teamId: string; userId: string; role: 'manager' | 'member' | null }) =>
+    (input: { teamId: string; userId: string; role: TeamRole | null }) =>
       input.role
-        ? api.put<void>(`/teams/${input.teamId}/members/${input.userId}`, { role: input.role })
+        ? api.put(`/teams/${input.teamId}/members/${input.userId}`, { role: input.role })
         : api.delete(`/teams/${input.teamId}/members/${input.userId}`),
-    [keys.teams, keys.users],
+    INVALIDATE_DIRECTORY,
   );
-export const useDeactivateUser = () =>
-  useApiMutation((id: string) => api.post<void>(`/users/${id}/deactivate`), [keys.users]);
 
+export const useDeactivateUser = () =>
+  useApiMutation((id: string) => api.post(`/users/${id}/deactivate`), INVALIDATE_DIRECTORY);
+
+// --- IdP group mapping ------------------------------------------------------------------------------------------
 export const useRoleMappingRules = () =>
-  useQuery(listQuery<RoleMappingRule>(keys.roleMapping, '/role-mapping-rules'));
+  useQuery(pagedQuery(keys.roleMapping, '/role-mapping-rules'));
+
 export const useSaveRoleMapping = () =>
   useApiMutation(
-    (input: { id?: string; rule: RoleMappingInput }) =>
+    (input: { id?: string; rule: Body<'post', '/role-mapping-rules'> }) =>
       input.id
-        ? api.patch<RoleMappingRule>(`/role-mapping-rules/${input.id}`, input.rule)
-        : api.post<RoleMappingRule>('/role-mapping-rules', input.rule),
+        ? api.patch(`/role-mapping-rules/${input.id}`, input.rule)
+        : api.post('/role-mapping-rules', input.rule),
     [keys.roleMapping],
   );
+
 export const useDeleteRoleMapping = () =>
   useApiMutation((id: string) => api.delete(`/role-mapping-rules/${id}`), [keys.roleMapping]);
 
+// --- Service accounts -------------------------------------------------------------------------------------------
 export const useServiceAccounts = () =>
-  useQuery(listQuery<ServiceAccount>(keys.serviceAccounts, '/service-accounts'));
+  useQuery(pagedQuery(keys.serviceAccounts, '/service-accounts'));
+
+/** The response carries the client id and, for `client_secret_basic`, the secret that is shown once. */
 export const useCreateServiceAccount = () =>
   useApiMutation(
-    (input: { name: string; teamId: string }) =>
-      api.post<ServiceAccount>('/service-accounts', input),
+    (input: Body<'post', '/service-accounts'>) => api.post('/service-accounts', input),
     [keys.serviceAccounts],
   );
+
+export const useRotateServiceAccount = () =>
+  useApiMutation(
+    (id: string) => api.post(`/service-accounts/${id}/credentials`, {}),
+    [keys.serviceAccounts],
+  );
+
 export const useDeleteServiceAccount = () =>
   useApiMutation((id: string) => api.delete(`/service-accounts/${id}`), [keys.serviceAccounts]);
 
-export const useOAuthClients = () =>
-  useQuery(listQuery<OAuthClient>(keys.oauthClients, '/oauth-clients'));
-export const usePatchOAuthClient = () =>
+// --- OAuth clients ----------------------------------------------------------------------------------------------
+export const useOAuthClients = () => useQuery(pagedQuery(keys.oauthClients, '/oauth-clients'));
+
+export const useRegisterOAuthClient = () =>
   useApiMutation(
-    (input: { id: string; status: 'approved' | 'blocked' }) =>
-      api.patch<OAuthClient>(`/oauth-clients/${input.id}`, { status: input.status }),
+    (input: Body<'post', '/oauth-clients'>) => api.post('/oauth-clients', input),
     [keys.oauthClients],
   );
 
-export const usePolicyRules = () =>
-  useQuery(listQuery<PolicyRule>(keys.policyRules, '/policy-rules'));
+/** The row id of a client policy is its client id. */
+export const usePatchOAuthClient = () =>
+  useApiMutation(
+    (input: { id: string; patch: Body<'patch', '/oauth-clients/{id}'> }) =>
+      api.patch(`/oauth-clients/${encodeURIComponent(input.id)}`, input.patch),
+    [keys.oauthClients],
+  );
+
+// --- Tool rules, custom policies, simulator ---------------------------------------------------------------------
+export const usePolicyRules = () => useQuery(pagedQuery(keys.policyRules, '/policy-rules'));
+
 export const useSavePolicyRule = () =>
   useApiMutation(
-    (input: { id?: string; rule: PolicyRuleInput }) =>
+    (input: { id?: string; rule: Body<'post', '/policy-rules'> }) =>
       input.id
-        ? api.patch<PolicyRule>(`/policy-rules/${input.id}`, input.rule)
-        : api.post<PolicyRule>('/policy-rules', input.rule),
+        ? api.patch(`/policy-rules/${input.id}`, input.rule)
+        : api.post('/policy-rules', input.rule),
     [keys.policyRules],
   );
+
 export const useDeletePolicyRule = () =>
   useApiMutation((id: string) => api.delete(`/policy-rules/${id}`), [keys.policyRules]);
-/** Assumed route (not in 17.2): dry-run a rule to count affected people and tools before saving. */
-export const usePreviewPolicyRule = () =>
-  useApiMutation((rule: PolicyRuleInput) =>
-    api.post<{ people: number; tools: number }>('/policy-rules/preview', rule),
-  );
 
 export const useCustomPolicies = () =>
-  useQuery(listQuery<CustomPolicy>(keys.customPolicies, '/custom-policies'));
+  useQuery(pagedQuery(keys.customPolicies, '/custom-policies'));
+
 export const useSaveCustomPolicy = () =>
   useApiMutation(
-    (input: { id?: string; policy: Omit<CustomPolicy, 'id'> }) =>
+    (input: { id?: string; policy: Body<'post', '/custom-policies'> }) =>
       input.id
-        ? api.patch<CustomPolicy>(`/custom-policies/${input.id}`, input.policy)
-        : api.post<CustomPolicy>('/custom-policies', input.policy),
+        ? api.patch(`/custom-policies/${input.id}`, input.policy)
+        : api.post('/custom-policies', input.policy),
     [keys.customPolicies],
   );
+
 export const useDeleteCustomPolicy = () =>
   useApiMutation((id: string) => api.delete(`/custom-policies/${id}`), [keys.customPolicies]);
+
 export const useValidatePolicy = () =>
-  useApiMutation((cedar: string) => api.post<PolicyValidation>('/policies/validate', { cedar }));
-export const useSimulate = () =>
-  useApiMutation((input: SimulationInput) =>
-    api.post<SimulationResult>('/policies/simulate', input),
+  useApiMutation((input: Body<'post', '/policies/validate'>) =>
+    api.post('/policies/validate', input),
   );
 
-// --- Settings and system -------------------------------------------------------------------------
-export const usePatchSettings = () =>
-  useApiMutation(
-    (patch: Partial<OrgSettings>) => api.patch<OrgSettings>('/settings', patch),
-    [keys.settings],
+export const useSimulate = () =>
+  useApiMutation((input: Body<'post', '/policies/simulate'>) =>
+    api.post('/policies/simulate', input),
   );
-export const useIdpConnections = () =>
-  useQuery(listQuery<IdpConnection>(keys.idp, '/idp-connections'));
-export const useSaveIdp = () =>
-  useApiMutation(
-    (input: {
-      id?: string;
-      idp: Omit<IdpConnection, 'id' | 'status' | 'lastTestAt'> & { clientSecret?: string };
-    }) =>
-      input.id
-        ? api.patch<IdpConnection>(`/idp-connections/${input.id}`, input.idp)
-        : api.post<IdpConnection>('/idp-connections', input.idp),
-    [keys.idp],
-  );
-export const useTestIdp = () =>
-  useApiMutation(
-    (id: string) => api.post<IdpTestResult>(`/idp-connections/${id}/test`),
-    [keys.idp],
-  );
-export const useModelGuards = () =>
-  useQuery({
-    queryKey: [...keys.settings, 'model-guards'],
-    queryFn: ({ signal }) => api.get<ModelGuardConfig>('/settings/model-guards', { signal }),
-  });
-export const useSaveModelGuards = () =>
-  useApiMutation(
-    (cfg: ModelGuardConfig) => api.put<ModelGuardConfig>('/settings/model-guards', cfg),
-    [[...keys.settings, 'model-guards']],
-  );
-export const useLimitRules = () => useQuery(listQuery<LimitRule>(keys.limits, '/limit-rules'));
-export const useSaveLimitRule = () =>
-  useApiMutation(
-    (input: { id?: string; rule: Omit<LimitRule, 'id'> }) =>
-      input.id
-        ? api.patch<LimitRule>(`/limit-rules/${input.id}`, input.rule)
-        : api.post<LimitRule>('/limit-rules', input.rule),
-    [keys.limits],
-  );
-export const useDeleteLimitRule = () =>
-  useApiMutation((id: string) => api.delete(`/limit-rules/${id}`), [keys.limits]);
-export const useSystemStatus = (enabled = true) =>
-  useQuery({
-    queryKey: keys.system,
-    enabled,
-    refetchInterval: 30_000,
-    queryFn: ({ signal }) => api.get<SystemStatus>('/system/status', { signal }),
-  });
-export const useRotateKms = () =>
-  useApiMutation(() => api.post<void>('/system/kms/rotate'), [keys.system]);

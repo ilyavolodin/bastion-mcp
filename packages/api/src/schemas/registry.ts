@@ -62,24 +62,35 @@ export const serverParams = z.object({
   version: z.string().min(1),
 });
 
-export const registryServerSummary = z.looseObject({
-  sourceId: z.string(),
-  name: z.string(),
-  version: z.string(),
-  status: z.string(),
-  isLatest: z.boolean(),
-  description: z.string(),
-  runtimes: z.array(z.string()),
-});
+export const registryServerSummary = z
+  .looseObject({
+    sourceId: z.string(),
+    name: z.string(),
+    version: z.string(),
+    status: z.string(),
+    isLatest: z.boolean(),
+    title: z.string().optional(),
+    description: z.string(),
+    publishedAt: z.string().nullable().optional(),
+    runtimes: z.array(z.string()),
+  })
+  .meta({ id: 'RegistryServer' });
 
-export const registryServerDetail = registryServerSummary.extend({
-  serverJson: z.looseObject({}),
-  install: z.looseObject({
-    installable: z.boolean(),
-    decision: z.string().optional(),
-    reasons: z.array(z.string()),
-  }),
-});
+export const registryServerDetail = z
+  .looseObject({
+    ...registryServerSummary.shape,
+    serverJson: z.looseObject({}),
+    install: z.looseObject({
+      installable: z.boolean(),
+      /** What the source policy decides for the caller: install now, ask for approval, catalog only, or deny. */
+      decision: z.string().optional(),
+      reasons: z.array(z.string()),
+      runtime: z.string().optional(),
+      risk: z.string().optional(),
+      warnings: z.array(z.string()).optional(),
+    }),
+  })
+  .meta({ id: 'RegistryServerDetail' });
 
 export const installBodySchema = z.object({
   sourceId: z.string().min(1),
@@ -89,10 +100,15 @@ export const installBodySchema = z.object({
   justification: z.string().max(2000).optional(),
 });
 
-export const installResultSchema = z.looseObject({
-  decision: z.enum(['installed', 'needs-request']),
-  reasons: z.array(z.string()),
-});
+/** `installed` (201) carries the new entry and installation; `needs-request` (202) only the reasons. */
+export const installResultSchema = z
+  .looseObject({
+    decision: z.enum(['installed', 'needs-request']),
+    reasons: z.array(z.string()),
+    entryId: z.string().optional(),
+    installationId: z.string().optional(),
+  })
+  .meta({ id: 'RegistryInstallResult' });
 
 export const requestListQuery = listQuerySchema
   .omit({ sort: true, q: true })

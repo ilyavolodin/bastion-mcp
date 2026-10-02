@@ -12,6 +12,7 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import pkg from '../package.json' with { type: 'json' };
 import {
   bootstrapOtel,
   buildResourceAttributes,
@@ -166,6 +167,16 @@ describe('15.1 bootstrapOtel', () => {
     expect(await res.text()).toContain('prom_test');
   });
 
+  it('19.1 OTEL_<SIGNAL>_EXPORTER=none exports nothing for that signal', async () => {
+    const mem = inMemory();
+    handle = bootstrapOtel({ ...base, ...mem.options, disabledSignals: ['traces', 'logs'] });
+    trace.getTracer('t').startSpan('s').end();
+    logs.getLogger('l').emit({ body: 'hello' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mem.spans.getFinishedSpans()).toHaveLength(0);
+    expect(mem.logExporter.getFinishedLogRecords()).toHaveLength(0);
+  });
+
   it('15.1 builds default OTLP exporters when none are injected', async () => {
     handle = bootstrapOtel({ ...base, instrumentations: [] });
     expect(handle.sampler).toBeDefined();
@@ -199,12 +210,36 @@ describe('15.1 startOtelFromEnv', () => {
   it('19.1 defaults to a worker with full sampling and no Prometheus endpoint', () => {
     expect(otelOptionsFromEnv({ BASTION_PROMETHEUS_PORT: '' }, 'host-1')).toEqual({
       serviceName: 'bastion-worker',
-      serviceVersion: '0.0.0',
+      serviceVersion: pkg.version,
       instanceId: 'host-1',
       environment: 'production',
       sampleRatio: 1,
       prometheusPort: undefined,
     });
+  });
+
+  it('19.1 maps OTEL_*_EXPORTER=none to disabled signals', () => {
+    const o = otelOptionsFromEnv(
+      {
+        OTEL_TRACES_EXPORTER: 'none',
+        OTEL_LOGS_EXPORTER: 'otlp, none',
+        OTEL_METRICS_EXPORTER: 'otlp',
+      },
+      'x',
+    );
+    expect(o?.disabledSignals).toEqual(['traces', 'logs']);
+    expect(otelOptionsFromEnv({}, 'x')?.disabledSignals).toBeUndefined();
+  });
+
+  it('19.1 starts with every exporter set to none', () => {
+    expect(startOtelFromEnv({ OTEL_SDK_DISABLED: 'true' })).toBeNull();
+    const h = startOtelFromEnv({
+      OTEL_TRACES_EXPORTER: 'none',
+      OTEL_METRICS_EXPORTER: 'none',
+      OTEL_LOGS_EXPORTER: 'none',
+    });
+    expect(h).not.toBeNull();
+    void h?.shutdown();
   });
 
   it('19.1 rejects an invalid sample ratio and honours OTEL_SDK_DISABLED', () => {

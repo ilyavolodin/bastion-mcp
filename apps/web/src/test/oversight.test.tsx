@@ -128,19 +128,25 @@ describe('live updates (18.1)', () => {
       type: 'notification',
       data: {
         id: '1',
-        kind: 'drift',
+        userId: 'u-dana',
+        type: 'drift',
         title: 'T',
-        body: 'B',
-        href: null,
+        data: { message: 'B' },
         createdAt: '',
+        updatedAt: '',
         readAt: null,
       },
     });
     expect(n?.title).toBe('T');
+    expect(n?.body).toBe('B');
+    expect(n?.href).toBe('/security');
     expect(spy).toHaveBeenCalledWith({ queryKey: ['notifications'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['drift-reviews'] });
     expect(
-      applyServerEvent(qc, { type: 'installation.status', data: { id: 'i', status: 'ready' } }),
+      applyServerEvent(qc, {
+        type: 'installation.status',
+        data: { installationId: 'i', status: 'ready' },
+      }),
     ).toBeNull();
     expect(spy).toHaveBeenCalledWith({ queryKey: ['installations'] });
   });

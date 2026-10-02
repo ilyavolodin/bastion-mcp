@@ -20,6 +20,12 @@ export type RouteAction = {
   /** The resource the handler passes to `authorize`; null with a null action. */
   resource: RouteResourceKind | null;
   grants: Readonly<Record<RouteRole, Grant>>;
+  /**
+   * What a service account (a principal of one team that holds the `member` capabilities for its OWN
+   * installations only, 10.1) is granted. Omitted means the `member` grant. User-only capabilities (personal
+   * installs, registry install, user secrets, user call logs) are `deny`.
+   */
+  serviceAccount?: Grant;
   note?: string;
 };
 
@@ -38,6 +44,10 @@ const g = (
  *
  * "manager" is a member who manages the team in scope; "scoped" always means that team or the caller's own.
  */
+/** The grant a service account holds on a row (10.1). */
+export const serviceAccountGrant = (row: Pick<RouteAction, 'grants' | 'serviceAccount'>): Grant =>
+  row.serviceAccount ?? row.grants.member;
+
 export const ROUTE_ACTIONS: readonly RouteAction[] = [
   // --- Session and self -------------------------------------------------------------------------------
   {
@@ -221,6 +231,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
     routes: [
       'PATCH /catalog/{id}',
       'POST /catalog/{id}/versions',
+      'PATCH /catalog/{id}/versions/{vid}',
       'POST /catalog/{id}/versions/{vid}/test',
       'PUT /catalog/{id}/versions/{vid}/files/{path}',
       'DELETE /catalog/{id}/versions/{vid}/files/{path}',
@@ -329,6 +340,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
     action: 'installation.manage',
     resource: 'Org',
     grants: g('allow', 'allow', 'allow', 'allow'),
+    serviceAccount: 'deny',
     note: "Personal (non-catalog) installs and the caller's own endpoints; `personalInstalls` is an org setting.",
   },
   {
@@ -456,6 +468,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
     action: 'registry.install',
     resource: 'Org',
     grants: g('allow', 'allow', 'allow', 'deny'),
+    serviceAccount: 'deny',
     note: 'The registry source policy (11.7) is not Cedar and narrows this further.',
   },
   {
@@ -465,6 +478,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
     action: 'registry.install',
     resource: 'User',
     grants: g('allow', 'scoped', 'deny', 'deny'),
+    serviceAccount: 'deny',
     note: 'The resource is the requester; managers decide for members of their teams.',
   },
   // --- Policies, guards, limits ------------------------------------------------------------------------------
@@ -543,6 +557,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
     action: 'secrets.manage',
     resource: 'User',
     grants: g('scoped', 'scoped', 'scoped', 'scoped'),
+    serviceAccount: 'deny',
     note: 'Own user secrets only; an auditor never sees org or team values.',
   },
   // --- Observability and audit ---------------------------------------------------------------------------
@@ -579,6 +594,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
     action: 'logs.view',
     resource: 'User',
     grants: g('allow', 'scoped', 'scoped', 'allow'),
+    serviceAccount: 'deny',
     note: 'The resource is the caller whose call is shown; members see their own.',
   },
   {

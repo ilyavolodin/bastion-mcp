@@ -17,8 +17,6 @@ import type {
   TEAM_ROLES,
 } from '@bastion-mcp/core/constants';
 
-export type { OrgSettings } from '@bastion-mcp/core/org-settings';
-
 export type Page<T> = { items: T[]; nextCursor: string | null };
 
 export type OrgRole = (typeof ORG_ROLES)[number];
@@ -55,24 +53,7 @@ export type Me = {
   };
 };
 
-export type Notification = {
-  id: string;
-  kind: 'install_request' | 'drift' | 'setup' | 'approval' | 'info';
-  title: string;
-  body: string;
-  href: string | null;
-  createdAt: string;
-  readAt: string | null;
-};
 
-export type Quota = {
-  id: string;
-  name: string;
-  used: number;
-  limit: number;
-  /** `left`: the bar shows what is left of a budget (quota); `inUse`: it shows concurrency. */
-  mode: 'left' | 'inUse';
-};
 
 export type RuntimeKind = 'remote' | 'npm' | 'python' | 'oci';
 export type AuthMode = 'oauth' | 'userSecret' | 'teamSecret' | 'none';
@@ -186,11 +167,13 @@ export type EgressHost = {
   lastSeenAt: string | null;
 };
 
-export type EgressRequest = {
-  id: string;
+/** One recent egress decision of an installation (8.8, `GET /installations/{id}/egress`). */
+export type EgressEntry = {
+  ts: string;
   host: string;
-  status: 'open' | 'approved' | 'rejected';
-  reason: string;
+  port: number;
+  decision: 'allowed' | 'denied';
+  bytesOut?: number;
 };
 
 export type Endpoint = {
@@ -363,104 +346,6 @@ export type DriftReview = {
   canDecide: boolean;
 };
 
-// --- Catalog (11) -------------------------------------------------------------------------------
-export type Visibility = { org: boolean; teamIds: string[]; userIds: string[] };
-export type CatalogEntry = {
-  id: string;
-  slug: string;
-  kind: CatalogKind;
-  displayName: string;
-  description: string;
-  letter: string;
-  color: string;
-  status: CatalogStatus;
-  risk: RiskLevel;
-  ownerTeamId: string | null;
-  ownerTeamName: string | null;
-  visibility: Visibility;
-  currentVersion: string | null;
-  draftVersionId: string | null;
-  versionCount: number;
-  autoUpgrade: boolean;
-  source: 'manual' | 'registry' | 'import';
-  executable: boolean;
-  updatedAt: string;
-};
-
-export type SourceSpec = {
-  runtime: RuntimeKind;
-  package: string;
-  version: string;
-  command: string;
-  args: string[];
-  url: string;
-  variables: { name: string; label: string; required: boolean; secret: boolean; default: string }[];
-  authMode: AuthMode;
-  oauthScopes: string[];
-  egressHosts: string[];
-  isolation: IsolationLevel;
-  guardProfileId: string | null;
-  limitsProfile: string;
-  onDrift: DriftPolicy;
-  userOverrides: 'none' | 'cosmetic' | 'full';
-  overrides: OverrideDocument;
-};
-
-export type CatalogVersionStatus = 'draft' | 'published' | 'broken';
-export type TestPhase = { name: SandboxPhase; durationMs: number };
-export type TestResult = {
-  status: 'running' | 'passed' | 'failed';
-  ranAs: string;
-  versionLabel: string;
-  phases: TestPhase[];
-  counts: { tools: number; prompts: number; resources: number; templates: number };
-  scan: { item: string; verdict: 'clean' | 'warn' | 'malicious'; message: string }[];
-  stderr: string[];
-};
-export type CatalogVersion = {
-  id: string;
-  entryId: string;
-  label: string;
-  status: CatalogVersionStatus;
-  spec: SourceSpec;
-  test: TestResult | null;
-  changelog: string;
-  createdAt: string;
-  executableApproval: 'none' | 'pending' | 'approved';
-};
-export type CatalogEntryDetail = CatalogEntry & { versions: CatalogVersion[] };
-export type CatalogDraftInput = {
-  displayName: string;
-  slug: string;
-  kind: CatalogKind;
-  description: string;
-  visibility: Visibility;
-  risk: RiskLevel;
-  autoUpgrade: boolean;
-  spec: SourceSpec;
-};
-
-export type TargetChip = { type: 'all' | 'team' | 'role' | 'idpGroup'; id: string; label: string };
-export type AutoInstallPolicy = {
-  id: string;
-  entryId: string;
-  entryName: string;
-  targets: TargetChip[];
-  mode: 'required' | 'default';
-  existingUsers: 'applyNow' | 'newOnly';
-  scope: 'user' | 'team';
-};
-export type AutoInstallInput = Omit<AutoInstallPolicy, 'id' | 'entryName'>;
-export type AutoInstallPreview = {
-  people: number;
-  teams: number;
-  mustConnect: number;
-  sample: { id: string; name: string }[];
-};
-
-export type FileNode = { path: string; classification: 'plain' | 'executable'; size: number };
-export type SkillFile = { path: string; content: string; classification: 'plain' | 'executable' };
-
 // --- Registry (11.6) ----------------------------------------------------------------------------
 export type RegistryServer = {
   sourceId: string;
@@ -503,91 +388,6 @@ export type Team = {
   managers: string[];
   members: { userId: string; name: string; role: TeamRole }[];
 };
-export type RoleMappingRule = {
-  id: string;
-  idpGroup: string;
-  match: 'equals' | 'regex';
-  target: 'role' | 'team';
-  targetValue: string;
-};
-export type RoleMappingInput = Omit<RoleMappingRule, 'id'>;
-export type ServiceAccount = {
-  id: string;
-  name: string;
-  teamId: string;
-  teamName: string;
-  credentials: number;
-  createdAt: string;
-};
-export type OAuthClient = {
-  id: string;
-  name: string;
-  clientId: string;
-  status: 'pending' | 'approved' | 'blocked';
-  registration: 'cimd' | 'dcr' | 'preregistered';
-  lastUsedAt: string | null;
-};
-export type RuleChip = { type: string; label: string };
-export type PolicyRule = {
-  id: string;
-  effect: PolicyEffect;
-  who: RuleChip[];
-  what: RuleChip[];
-  when: string[];
-  affected: { people: number; tools: number };
-  orgLevel: boolean;
-  canEdit: boolean;
-};
-export type PolicyRuleInput = Pick<PolicyRule, 'effect' | 'who' | 'what' | 'when'>;
-export type CustomPolicy = { id: string; name: string; cedar: string; enabled: boolean };
-export type PolicyValidation = { valid: boolean; errors: { line: number; message: string }[] };
-export type SimulationInput = { userId: string; action: string; tool: string };
-export type SimulationResult = {
-  decision: 'permit' | 'deny';
-  summary: string;
-  matches: { id: string; effect: PolicyEffect; label: string; deciding: boolean }[];
-};
-
-// --- Settings (19.2) ----------------------------------------------------------------------------
-export type IdpConnection = {
-  id: string;
-  name: string;
-  issuer: string;
-  clientId: string;
-  scopes: string[];
-  domains: string[];
-  status: 'ok' | 'error' | 'untested';
-  lastTestAt: string | null;
-};
-export type IdpTestResult = { ok: boolean; steps: { name: string; ok: boolean; detail: string }[] };
-export type ModelGuardEntry = { enabled: boolean; endpoint: string; model: string };
-export type ModelGuardConfig = {
-  jev: ModelGuardEntry;
-  llmJudge: ModelGuardEntry;
-  classifier: ModelGuardEntry;
-};
-export type LimitRule = {
-  id: string;
-  name: string;
-  kind: 'rate' | 'quota' | 'concurrency';
-  scope: string;
-  limit: number;
-  window: string;
-};
-export type SystemStatus = {
-  replicas: {
-    id: string;
-    role: 'worker' | 'ui';
-    version: string;
-    uptimeSec: number;
-    rollingOut: boolean;
-  }[];
-  queues: { name: string; depth: number; capacity: number }[];
-  checks: { name: string; status: 'ok' | 'warn' | 'error'; detail: string }[];
-  registrySync: { sourceId: string; name: string; runs: { at: string; ok: boolean }[] }[];
-  kms: { provider: string; rotatedAt: string };
-};
-
 // --- Plugins (25) -------------------------------------------------------------------------------
 export type PluginClientId = 'claude-code' | 'codex' | 'claude-desktop' | 'chatgpt';
 export type PluginClientStatus = {
@@ -637,22 +437,3 @@ export type RolloutConfig = {
   kind: 'snippet' | 'checklist';
   content: string;
 };
-export type ExecutableApproval = {
-  entryId: string;
-  versionId: string;
-  name: string;
-  letter: string;
-  color: string;
-  author: string;
-  summary: string;
-  diff: string[];
-};
-
-export type ServerEvent =
-  | { type: 'notification'; data: Notification }
-  | { type: 'installation.status'; data: { id: string; status: InstallationStatus } }
-  | {
-      type: 'test.progress';
-      data: { entryId: string; versionId: string; status: TestResult['status'] };
-    }
-  | { type: 'drift.review'; data: { id: string } };

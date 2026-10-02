@@ -284,8 +284,8 @@ loopback, link-local (including `169.254.169.254`), RFC 1918, CGNAT and IPv6 ULA
 allows them (8.8). Package mirrors (`BASTION_NPM_REGISTRY`, `BASTION_PYPI_INDEX_URL`) are reachable during install only.
 
 Warm-pool and claim details to know when operating: the driver names pools `bastion-runtime-<size>` and
-`bastion-runtime-<size>-pvc`; claims are `bst-<12 hex>` (ephemeral, 24 h shutdown time refreshed hourly) and
-`bsp-<12 hex>` (persistent workspaces, suspended on idle). The ui scheduler garbage-collects claims whose instance is
+`bastion-runtime-<size>-pvc`; claims are `bst-<12 hex of the id's random tail>` (ephemeral, 24 h shutdown time refreshed hourly) and
+`bsp-<12 hex of the id's random tail>` (persistent workspaces, suspended on idle). The ui scheduler garbage-collects claims whose instance is
 not in Postgres every 5 minutes. Several of these behaviors are still being confirmed on a live cluster
 (`docs/spikes/m3-agent-sandbox.md`).
 

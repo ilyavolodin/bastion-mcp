@@ -33,6 +33,7 @@ import {
   USER_STATUSES,
 } from '@bastion-mcp/core';
 import { describe, expect, it } from 'vitest';
+import { CALL_ORIGINS } from '../src/repositories/telemetry';
 
 const root = join(import.meta.dirname, '..', 'prisma');
 const migrationsDir = join(root, 'migrations');
@@ -98,6 +99,7 @@ describe('16.2 schema conformance: CHECK constraints mirror @bastion-mcp/core co
     ['egress_events', 'decision', ['allow', 'deny']],
     ['call_log', 'outcome', CALL_OUTCOMES],
     ['call_log', 'principal_type', PRINCIPAL_TYPES],
+    ['call_log', 'origin', CALL_ORIGINS],
     ['registry_sources', 'trust', ['official', 'internal', 'community']],
     ['registry_servers', 'status', ['active', 'deprecated', 'deleted']],
   ];

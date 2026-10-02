@@ -66,10 +66,31 @@ const forbidden = Object.entries(allowed).map(([pkg, deps]) => {
   };
 });
 
+/** Apps may import packages (apps/server wires every package, so it has no allow-list); packages never import apps. */
+const appRules = [
+  {
+    name: "packages-do-not-import-apps",
+    comment: "workspace packages must not depend on deployables",
+    severity: "error",
+    from: { path: "^packages/" },
+    to: { path: "^apps/" },
+  },
+  {
+    name: "apps-do-not-import-each-other",
+    comment: "apps/runner, apps/credential and apps/web are independent deployables; apps/server (the composition root) may import everything",
+    severity: "error",
+    from: { path: "^apps/(?!server/)([^/]+)/(src|test)" },
+    to: { path: "^apps/([^/]+)/", pathNot: "^apps/$1/" },
+  },
+];
+
 module.exports = {
   forbidden: [
+    ...appRules,
     { name: 'no-circular', severity: 'error', from: {}, to: { circular: true } },
     ...forbidden,
   ],
-  options: { tsConfig: { fileName: 'tsconfig.base.json' }, doNotFollow: { path: 'node_modules' } },
+  options: {
+    exclude: { path: "(^|/)(dist|coverage|node_modules|generated|public)/" },
+    tsConfig: { fileName: 'tsconfig.base.json' }, doNotFollow: { path: 'node_modules' } },
 };

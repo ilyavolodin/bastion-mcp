@@ -1,7 +1,8 @@
-import type { RuntimeKind } from '@/api/types';
+/** Where an imported snippet runs: a remote URL, an npm package (`npx`) or a PyPI package (`uvx`). */
+export type ImportRuntime = 'remote' | 'npm' | 'python';
 
 export type ImportedSource = {
-  runtime: RuntimeKind;
+  runtime: ImportRuntime;
   package: string;
   version: string;
   command: string;
@@ -37,7 +38,7 @@ export function importSnippet(text: string): ImportedSource | { error: string } 
   if (url) return { runtime: 'remote', package: '', version: '', command: '', args: [], url };
   const command = typeof cfg.command === 'string' ? cfg.command : '';
   const args = Array.isArray(cfg.args) ? cfg.args.map(String) : [];
-  const runtime: RuntimeKind | null =
+  const runtime: ImportRuntime | null =
     command === 'npx' ? 'npm' : command === 'uvx' ? 'python' : null;
   if (!runtime) return { error: 'Only npx, uvx and remote URLs can be imported' };
   const spec = args.find((a) => !a.startsWith('-'));

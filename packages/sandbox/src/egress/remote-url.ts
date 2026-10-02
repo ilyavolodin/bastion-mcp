@@ -1,6 +1,5 @@
-import type { LookupFunction } from 'node:net';
 import net from 'node:net';
-import { BastionError, isAddressDenied } from '@bastion-mcp/core';
+import { BastionError, isAddressDenied, pinnedLookup } from '@bastion-mcp/core';
 import { canonicalHost } from './policy';
 import { type Resolver, systemResolver } from './proxy';
 
@@ -79,15 +78,4 @@ export const assertSafeRemoteUrl = async (
   return { url, address: first, family: net.isIPv6(first) ? 6 : 4, port };
 };
 
-/** `lookup` for undici/`net.connect` that always answers the pinned address, whatever name is asked. */
-export const pinnedLookup =
-  (pinned: Pick<SafeRemoteUrl, 'address' | 'family'>): LookupFunction =>
-  (_hostname, options, callback) => {
-    if (options.all) {
-      (callback as unknown as (e: null, a: { address: string; family: number }[]) => void)(null, [
-        { address: pinned.address, family: pinned.family },
-      ]);
-    } else {
-      callback(null, pinned.address, pinned.family);
-    }
-  };
+export { pinnedLookup };

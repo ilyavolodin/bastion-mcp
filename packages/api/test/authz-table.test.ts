@@ -1,4 +1,9 @@
-import { type Grant, ROUTE_ACTIONS, type RouteAction } from '@bastion-mcp/policy';
+import {
+  type Grant,
+  ROUTE_ACTIONS,
+  type RouteAction,
+  serviceAccountGrant,
+} from '@bastion-mcp/policy';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { expandRouteString } from '../src/framework/route-table';
 import type { AuthzCase } from './authz/types';
@@ -32,18 +37,6 @@ const resolve = (grant: Grant, scope: 'own' | 'other'): Expectation =>
  * another team, member (own and foreign resource), auditor, service account (a member of team A) and an
  * unauthenticated caller.
  */
-/**
- * Rules whose Cedar policies address human users: a service account (a member of one team) is denied even
- * where the member grant says allow (10.1; found by running the real engine).
- */
-const USER_ONLY_RULES = new Set([
-  'registry.install',
-  'registry.requests.decide',
-  'secrets.user',
-  'logs.user',
-  'installations.personal',
-]);
-
 export const rowsFor = (rule: RouteAction): Row[] => {
   const g = rule.grants;
   const rows: Row[] = [
@@ -71,7 +64,7 @@ export const rowsFor = (rule: RouteAction): Row[] => {
     {
       actor: 'service',
       scope: 'own',
-      expect: USER_ONLY_RULES.has(rule.id) ? 'deny' : resolve(g.member, 'own'),
+      expect: resolve(serviceAccountGrant(rule), 'own'),
     },
     { actor: 'anonymous', scope: 'own', expect: 'unauthenticated' },
   ];

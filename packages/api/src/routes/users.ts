@@ -3,6 +3,15 @@ import { listQuerySchema } from '../framework/conventions';
 import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
 import { idParams, itemPage, itemSchema } from '../schemas/common';
 import {
+  asRow,
+  pageOf,
+  roleMappingRuleRow,
+  teamDetailRow,
+  teamMemberRow,
+  teamRow,
+  userRow,
+} from '../schemas/rows';
+import {
   memberBodySchema,
   roleRuleCreateSchema,
   roleRulePatchSchema,
@@ -30,7 +39,7 @@ import { org, teamOf, versionOf } from './shared';
 
 const TAG = 'Users and teams';
 const memberParams = z.object({ id: z.string().min(1), userId: z.string().min(1) });
-const teamWithMembers = itemSchema.extend({ members: z.array(z.looseObject({ id: z.string() })) });
+const teamWithMembers = asRow(teamDetailRow);
 
 export const usersRoutes: RouteDefinition[] = [
   defineRoute({
@@ -38,7 +47,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/users',
     tag: TAG,
     summary: 'List users',
-    schema: { query: userListQuery, response: itemPage },
+    schema: { query: userListQuery, response: pageOf('UserPage', userRow) },
     authz: authz.on('org.view', org),
     handler: (ctx) =>
       users.list(ctx, ctx.query, {
@@ -51,7 +60,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/users',
     tag: TAG,
     summary: 'Create a user',
-    schema: { body: userCreateSchema, response: itemSchema },
+    schema: { body: userCreateSchema, response: asRow(userRow) },
     authz: authz.on('users.write', org),
     handler: (ctx) => createUser(ctx, ctx.body),
   }),
@@ -60,7 +69,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/users/{id}',
     tag: TAG,
     summary: 'Get a user',
-    schema: { params: idParams, response: itemSchema },
+    schema: { params: idParams, response: asRow(userRow) },
     authz: authz.on('org.view', org),
     handler: (ctx) => users.get(ctx, ctx.params.id),
   }),
@@ -69,7 +78,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/users/{id}',
     tag: TAG,
     summary: 'Update a user',
-    schema: { params: idParams, body: userPatchSchema, response: itemSchema },
+    schema: { params: idParams, body: userPatchSchema, response: asRow(userRow) },
     authz: authz.on('users.write', org),
     version: versionOf('users'),
     handler: (ctx) => users.update(ctx, ctx.params.id, ctx.body),
@@ -79,7 +88,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/users/{id}/deactivate',
     tag: TAG,
     summary: 'Deactivate a user: revoke tokens and sessions, stop instances',
-    schema: { params: idParams, response: itemSchema },
+    schema: { params: idParams, response: asRow(userRow) },
     authz: authz.on('users.write', org),
     status: 200,
     handler: (ctx) => deactivateUser(ctx, ctx.params.id),
@@ -90,7 +99,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/teams',
     tag: TAG,
     summary: 'List teams',
-    schema: { query: listQuerySchema, response: itemPage },
+    schema: { query: listQuerySchema, response: pageOf('TeamPage', teamRow) },
     authz: authz.on('org.view', org),
     handler: (ctx) => teams.list(ctx, ctx.query),
   }),
@@ -99,7 +108,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/teams',
     tag: TAG,
     summary: 'Create a team',
-    schema: { body: teamCreateSchema, response: itemSchema },
+    schema: { body: teamCreateSchema, response: asRow(teamRow) },
     authz: authz.on('teams.write', org),
     handler: (ctx) => createTeam(ctx, ctx.body),
   }),
@@ -120,7 +129,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/teams/{id}',
     tag: TAG,
     summary: 'Update a team',
-    schema: { params: idParams, body: teamPatchSchema, response: itemSchema },
+    schema: { params: idParams, body: teamPatchSchema, response: asRow(teamRow) },
     authz: authz.on('teams.write', org),
     version: versionOf('teams'),
     handler: (ctx) => updateTeam(ctx, ctx.params.id, ctx.body),
@@ -144,7 +153,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/teams/{id}/members/{userId}',
     tag: TAG,
     summary: 'Add a member or change their team role',
-    schema: { params: memberParams, body: memberBodySchema, response: itemSchema },
+    schema: { params: memberParams, body: memberBodySchema, response: asRow(teamMemberRow) },
     authz: authz.on('teams.members', teamOf()),
     status: 200,
     version: async (input) =>
@@ -182,7 +191,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/role-mapping-rules',
     tag: TAG,
     summary: 'List role-mapping rules',
-    schema: { query: listQuerySchema, response: itemPage },
+    schema: { query: listQuerySchema, response: pageOf('RoleMappingRulePage', roleMappingRuleRow) },
     authz: authz.on('org.view', org),
     handler: (ctx) => roleMappingRules.list(ctx, ctx.query),
   }),
@@ -191,7 +200,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/role-mapping-rules',
     tag: TAG,
     summary: 'Create a role-mapping rule',
-    schema: { body: roleRuleCreateSchema, response: itemSchema },
+    schema: { body: roleRuleCreateSchema, response: asRow(roleMappingRuleRow) },
     authz: authz.on('users.write', org),
     handler: (ctx) => {
       assertGroupPattern(ctx.body.groupPattern);
@@ -203,7 +212,7 @@ export const usersRoutes: RouteDefinition[] = [
     url: '/role-mapping-rules/{id}',
     tag: TAG,
     summary: 'Update a role-mapping rule',
-    schema: { params: idParams, body: roleRulePatchSchema, response: itemSchema },
+    schema: { params: idParams, body: roleRulePatchSchema, response: asRow(roleMappingRuleRow) },
     authz: authz.on('users.write', org),
     version: versionOf('role_mapping_rules'),
     handler: (ctx) => {

@@ -136,7 +136,7 @@ export const seedInstallations = async (store: MemoryStore): Promise<void> => {
     status: 'open',
     newHash: 'sha-new',
     newDefinition: { name: 'search', description: 'changed' },
-    guardResults: {},
+    guardResults: [],
   });
   await store.seed('drift_reviews', {
     id: 'drift-2',
@@ -146,7 +146,7 @@ export const seedInstallations = async (store: MemoryStore): Promise<void> => {
     status: 'open',
     newHash: 'sha-new-2',
     newDefinition: { name: 'delete' },
-    guardResults: {},
+    guardResults: [],
   });
   await store.seed('auto_install_policies', {
     id: 'aip-team-a',

@@ -4,12 +4,27 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query';
-import { fetchAll, type Query } from '../client';
+import { type ApiPath, fetchAll, type LooseQuery, legacyFetchAll, type Query } from '../client';
+import type { QueryOf } from '../schema';
 
-/** Query options for a cursor-paginated list endpoint that the screen wants in full. */
-export const listQuery = <T>(key: QueryKey, path: string, query?: Query) => ({
+/**
+ * Query options for a cursor-paginated list endpoint that the screen wants in full. Items are typed by the
+ * operation (`Schemas['TeamPage']['items']`), the query by its generated parameters.
+ */
+export const pagedQuery = <P extends ApiPath<'get'>>(
+  key: QueryKey,
+  path: P,
+  query?: LooseQuery<QueryOf<'get', P>>,
+) => ({
   queryKey: [...key, query ?? {}] as QueryKey,
-  queryFn: ({ signal }: { signal: AbortSignal }) => fetchAll<T>(path, query ?? {}, 20, signal),
+  queryFn: ({ signal }: { signal: AbortSignal }) => fetchAll(path, query, 20, signal),
+});
+
+/** The pre-reconciliation list query (item type named by hand); see `legacyApi`. */
+export const listQuery = <T>(key: QueryKey, path: ApiPath<'get'>, query?: Query) => ({
+  queryKey: [...key, query ?? {}] as QueryKey,
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    legacyFetchAll<T>(path, query ?? {}, 20, signal),
 });
 
 /** A mutation that invalidates the given query-key prefixes once it succeeds. */
@@ -57,4 +72,9 @@ export const keys = {
   system: ['system'] as const,
   marketplaces: ['marketplaces'] as const,
   approvals: ['approvals'] as const,
+};
+
+export const useInvalidate = () => {
+  const qc = useQueryClient();
+  return (key: readonly unknown[]) => qc.invalidateQueries({ queryKey: key });
 };

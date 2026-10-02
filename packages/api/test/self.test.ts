@@ -29,6 +29,21 @@ describe('17.2 GET /me and PATCH /me', () => {
     expect(res.headers.etag).toBeDefined();
   });
 
+  it('17.2 returns org display data and the Cedar-derived capabilities the console needs', async () => {
+    api = await buildTestApi();
+    const admin = await api.call('admin', 'GET', '/me');
+    expect(admin.body).toMatchObject({
+      org: { name: expect.any(String), host: expect.any(String), toolWarnThreshold: 40 },
+      capabilities: { registry: true, publishOrgWide: true, personalInstalls: 'remoteOnly' },
+    });
+    expect(rec(rec(admin.body).org).traceUiUrl).toBeNull();
+    const auditor = await api.call('auditor', 'GET', '/me');
+    expect(rec(auditor.body).capabilities).toMatchObject({
+      registry: false,
+      publishOrgWide: false,
+    });
+  });
+
   it('17.2 returns a service account as itself', async () => {
     api = await buildTestApi();
     const res = await api.call('service', 'GET', '/me');

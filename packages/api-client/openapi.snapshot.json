@@ -153,6 +153,58 @@
                         "additionalProperties": false
                       }
                     },
+                    "org": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "host": {
+                          "type": "string"
+                        },
+                        "traceUiUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "toolWarnThreshold": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "host",
+                        "traceUiUrl",
+                        "toolWarnThreshold"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "capabilities": {
+                      "type": "object",
+                      "properties": {
+                        "registry": {
+                          "type": "boolean"
+                        },
+                        "publishOrgWide": {
+                          "type": "boolean"
+                        },
+                        "personalInstalls": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "remoteOnly",
+                            "all"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "registry",
+                        "publishOrgWide",
+                        "personalInstalls"
+                      ],
+                      "additionalProperties": false
+                    },
                     "updatedAt": {
                       "type": "string"
                     }
@@ -166,6 +218,8 @@
                     "displayName",
                     "status",
                     "teams",
+                    "org",
+                    "capabilities",
                     "updatedAt"
                   ],
                   "additionalProperties": false
@@ -319,6 +373,58 @@
                         "additionalProperties": false
                       }
                     },
+                    "org": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "host": {
+                          "type": "string"
+                        },
+                        "traceUiUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "toolWarnThreshold": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "host",
+                        "traceUiUrl",
+                        "toolWarnThreshold"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "capabilities": {
+                      "type": "object",
+                      "properties": {
+                        "registry": {
+                          "type": "boolean"
+                        },
+                        "publishOrgWide": {
+                          "type": "boolean"
+                        },
+                        "personalInstalls": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "remoteOnly",
+                            "all"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "registry",
+                        "publishOrgWide",
+                        "personalInstalls"
+                      ],
+                      "additionalProperties": false
+                    },
                     "updatedAt": {
                       "type": "string"
                     }
@@ -332,6 +438,8 @@
                     "displayName",
                     "status",
                     "teams",
+                    "org",
+                    "capabilities",
                     "updatedAt"
                   ],
                   "additionalProperties": false
@@ -9271,6 +9379,1811 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Edit a draft version in place (published versions are immutable)",
+        "tags": [
+          "Catalog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "serverSpec": {
+                    "anyOf": [
+                      {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "remote"
+                                ]
+                              },
+                              "transport": {
+                                "type": "string",
+                                "enum": [
+                                  "streamable-http",
+                                  "sse"
+                                ]
+                              },
+                              "url": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "variables": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "isRequired": {
+                                      "type": "boolean"
+                                    },
+                                    "isSecret": {
+                                      "type": "boolean"
+                                    },
+                                    "default": {
+                                      "type": "string"
+                                    },
+                                    "choices": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "name"
+                                  ]
+                                }
+                              },
+                              "headers": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "isRequired": {
+                                      "type": "boolean"
+                                    },
+                                    "isSecret": {
+                                      "type": "boolean"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "name"
+                                  ]
+                                }
+                              },
+                              "auth": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "none"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "mode"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "orgSecret"
+                                        ]
+                                      },
+                                      "inject": {
+                                        "type": "array",
+                                        "items": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "header"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "env"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "arg"
+                                                  ]
+                                                },
+                                                "position": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "flag": {
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "value"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "inject"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "userSecret"
+                                        ]
+                                      },
+                                      "fields": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "label": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "description": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "label"
+                                          ]
+                                        }
+                                      },
+                                      "inject": {
+                                        "type": "array",
+                                        "items": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "header"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "env"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "arg"
+                                                  ]
+                                                },
+                                                "position": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "flag": {
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "value"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "fields",
+                                      "inject"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "oauth"
+                                        ]
+                                      },
+                                      "client": {
+                                        "oneOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "registration": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "preRegistered"
+                                                ]
+                                              },
+                                              "clientId": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "clientSecretRef": {
+                                                "type": "string"
+                                              },
+                                              "authMethod": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "client_secret_basic",
+                                                  "client_secret_post",
+                                                  "private_key_jwt",
+                                                  "none"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "registration",
+                                              "clientId",
+                                              "authMethod"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "registration": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "cimd"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "registration"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "registration": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "dcr"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "registration"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "registration": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "auto"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "registration"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "scopes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "inject": {
+                                        "type": "array",
+                                        "items": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "header"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "env"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "arg"
+                                                  ]
+                                                },
+                                                "position": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "flag": {
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "value"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "client"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "enterpriseManaged"
+                                        ]
+                                      },
+                                      "idpConnectionId": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "scopes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "inject": {
+                                        "type": "array",
+                                        "items": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "header"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "env"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "arg"
+                                                  ]
+                                                },
+                                                "position": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "flag": {
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "value"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "idpConnectionId"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tokenExchange"
+                                        ]
+                                      },
+                                      "idpConnectionId": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "flavor": {
+                                        "type": "string",
+                                        "enum": [
+                                          "rfc8693",
+                                          "entra-obo"
+                                        ]
+                                      },
+                                      "audience": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "scopes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "inject": {
+                                        "type": "array",
+                                        "items": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "header"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "env"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "arg"
+                                                  ]
+                                                },
+                                                "position": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "flag": {
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "value"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "idpConnectionId",
+                                      "flavor",
+                                      "audience"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "tls": {
+                                "type": "object",
+                                "properties": {
+                                  "caBundleSecret": {
+                                    "type": "string"
+                                  },
+                                  "clientCertSecret": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "timeouts": {
+                                "type": "object",
+                                "properties": {
+                                  "toolCallMs": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1800000
+                                  },
+                                  "listMs": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1800000
+                                  }
+                                }
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "transport",
+                              "url",
+                              "auth"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "package"
+                                ]
+                              },
+                              "runtime": {
+                                "type": "string",
+                                "enum": [
+                                  "npm",
+                                  "pypi"
+                                ]
+                              },
+                              "identifier": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "version": {
+                                "type": "string",
+                                "pattern": "^\\d+(?:\\.\\d+)+(?:[-+._]?[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$"
+                              },
+                              "bin": {
+                                "type": "string"
+                              },
+                              "packageArguments": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "positional",
+                                        "named"
+                                      ]
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "isRequired": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "value"
+                                  ]
+                                }
+                              },
+                              "environmentVariables": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "isRequired": {
+                                      "type": "boolean"
+                                    },
+                                    "isSecret": {
+                                      "type": "boolean"
+                                    },
+                                    "default": {
+                                      "type": "string"
+                                    },
+                                    "choices": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "name"
+                                  ]
+                                }
+                              },
+                              "lockfile": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "npm-shrinkwrap",
+                                      "uv-requirements"
+                                    ]
+                                  },
+                                  "content": {
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "content",
+                                  "sha256"
+                                ]
+                              },
+                              "protocol": {
+                                "default": "legacy",
+                                "type": "string",
+                                "enum": [
+                                  "legacy",
+                                  "modern",
+                                  "auto"
+                                ]
+                              },
+                              "size": {
+                                "default": "small",
+                                "type": "string",
+                                "enum": [
+                                  "small",
+                                  "medium",
+                                  "large"
+                                ]
+                              },
+                              "egress": {
+                                "default": {
+                                  "allow": []
+                                },
+                                "type": "object",
+                                "properties": {
+                                  "allow": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "allow"
+                                ]
+                              },
+                              "workspace": {
+                                "default": {
+                                  "persistent": false,
+                                  "sizeMiB": 512
+                                },
+                                "type": "object",
+                                "properties": {
+                                  "persistent": {
+                                    "type": "boolean"
+                                  },
+                                  "sizeMiB": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "persistent",
+                                  "sizeMiB"
+                                ]
+                              },
+                              "allowInstallScripts": {
+                                "default": false,
+                                "type": "boolean"
+                              },
+                              "idleTimeoutMinutes": {
+                                "default": 15,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1440
+                              },
+                              "instanceScope": {
+                                "default": "perUser",
+                                "type": "string",
+                                "enum": [
+                                  "perUser",
+                                  "shared"
+                                ]
+                              },
+                              "auth": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "none"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "mode"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "orgSecret"
+                                        ]
+                                      },
+                                      "inject": {
+                                        "type": "array",
+                                        "items": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "header"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "env"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "arg"
+                                                  ]
+                                                },
+                                                "position": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "flag": {
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "value"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "inject"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "userSecret"
+                                        ]
+                                      },
+                                      "fields": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "label": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "description": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "label"
+                                          ]
+                                        }
+                                      },
+                                      "inject": {
+                                        "type": "array",
+                                        "items": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "header"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "env"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "arg"
+                                                  ]
+                                                },
+                                                "position": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "flag": {
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "value"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "fields",
+                                      "inject"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "oauth"
+                                        ]
+                                      },
+                                      "client": {
+                                        "oneOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "registration": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "preRegistered"
+                                                ]
+                                              },
+                                              "clientId": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "clientSecretRef": {
+                                                "type": "string"
+                                              },
+                                              "authMethod": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "client_secret_basic",
+                                                  "client_secret_post",
+                                                  "private_key_jwt",
+                                                  "none"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "registration",
+                                              "clientId",
+                                              "authMethod"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "registration": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "cimd"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "registration"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "registration": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "dcr"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "registration"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "registration": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "auto"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "registration"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "scopes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "inject": {
+                                        "type": "array",
+                                        "items": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "header"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "env"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "arg"
+                                                  ]
+                                                },
+                                                "position": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "flag": {
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "value"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "client"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "enterpriseManaged"
+                                        ]
+                                      },
+                                      "idpConnectionId": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "scopes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "inject": {
+                                        "type": "array",
+                                        "items": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "header"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "env"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "arg"
+                                                  ]
+                                                },
+                                                "position": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "flag": {
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "value"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "idpConnectionId"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tokenExchange"
+                                        ]
+                                      },
+                                      "idpConnectionId": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "flavor": {
+                                        "type": "string",
+                                        "enum": [
+                                          "rfc8693",
+                                          "entra-obo"
+                                        ]
+                                      },
+                                      "audience": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "scopes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "inject": {
+                                        "type": "array",
+                                        "items": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "header"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "env"
+                                                  ]
+                                                },
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "name",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "to": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "arg"
+                                                  ]
+                                                },
+                                                "position": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "flag": {
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "to",
+                                                "value"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "idpConnectionId",
+                                      "flavor",
+                                      "audience"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "timeouts": {
+                                "type": "object",
+                                "properties": {
+                                  "toolCallMs": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1800000
+                                  },
+                                  "listMs": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1800000
+                                  }
+                                }
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "runtime",
+                              "identifier",
+                              "version",
+                              "auth"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "installForm": {
+                    "type": "object",
+                    "properties": {
+                      "variables": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "secrets": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      }
+                    }
+                  },
+                  "changelog": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 10000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "vid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current ETag",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required",
             "content": {
               "application/problem+json": {
                 "schema": {

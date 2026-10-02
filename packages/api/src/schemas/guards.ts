@@ -47,3 +47,32 @@ export const guardTestResultSchema = z.object({
 
 export const modelGuardsSchema = orgSettingsSchema.shape.modelGuards;
 export const modelGuardsView = modelGuardsSchema.extend({ updatedAt: z.string().nullable() });
+
+/** The stored config of the three model guards, as the guards read it (13.5); every field passes through. */
+const modelGuardConfig = z.looseObject({
+  endpoint: z.string().optional(),
+  url: z.string().optional(),
+  model: z.string().optional(),
+  apiKeySecret: z.string().optional(),
+  auth: z.looseObject({ header: z.string(), secret: z.string() }).optional(),
+  maliciousLabels: z.array(z.string()).optional(),
+  threshold: z.number().optional(),
+  thresholds: z
+    .looseObject({
+      block: z.number().optional(),
+      quarantine: z.number().optional(),
+      warn: z.number().optional(),
+    })
+    .optional(),
+  timeoutMs: z.number().optional(),
+});
+
+/** Response of `GET`/`PUT /settings/model-guards`: each guard is its config, or `null` when off. */
+export const modelGuardsResponse = z
+  .object({
+    jev: modelGuardConfig.nullable(),
+    llmJudge: modelGuardConfig.nullable(),
+    classifier: modelGuardConfig.nullable(),
+    updatedAt: z.string().nullable(),
+  })
+  .meta({ id: 'ModelGuards' });

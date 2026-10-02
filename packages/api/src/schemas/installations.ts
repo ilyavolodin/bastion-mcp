@@ -104,14 +104,40 @@ export const logsQuery = z.object({
   follow: z.stringbool().default(true),
 });
 
-export const definitionsSchema = z.object({
-  items: z.array(z.looseObject({})),
-  meta: z.array(z.looseObject({})),
-  degraded: z.array(z.looseObject({})),
-  needsAuth: z.array(z.looseObject({})),
-  warnings: z.array(z.looseObject({})),
-  instructions: z.string().optional(),
+/** One served definition (tool, prompt, resource or template) after overrides; the MCP shape passes through. */
+const definitionItem = z.looseObject({
+  name: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  uri: z.string().optional(),
+  uriTemplate: z.string().optional(),
+  inputSchema: z.record(z.string(), z.unknown()).optional(),
+  annotations: z.record(z.string(), z.unknown()).optional(),
 });
+
+/** What the override engine decided for one item (7.3, 12). */
+const definitionMeta = z.looseObject({
+  kind: z.enum(['tool', 'prompt', 'resource', 'resourceTemplate']),
+  installationId: z.string(),
+  upstreamKey: z.string(),
+  finalKey: z.string(),
+  overridden: z.boolean(),
+  renamed: z.boolean(),
+  collided: z.boolean(),
+  issues: z.array(z.looseObject({})),
+  invalidPatch: z.string().optional(),
+});
+
+export const definitionsSchema = z
+  .object({
+    items: z.array(definitionItem),
+    meta: z.array(definitionMeta),
+    degraded: z.array(z.object({ installation: z.string(), code: z.string() })),
+    needsAuth: z.array(z.object({ installation: z.string() })),
+    warnings: z.array(z.looseObject({ code: z.string() })),
+    instructions: z.string().optional(),
+  })
+  .meta({ id: 'Definitions' });
 
 // --- endpoints ---------------------------------------------------------------------------------------
 
@@ -183,12 +209,50 @@ export const previewBodySchema = z
   .refine((v) => v.installationId !== undefined || v.upstream !== undefined, {
     message: 'give installationId or upstream',
   });
-export const previewResultSchema = z.object({
-  final: z.looseObject({}),
-  diff: z.array(z.looseObject({})),
-  instructions: z.looseObject({}).optional(),
-  rejected: z.array(z.object({ path: z.string(), reason: z.string() })),
+const overrideKind = z.enum(['tool', 'prompt', 'resource', 'resourceTemplate']);
+const overrideIssue = z.object({
+  code: z.string(),
+  message: z.string(),
+  path: z.string().optional(),
 });
+
+/** What the override engine decided for one item, with the JSON-pointer changes against upstream (12.5). */
+const itemDiff = z.object({
+  kind: overrideKind,
+  key: z.string(),
+  status: z.enum(['unchanged', 'modified', 'hidden', 'invalid']),
+  error: z.string().optional(),
+  issues: z.array(overrideIssue),
+  changes: z.array(
+    z.object({
+      path: z.string(),
+      op: z.enum(['add', 'remove', 'replace']),
+      before: z.unknown().optional(),
+      after: z.unknown().optional(),
+    }),
+  ),
+});
+
+export const previewResultSchema = z
+  .object({
+    final: z.looseObject({
+      instructions: z.string().optional(),
+      tools: z.array(z.looseObject({ upstreamName: z.string(), tool: z.looseObject({}) })),
+      prompts: z.array(z.looseObject({ upstreamName: z.string(), prompt: z.looseObject({}) })),
+      resources: z.array(z.looseObject({ upstreamUri: z.string(), resource: z.looseObject({}) })),
+      resourceTemplates: z.array(
+        z.looseObject({ upstreamTemplate: z.string(), template: z.looseObject({}) }),
+      ),
+      hidden: z.array(z.object({ kind: overrideKind, key: z.string() })),
+      invalid: z.array(z.object({ kind: overrideKind, key: z.string(), error: z.string() })),
+    }),
+    diff: z.array(itemDiff),
+    instructions: z
+      .object({ before: z.string().optional(), after: z.string().optional() })
+      .optional(),
+    rejected: z.array(z.object({ path: z.string(), reason: z.string() })),
+  })
+  .meta({ id: 'OverridePreview' });
 
 // --- drift -------------------------------------------------------------------------------------------
 

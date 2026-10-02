@@ -34,9 +34,9 @@ driver is unit tested only through the injected `KubeApi` port.
    `shutdownPolicy: Delete` is expected to remove the Sandbox; the driver also deletes the bound Sandbox by name.
 4. **Persistent claims and `shutdownPolicy`.** Persistent claims omit `lifecycle`, so the default `Retain` applies;
    uninstall deletes claim, Sandbox and PVCs explicitly.
-5. **Claim name uniqueness.** `bst-<first 12 hex of instanceId>` is the specified name. For UUIDv7 the first 12 hex
-   digits are the millisecond timestamp, so two instances created in the same millisecond collide (the driver turns
-   the 409 into `SANDBOX_START_FAILED`). Consider hex digits from the random tail in a follow-up ADR.
+5. **Claim name uniqueness.** The specified `bst-<first 12 hex of instanceId>` collides for UUIDv7 ids created in the
+   same millisecond (the first 12 hex digits are the timestamp). Resolved: names use the LAST 12 hex digits (the
+   random tail); see ADR 0001, section 6.
 6. **Warm-pool claims and NetworkPolicy.** That the template NetworkPolicy applies to claimed pods (and to
    resumed pods of persistent claims) is taken from the design, not verified.
 7. **gVisor.** The runner needs `0.0.0.0:8080` reachable from worker pods under `runsc`; to be checked in the

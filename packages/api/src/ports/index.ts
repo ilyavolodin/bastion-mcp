@@ -48,6 +48,8 @@ export type * from './uow';
 export type ApiConfig = {
   /** `https://<host>`: the only trusted origin (resource `https://<host>/api`, 9.3). */
   baseUrl: string;
+  /** `BASTION_TRACE_UI_URL` template, shown to the console as a link target (19.1). */
+  traceUiUrl?: string;
   /** Maximum time one SSE stream stays open, in seconds (default 3600). */
   sseMaxSeconds?: number;
   /** Heartbeat comment interval of SSE streams in milliseconds (default 15000). */

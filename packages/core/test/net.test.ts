@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   type AddressClass,
+  addressFamily,
   classifyAddress,
   ipInCidr,
   isAddressDenied,
   matchEgressRule,
   normalizeIpLiteral,
   parseEgressRule,
+  pinnedLookup,
 } from '../src/net';
 
 describe('8.8 / 23.3 SSRF address classification', () => {
@@ -102,5 +104,28 @@ describe('8.8 egress allowlist', () => {
     expect(
       matchEgressRule('API.GitHub.com', 443, ['api.github.com'], { protocol: 'connect' }),
     ).toBe(true);
+  });
+});
+
+describe('pinnedLookup (8.8, 8.9)', () => {
+  it('8.9 answers the pinned address whatever name is asked, single and all forms', async () => {
+    const lookup = pinnedLookup({ address: '93.184.216.34', family: 4 });
+    const single = await new Promise((resolve) =>
+      lookup('anything', {}, (_e, a, f) => resolve([a, f])),
+    );
+    expect(single).toEqual(['93.184.216.34', 4]);
+    const all = await new Promise((resolve) =>
+      (lookup as (h: string, o: object, cb: (e: null, a: unknown) => void) => void)(
+        'x',
+        { all: true },
+        (_e, a) => resolve(a),
+      ),
+    );
+    expect(all).toEqual([{ address: '93.184.216.34', family: 4 }]);
+  });
+
+  it('8.9 addressFamily reports 4 or 6', () => {
+    expect(addressFamily('1.2.3.4')).toBe(4);
+    expect(addressFamily('2001:db8::1')).toBe(6);
   });
 });

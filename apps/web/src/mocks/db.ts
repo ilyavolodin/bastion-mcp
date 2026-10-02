@@ -1,38 +1,47 @@
-import { ORG_SETTING_DEFAULTS, type OrgSettings } from '@bastion-mcp/core/org-settings';
 import type {
-  AutoInstallPolicy,
   CallRecord,
-  CatalogEntry,
-  CatalogVersion,
-  CustomPolicy,
   DriftReview,
   EgressHost,
-  EgressRequest,
   Endpoint,
-  FileNode,
-  IdpConnection,
   Installation,
   InstallRequest,
-  LimitRule,
   Marketplace,
   MarketplaceDetail,
   Me,
-  ModelGuardConfig,
-  Notification,
-  OAuthClient,
   OverrideDocument,
-  PolicyRule,
   RegistryServer,
-  RoleMappingRule,
-  ServiceAccount,
-  SkillFile,
   Team,
   UiRole,
   User,
 } from '@/api/types';
+import { type AccessData, buildAccessData } from './domains/access';
+import { buildCatalogData, type CatalogData } from './domains/catalog';
+import { buildObservabilityData, type ObservabilityData } from './domains/observability';
+import { buildPluginsData, type PluginsData } from './domains/plugins';
+import { buildRegistryData, type RegistryData } from './domains/registry';
+import { buildServersData, type ServersData } from './domains/servers';
+import { buildSessionData, type SessionData } from './domains/session';
+import { buildSettingsData, type SettingsData } from './domains/settings';
 import * as fx from './fixtures';
 
+/**
+ * Rows in the shape of the real API (generated types), one slice per domain (`./domains/*`). Domains that moved to
+ * the typed mock read and write `db.data.<domain>`; the flat view-model fields below belong to the screens that
+ * have not moved yet and disappear with them.
+ */
+export type DomainData = {
+  access: AccessData;
+  settings: SettingsData;
+  catalog: CatalogData;
+  servers: ServersData;
+  observability: ObservabilityData;
+  registry: RegistryData;
+  plugins: PluginsData;
+  session: SessionData;
+};
+
 export type MockDb = {
+  data: DomainData;
   now: number;
   role: UiRole;
   me: Me;
@@ -41,28 +50,13 @@ export type MockDb = {
   installations: Installation[];
   endpoints: Endpoint[];
   calls: CallRecord[];
-  notifications: Notification[];
-  catalog: CatalogEntry[];
-  versions: Record<string, CatalogVersion[]>;
-  autoInstall: AutoInstallPolicy[];
   drift: DriftReview[];
   requests: InstallRequest[];
   registry: RegistryServer[];
-  roleMapping: RoleMappingRule[];
-  serviceAccounts: ServiceAccount[];
-  oauthClients: OAuthClient[];
-  policyRules: PolicyRule[];
-  customPolicies: CustomPolicy[];
-  idp: IdpConnection[];
-  modelGuards: ModelGuardConfig;
-  limits: LimitRule[];
-  settings: OrgSettings;
   marketplaces: Marketplace[];
   marketplaceDetails: Record<string, MarketplaceDetail>;
   overrides: Record<string, OverrideDocument>;
-  egress: Record<string, { hosts: EgressHost[]; requests: EgressRequest[] }>;
-  files: { nodes: FileNode[]; files: Record<string, SkillFile> };
-  testStarts: Record<string, number>;
+  egress: Record<string, { hosts: EgressHost[] }>;
   seq: number;
 };
 
@@ -98,15 +92,18 @@ export const buildMe = (role: UiRole): Me => {
 export function createDb(role: UiRole = 'admin', now: number = Date.now()): MockDb {
   const users = fx.buildUsers(now);
   const installations = fx.buildInstallations();
-  const catalog = fx.buildCatalog();
-  const settings: OrgSettings = {
-    ...ORG_SETTING_DEFAULTS,
-    org: { displayName: 'Acme Corp', timeZone: 'America/New_York' },
-    endpoints: { toolWarnThreshold: 40 },
-    logs: { ...ORG_SETTING_DEFAULTS.logs, capturePreviews: true },
-  };
   const marketplaces = fx.buildMarketplaces();
   return {
+    data: {
+      access: buildAccessData(now),
+      settings: buildSettingsData(now),
+      catalog: buildCatalogData(now),
+      servers: buildServersData(now),
+      observability: buildObservabilityData(now),
+      registry: buildRegistryData(now),
+      plugins: buildPluginsData(now),
+      session: buildSessionData(now),
+    },
     now,
     role,
     me: buildMe(role),
@@ -136,22 +133,9 @@ export function createDb(role: UiRole = 'admin', now: number = Date.now()): Mock
       },
     ],
     calls: fx.buildCalls(now, users, installations),
-    notifications: fx.buildNotifications(now),
-    catalog,
-    versions: Object.fromEntries(catalog.map((e) => [e.id, fx.buildVersions(e)])),
-    autoInstall: fx.buildAutoInstall(),
     drift: fx.buildDrift(now),
     requests: fx.buildRequests(now),
     registry: fx.buildRegistry(),
-    roleMapping: fx.buildRoleMapping(),
-    serviceAccounts: fx.buildServiceAccounts(now),
-    oauthClients: fx.buildOAuthClients(now),
-    policyRules: fx.buildPolicyRules(),
-    customPolicies: fx.buildCustomPolicies(),
-    idp: fx.buildIdp(now),
-    modelGuards: fx.buildModelGuards(),
-    limits: fx.buildLimits(),
-    settings,
     marketplaces,
     marketplaceDetails: Object.fromEntries(
       marketplaces.map((m) => [m.id, fx.buildMarketplaceDetail(m, now)]),
@@ -203,12 +187,9 @@ export function createDb(role: UiRole = 'admin', now: number = Date.now()): Mock
                   ]
                 : [],
             ),
-          requests: [],
         },
       ]),
     ),
-    files: fx.buildSkillFiles(),
-    testStarts: {},
     seq: 100,
   };
 }

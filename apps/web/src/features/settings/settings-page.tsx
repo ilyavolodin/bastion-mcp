@@ -2,15 +2,10 @@ import { z } from 'zod';
 import { PageHeader } from '@/components/page-header';
 import { cn } from '@/lib/cn';
 import { useSearchState } from '@/lib/search';
-import {
-  IdpSection,
-  KmsSection,
-  LimitsSection,
-  ModelGuardsSection,
-  OrganizationSection,
-  RetentionSection,
-  SandboxesSection,
-} from './sections';
+import { ModelGuardsSection } from './guards-section';
+import { IdpSection } from './idp-section';
+import { LimitsSection } from './limits-section';
+import { KmsSection, OrganizationSection, RetentionSection, SandboxesSection } from './sections';
 import { SystemStatusSection } from './system-status';
 
 export const SECTIONS = [

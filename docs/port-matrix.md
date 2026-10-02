@@ -115,6 +115,7 @@ after commit). Tests are `packages/db/test/repositories/*.integration.test.ts` a
     `registry_servers.status`, and a partial unique index allowing one `guard_profiles.is_org_default`.
     `schema-conformance.test.ts` covers them.
 19. Policy tool rules carry no owner team in `ToolRuleRow`; `policy_rules.owner_team_id` is stored but not exported.
+19b. (migration `0003_server_runtime`) `call_log.origin` (`direct` | `plugin`, CHECK constrained) tags rows of `/mcp/c/{catalogSlug}` calls (7.1, 25.8). `CallLogRow` of `db` accepts an optional `origin`; the telemetry package's row schema does not carry it, so `apps/server` sets it when the call arrived through a catalog route. List and detail views return it.
 
 ## Conventions the API layer relies on
 

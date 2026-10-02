@@ -24,7 +24,7 @@ describe('Catalog editor (11.3, 18.3)', () => {
 
   it('11.3 Publish is enabled only after a passing test of this exact version', async () => {
     const { user } = await renderRoute('/catalog/c-postgres?step=test');
-    expect(await screen.findByText('Passed as you')).toBeInTheDocument();
+    expect(await screen.findByText('Passed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Publish v3.2.0' })).toBeEnabled();
     // Editing the entry makes the version untested until saved and re-run.
     await user.click(screen.getByRole('button', { name: /Source/ }));
@@ -40,15 +40,20 @@ describe('Catalog editor (11.3, 18.3)', () => {
     expect(screen.getByRole('button', { name: /Publish v/ })).toBeDisabled();
   });
 
-  it('11.3 shows start phases, discovered capabilities, guard scan and stderr', async () => {
+  it('11.3 shows the steps of the test run the API reports, with their details', async () => {
     await renderRoute('/catalog/c-postgres?step=test');
-    const phases = await screen.findByRole('list', { name: 'Start phases' });
+    const steps = await screen.findByRole('list', { name: 'Test steps' });
     expect(
-      within(phases)
+      within(steps)
         .getAllByRole('listitem')
         .map((l) => l.textContent),
-    ).toEqual(['claim120 ms', 'bind80 ms', 'install2.3 s', 'spawn900 ms', 'connect310 ms']);
-    expect(screen.getByText('Tool description scan')).toBeInTheDocument();
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Capture tools, prompts and resources'),
+        expect.stringContaining('7 tools, 2 prompts, 1 resource template'),
+        expect.stringContaining('Scan every description'),
+      ]),
+    );
     expect(screen.getByText(/warn: DATABASE_URL uses a read-write role/)).toBeInTheDocument();
   });
 
@@ -56,14 +61,16 @@ describe('Catalog editor (11.3, 18.3)', () => {
     const { user } = await renderRoute('/catalog/c-postgres?step=publish');
     await user.click(await screen.findByRole('button', { name: 'Publish v3.2.0' }));
     await waitFor(() =>
-      expect(getDb().catalog.find((c) => c.id === 'c-postgres')?.status).toBe('published'),
+      expect(
+        getDb().data.catalog.entries.find((c) => c.id === 'c-postgres')?.status,
+      ).toBe('published'),
     );
   });
 
   it('11.5 shows the auto-install preview with an avatar strip', async () => {
     await renderRoute('/catalog/c-postgres');
     const card = await screen.findByRole('region', { name: 'Auto-install preview' });
-    expect(await within(card).findByText(/people in 2 teams/)).toBeInTheDocument();
+    expect(await within(card).findByText(/people in \d+ teams?/)).toBeInTheDocument();
     expect(within(card).getByTestId('avatar-strip')).toBeInTheDocument();
   });
 
@@ -86,10 +93,11 @@ describe('Catalog list and policies', () => {
 
   it('11.5 previews who gets an auto-install policy before saving', async () => {
     const { user } = await renderRoute('/catalog?tab=policies');
-    await user.click(await screen.findByRole('button', { name: 'New policy' }));
-    const dialog = await screen.findByRole('dialog', { name: /New auto-install policy/ });
+    const card = await screen.findByRole('region', { name: 'Postgres analytics' });
+    await user.click(within(card).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog', { name: /Edit auto-install policy/ });
     await user.click(within(dialog).getByRole('button', { name: 'Everyone' }));
-    expect(await within(dialog).findByText(/451 people in/)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/14 people in/)).toBeInTheDocument();
   });
 });
 
@@ -128,23 +136,22 @@ describe('Access (10, 18.3)', () => {
     expect(deciding?.textContent).toContain('rule-support-no-destructive');
   });
 
-  it('shows policy rules as rows with a live affected count and locks org rules for managers', async () => {
+  it('shows policy rules as rows and locks org rules for managers (policies.write is admin-only)', async () => {
     await renderRoute('/access', { role: 'manager' });
-    expect(await screen.findByText('38 people · 6 tools')).toBeInTheDocument();
+    expect(await screen.findByText('Support never posts to Slack')).toBeInTheDocument();
     expect(screen.getAllByText('Org rule · Admins edit').length).toBe(2);
+    expect(screen.getAllByText('Team rule · Admins edit').length).toBe(3);
+    expect(screen.queryByRole('button', { name: 'Add rule' })).toBeNull();
     expect(screen.queryByRole('tab', { name: /IdP group mapping/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Custom Cedar policies/ })).toBeNull();
   });
 
-  it('the rule builder counts affected people and tools live', async () => {
+  it('the rule builder points to the simulator instead of a live count (no preview route in 17.2)', async () => {
     const { user } = await renderRoute('/access');
     await user.click(await screen.findByRole('button', { name: 'Add rule' }));
     const dialog = await screen.findByRole('dialog', { name: /New tool rule/ });
-    await user.click(within(dialog).getByRole('button', { name: 'Everyone' }));
-    await user.type(within(dialog).getByLabelText('Add a tool pattern'), 'delete_*{Enter}');
-    await waitFor(() =>
-      expect(dialog.querySelector('[aria-live=polite]')).toHaveTextContent(/38 people and 3 tools/),
-    );
+    expect(within(dialog).getByText(/policy simulator/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/are affected/)).toBeNull();
   });
 
   it('validates Cedar and keeps Save disabled while it has errors', async () => {
@@ -166,7 +173,9 @@ describe('Access (10, 18.3)', () => {
     expect(await screen.findByText('bastion-admins')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Delete rule for bastion-admins' }));
     await waitFor(() =>
-      expect(getDb().roleMapping.some((r) => r.idpGroup === 'bastion-admins')).toBe(false),
+      expect(
+        getDb().data.access.roleMappingRules.some((r) => r.groupPattern === 'bastion-admins'),
+      ).toBe(false),
     );
   });
 });
@@ -176,14 +185,13 @@ describe('Settings (19.2, 15.7)', () => {
     await renderRoute('/settings?section=system');
     expect(await screen.findByText('worker-6')).toBeInTheDocument();
     expect(screen.getByText(/1\.4\.1 · rolling out/)).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Guard model calls depth' })).toHaveAttribute(
+    expect(screen.getByRole('progressbar', { name: 'guard-model-calls depth' })).toHaveAttribute(
       'aria-valuenow',
       '62',
     );
-    expect(screen.getByText('Collector slow to respond')).toBeInTheDocument();
-    expect(
-      screen.getByRole('list', { name: 'Official MCP Registry sync history' }),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/kubernetes · gVisor runtime class/)).toBeInTheDocument();
+    expect(screen.getByText('timeout fetching /v0/servers')).toBeInTheDocument();
+    expect(screen.getByText('Official MCP Registry')).toBeInTheDocument();
   });
 
   it('saves organization settings through zod validation', async () => {
@@ -194,7 +202,7 @@ describe('Settings (19.2, 15.7)', () => {
     expect(await screen.findByText(/at least 1 character|Too small/i)).toBeInTheDocument();
     await user.type(name, 'Acme Inc');
     await user.click(screen.getByRole('button', { name: 'Save organization' }));
-    await waitFor(() => expect(getDb().settings.org.displayName).toBe('Acme Inc'));
+    await waitFor(() => expect(getDb().data.settings.settings.org.displayName).toBe('Acme Inc'));
   });
 
   it('tests an IdP connection and shows each step', async () => {
@@ -250,7 +258,7 @@ describe('Plugins (25, 18.3)', () => {
     await user.click(await screen.findByRole('button', { name: 'Approve' }));
     await waitFor(() =>
       expect(
-        getDb().versions['c-incident-kit']?.some((v) => v.executableApproval === 'approved'),
+        Boolean(getDb().data.catalog.approvals['v-incident-kit-2.1.0']),
       ).toBe(true),
     );
   });

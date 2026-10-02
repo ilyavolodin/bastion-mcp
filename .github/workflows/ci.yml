@@ -33,3 +33,8 @@ jobs:
         run: pnpm test:scripts
       - name: MUST coverage (23.5)
         run: pnpm must-coverage
+      - name: Load harness tests (standalone deps)
+        working-directory: packages/testkit/load
+        run: pnpm install --ignore-workspace --frozen-lockfile
+      - name: Load harness tests
+        run: pnpm exec vitest run --root packages/testkit/load

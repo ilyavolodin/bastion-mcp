@@ -10,6 +10,20 @@ const base = {
 };
 
 describe('19.1 configuration loader', () => {
+  it('19.1 reads worker id, version and environment (defaults: unset, unset, production)', () => {
+    const d = loadConfig(base);
+    expect(d.workerId).toBeUndefined();
+    expect(d.version).toBeUndefined();
+    expect(d.environment).toBe('production');
+    const c = loadConfig({
+      ...base,
+      BASTION_WORKER_ID: 'w-1',
+      BASTION_VERSION: '1.4.0',
+      BASTION_ENVIRONMENT: 'staging',
+    });
+    expect([c.workerId, c.version, c.environment]).toEqual(['w-1', '1.4.0', 'staging']);
+  });
+
   it('applies documented defaults', () => {
     const c = loadConfig(base);
     expect(c.role).toBe('all');

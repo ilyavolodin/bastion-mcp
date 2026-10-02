@@ -44,12 +44,22 @@ export const releaseParams = z.object({
   n: z.coerce.number().int().min(1),
 });
 
-export const releaseSchema = z.looseObject({
-  seq: z.number().int(),
-  gitCommit: z.string(),
-  releaseTime: z.string(),
-  promoted: z.boolean(),
-});
+export const releaseSchema = z
+  .looseObject({
+    seq: z.number().int(),
+    gitCommit: z.string(),
+    releaseTime: z.string(),
+    promoted: z.boolean(),
+    /** The plugins the release ships, with the version and policy each had when it was cut. */
+    items: z.array(
+      z.object({
+        name: z.string(),
+        version: z.string(),
+        policy: z.enum(MARKETPLACE_ITEM_POLICIES),
+      }),
+    ),
+  })
+  .meta({ id: 'MarketplaceRelease' });
 
 export const mirrorBodySchema = z.object({
   provider: z.enum(['github', 'gitlab']),
@@ -58,18 +68,71 @@ export const mirrorBodySchema = z.object({
   credentialSecretId: z.string().min(1),
 });
 
+export const mirrorTargetSchema = z
+  .object({
+    provider: z.enum(['github', 'gitlab']),
+    repo: z.string(),
+    branch: z.string(),
+    credentialSecretId: z.string(),
+  })
+  .meta({ id: 'MirrorTarget' });
+
+/** Where the push to the mirror stands (25.6). */
+export const mirrorStateSchema = z
+  .looseObject({
+    status: z.enum(['idle', 'ok', 'retrying', 'diverged']),
+    lastPushedSeq: z.number().int().nullable(),
+    attempts: z.number().int(),
+    nextAttemptAt: z.string().nullable(),
+    lastError: z.string().nullable(),
+    updatedAt: z.string(),
+  })
+  .meta({ id: 'MirrorState' });
+
 export const mirrorViewSchema = z.object({
-  mirror: z
-    .object({
-      provider: z.enum(['github', 'gitlab']),
-      repo: z.string(),
-      branch: z.string(),
-      credentialSecretId: z.string(),
-    })
-    .nullable(),
-  status: z.looseObject({ status: z.string() }).nullable(),
+  mirror: mirrorTargetSchema.nullable(),
+  status: mirrorStateSchema.nullable(),
   updatedAt: z.string(),
 });
+
+/**
+ * Copy-ready client configuration (25.7). Which fields are present depends on `client`: `claude-code` has
+ * `managedSettings`, `strictKnownMarketplacesEntry`, `gitCredentialLine` and `installCommands`; `claude-desktop-3p`
+ * `allowedPluginMarketplaces`; `codex` `commands`, `gitCredentialLine` and `requirementsToml`; `claude-ai` and
+ * `chatgpt` `steps` and `plugins`. (A flat object keeps the response additive for older clients.)
+ */
+export const rolloutConfigSchema = z
+  .object({
+    client: z.enum(ROLLOUT_CLIENTS),
+    managedSettings: z
+      .object({
+        extraKnownMarketplaces: z.record(
+          z.string(),
+          z.object({
+            source: z.object({ source: z.literal('git'), url: z.string() }),
+            autoUpdate: z.literal(true),
+          }),
+        ),
+        enabledPlugins: z.record(z.string(), z.literal(true)),
+      })
+      .optional(),
+    strictKnownMarketplacesEntry: z
+      .object({ source: z.literal('git'), url: z.string() })
+      .optional(),
+    gitCredentialLine: z.string().optional(),
+    installCommands: z.array(z.string()).optional(),
+    allowedPluginMarketplaces: z
+      .object({
+        gitEntry: z.record(z.string(), z.string()),
+        urlEntry: z.record(z.string(), z.string()).optional(),
+      })
+      .optional(),
+    commands: z.array(z.string()).optional(),
+    requirementsToml: z.string().optional(),
+    steps: z.array(z.string()).optional(),
+    plugins: z.array(z.object({ name: z.string(), setTo: z.string() })).optional(),
+  })
+  .meta({ id: 'RolloutConfig' });
 
 export const rolloutQuery = z.object({ client: z.enum(ROLLOUT_CLIENTS) });
 export const usageQuery = z.object({ from: z.string().optional(), to: z.string().optional() });

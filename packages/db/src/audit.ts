@@ -1,6 +1,6 @@
 import { canonicalJson, newId, sha256 } from '@bastion-mcp/core';
 import type { DbExecutor } from './client';
-import type { Prisma } from './generated/client';
+import { Prisma } from './generated/client';
 
 /** Hash chain over `audit_events` (15.6): `hash = sha256(prev_hash || canonical_row)`. */
 export const GENESIS_HASH: Buffer = Buffer.alloc(32);
@@ -107,7 +107,7 @@ export const appendAuditEvent = async (
   const created = await tx.auditEvent.create({
     data: {
       ...fields,
-      diff: (fields.diff ?? undefined) as Prisma.InputJsonValue | undefined,
+      diff: (fields.diff ?? Prisma.DbNull) as Prisma.InputJsonValue,
       prevHash: stored ? new Uint8Array(stored) : null,
       hash: new Uint8Array(hash),
     },

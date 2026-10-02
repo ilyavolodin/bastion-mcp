@@ -132,7 +132,7 @@ shape on the way in and back out.
 
 ## 5. Sandboxes (8)
 
-A `SandboxClaim` (`bst-<12 hex>`) against the warm pool `bastion-runtime-<size>` yields a pod running `runner.mjs`; the
+A `SandboxClaim` (`bst-<12 hex of the id's random tail>`) against the warm pool `bastion-runtime-<size>` yields a pod running `runner.mjs`; the
 worker binds it with a per-claim token, starts the stdio server through the runner's WebSocket framing
 (`SandboxStdioTransport`), and keeps traffic flowing through one connection (a new owner replaces it with close code
 4001). All sandbox network access goes through the worker's egress proxy, which resolves names once and denies private,

@@ -3,6 +3,7 @@
  * `otel-register.ts` entry calls `startOtelFromEnv` so it can be loaded first with `node --import`.
  */
 
+import { hostname } from 'node:os';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto';
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
@@ -26,6 +27,9 @@ import {
   TraceIdRatioBasedSampler,
 } from '@opentelemetry/sdk-trace-base';
 import { z } from 'zod';
+import pkg from '../package.json' with { type: 'json' };
+
+export type OtelSignal = 'traces' | 'metrics' | 'logs';
 
 export type BastionServiceName = 'bastion-worker' | 'bastion-ui';
 
@@ -46,6 +50,8 @@ export interface OtelOptions {
   spanProcessors?: SpanProcessor[] | undefined;
   metricReaders?: IMetricReader[] | undefined;
   logRecordProcessors?: LogRecordProcessor[] | undefined;
+  /** Signals whose exporter is `none` (`OTEL_<SIGNAL>_EXPORTER=none`): nothing is exported for them. */
+  disabledSignals?: OtelSignal[] | undefined;
   /** Replaces the default instrumentation set (http, undici, fastify, pg, ioredis, pino). */
   instrumentations?: Instrumentation[] | undefined;
 }
@@ -81,20 +87,29 @@ export const defaultInstrumentations = (): Instrumentation[] => [
 
 export const bootstrapOtel = (options: OtelOptions): OtelHandle => {
   const sampler = buildSampler(options.sampleRatio);
-  const metricReaders: IMetricReader[] = options.metricReaders ?? [
-    new PeriodicExportingMetricReader({ exporter: new OTLPMetricExporter() }),
-  ];
+  const off = new Set(options.disabledSignals ?? []);
+  const metricReaders: IMetricReader[] = off.has('metrics')
+    ? []
+    : [
+        ...(options.metricReaders ?? [
+          new PeriodicExportingMetricReader({ exporter: new OTLPMetricExporter() }),
+        ]),
+      ];
   if (options.prometheusPort !== undefined) {
     metricReaders.push(new PrometheusExporter({ port: options.prometheusPort }));
   }
   const sdk = new NodeSDK({
     resource: resourceFromAttributes(buildResourceAttributes(options)),
     sampler,
-    spanProcessors: options.spanProcessors ?? [new BatchSpanProcessor(new OTLPTraceExporter())],
+    spanProcessors: off.has('traces')
+      ? []
+      : (options.spanProcessors ?? [new BatchSpanProcessor(new OTLPTraceExporter())]),
     metricReaders,
-    logRecordProcessors: options.logRecordProcessors ?? [
-      new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() }),
-    ],
+    logRecordProcessors: off.has('logs')
+      ? []
+      : (options.logRecordProcessors ?? [
+          new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() }),
+        ]),
     instrumentations: options.instrumentations ?? defaultInstrumentations(),
   });
   sdk.start();
@@ -119,9 +134,12 @@ const envSchema = z.object({
   BASTION_TRACE_SAMPLE_RATIO: z.coerce.number().min(0).max(1).default(1),
   BASTION_PROMETHEUS_PORT: z.coerce.number().int().min(1).max(65535).optional(),
   BASTION_WORKER_ID: z.string().min(1).optional(),
-  BASTION_VERSION: z.string().min(1).default('0.0.0'),
+  BASTION_VERSION: z.string().min(1).default(pkg.version),
   BASTION_ENVIRONMENT: z.string().min(1).default('production'),
   OTEL_SDK_DISABLED: boolish,
+  OTEL_TRACES_EXPORTER: z.string().optional(),
+  OTEL_METRICS_EXPORTER: z.string().optional(),
+  OTEL_LOGS_EXPORTER: z.string().optional(),
 });
 
 export type OtelEnv = Record<string, string | undefined>;
@@ -136,6 +154,16 @@ export const otelOptionsFromEnv = (
     BASTION_PROMETHEUS_PORT: env.BASTION_PROMETHEUS_PORT || undefined,
   });
   if (e.OTEL_SDK_DISABLED) return null;
+  const isNone = (v: string | undefined): boolean =>
+    v
+      ?.split(',')
+      .map((x) => x.trim().toLowerCase())
+      .includes('none') === true;
+  const disabledSignals: OtelSignal[] = [
+    ...(isNone(e.OTEL_TRACES_EXPORTER) ? (['traces'] as const) : []),
+    ...(isNone(e.OTEL_METRICS_EXPORTER) ? (['metrics'] as const) : []),
+    ...(isNone(e.OTEL_LOGS_EXPORTER) ? (['logs'] as const) : []),
+  ];
   return {
     serviceName: e.BASTION_ROLE === 'ui' ? 'bastion-ui' : 'bastion-worker',
     serviceVersion: e.BASTION_VERSION,
@@ -143,12 +171,13 @@ export const otelOptionsFromEnv = (
     environment: e.BASTION_ENVIRONMENT,
     sampleRatio: e.BASTION_TRACE_SAMPLE_RATIO,
     prometheusPort: e.BASTION_PROMETHEUS_PORT,
+    ...(disabledSignals.length > 0 ? { disabledSignals } : {}),
   };
 };
 
 export const startOtelFromEnv = (
   env: OtelEnv = process.env,
-  fallbackInstanceId = `${process.env.HOSTNAME ?? 'bastion'}-${process.pid}`,
+  fallbackInstanceId = `${hostname()}-${process.pid}`,
 ): OtelHandle | null => {
   const options = otelOptionsFromEnv(env, fallbackInstanceId);
   return options === null ? null : bootstrapOtel(options);

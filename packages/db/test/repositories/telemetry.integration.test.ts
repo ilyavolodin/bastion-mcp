@@ -107,6 +107,18 @@ describe.skipIf(!dbEnabled())('15.5 call log, rollups, stats, retention and egre
     await expect(repo.insertBatch([row({ outcome: 'weird' as never })])).rejects.toThrow();
   });
 
+  it('25.8 call_log.origin defaults to direct and records plugin traffic (migration 0003)', async () => {
+    const repo = createCallLogRepository(h.db.prisma);
+    const direct = row({ ts: at(310) });
+    const plugin = row({ ts: at(311), origin: 'plugin' });
+    await repo.insertBatch([direct, plugin]);
+    expect((await repo.get(direct.id))?.origin).toBe('direct');
+    expect((await repo.get(plugin.id))?.origin).toBe('plugin');
+    const listed = await repo.list({ from: at(309), to: at(312) });
+    expect(listed.items.map((i) => i.origin).sort()).toEqual(['direct', 'plugin']);
+    await expect(repo.insertBatch([row({ origin: 'x' as never })])).rejects.toThrow();
+  });
+
   it('15.5 lists calls by user, team, installation, item, outcome and time range with keyset cursors', async () => {
     const repo = createCallLogRepository(h.db.prisma);
     const users = createUserRepository(h.db.prisma);

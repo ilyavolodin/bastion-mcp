@@ -39,11 +39,17 @@ const SPEC: SandboxSpec = {
 };
 
 describe('8.4 claim builders', () => {
-  it('8.4 names claims bst-<instanceId first 12 hex> and bsp-<installationId first 12 hex>', () => {
-    expect(instanceClaimName(IID)).toBe('bst-0198a1b2c3d4');
-    expect(persistentClaimName(INSTALL)).toBe('bsp-0198ffff1111');
+  it('8.4 names claims bst-<last 12 hex of instanceId> and bsp-<last 12 hex of installationId>', () => {
+    expect(instanceClaimName(IID)).toBe('bst-0c1d2e3f4a5b');
+    expect(persistentClaimName(INSTALL)).toBe('bsp-0c1d2e3f4a5b');
     expect(isPersistentClaimName('bsp-x')).toBe(true);
     expect(() => instanceClaimName('zz')).toThrow(TypeError);
+  });
+  it('8.4 UUIDv7 ids from the same millisecond get different claim names', () => {
+    const a = '0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
+    const b = '0198a1b2-c3d4-7111-9222-aaaabbbbcccc';
+    expect(instanceClaimName(a)).not.toBe(instanceClaimName(b));
+    expect(persistentClaimName(a)).not.toBe(persistentClaimName(b));
   });
   it('8.4 user-hash label is SHA-256 of the user id, first 16 hex', () => {
     expect(userHash('user-1')).toMatch(/^[0-9a-f]{16}$/);
@@ -53,7 +59,7 @@ describe('8.4 claim builders', () => {
     const claim = buildClaim({ spec: SPEC, namespace: 'bastion-sandboxes', nowMs: NOW });
     expect(claim.apiVersion).toBe('extensions.agents.x-k8s.io/v1beta1');
     expect(claim.kind).toBe('SandboxClaim');
-    expect(claim.metadata.name).toBe('bst-0198a1b2c3d4');
+    expect(claim.metadata.name).toBe('bst-0c1d2e3f4a5b');
     expect(claim.metadata.labels).toEqual({
       [LABELS.instance]: IID,
       [LABELS.installation]: INSTALL,
@@ -71,7 +77,7 @@ describe('8.4 claim builders', () => {
       nowMs: NOW,
       storageClassName: 'fast',
     });
-    expect(claim.metadata.name).toBe('bsp-0198ffff1111');
+    expect(claim.metadata.name).toBe('bsp-0c1d2e3f4a5b');
     expect(claim.spec?.warmPoolRef).toEqual({ name: 'bastion-runtime-small-pvc' });
     expect(claim.spec?.lifecycle).toBeUndefined();
     const vct = claim.spec?.volumeClaimTemplates as {
@@ -269,12 +275,12 @@ describe('8.4 kubernetes driver', () => {
     const api = new FakeKube();
     const t = make(api);
     const handle = await t.driver.create(SPEC, signal());
-    expect(api.log[0]).toBe('create bst-0198a1b2c3d4');
+    expect(api.log[0]).toBe('create bst-0c1d2e3f4a5b');
     expect(t.addresses).toEqual(['10.0.0.7:8080']);
     expect(t.calls).toEqual(['bind:runner-token']);
     expect(handle.ref).toEqual({
       driver: 'kubernetes',
-      id: 'bst-0198a1b2c3d4',
+      id: 'bst-0c1d2e3f4a5b',
       address: '10.0.0.7:8080',
       runnerToken: 'runner-token',
     });
@@ -288,7 +294,7 @@ describe('8.4 kubernetes driver', () => {
     await expect(t.driver.create(SPEC, signal())).rejects.toMatchObject({
       code: 'SANDBOX_START_FAILED',
     });
-    expect(api.log).toContain('delete claim/bst-0198a1b2c3d4');
+    expect(api.log).toContain('delete claim/bst-0c1d2e3f4a5b');
   });
   it('8.4 an already existing ephemeral claim name is an error and is not deleted', async () => {
     const api = new FakeKube();
@@ -307,7 +313,7 @@ describe('8.4 kubernetes driver', () => {
     const api = new FakeKube();
     const t = make(api, 'bound');
     await expect(t.driver.create(SPEC, signal())).rejects.toThrow(/already bound/);
-    expect(api.log).toContain('delete claim/bst-0198a1b2c3d4');
+    expect(api.log).toContain('delete claim/bst-0c1d2e3f4a5b');
   });
   it('8.5 kata-only entries are blocked on a gvisor driver, allowed on a kata one', async () => {
     const api = new FakeKube();
@@ -325,14 +331,14 @@ describe('8.4 kubernetes driver', () => {
     const t = make(api);
     const persistent = { ...SPEC, workspace: { persistent: true, sizeMiB: 1024 } };
     const { ref } = await t.driver.create(persistent, signal());
-    expect(ref.id).toBe('bsp-0198ffff1111');
+    expect(ref.id).toBe('bsp-0c1d2e3f4a5b');
     await t.driver.suspend(ref);
     expect(api.log).toContain(
-      'patch sandbox/sbx-bsp-0198ffff1111 {"spec":{"operatingMode":"Suspended"}}',
+      'patch sandbox/sbx-bsp-0c1d2e3f4a5b {"spec":{"operatingMode":"Suspended"}}',
     );
     await t.driver.create(persistent, signal());
     expect(api.log).toContain(
-      'patch sandbox/sbx-bsp-0198ffff1111 {"spec":{"operatingMode":"Running"}}',
+      'patch sandbox/sbx-bsp-0c1d2e3f4a5b {"spec":{"operatingMode":"Running"}}',
     );
     expect(api.log.filter((l) => l.startsWith('create')).length).toBe(1);
     await expect(t.driver.suspend({ ...ref, id: 'bst-x' })).rejects.toThrow(/persistent/);
@@ -346,16 +352,16 @@ describe('8.4 kubernetes driver', () => {
     api.log.length = 0;
     await t.driver.destroy(ref);
     expect(api.log).toEqual([
-      'delete claim/bsp-0198ffff1111',
-      'delete sandbox/sbx-bsp-0198ffff1111',
+      'delete claim/bsp-0c1d2e3f4a5b',
+      'delete sandbox/sbx-bsp-0c1d2e3f4a5b',
       `deleteMatching ${LABELS.installation}=${INSTALL}`,
     ]);
     const eph = await t.driver.create(SPEC, signal());
     api.log.length = 0;
     await t.driver.destroy(eph.ref);
     expect(api.log).toEqual([
-      'delete claim/bst-0198a1b2c3d4',
-      'delete sandbox/sbx-bst-0198a1b2c3d4',
+      'delete claim/bst-0c1d2e3f4a5b',
+      'delete sandbox/sbx-bst-0c1d2e3f4a5b',
     ]);
   });
   it('21.2 attach re-uses the stored token against the claim address and fails when the claim is gone', async () => {
@@ -363,13 +369,13 @@ describe('8.4 kubernetes driver', () => {
     const t = make(api, 'running');
     const ref = {
       driver: 'kubernetes' as const,
-      id: 'bst-0198a1b2c3d4',
+      id: 'bst-0c1d2e3f4a5b',
       address: '10.0.0.1:8080',
       runnerToken: 'stored',
     };
     await expect(t.driver.attach(ref, signal())).rejects.toThrow(/no longer exists/);
-    api.objects.set('claim/bst-0198a1b2c3d4', {
-      metadata: { name: 'bst-0198a1b2c3d4' },
+    api.objects.set('claim/bst-0c1d2e3f4a5b', {
+      metadata: { name: 'bst-0c1d2e3f4a5b' },
       status: { sandbox: { podIPs: ['10.0.0.9'] } },
     });
     const handle = await t.driver.attach(ref, signal());

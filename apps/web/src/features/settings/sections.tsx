@@ -4,30 +4,10 @@ import * as React from 'react';
 import { type FieldPath, type FieldValues, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import {
-  useDeleteLimitRule,
-  useIdpConnections,
-  useLimitRules,
-  useModelGuards,
-  usePatchSettings,
-  useRotateKms,
-  useSaveIdp,
-  useSaveLimitRule,
-  useSaveModelGuards,
-  useSettings,
-  useSystemStatus,
-  useTestIdp,
-} from '@/api/hooks';
-import type {
-  IdpConnection,
-  IdpTestResult,
-  LimitRule,
-  ModelGuardConfig,
-  OrgSettings,
-} from '@/api/types';
-import { EmptyState } from '@/components/empty-state';
+import { usePatchSettings, useRotateKms, useSettings, useSystemStatus } from '@/api/hooks';
+import type { OrgSettings } from '@/api/views/settings';
 import { Field } from '@/components/form';
-import { Card, CardHeader, Tag } from '@/components/primitives';
+import { Card, CardHeader } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { StatusDot } from '@/components/status';
 import { Button } from '@/components/ui/button';
@@ -327,232 +307,6 @@ export function RetentionSection() {
   );
 }
 
-function IdpTest({ result }: { result: IdpTestResult }) {
-  return (
-    <ul
-      aria-label="Connection test"
-      className="m-0 flex list-none flex-col gap-1.5 rounded-md bg-sunken p-3 text-[13px]"
-    >
-      {result.steps.map((s) => (
-        <li key={s.name} className="flex items-center gap-2">
-          <StatusDot tone={s.ok ? 'ok' : 'bad'} label={s.ok ? 'Passed' : 'Failed'} hideLabel />
-          <span className="font-medium">{s.name}</span>
-          <span className="text-muted">{s.detail}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function IdpSection() {
-  const q = useIdpConnections();
-  const test = useTestIdp();
-  const save = useSaveIdp();
-  const [results, setResults] = React.useState<Record<string, IdpTestResult>>({});
-  const [editing, setEditing] = React.useState<IdpConnection | 'new' | null>(null);
-  const [draft, setDraft] = React.useState({
-    name: '',
-    issuer: '',
-    clientId: '',
-    clientSecret: '',
-    scopes: 'openid email profile',
-    domains: '',
-  });
-  React.useEffect(() => {
-    if (editing === 'new')
-      setDraft({
-        name: '',
-        issuer: '',
-        clientId: '',
-        clientSecret: '',
-        scopes: 'openid email profile',
-        domains: '',
-      });
-    else if (editing)
-      setDraft({
-        name: editing.name,
-        issuer: editing.issuer,
-        clientId: editing.clientId,
-        clientSecret: '',
-        scopes: editing.scopes.join(' '),
-        domains: editing.domains.join(', '),
-      });
-  }, [editing]);
-  return (
-    <Card aria-label="Identity providers" className="gap-3">
-      <CardHeader
-        title="Identity providers"
-        subtitle="OIDC connections for sign-in"
-        actions={
-          <Button size="sm" onClick={() => setEditing('new')}>
-            Add connection
-          </Button>
-        }
-      />
-      <QueryBoundary
-        query={q}
-        isEmpty={(d) => d.length === 0}
-        empty={
-          <EmptyState
-            title="No identity provider"
-            description="Add an OIDC connection so people can sign in with your IdP."
-            action={{ label: 'Add connection', onClick: () => setEditing('new') }}
-          />
-        }
-      >
-        {(items) => (
-          <ul className="m-0 list-none p-0">
-            {items.map((c) => (
-              <li
-                key={c.id}
-                className="flex flex-col gap-2 border-b border-line py-3 last:border-b-0"
-              >
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-label">{c.name}</div>
-                    <div className="truncate font-mono text-caption text-muted">{c.issuer}</div>
-                  </div>
-                  <StatusDot
-                    tone={c.status === 'ok' ? 'ok' : c.status === 'error' ? 'bad' : 'neutral'}
-                    label={
-                      c.status === 'ok'
-                        ? 'Working'
-                        : c.status === 'error'
-                          ? 'Failing'
-                          : 'Not tested'
-                    }
-                  />
-                  {c.lastTestAt ? (
-                    <span className="text-caption text-muted">
-                      tested {formatDate(c.lastTestAt)}
-                    </span>
-                  ) : null}
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    disabled={test.isPending}
-                    onClick={() =>
-                      test.mutate(c.id, {
-                        onSuccess: (r) => setResults((x) => ({ ...x, [c.id]: r })),
-                      })
-                    }
-                  >
-                    Test connection
-                  </Button>
-                  <Button variant="ghost" size="xs" onClick={() => setEditing(c)}>
-                    Edit
-                  </Button>
-                </div>
-                {results[c.id] ? <IdpTest result={results[c.id] as IdpTestResult} /> : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </QueryBoundary>
-      <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent
-          title={editing === 'new' ? 'Add identity provider' : 'Edit identity provider'}
-        >
-          <form
-            className="flex flex-col gap-3.5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              save.mutate(
-                {
-                  ...(editing && editing !== 'new' ? { id: editing.id } : {}),
-                  idp: {
-                    name: draft.name,
-                    issuer: draft.issuer,
-                    clientId: draft.clientId,
-                    scopes: draft.scopes.split(/\s+/).filter(Boolean),
-                    domains: draft.domains
-                      .split(',')
-                      .map((d) => d.trim())
-                      .filter(Boolean),
-                    ...(draft.clientSecret ? { clientSecret: draft.clientSecret } : {}),
-                  },
-                },
-                {
-                  onSuccess: () => {
-                    toast.success('Connection saved');
-                    setEditing(null);
-                  },
-                },
-              );
-            }}
-          >
-            <Field label="Name" required>
-              {({ id }) => (
-                <Input
-                  id={id}
-                  value={draft.name}
-                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                />
-              )}
-            </Field>
-            <Field label="Issuer (discovery URL base)" required>
-              {({ id }) => (
-                <Input
-                  id={id}
-                  value={draft.issuer}
-                  placeholder="https://acme.okta.com"
-                  onChange={(e) => setDraft({ ...draft, issuer: e.target.value })}
-                />
-              )}
-            </Field>
-            <div className="grid gap-3.5 sm:grid-cols-2">
-              <Field label="Client ID" required>
-                {({ id }) => (
-                  <Input
-                    id={id}
-                    value={draft.clientId}
-                    onChange={(e) => setDraft({ ...draft, clientId: e.target.value })}
-                  />
-                )}
-              </Field>
-              <Field label="Client secret" help="Leave empty to keep the current one">
-                {({ id }) => (
-                  <Input
-                    id={id}
-                    type="password"
-                    autoComplete="new-password"
-                    value={draft.clientSecret}
-                    onChange={(e) => setDraft({ ...draft, clientSecret: e.target.value })}
-                  />
-                )}
-              </Field>
-            </div>
-            <Field label="Scopes">
-              {({ id }) => (
-                <Input
-                  id={id}
-                  value={draft.scopes}
-                  onChange={(e) => setDraft({ ...draft, scopes: e.target.value })}
-                />
-              )}
-            </Field>
-            <Field label="Allowed email domains" help="Comma separated">
-              {({ id }) => (
-                <Input
-                  id={id}
-                  value={draft.domains}
-                  onChange={(e) => setDraft({ ...draft, domains: e.target.value })}
-                />
-              )}
-            </Field>
-            <Button
-              type="submit"
-              disabled={!draft.name || !draft.issuer || !draft.clientId || save.isPending}
-            >
-              Save connection
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  );
-}
-
 export function KmsSection() {
   const sys = useSystemStatus();
   const rotate = useRotateKms();
@@ -565,14 +319,19 @@ export function KmsSection() {
           <>
             <div className="flex items-center gap-3 rounded-md bg-sunken p-3.5">
               <StatusDot
-                tone={
-                  s.checks.find((c) => c.name === 'Key management')?.status === 'ok' ? 'ok' : 'warn'
-                }
-                label="Reachable"
+                tone={s.kms.healthy ? 'ok' : 'bad'}
+                label={s.kms.healthy ? 'Reachable' : 'Unreachable'}
               />
               <span className="flex-1 text-label">{s.kms.provider}</span>
-              <span className="text-caption text-muted">rotated {formatDate(s.kms.rotatedAt)}</span>
+              <span className="text-caption text-muted">
+                {s.kms.lastRotatedAt
+                  ? `rotated ${formatDate(s.kms.lastRotatedAt)}`
+                  : 'never rotated'}
+              </span>
             </div>
+            {s.kms.kekRef ? (
+              <p className="m-0 break-all font-mono text-caption text-muted">{s.kms.kekRef}</p>
+            ) : null}
             <p className="m-0 text-muted">
               Secrets are envelope-encrypted. Rotating re-wraps data keys; nothing is shown or lost.
             </p>
@@ -589,8 +348,8 @@ export function KmsSection() {
                     disabled={rotate.isPending}
                     onClick={() =>
                       rotate.mutate(undefined, {
-                        onSuccess: () => {
-                          toast.success('Key rotation started');
+                        onSuccess: (r) => {
+                          toast.success(`Keys rotated: ${r.rewrapped} data keys re-wrapped`);
                           setConfirm(false);
                         },
                       })
@@ -607,217 +366,6 @@ export function KmsSection() {
           </>
         )}
       </QueryBoundary>
-    </Card>
-  );
-}
-
-const GUARD_LABELS: Record<keyof ModelGuardConfig, { title: string; help: string }> = {
-  jev: { title: 'JEV guard', help: 'Judges tool results for injected instructions' },
-  llmJudge: { title: 'LLM judge', help: 'A general model scores risky calls' },
-  classifier: { title: 'Classifier', help: 'A small model labels content' },
-};
-
-export function ModelGuardsSection() {
-  const q = useModelGuards();
-  const save = useSaveModelGuards();
-  const [cfg, setCfg] = React.useState<ModelGuardConfig | null>(null);
-  React.useEffect(() => {
-    if (q.data) setCfg(q.data);
-  }, [q.data]);
-  return (
-    <QueryBoundary query={q}>
-      {() =>
-        cfg ? (
-          <Card aria-label="Model guards" className="max-w-3xl gap-4">
-            <CardHeader
-              title="Model guards"
-              subtitle="Optional models that add judgement to the deterministic guards"
-            />
-            {(Object.keys(GUARD_LABELS) as (keyof ModelGuardConfig)[]).map((k) => (
-              <fieldset
-                key={k}
-                className="m-0 flex flex-col gap-3 rounded-md border border-line p-3.5"
-              >
-                <legend className="px-1 text-label">{GUARD_LABELS[k].title}</legend>
-                <label className="flex items-center gap-3">
-                  <Switch
-                    checked={cfg[k].enabled}
-                    onCheckedChange={(v) => setCfg({ ...cfg, [k]: { ...cfg[k], enabled: v } })}
-                    aria-label={`Enable ${GUARD_LABELS[k].title}`}
-                  />
-                  <span className="text-caption text-muted">{GUARD_LABELS[k].help}</span>
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Endpoint">
-                    {({ id }) => (
-                      <Input
-                        id={id}
-                        disabled={!cfg[k].enabled}
-                        value={cfg[k].endpoint}
-                        onChange={(e) =>
-                          setCfg({ ...cfg, [k]: { ...cfg[k], endpoint: e.target.value } })
-                        }
-                      />
-                    )}
-                  </Field>
-                  <Field label="Model">
-                    {({ id }) => (
-                      <Input
-                        id={id}
-                        disabled={!cfg[k].enabled}
-                        value={cfg[k].model}
-                        onChange={(e) =>
-                          setCfg({ ...cfg, [k]: { ...cfg[k], model: e.target.value } })
-                        }
-                      />
-                    )}
-                  </Field>
-                </div>
-              </fieldset>
-            ))}
-            <Button
-              className="self-start"
-              disabled={save.isPending}
-              onClick={() =>
-                save.mutate(cfg, { onSuccess: () => toast.success('Model guards saved') })
-              }
-            >
-              Save model guards
-            </Button>
-          </Card>
-        ) : null
-      }
-    </QueryBoundary>
-  );
-}
-
-const limitSchema = z.object({
-  name: z.string().trim().min(1, 'Name the rule'),
-  kind: z.enum(['rate', 'quota', 'concurrency']),
-  scope: z.string().trim().min(1, 'Say who it applies to'),
-  limit: z.number().int().positive('Must be above zero'),
-  window: z.string().trim().min(1),
-});
-type LimitValues = z.infer<typeof limitSchema>;
-
-export function LimitsSection() {
-  const q = useLimitRules();
-  const save = useSaveLimitRule();
-  const del = useDeleteLimitRule();
-  const [editing, setEditing] = React.useState<LimitRule | 'new' | null>(null);
-  const form = useForm<LimitValues>({
-    resolver: zodResolver(limitSchema),
-    defaultValues: { name: '', kind: 'quota', scope: 'Every user', limit: 1000, window: 'per day' },
-  });
-  React.useEffect(() => {
-    if (editing === 'new')
-      form.reset({ name: '', kind: 'quota', scope: 'Every user', limit: 1000, window: 'per day' });
-    else if (editing) form.reset(editing);
-  }, [editing, form]);
-  return (
-    <Card aria-label="Limits" className="gap-3">
-      <CardHeader
-        title="Limits"
-        subtitle="Rate, quota and concurrency rules (14)"
-        actions={
-          <Button size="sm" onClick={() => setEditing('new')}>
-            Add rule
-          </Button>
-        }
-      />
-      <QueryBoundary
-        query={q}
-        isEmpty={(d) => d.length === 0}
-        empty={
-          <EmptyState
-            title="No limits"
-            description="Defaults apply until you add a rule."
-            action={{ label: 'Add rule', onClick: () => setEditing('new') }}
-          />
-        }
-      >
-        {(items) => (
-          <ul className="m-0 list-none p-0">
-            {items.map((r) => (
-              <li
-                key={r.id}
-                className="flex items-center gap-3 border-b border-line py-3 last:border-b-0"
-              >
-                <span className="flex-1 text-label">{r.name}</span>
-                <Tag>{r.kind}</Tag>
-                <span className="text-caption text-muted">
-                  {r.scope} · {r.limit.toLocaleString()} {r.window}
-                </span>
-                <Button variant="ghost" size="xs" onClick={() => setEditing(r)}>
-                  Edit
-                </Button>
-                <Button variant="ghost" size="xs" onClick={() => del.mutate(r.id)}>
-                  Delete
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </QueryBoundary>
-      <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent title={editing === 'new' ? 'New limit' : 'Edit limit'}>
-          <form
-            noValidate
-            className="flex flex-col gap-3.5"
-            onSubmit={form.handleSubmit((v) =>
-              save.mutate(
-                { ...(editing && editing !== 'new' ? { id: editing.id } : {}), rule: v },
-                {
-                  onSuccess: () => {
-                    toast.success('Limit saved');
-                    setEditing(null);
-                  },
-                },
-              ),
-            )}
-          >
-            <Field label="Name" error={form.formState.errors.name?.message}>
-              {({ id, describedBy, invalid }) => (
-                <Input
-                  id={id}
-                  aria-describedby={describedBy}
-                  aria-invalid={invalid}
-                  {...form.register('name')}
-                />
-              )}
-            </Field>
-            <div className="grid gap-3.5 sm:grid-cols-2">
-              <Field label="Kind">
-                {({ id }) => (
-                  <Select id={id} {...form.register('kind')}>
-                    <option value="rate">Rate</option>
-                    <option value="quota">Quota</option>
-                    <option value="concurrency">Concurrency</option>
-                  </Select>
-                )}
-              </Field>
-              <Field label="Applies to" error={form.formState.errors.scope?.message}>
-                {({ id }) => <Input id={id} {...form.register('scope')} />}
-              </Field>
-              <Field label="Limit" error={form.formState.errors.limit?.message}>
-                {({ id }) => (
-                  <Input
-                    id={id}
-                    type="number"
-                    {...form.register('limit', { valueAsNumber: true })}
-                  />
-                )}
-              </Field>
-              <Field label="Window">
-                {({ id }) => <Input id={id} {...form.register('window')} />}
-              </Field>
-            </div>
-            <Button type="submit" disabled={save.isPending}>
-              Save limit
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
     </Card>
   );
 }

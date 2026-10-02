@@ -10,7 +10,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@bastion-mcp/core/constants": ["../../packages/core/src/constants.ts"],
-      "@bastion-mcp/core/org-settings": ["../../packages/core/src/org-settings.ts"]
+      "@bastion-mcp/core/org-settings": ["../../packages/core/src/org-settings.ts"],
+      "@bastion-mcp/core/ids": ["../../packages/core/src/ids.ts"]
     }
   },
   "include": ["src", "e2e", "vite.config.ts", "vitest.config.ts", "playwright.config.ts"]

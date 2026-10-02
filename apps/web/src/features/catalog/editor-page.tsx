@@ -2,27 +2,33 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { api } from '@/api/client';
-import { useCatalogEntry, useCreateCatalogEntry, usePublish, useTestResult } from '@/api/hooks';
-import type { CatalogEntryDetail, CatalogVersion } from '@/api/types';
+import { ApiError } from '@/api/client';
+import {
+  type CatalogEntryDetail,
+  useCatalogEntry,
+  useCatalogVersion,
+  useCreateCatalogEntry,
+  usePublish,
+  useSaveDraft,
+} from '@/api/hooks';
+import { bumpLabel, editableVersion, isPassing } from '@/api/views/catalog';
 import { PageHeader } from '@/components/page-header';
 import { Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Stepper } from '@/components/stepper';
 import { Button } from '@/components/ui/button';
 import { useSearchState } from '@/lib/search';
-import { defaultSpec } from './default-spec';
+import { type Draft, draftOf, emptyDraft, validateDraft } from './draft';
 import {
   AuthenticationStep,
   ConfigurationStep,
-  type Draft,
   NetworkStep,
   OverridesStep,
   SecurityStep,
   SourceStep,
 } from './editor-steps';
 import { AutoInstallCard, PublishCard } from './publish-card';
-import { isPassing, TestPanel } from './test-panel';
+import { TestPanel } from './test-panel';
 
 export const STEPS = [
   { id: 'source', label: 'Source' },
@@ -43,97 +49,82 @@ const searchSchema = z.object({
     .default('source'),
 });
 
-const emptyDraft = (): Draft => ({
-  displayName: '',
-  slug: '',
-  kind: 'mcp_server',
-  description: '',
-  visibility: { org: false, teamIds: [], userIds: [] },
-  risk: 'low',
-  autoUpgrade: true,
-  spec: defaultSpec(),
-});
+/** Server-side field errors (`/slug`) keyed by the first path segment. */
+const fieldErrorsOf = (e: ApiError): Record<string, string> =>
+  Object.fromEntries(
+    e.errors.map((f) => [f.path.replace(/^\//, '').split('/')[0] ?? '', f.message]),
+  );
 
-const fromEntry = (
-  e: CatalogEntryDetail,
-): { draft: Draft; version: CatalogVersion | undefined } => {
-  const version = e.versions.find((v) => v.id === e.draftVersionId) ?? e.versions[0];
-  return {
-    version,
-    draft: {
-      displayName: e.displayName,
-      slug: e.slug,
-      kind: e.kind,
-      description: e.description,
-      visibility: e.visibility,
-      risk: e.risk,
-      autoUpgrade: e.autoUpgrade,
-      spec: version?.spec ?? defaultSpec(),
-    },
-  };
-};
-
-function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
+function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
   const navigate = useNavigate();
   const [s, setS] = useSearchState(searchSchema);
-  const init = React.useMemo(
-    () => (entry ? fromEntry(entry) : { draft: emptyDraft(), version: undefined }),
-    [entry],
-  );
-  const [draft, setDraft] = React.useState<Draft>(init.draft);
+  const entry = detail?.entry ?? null;
+  const version = detail ? editableVersion(detail.versions) : undefined;
+  const init = React.useMemo(() => {
+    if (!detail) return emptyDraft();
+    const label = !version
+      ? '0.1.0'
+      : version.status === 'draft'
+        ? version.label
+        : bumpLabel(version.label);
+    return draftOf(detail.entry, version, label);
+  }, [detail, version]);
+  const [draft, setDraft] = React.useState<Draft>(init);
   const [dirty, setDirty] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
   const create = useCreateCatalogEntry();
-  const version = init.version;
-  const publish = usePublish(entry?.id ?? '', version?.id ?? '');
-  const test = useTestResult(entry?.id ?? '', version?.id ?? null);
+  const saveDraft = useSaveDraft(entry?.id ?? '', version);
+  const draftVersion = version?.status === 'draft' ? version : undefined;
+  const publish = usePublish(entry?.id ?? '', draftVersion?.id ?? '');
+  const current = useCatalogVersion(entry?.id, draftVersion?.id);
   const change = (d: Draft) => {
     setDraft(d);
     setDirty(true);
   };
-  const label = draft.spec.version || version?.label || '0.1.0';
-  const passing = !dirty && isPassing(test.data, label);
+  const label = draft.label || version?.label || '0.1.0';
+  const passing = !dirty && Boolean(draftVersion) && isPassing(current.data?.testResult);
 
   const save = async (): Promise<string | null> => {
-    if (!draft.displayName.trim()) {
-      toast.error('Give the entry a name first');
-      setS({ step: 'source' });
+    const issues = validateDraft(draft);
+    const first = issues[0];
+    if (first) {
+      toast.error(first.message);
+      setS({ step: first.step as StepId });
       return null;
     }
     setSaving(true);
+    setErrors({});
     try {
       if (!entry) {
         const created = await create.mutateAsync(draft);
         toast.success('Draft saved');
         void navigate({
-          to: `/catalog/${created.id}`,
+          to: `/catalog/${created.entry.id}`,
           search: { step: s.step },
           replace: true,
         } as never);
-        return created.versions[0]?.id ?? null;
+        return created.version.id;
       }
-      await api.patch(`/catalog/${entry.id}`, {
-        displayName: draft.displayName,
-        description: draft.description,
-        visibility: draft.visibility,
-        risk: draft.risk,
-        autoUpgrade: draft.autoUpgrade,
-      });
-      const v = version
-        ? await api.patch<CatalogVersion>(`/catalog/${entry.id}/versions/${version.id}`, {
-            spec: draft.spec,
-          })
-        : await api.post<CatalogVersion>(`/catalog/${entry.id}/versions`, { spec: draft.spec });
+      const saved = await saveDraft.mutateAsync(draft);
       setDirty(false);
       toast.success('Draft saved');
-      return v.id;
+      return saved.id;
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setErrors(fieldErrorsOf(e));
+        toast.error(e.detail || e.title);
+        setS({ step: 'source' });
+        return null;
+      }
+      throw e;
     } finally {
       setSaving(false);
     }
   };
 
   const stepIndex = STEPS.findIndex((x) => x.id === s.step);
-  const props = { draft, onChange: change };
+  const props = { draft, onChange: change, errors, existing: Boolean(entry) };
   return (
     <>
       <PageHeader
@@ -169,13 +160,13 @@ function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
           {s.step === 'overrides' ? <OverridesStep {...props} /> : null}
           {s.step === 'security' ? <SecurityStep {...props} /> : null}
           {s.step === 'test' || s.step === 'publish' ? (
-            entry && version ? (
+            entry && draftVersion ? (
               <TestPanel
                 entryId={entry.id}
-                versionId={version.id}
+                versionId={draftVersion.id}
                 versionLabel={label}
                 canRun
-                onBeforeRun={async () => (dirty ? await save() : version.id)}
+                onBeforeRun={async () => (dirty ? await save() : draftVersion.id)}
               />
             ) : (
               <div className="rounded-lg bg-surface p-5 shadow-card">
@@ -210,7 +201,7 @@ function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
             draft={draft}
             onChange={(p) => change({ ...draft, ...p })}
             versionLabel={label}
-            canPublish={passing && Boolean(entry && version)}
+            canPublish={passing}
             publishing={publish.isPending}
             disabledReason={
               dirty
@@ -219,12 +210,15 @@ function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
             }
             entryId={entry?.id}
             onPublish={() =>
-              publish.mutate(undefined, {
-                onSuccess: () => {
-                  toast.success(`${draft.displayName} v${label} is in the Store`);
-                  void navigate({ to: '/catalog' });
+              publish.mutate(
+                { visibility: draft.visibility },
+                {
+                  onSuccess: () => {
+                    toast.success(`${draft.displayName} v${label} is in the Store`);
+                    void navigate({ to: '/catalog' });
+                  },
                 },
-              })
+              )
             }
           />
           <AutoInstallCard entryId={entry?.id} />
@@ -237,10 +231,10 @@ function Editor({ entry }: { entry: CatalogEntryDetail | null }) {
 export function CatalogEditorPage() {
   const { id } = useParams({ strict: false }) as { id: string };
   const q = useCatalogEntry(id === 'new' ? undefined : id);
-  if (id === 'new') return <Editor key="new" entry={null} />;
+  if (id === 'new') return <Editor key="new" detail={null} />;
   return (
     <QueryBoundary query={q} label="Loading entry">
-      {(e) => <Editor key={e.id} entry={e} />}
+      {(d) => <Editor key={d.entry.id} detail={d} />}
     </QueryBoundary>
   );
 }

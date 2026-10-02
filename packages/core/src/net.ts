@@ -1,4 +1,4 @@
-import { BlockList, isIP } from 'node:net';
+import { BlockList, isIP, type LookupFunction } from 'node:net';
 
 /**
  * Address checks shared by the egress proxy (8.8), remote connectors (8.9) and SSRF tests (23.3).
@@ -186,3 +186,22 @@ export const matchEgressRule = (
     return target.endsWith(`.${rule.suffix}`);
   });
 };
+
+/** 4 or 6 for an IP literal. */
+export const addressFamily = (ip: string): 4 | 6 => (isIP(ip) === 6 ? 6 : 4);
+
+/**
+ * `lookup` for undici/`net.connect` that always answers the pre-validated address, whatever name is asked:
+ * resolve once, check, then connect to that exact address (DNS-rebinding safe, 8.8, 8.9).
+ */
+export const pinnedLookup =
+  (pinned: { address: string; family: number }): LookupFunction =>
+  (_hostname, options, callback) => {
+    if (options.all) {
+      (callback as unknown as (e: null, a: { address: string; family: number }[]) => void)(null, [
+        { address: pinned.address, family: pinned.family },
+      ]);
+    } else {
+      callback(null, pinned.address, pinned.family);
+    }
+  };

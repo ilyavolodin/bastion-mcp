@@ -85,6 +85,10 @@ export const mapUpstreamError = async (
         timeoutMs: ctx.timeoutMs ?? 0,
       });
     }
+    // The SDK client refuses to call a method the server did not declare; to us that is "no such list".
+    if (error.code === SdkErrorCode.CapabilityNotSupported) {
+      return new UpstreamRpcError(JSONRPC_CODES.METHOD_NOT_FOUND, error.message);
+    }
     const status = httpStatusOf(error);
     if (status !== undefined && HTTP_AUTH.has(status)) {
       return new UpstreamAuthRequiredError('upstream rejected the credential', {

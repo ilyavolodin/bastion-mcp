@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { CheckCircle2, KeyRound, Link2 } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
-import { ApiError, api } from '@/api/client';
+import { ApiError, legacyApi as api } from '@/api/client';
 import { useConnectInstallation, useCreateInstallation, useEndpoints } from '@/api/hooks';
 import type { Installation, StoreEntryDetail } from '@/api/types';
 import { ClientConfigTabs } from '@/components/client-config';

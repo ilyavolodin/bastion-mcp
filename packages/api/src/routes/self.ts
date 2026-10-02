@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { listQuerySchema, pageSchema } from '../framework/conventions';
 import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
 import { idParams, itemPage, itemSchema } from '../schemas/common';
+import { asRow, notificationRow, pageOf } from '../schemas/rows';
 import {
   createToken,
   getMe,
@@ -38,6 +39,17 @@ const meSchema = z.object({
       displayName: z.string().optional(),
     }),
   ),
+  org: z.object({
+    name: z.string(),
+    host: z.string(),
+    traceUiUrl: z.string().nullable(),
+    toolWarnThreshold: z.number(),
+  }),
+  capabilities: z.object({
+    registry: z.boolean(),
+    publishOrgWide: z.boolean(),
+    personalInstalls: z.enum(['off', 'remoteOnly', 'all']),
+  }),
   updatedAt: z.string(),
 });
 
@@ -94,7 +106,7 @@ export const selfRoutes: RouteDefinition[] = [
     summary: 'Your notifications, newest first',
     schema: {
       query: listQuerySchema.extend({ unread: z.stringbool().optional() }),
-      response: itemPage,
+      response: pageOf('NotificationPage', notificationRow),
     },
     authz: authz.self(),
     handler: (ctx) => listNotifications(ctx, ctx.query),
@@ -104,7 +116,7 @@ export const selfRoutes: RouteDefinition[] = [
     url: '/me/notifications/{id}/read',
     tag: TAG,
     summary: 'Mark a notification read',
-    schema: { params: idParams, response: itemSchema },
+    schema: { params: idParams, response: asRow(notificationRow) },
     authz: authz.self(),
     status: 200,
     handler: (ctx) => markNotificationRead(ctx, ctx.params.id),

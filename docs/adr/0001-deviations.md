@@ -50,3 +50,21 @@ dist-tag currently points at an 8.0 release candidate).
 - **Org-wide publishing and manager call-log visibility** are data-driven (`orgWidePublisherIds`,
   `settings.logsManagerVisibility`), because management actions have an empty context.
 - Managers edit entries whose owner team they manage; "edit own entries" is not implemented (no creator attribute).
+
+## 6. Sandbox claim names use the tail of the id
+
+Section 8.4 names claims `bst-<instanceId first 12 hex>` and `bsp-<installationId first 12 hex>`. For UUIDv7 the
+first 12 hex digits are a millisecond timestamp, so ids created in the same millisecond collide. Names use the LAST
+12 hex digits (the random part) instead.
+
+## 7. Console reconciliation with the API (`apps/web`)
+
+- `GET /me` also returns `org` (`name`, `host`, `traceUiUrl`, `toolWarnThreshold`) and `capabilities`
+  (`registry`, `publishOrgWide`, `personalInstalls`, from Cedar and org settings), so members need no Admin-only
+  `/settings` read. `traceUiUrl` comes from `BASTION_TRACE_UI_URL` through `ApiConfig.traceUiUrl`.
+- `PATCH /catalog/{id}/versions/{vid}` edits a draft version in place (published versions answer 409
+  `version_immutable`); it uses the `catalog.update` rule.
+- The theme is a per-browser preference: `PATCH /me` edits the display name only.
+- No live "affected people and tools" count for policy rules (the console points to the simulator), no
+  "request network access" button (no route; admins edit the allowlist), and executable-content approvals are
+  found by walking plugin entries and their draft versions' `approval` status instead of a list filter.

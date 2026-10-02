@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { Server, TriangleAlert } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, Tooltip, XAxis } from 'recharts';
 import { useCallSeries, useInstallations, useQuotas, useTeams, useUsers } from '@/api/hooks';
-import type { Quota } from '@/api/types';
+import type { QuotaView } from '@/api/views/session';
 import { useAuth } from '@/auth/auth';
 import { ChartCard } from '@/components/chart-card';
 import { AutoSize, AXIS_TICK, ChartTooltip, dayLabel, GRID } from '@/components/charts';
@@ -20,7 +20,7 @@ import { DecisionsCard } from './decisions-card';
 
 const BAR_COLORS = ['var(--tangerine)', 'var(--sky)', 'var(--teal)'];
 
-export const quotaText = (q: Quota): string =>
+export const quotaText = (q: QuotaView): string =>
   q.mode === 'left'
     ? `${formatNumber(q.limit - q.used)} left of ${formatNumber(q.limit)}`
     : `${formatNumber(q.used)} of ${formatNumber(q.limit)} in use`;

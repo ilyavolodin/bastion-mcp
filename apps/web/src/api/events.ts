@@ -1,7 +1,33 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { API_BASE } from './client';
-import type { Notification, ServerEvent } from './types';
+import type { Schemas } from './schema';
+import { type NotificationView, toNotification } from './views/session';
+
+/**
+ * Payloads of `GET /api/v1/events` (18.1). The stream is Server-Sent Events, which OpenAPI does not describe, so these
+ * are the one place the console restates API shapes by hand; each follows what the API publishes
+ * (`services/installations.ts`, `services/drift.ts`, `services/registry.ts`, `apps/server/.../version-test.ts`).
+ */
+export type ServerEvent =
+  | { type: 'notification'; data: Schemas['Notification'] }
+  | {
+      type: 'installation.status';
+      data: { installationId: string; status: Schemas['Installation']['status'] };
+    }
+  | {
+      type: 'test.progress';
+      data: {
+        runId: string;
+        entryId: string;
+        versionId: string;
+        status: Schemas['VersionTestRun']['status'];
+      };
+    }
+  | {
+      type: 'drift.review';
+      data: { reviewId: string; status: string; itemKind: string; itemKey: string };
+    };
 
 export const EVENT_TYPES = [
   'notification',
@@ -38,15 +64,15 @@ export function openEventStream(
 }
 
 /** Applies a server event to the query cache. Returns the notification to toast, when there is one. */
-export function applyServerEvent(qc: QueryClient, event: ServerEvent): Notification | null {
+export function applyServerEvent(qc: QueryClient, event: ServerEvent): NotificationView | null {
   switch (event.type) {
     case 'notification': {
       void qc.invalidateQueries({ queryKey: ['notifications'] });
-      if (event.data.kind === 'drift') void qc.invalidateQueries({ queryKey: ['drift-reviews'] });
-      if (event.data.kind === 'install_request') {
+      if (event.data.type === 'drift') void qc.invalidateQueries({ queryKey: ['drift-reviews'] });
+      if (event.data.type === 'install_request') {
         void qc.invalidateQueries({ queryKey: ['install-requests'] });
       }
-      return event.data;
+      return toNotification(event.data);
     }
     case 'installation.status':
       void qc.invalidateQueries({ queryKey: ['installations'] });
@@ -60,7 +86,7 @@ export function applyServerEvent(qc: QueryClient, event: ServerEvent): Notificat
   }
 }
 
-export function useServerEvents(onNotification: (n: Notification) => void, enabled = true): void {
+export function useServerEvents(onNotification: (n: NotificationView) => void, enabled = true): void {
   const qc = useQueryClient();
   const cb = useRef(onNotification);
   cb.current = onNotification;

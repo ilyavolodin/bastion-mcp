@@ -6,6 +6,7 @@ import {
   ROUTE_ACTIONS,
   type RouteAction,
   type RouteRole,
+  serviceAccountGrant,
 } from '../src';
 import {
   data,
@@ -16,9 +17,11 @@ import {
   instManager,
   instMember,
   instOther,
+  instService,
   instTeam,
   orgResource,
   ROLES,
+  serviceAccount,
   teamResource,
   userResource,
 } from './fixtures';
@@ -108,6 +111,40 @@ describe('17.2, 23.3 route-action table', () => {
         });
       }
     }
+  });
+
+  describe('10.1 service accounts hold member capabilities for their own installations only', () => {
+    const serviceResource = (row: RouteAction, which: 'in' | 'out'): ResourceData => {
+      if (row.resource === 'Installation')
+        return installationResource(which === 'in' ? instService : instOther);
+      if (row.resource === 'User') return userResource(which === 'in' ? 'sa1' : 'oth1', ['t']);
+      return scopeResource(row, 'member', which);
+    };
+    for (const row of rows) {
+      const grant = serviceAccountGrant(row);
+      it(`10.1 ${row.action} on ${row.resource} (${row.id}) as service account: ${grant}`, () => {
+        const action = row.action;
+        if (action === null) throw new Error('unreachable');
+        const inside = engine.authorize({
+          principal: serviceAccount,
+          action,
+          resource: serviceResource(row, 'in'),
+        });
+        expect(inside.decision, inside.reasons.join(',')).toBe(grant === 'deny' ? 'deny' : 'allow');
+      });
+    }
+
+    it('10.1 user-only capabilities are denied to service accounts in the table', () => {
+      const denied = rows.filter(
+        (r) => serviceAccountGrant(r) === 'deny' && r.grants.member !== 'deny',
+      );
+      expect(denied.map((r) => r.id).sort()).toEqual([
+        'installations.personal',
+        'logs.user',
+        'registry.install',
+        'secrets.user',
+      ]);
+    });
   });
 
   it('10.1 manager grants hold only for teams the manager manages', () => {

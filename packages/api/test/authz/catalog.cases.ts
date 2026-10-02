@@ -129,6 +129,11 @@ export const catalogCases: AuthzCase[] = [
     url: `/catalog/${e.entry}/versions`,
     body: { label: 'authz-label' },
   })),
+  entryCase('catalog.update', 'PATCH /catalog/{id}/versions/{vid}', (e) => ({
+    method: 'PATCH',
+    url: `/catalog/${e.entry}/versions/${e.ver}`,
+    body: { changelog: 'authz' },
+  })),
   entryCase('catalog.update', 'POST /catalog/{id}/versions/{vid}/test', (e) => ({
     method: 'POST',
     url: `/catalog/${e.entry}/versions/${e.ver}/test`,

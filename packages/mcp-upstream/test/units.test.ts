@@ -49,6 +49,15 @@ describe('6.9 upstream error mapping', () => {
     expect((mapped as UpstreamRpcError).rpcData).toEqual({ field: 'a' });
   });
 
+  it('6.9 an upstream without a capability answers method-not-found, not unavailable', async () => {
+    const mapped = await mapUpstreamError(
+      new SdkError(SdkErrorCode.CapabilityNotSupported, 'Server does not support prompts'),
+      ctx,
+    );
+    expect(mapped.mcpCode).toBe(-32601);
+    expect(mapped.code).toBe('UPSTREAM_ERROR');
+  });
+
   it('6.9 timeouts become UPSTREAM_TIMEOUT -32017 with the timeout', async () => {
     const mapped = await mapUpstreamError(
       new SdkError(SdkErrorCode.RequestTimeout, 'timed out'),

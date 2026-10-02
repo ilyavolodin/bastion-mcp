@@ -2,6 +2,7 @@ import swagger from '@fastify/swagger';
 import type { FastifyInstance } from 'fastify';
 import {
   jsonSchemaTransform,
+  jsonSchemaTransformObject,
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod';
@@ -40,9 +41,10 @@ export const registerApi = async (
           servers: [{ url: deps.config.baseUrl + API_PREFIX }],
         },
         transform: jsonSchemaTransform,
+        // Named schemas (`.meta({ id })`, see schemas/rows.ts) become `components.schemas.<id>`.
         transformObject: (input) =>
           'openapiObject' in input
-            ? decorateOpenApi(input.openapiObject as unknown as OpenApiDoc)
+            ? decorateOpenApi(jsonSchemaTransformObject(input) as unknown as OpenApiDoc)
             : input.swaggerObject,
       });
       installProblemHandlers(api);
