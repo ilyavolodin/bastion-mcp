@@ -2,23 +2,23 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { api, fetchAll } from '../client';
 import {
   BUCKET_MS,
-  RANGE_MS,
+  bucketFor,
   type CallFilters,
   type CallSeries,
   type CallViewer,
-  type DriftDecision,
-  bucketFor,
   callsQuery,
+  type DriftDecision,
   driftViews,
   findingViews,
   guardTotals,
   latencyPoints,
+  RANGE_MS,
   rangeWindow,
+  type StatsRange,
   sandboxSeries,
   scopedFilters,
   seriesFromCalls,
   seriesFromStats,
-  type StatsRange,
   totalsByGroup,
 } from '../views/observability';
 import { keys, useApiMutation } from './base';
@@ -108,12 +108,23 @@ export const useCallSeries = (args: StatsArgs) => {
         const filters = scopedFilters(
           viewer,
           args.scope === 'me'
-            ? { user: viewer.id, ...(args.installationId ? { installationId: args.installationId } : {}) }
+            ? {
+                user: viewer.id,
+                ...(args.installationId ? { installationId: args.installationId } : {}),
+              }
             : { ...(args.installationId ? { installationId: args.installationId } : {}) },
         );
         const rows = await fetchAll(
           '/calls',
-          { ...callsQuery({ ...filters, range: args.range === '1h' || args.range === '7d' ? args.range : '24h' }, w.to) },
+          {
+            ...callsQuery(
+              {
+                ...filters,
+                range: args.range === '1h' || args.range === '7d' ? args.range : '24h',
+              },
+              w.to,
+            ),
+          },
           10,
           signal,
         );
@@ -152,21 +163,26 @@ export const useCallTotals = (args: StatsArgs, groupBy: 'installation' | 'item')
     queryFn: ({ signal }) =>
       api
         .get('/stats/calls', {
-          query: { groupBy, ...rangeQuery(args.range, args.scope === 'team' ? args.teamId : undefined) },
+          query: {
+            groupBy,
+            ...rangeQuery(args.range, args.scope === 'team' ? args.teamId : undefined),
+          },
           signal,
         })
         .then(totalsByGroup),
   });
 
-export const useLatency = (args: StatsArgs) =>
+export const useLatency = (args: StatsArgs, enabled = true) =>
   useQuery({
+    enabled,
     queryKey: [...keys.stats, 'latency', args],
     queryFn: ({ signal }) =>
       api.get('/stats/latency', { query: rangeQuery(args.range), signal }).then(latencyPoints),
   });
 
-export const useSandboxStats = (args: StatsArgs) =>
+export const useSandboxStats = (args: StatsArgs, enabled = true) =>
   useQuery({
+    enabled,
     queryKey: [...keys.stats, 'sandboxes', args],
     queryFn: ({ signal }) =>
       api.get('/stats/sandboxes', { query: rangeQuery(args.range), signal }).then(sandboxSeries),
@@ -175,8 +191,7 @@ export const useSandboxStats = (args: StatsArgs) =>
 export const useGuardStats = (args: { range: StatsRange }) =>
   useQuery({
     queryKey: [...keys.stats, 'guards', args],
-    queryFn: ({ signal }) =>
-      api.get('/stats/guards', { query: rangeQuery(args.range), signal }),
+    queryFn: ({ signal }) => api.get('/stats/guards', { query: rangeQuery(args.range), signal }),
     select: (stats) => ({ stats, totals: guardTotals(stats) }),
   });
 
@@ -216,7 +231,7 @@ export const useDecideDrift = () =>
   useApiMutation(
     (input: DriftDecision) =>
       input.decision === 'approve'
-        ? api.post(`/drift-reviews/${input.id}/approve`, input.note ? { note: input.note } : {})
-        : api.post(`/drift-reviews/${input.id}/reject`, { reason: input.reason }),
+        ? api.post(`/drift-reviews/${input.id}/approve`, input.body)
+        : api.post(`/drift-reviews/${input.id}/reject`, input.body),
     [keys.drift, keys.installations, [...keys.stats, 'findings']],
   );

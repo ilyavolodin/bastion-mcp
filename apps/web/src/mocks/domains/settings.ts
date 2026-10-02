@@ -6,7 +6,6 @@
 import { ORG_SETTING_DEFAULTS, orgSettingsSchema } from '@bastion-mcp/core/org-settings';
 import type { HttpHandler } from 'msw';
 import type { Res, Schemas } from '@/api/schema';
-import { getDb } from '../db';
 import {
   etagHeaders,
   forbidden,
@@ -18,6 +17,7 @@ import {
   route,
   type SampleFactory,
 } from '../http';
+import { getDb } from '../state';
 
 type OrgSettings = Res<'get', '/settings'>['settings'];
 

@@ -68,3 +68,27 @@ first 12 hex digits are a millisecond timestamp, so ids created in the same mill
 - No live "affected people and tools" count for policy rules (the console points to the simulator), no
   "request network access" button (no route; admins edit the allowlist), and executable-content approvals are
   found by walking plugin entries and their draft versions' `approval` status instead of a list filter.
+
+- Every response of a stored resource is a named schema (`User`, `Team`, `Installation`, `CatalogEntry`, ...; see
+  `packages/api/src/schemas/rows.ts`) that mirrors the store row: one field per column, camelCase, ISO dates, `null`
+  for nullable columns. They are open objects, so a column added later is not a breaking change. The OpenAPI document
+  carries them as `components.schemas.*` and `@bastion-mcp/api-client` generates a precise type for each; list
+  responses are named pages (`TeamPage`, ...). Other loose responses were tightened the same way (definitions,
+  egress, overrides preview, rollout, model guards, call records, findings, notifications, test runs, installForm).
+  Everything is additive or a tightening of a previously untyped field, so `openapi:check` reports compatible changes
+  only. The in-memory test store fills the column defaults of the database so API tests exercise the same rows.
+- `GET /client-config?client=&auth=` returns the client configuration of the default `/mcp` endpoint (it has no
+  endpoint row, so `GET /endpoints/{id}/client-config` cannot serve it); it uses the `installations.personal` rule.
+- The console takes every request and response type from the generated client (`src/api/schema.ts`); screens that
+  need joined or derived data (names, letters, status chips) build view models over the generated types in
+  `src/api/views`. The MSW mock is typed by the same types and `src/api/route-contract.test.ts` validates every
+  sample request and every response, page by page, against the OpenAPI schemas with ajv.
+- Console features dropped because the API has no source for them: the span waterfall and sandbox phases of a call,
+  per-finding before/after text, the client to installation Sankey and the topology view (statistics have no client
+  dimension; `@xyflow/react` is no longer a dependency of the console), install counts and popularity in the store,
+  the per-user "hide" of an installation, tool counts on installation rows, sparklines, the "Runs code" and "parts"
+  tags of catalog and plugin lists, queue capacity and uptime in the system status, and OAuth client display names.
+  The Traffic flow card of the observability screen is a ranking of installations by calls.
+- A policy rule, a limit rule, a role-mapping rule and a service account are created with the fields the API
+  requires (`name`, `priority`, `slug`, `authMethod`, `idpConnectionId`, ...); service-account credentials are shown
+  once; install-request rejections and drift rejections ask for the required `reason`.

@@ -1,39 +1,38 @@
 import { Link } from '@tanstack/react-router';
-import { Terminal } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   useApproveExecutable,
+  useDistribution,
   useExecutableApprovals,
-  useMarketplace,
+  useMirror,
   usePromoteRelease,
   usePushMirror,
+  useReleases,
 } from '@/api/hooks';
-import type { MarketplaceDetail, MarketplacePlugin, PluginClientStatus } from '@/api/types';
+import {
+  type ChannelTotal,
+  type ClientSetup,
+  mirrorSummary,
+  type PluginView,
+  type ReleaseView,
+} from '@/api/views/plugins';
 import { CopyField } from '@/components/copy-field';
 import { Card, CardHeader, ServerIcon, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
-import { StatusDot, type Tone } from '@/components/status';
+import { StatusDot } from '@/components/status';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
 
-const CLIENT_STATUS: Record<PluginClientStatus['status'], { tone: Tone; label: string }> = {
-  latest: { tone: 'ok', label: 'Latest' },
-  behind: { tone: 'warn', label: 'One release behind' },
-  managed: { tone: 'info', label: 'Managed by IT' },
-  unknown: { tone: 'neutral', label: 'Not fetched yet' },
-};
-
 const BADGE: Record<string, string> = {
   'claude-code': '>_',
   codex: 'Cx',
-  'claude-desktop': 'C',
+  'claude-ai': 'C',
   chatgpt: 'GP',
 };
 
-/** Set up panel for one client: exact steps, and a status dot for whether this machine has the latest release. */
-export function ClientSetupCard({ c }: { c: PluginClientStatus }) {
-  const s = CLIENT_STATUS[c.status];
+/** Set up panel for one client: the exact command or step to follow. */
+export function ClientSetupCard({ c }: { c: ClientSetup }) {
   return (
     <div className="flex flex-col gap-2.5 rounded-md border border-line p-3.5">
       <div className="flex items-center gap-2.5">
@@ -41,7 +40,6 @@ export function ClientSetupCard({ c }: { c: PluginClientStatus }) {
           {BADGE[c.client] ?? c.label.charAt(0)}
         </span>
         <span className="flex-1 text-[14px] font-semibold">{c.label}</span>
-        <StatusDot tone={s.tone} label={s.label} className="font-semibold" />
       </div>
       {c.command ? (
         <CopyField
@@ -57,14 +55,13 @@ export function ClientSetupCard({ c }: { c: PluginClientStatus }) {
   );
 }
 
-const STATE: Record<MarketplacePlugin['state'], { tone: Tone; label: string }> = {
-  installed: { tone: 'ok', label: 'Installed' },
-  available: { tone: 'neutral', label: 'Available' },
-  update: { tone: 'warn', label: 'Update ready' },
-};
+const POLICY_LABEL = {
+  installedByDefault: 'Installed by default',
+  required: 'Required',
+  available: 'Available',
+} as const;
 
-export function PluginCard({ p, showPolicy }: { p: MarketplacePlugin; showPolicy?: boolean }) {
-  const s = STATE[p.state];
+export function PluginCard({ p, showPolicy }: { p: PluginView; showPolicy?: boolean }) {
   return (
     <article className="flex flex-col gap-3 rounded-lg bg-surface p-[18px] shadow-card">
       <div className="flex items-center gap-3">
@@ -75,35 +72,20 @@ export function PluginCard({ p, showPolicy }: { p: MarketplacePlugin; showPolicy
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {p.parts.map((x) => (
-          <Tag key={x}>{x}</Tag>
-        ))}
-        {p.executable ? (
-          <Tag tone="bad" icon={<Terminal className="size-[11px]" aria-hidden="true" />}>
-            Runs code locally
-          </Tag>
+        <Tag>v{p.version}</Tag>
+        {showPolicy || p.policy !== 'available' ? (
+          <Tag tone="info">{POLICY_LABEL[p.policy]}</Tag>
         ) : null}
-        {showPolicy ? (
-          <Tag tone="info">
-            {p.policy === 'installedByDefault'
-              ? 'Installed by default'
-              : p.policy === 'required'
-                ? 'Required'
-                : 'Available'}
-          </Tag>
-        ) : null}
-      </div>
-      <div className="mt-auto">
-        <StatusDot tone={s.tone} label={s.label} className="font-semibold" />
       </div>
     </article>
   );
 }
 
-/** One dot per release; the promoted release is marked, the draft is dashed. */
-export function ReleaseTimeline({ releases }: { releases: MarketplaceDetail['releases'] }) {
+/** One dot per release, oldest first; the promoted release is marked, the one waiting for promotion is dashed. */
+export function ReleaseTimeline({ releases }: { releases: ReleaseView[] }) {
   const n = releases.length;
   const x = (i: number) => (n === 1 ? 160 : 14 + (292 * i) / (n - 1));
+  const promoted = releases.find((r) => r.promoted);
   return (
     <div className="flex flex-col gap-1.5">
       <svg
@@ -116,7 +98,7 @@ export function ReleaseTimeline({ releases }: { releases: MarketplaceDetail['rel
         <path d="M8 20H312" stroke="var(--line)" strokeWidth="2" />
         {releases.map((r, i) =>
           r.promoted ? (
-            <g key={r.n}>
+            <g key={r.seq}>
               <circle cx={x(i)} cy="20" r="9" fill="var(--tangerine)" />
               <circle
                 cx={x(i)}
@@ -129,7 +111,7 @@ export function ReleaseTimeline({ releases }: { releases: MarketplaceDetail['rel
             </g>
           ) : r.draft ? (
             <circle
-              key={r.n}
+              key={r.seq}
               cx={x(i)}
               cy="20"
               r="6"
@@ -139,15 +121,15 @@ export function ReleaseTimeline({ releases }: { releases: MarketplaceDetail['rel
               strokeDasharray="3 2"
             />
           ) : (
-            <circle key={r.n} cx={x(i)} cy="20" r="5" fill="var(--line-strong)" />
+            <circle key={r.seq} cx={x(i)} cy="20" r="5" fill="var(--line-strong)" />
           ),
         )}
       </svg>
       <div className="flex justify-between text-[11px] text-muted">
-        <span>{releases[0] ? formatDate(releases[0].createdAt) : ''}</span>
-        {releases.find((r) => r.promoted) ? (
+        <span>{releases[0] ? formatDate(releases[0].releaseTime) : ''}</span>
+        {promoted ? (
           <span className="font-semibold text-tangerine-ink">
-            Promoted · {formatDate(releases.find((r) => r.promoted)?.createdAt ?? '')}
+            Promoted · {formatDate(promoted.releaseTime)}
           </span>
         ) : null}
         {releases.some((r) => r.draft) ? <span>Draft</span> : null}
@@ -156,38 +138,38 @@ export function ReleaseTimeline({ releases }: { releases: MarketplaceDetail['rel
   );
 }
 
-const ADOPTION = {
-  latest: { label: 'Latest', color: 'var(--tangerine)' },
-  oneBehind: { label: 'One behind', color: 'var(--sky)' },
-  older: { label: 'Older', color: 'var(--line-strong)' },
-} as const;
+const CHANNEL_COLORS = ['var(--tangerine)', 'var(--sky)', 'var(--line-strong)', 'var(--teal)'];
 
-export function AdoptionBar({ adoption }: { adoption: MarketplaceDetail['adoption'] }) {
+/** How the marketplace was fetched, per channel (25.9). */
+export function DistributionBar({ totals }: { totals: ChannelTotal[] }) {
+  if (totals.length === 0) {
+    return <span className="text-caption text-muted">No fetches yet.</span>;
+  }
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-caption text-muted">People by release</span>
+      <span className="text-caption text-muted">Fetches by channel</span>
       <div
         className="flex h-3.5 gap-0.5 overflow-hidden rounded-sm"
         role="img"
-        aria-label={adoption.map((a) => `${ADOPTION[a.release].label}: ${a.people}`).join(', ')}
+        aria-label={totals.map((t) => `${t.label}: ${t.count}`).join(', ')}
       >
-        {adoption.map((a) => (
+        {totals.map((t, i) => (
           <span
-            key={a.release}
-            title={`${ADOPTION[a.release].label}: ${a.people}`}
-            style={{ flex: a.people, background: ADOPTION[a.release].color }}
+            key={t.channel}
+            title={`${t.label}: ${t.count}`}
+            style={{ flex: t.count, background: CHANNEL_COLORS[i % CHANNEL_COLORS.length] }}
           />
         ))}
       </div>
       <div className="flex flex-wrap gap-3 text-[11px] text-muted">
-        {adoption.map((a) => (
-          <span key={a.release} className="inline-flex items-center gap-1">
+        {totals.map((t, i) => (
+          <span key={t.channel} className="inline-flex items-center gap-1">
             <span
               className="size-2 rounded-full"
-              style={{ background: ADOPTION[a.release].color }}
+              style={{ background: CHANNEL_COLORS[i % CHANNEL_COLORS.length] }}
               aria-hidden="true"
             />
-            {ADOPTION[a.release].label}
+            {t.label}
           </span>
         ))}
       </div>
@@ -195,31 +177,25 @@ export function AdoptionBar({ adoption }: { adoption: MarketplaceDetail['adoptio
   );
 }
 
-export function MirrorStatus({ m }: { m: MarketplaceDetail['mirror'] }) {
-  const tone: Tone = m.status === 'in_sync' ? 'ok' : m.status === 'behind' ? 'warn' : 'bad';
+export function MirrorStatus({ summary }: { summary: ReturnType<typeof mirrorSummary> }) {
   return (
     <div className="flex items-center gap-2 rounded-md bg-sunken px-3 py-2.5">
-      <StatusDot
-        tone={tone}
-        label={m.status === 'in_sync' ? 'In sync' : m.status === 'behind' ? 'Behind' : 'Failed'}
-        hideLabel
-      />
+      <StatusDot tone={summary.tone} label={summary.label} hideLabel />
       <span className="flex-1 text-[13px] font-medium">
-        {m.target}{' '}
-        {m.status === 'in_sync'
-          ? 'mirror in sync'
-          : m.status === 'behind'
-            ? 'mirror behind'
-            : 'mirror failed'}
+        {summary.target ? `${summary.target} mirror ${summary.label}` : summary.label}
       </span>
-      <span className="text-caption text-muted">for claude.ai and ChatGPT</span>
+      {summary.target ? (
+        <span className="text-caption text-muted">for claude.ai and ChatGPT</span>
+      ) : null}
     </div>
   );
 }
 
-/** Releases, adoption, mirror and "Promote" for a marketplace (Managers and Admins). */
+/** Releases, distribution, mirror and "Promote" for a marketplace (Managers and Admins). */
 export function ReleasesCard({ id, link }: { id: string; link?: boolean }) {
-  const q = useMarketplace(id);
+  const releases = useReleases(id);
+  const mirror = useMirror(id);
+  const distribution = useDistribution(id);
   const promote = usePromoteRelease(id);
   const push = usePushMirror(id);
   return (
@@ -234,18 +210,20 @@ export function ReleasesCard({ id, link }: { id: string; link?: boolean }) {
           ) : undefined
         }
       />
-      <QueryBoundary query={q}>
-        {(m) => {
-          const draft = m.releases.find((r) => r.draft);
+      <QueryBoundary query={releases}>
+        {(list) => {
+          const draft = list.find((r) => r.draft);
+          const summary = mirrorSummary(mirror.data);
           return (
             <>
-              <ReleaseTimeline releases={m.releases} />
-              <AdoptionBar adoption={m.adoption} />
-              <MirrorStatus m={m.mirror} />
-              {m.mirror.status !== 'in_sync' ? (
+              <ReleaseTimeline releases={list} />
+              <DistributionBar totals={distribution.data ?? []} />
+              <MirrorStatus summary={summary} />
+              {summary.needsPush ? (
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={push.isPending}
                   onClick={() =>
                     push.mutate(undefined, { onSuccess: () => toast.success('Mirror pushed') })
                   }
@@ -257,8 +235,8 @@ export function ReleasesCard({ id, link }: { id: string; link?: boolean }) {
                 <Button
                   disabled={promote.isPending}
                   onClick={() =>
-                    promote.mutate(draft.n, {
-                      onSuccess: () => toast.success(`Release ${draft.n} promoted`),
+                    promote.mutate(draft.seq, {
+                      onSuccess: () => toast.success(`Release ${draft.seq} promoted`),
                     })
                   }
                 >

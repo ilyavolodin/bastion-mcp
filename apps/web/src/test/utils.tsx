@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import type * as React from 'react';
-import type { UiRole } from '@/api/types';
+import type { UiRole } from '@/api/views/session';
 import { AuthProvider } from '@/auth/auth';
 import { type MockDb, resetDb } from '@/mocks/db';
 import { createAppRouter } from '@/router';

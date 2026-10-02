@@ -3,7 +3,7 @@
  * `title` and a free-form `data` object; the bell also needs a line of text and a place to go, which are derived
  * here from `type` and `data`. A quota row becomes a labelled bar.
  */
-import type { Res, Schemas } from '../schema';
+import type { OrgRole, Res, Schemas, TeamRole } from '../schema';
 
 export type NotificationRow = Schemas['Notification'];
 export type QuotaRow = Res<'get', '/me/quotas'>['items'][number];
@@ -61,3 +61,24 @@ export const toQuota = (row: QuotaRow): QuotaView => ({
   limit: row.limit,
   mode: row.kind === 'concurrency' ? 'inUse' : 'left',
 });
+
+// --- the signed-in user ---------------------------------------------------------------------------------------
+
+/** The role the UI reasons about (10.1): "Manager" is a member who manages at least one team. */
+export type UiRole = 'admin' | 'manager' | 'member' | 'auditor';
+export type ThemePref = 'light' | 'dark';
+
+export type TeamRef = { id: string; name: string; role: TeamRole };
+
+/** The caller as the screens use it: `GET /me` with the teams named and the browser-held theme. */
+export type Me = {
+  id: string;
+  email: string;
+  name: string;
+  orgRole: OrgRole;
+  teams: TeamRef[];
+  theme: ThemePref;
+  org: Res<'get', '/me'>['org'];
+  /** Cedar-derived capability flags the UI cannot infer from the role alone (10.1, 11.7). */
+  capabilities: Res<'get', '/me'>['capabilities'];
+};

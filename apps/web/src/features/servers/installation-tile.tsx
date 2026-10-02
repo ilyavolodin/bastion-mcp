@@ -1,19 +1,18 @@
 import { Link } from '@tanstack/react-router';
-import type { Installation } from '@/api/types';
+import type { InstallationView } from '@/api/views/servers';
 import { ServerIcon } from '@/components/primitives';
-import { Sparkline } from '@/components/sparkline';
 import { InstallationStatus } from '@/components/status';
 import { installationAction, RUNTIME_LABEL } from '@/lib/format';
 
-const metaText = (i: Installation): string => {
+const metaText = (i: InstallationView): string => {
   const rt = i.runtime === 'remote' ? 'Remote' : `${RUNTIME_LABEL[i.runtime]} sandbox`;
   const auth = i.authMode === 'oauth' ? 'OAuth' : i.authMode === 'userSecret' ? 'API key' : null;
   const owner = i.ownerType === 'team' ? 'Team' : null;
   return [rt, auth ?? owner].filter(Boolean).join(' · ');
 };
 
-/** Installation tile: icon, name, status dot, 24 h sparkline, or the action when setup is needed. */
-export function InstallationTile({ installation: i }: { installation: Installation }) {
+/** Installation tile: icon, name, status, owner, or the action when setup is needed. */
+export function InstallationTile({ installation: i }: { installation: InstallationView }) {
   const action = installationAction(i);
   return (
     <Link
@@ -33,11 +32,9 @@ export function InstallationTile({ installation: i }: { installation: Installati
           {action.label}
         </span>
       ) : (
-        <Sparkline
-          data={i.spark24}
-          color={i.color}
-          label={`${i.displayName} calls in the last 24 hours`}
-        />
+        <span className="text-caption text-muted">
+          {i.ownerType === 'team' ? `Shared with ${i.ownerName}` : `Yours · /${i.slug}`}
+        </span>
       )}
     </Link>
   );

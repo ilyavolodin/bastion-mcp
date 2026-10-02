@@ -27,7 +27,7 @@ import {
   versionPatchSchema,
   visibilityBodySchema,
 } from '../schemas/catalog';
-import { idParams, itemPage, itemSchema } from '../schemas/common';
+import { idParams } from '../schemas/common';
 import {
   asRow,
   catalogEntryRow,
@@ -119,10 +119,10 @@ const fileVersion = (input: AuthzInput) =>
     .get('catalog_files', fileRowId(input.params.vid ?? '', input.params.path ?? ''))
     .then((row) => row?.updatedAt ?? null);
 
-const runSchema = z.looseObject({ id: z.string(), versionId: z.string(), status: z.string() });
+const _runSchema = z.looseObject({ id: z.string(), versionId: z.string(), status: z.string() });
 const idLoose = z.looseObject({ id: z.string() });
-const filesSchema = pageSchema(idLoose).extend({ approval: z.looseObject({}).nullable() });
-const storeItem = idLoose;
+const _filesSchema = pageSchema(idLoose).extend({ approval: z.looseObject({}).nullable() });
+const _storeItem = idLoose;
 
 export const catalogRoutes: RouteDefinition[] = [
   // --- entries --------------------------------------------------------------------------------------------

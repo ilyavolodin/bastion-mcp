@@ -5046,8 +5046,17 @@
           "isLatest": {
             "type": "boolean"
           },
+          "title": {
+            "type": "string"
+          },
           "description": {
             "type": "string"
+          },
+          "publishedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "runtimes": {
             "type": "array",
@@ -5085,8 +5094,17 @@
           "isLatest": {
             "type": "boolean"
           },
+          "title": {
+            "type": "string"
+          },
           "description": {
             "type": "string"
+          },
+          "publishedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "runtimes": {
             "type": "array",
@@ -21807,6 +21825,164 @@
             "in": "path",
             "name": "id",
             "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "client": {
+                      "type": "string",
+                      "enum": [
+                        "claude-desktop",
+                        "claude-code",
+                        "cursor",
+                        "vscode"
+                      ]
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "auth": {
+                      "type": "string",
+                      "enum": [
+                        "oauth",
+                        "pat"
+                      ]
+                    },
+                    "file": {
+                      "type": "string"
+                    },
+                    "config": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "instructions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "client",
+                    "url",
+                    "name",
+                    "auth",
+                    "instructions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client-config": {
+      "get": {
+        "summary": "Configuration to paste into an MCP client for the default endpoint (/mcp)",
+        "tags": [
+          "Endpoints"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "claude-desktop",
+                "claude-code",
+                "cursor",
+                "vscode"
+              ]
+            },
+            "in": "query",
+            "name": "client",
+            "required": true
+          },
+          {
+            "schema": {
+              "default": "oauth",
+              "type": "string",
+              "enum": [
+                "oauth",
+                "pat"
+              ]
+            },
+            "in": "query",
+            "name": "auth",
+            "required": false
           }
         ],
         "security": [

@@ -4,8 +4,8 @@ The Bastion admin console (TDD section 18): a React 19 SPA served by the `ui` ro
 control-plane REST API at `/api/v1` (17) and receives live updates from `GET /api/v1/events` (SSE).
 
 Stack (5.1): Vite 7, TanStack Router and Query, Tailwind CSS 4 with the Zest tokens as CSS variables (light and
-dark), shadcn/ui on Radix (`src/components/ui`), Lucide, Recharts 3 (including Sankey), `@xyflow/react`
-(topology view), Monaco (JSON and Cedar, lazy loaded, bundled locally, no CDN), react-hook-form + zod.
+dark), shadcn/ui on Radix (`src/components/ui`), Lucide, Recharts 3, Monaco (JSON and Cedar, lazy loaded,
+bundled locally, no CDN), react-hook-form + zod.
 
 ## Commands
 
@@ -33,22 +33,33 @@ a team is a Manager (10.1). A dev-only role preview bar exists behind `?rolePrev
 `?rolePreview=0` turns it off); it is off by default and never shown otherwise. Light is the default theme for
 everyone; dark is stored per user through `PATCH /me`.
 
-## The API layer and swapping in `@bastion-mcp/api-client`
+## The API layer
 
-All network access lives in `src/api/`:
+All network access lives in `src/api/`, and every request and response type comes from the generated client
+(`@bastion-mcp/api-client`, built from the API's OpenAPI document):
 
-- `client.ts`: typed fetch wrapper (CSRF double submit with `x-bastion-csrf` from `bastion_csrf`, RFC 9457
-  problem+json to `ApiError`, ETag remembered per path and sent as `If-Match`, cursor pagination via
-  `fetchAll`, timeout and abort on every call, 401 redirect to `/auth/login`).
-- `types.ts`: view-model DTOs; `me.ts` maps the generated `GET /me` response.
-- `hooks/*.ts`: TanStack Query hooks, one per route group.
-- `events.ts`: SSE subscription and cache updates.
+- `client.ts`: the typed `api` (CSRF double submit with `x-bastion-csrf` from `bastion_csrf`, RFC 9457 problem+json to
+  `ApiError`, ETag remembered per path and sent as `If-Match`, cursor pagination via `fetchAll`, timeout and abort on
+  every call, 401 redirect to `/auth/login`). The path decides the body, the query and the response:
+  `api.post('/teams', body)` only compiles when `/teams` has a POST and `body` is its request body.
+- `schema.ts`: `Schemas['Team']`, `Body<'post', '/teams'>`, `Res<...>`, `Query<...>`: nothing is restated by hand.
+- `views/<domain>.ts`: view models for screens that join or derive data (names from other lists, letter and tint from
+  the name, status chips), defined over the generated types with pure mappers.
+- `hooks/<domain>.ts`: TanStack Query hooks, one file per domain (`pagedQuery` for lists).
+- `events.ts`: the SSE stream; its payloads are the only shapes OpenAPI cannot describe, so they are hand-written.
 
-`client.ts` is implemented on `createApiClient` from `@bastion-mcp/api-client` (keeping the `ApiError` mapping,
-CSRF header and ETag/If-Match). `api.get/post/...` accept only paths that exist in the OpenAPI document for that
-method (`ApiPath`), `GET /me` is typed by the generated response (`src/api/me.ts`, `src/mocks/me-response.ts`), and
-`src/api/route-contract.test.ts` fails when the UI or an MSW handler uses a route that is not in
-`packages/api-client/openapi.json`.
+Forms collect every field the API requires and validate with the same limits (slugs are derived from the name with
+core's `slugify`). Each form builds its body with a typed `toBody`.
+
+## The mock API and the contract tests
+
+`src/mocks/domains/<domain>.ts` is the MSW mock of one route group. Handlers are written with
+`route.get('/teams/{id}', ...)` (`src/mocks/http.ts`), so the path is an operation of the OpenAPI document and the
+answer has the operation's response type; the rows in `db.data.<domain>` have the exact API shape.
+`src/api/route-contract.test.ts` fails when the UI calls a route the API does not have or the mock does not answer,
+and validates every sample request and every response page of the mock with ajv against the JSON schemas of
+`packages/api-client/openapi.json`. Each form has a test that submits through the real screen, captures the body that
+went over the wire (`src/test/capture.ts`) and validates it against the request schema.
 
 Reconciliation decisions (also in `docs/adr/0001-deviations.md`, section 7):
 
@@ -60,14 +71,14 @@ Reconciliation decisions (also in `docs/adr/0001-deviations.md`, section 7):
 | `POST /installations/{id}/egress` | Removed; the Network tab shows `GET .../egress` decisions grouped per host. |
 | `/me` `org.*`, `capabilities.*` | Added to the API's `GET /me`. |
 | theme in `PATCH /me` | Per-browser (`localStorage`); `PATCH /me` edits `displayName` only. |
+| `GET .../versions/{vid}/test` as JSON | It is an SSE stream: the Test panel reads the run from the version row and polls. |
+| default endpoint client config | `GET /client-config` (added): the default `/mcp` endpoint has no row. |
+| stats by client, call spans | Not in the API: the Sankey, topology and waterfall are replaced by rankings and the call row. |
 
-Known follow-up: many request and response bodies are still written by hand in `types.ts` (the generated response
-types for list and detail routes are loose `{ id, updatedAt, ... }` objects) and several form bodies differ from the
-API's, for example `POST /teams` (`slug`, `displayName`) and catalog versions (`serverSpec`, `label`).
-
-`@bastion-mcp/core` is imported for constants and the org-settings schema only, through the two browser-safe
-subpaths `@bastion-mcp/core/constants` and `@bastion-mcp/core/org-settings` (aliased in `vite.config.ts` and
-`tsconfig.json`), because the package barrel pulls in Node-only modules.
+`@bastion-mcp/core` is imported for constants, the org-settings schema and `slugify` only, through the browser-safe
+subpaths `@bastion-mcp/core/constants`, `@bastion-mcp/core/org-settings` and `@bastion-mcp/core/ids` (aliased in
+`vite.config.ts` and `tsconfig.json`), because the package barrel and `server-spec` pull in Node-only modules; the
+`ServerSpec` constraints are mirrored in the catalog editor and checked against the OpenAPI schema by the tests.
 
 ## Layout
 

@@ -1,15 +1,14 @@
 import { KeyRound } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
-import { useDisconnectInstallation, useSetSecret } from '@/api/hooks';
-import type { Installation } from '@/api/types';
+import { useCatalogVersion, useDisconnectInstallation, useSetSecret } from '@/api/hooks';
+import { type InstallationView, secretStatus } from '@/api/views/servers';
 import { Field } from '@/components/form';
 import { Card, CardHeader } from '@/components/primitives';
 import { StatusDot } from '@/components/status';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { formatDate } from '@/lib/format';
 import { useInstallationAction } from '../use-installation-action';
 
 function ReplaceSecret({
@@ -18,7 +17,7 @@ function ReplaceSecret({
   open,
   onOpenChange,
 }: {
-  installation: Installation;
+  installation: InstallationView;
   name: string;
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -46,6 +45,7 @@ function ReplaceSecret({
           onSubmit={(e) => {
             e.preventDefault();
             if (!value.trim()) return setError('Enter a value');
+            if (value.length > 65_536) return setError('Keep it under 64 KiB');
             set.mutate(
               { name, value },
               {
@@ -81,25 +81,26 @@ function ReplaceSecret({
 }
 
 /** OAuth status with scopes and expiry, secrets (set or not set, never values) and reconnect (18.3). */
-export function ConnectionTab({ installation: i }: { installation: Installation }) {
+export function ConnectionTab({ installation: i }: { installation: InstallationView }) {
   const { run, pending } = useInstallationAction();
   const disconnect = useDisconnectInstallation(i.id);
+  const version = useCatalogVersion(i.catalogEntryId ?? undefined, i.catalogVersionId ?? undefined);
   const [replacing, setReplacing] = React.useState<string | null>(null);
+  const secrets = secretStatus(i, i.spec, version.data?.installForm.secrets ?? []);
+  const connected = i.status === 'ready';
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      {i.oauth ? (
+      {i.authMode === 'oauth' ? (
         <Card aria-label="Sign-in" className="gap-3.5">
-          <CardHeader title={`${i.oauth.provider} sign-in`} />
+          <CardHeader title={`${i.displayName} sign-in`} />
           <StatusDot
-            tone={i.oauth.connected ? 'ok' : 'warn'}
-            label={i.oauth.connected ? 'Connected' : 'Not connected'}
+            tone={connected ? 'ok' : 'warn'}
+            label={connected ? 'Connected' : 'Not connected'}
           />
           <dl className="m-0 grid grid-cols-[100px_1fr] gap-y-1.5 text-[13px]">
             <dt className="text-muted">Scopes</dt>
-            <dd className="m-0 font-mono">{i.oauth.scopes.join(', ')}</dd>
-            <dt className="text-muted">Expires</dt>
-            <dd className="m-0">
-              {i.oauth.expiresAt ? formatDate(i.oauth.expiresAt) : 'Not connected'}
+            <dd className="m-0 font-mono">
+              {i.spec?.scopes.length ? i.spec.scopes.join(', ') : 'As the server asks'}
             </dd>
           </dl>
           <div className="flex gap-2">
@@ -107,12 +108,12 @@ export function ConnectionTab({ installation: i }: { installation: Installation 
               size="sm"
               disabled={pending}
               onClick={() =>
-                run({ ...i, status: i.oauth?.connected ? 'reconnect_required' : 'needs_setup' })
+                run({ ...i, status: connected ? 'reconnect_required' : 'needs_setup' })
               }
             >
-              {i.oauth.connected ? 'Reconnect' : `Connect ${i.displayName}`}
+              {connected ? 'Reconnect' : `Connect ${i.displayName}`}
             </Button>
-            {i.oauth.connected && i.canManage ? (
+            {connected ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -128,10 +129,10 @@ export function ConnectionTab({ installation: i }: { installation: Installation 
       ) : null}
       <Card aria-label="Secrets" className="gap-3.5">
         <CardHeader title="Secrets" />
-        {i.secrets.length === 0 ? (
+        {secrets.length === 0 ? (
           <p className="m-0 text-muted">This server needs no secrets.</p>
         ) : (
-          i.secrets.map((s) => (
+          secrets.map((s) => (
             <div
               key={s.name}
               className="flex items-center gap-2.5 rounded-md bg-sunken px-3 py-2.5"
@@ -139,11 +140,9 @@ export function ConnectionTab({ installation: i }: { installation: Installation 
               <KeyRound className="size-4 text-muted" aria-hidden="true" />
               <span className="flex-1 font-mono text-[13px] font-medium">{s.name}</span>
               <StatusDot tone={s.set ? 'ok' : 'warn'} label={s.set ? 'Set' : 'Not set'} />
-              {i.canManage ? (
-                <Button variant="outline" size="xs" onClick={() => setReplacing(s.name)}>
-                  {s.set ? 'Replace secret' : 'Add secret'}
-                </Button>
-              ) : null}
+              <Button variant="outline" size="xs" onClick={() => setReplacing(s.name)}>
+                {s.set ? 'Replace secret' : 'Add secret'}
+              </Button>
             </div>
           ))
         )}

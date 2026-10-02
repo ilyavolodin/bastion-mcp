@@ -1,5 +1,5 @@
 /** Role model of the UI (10.1, 18.2). Everything role-aware in the SPA reads from this module. */
-import type { Me, UiRole } from '@/api/types';
+import type { Me, UiRole } from '@/api/views/session';
 
 export type NavSection =
   | 'home'

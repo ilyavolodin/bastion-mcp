@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../client';
-import type { BodyOf } from '../schema';
 import { toMe } from '../me';
+import type { BodyOf } from '../schema';
 import { toNotification, toQuota } from '../views/session';
 import { keys, pagedQuery, useApiMutation } from './base';
 
@@ -25,10 +25,7 @@ export const useNotifications = () =>
   });
 
 export const useMarkNotificationRead = () =>
-  useApiMutation(
-    (id: string) => api.post(`/me/notifications/${id}/read`),
-    [keys.notifications],
-  );
+  useApiMutation((id: string) => api.post(`/me/notifications/${id}/read`), [keys.notifications]);
 
 export const useQuotas = () =>
   useQuery({

@@ -4,7 +4,6 @@
  * mirrors `packages/overrides/src/schema.ts`, which `web` may not import (5.3 leaf rule).
  */
 import { z } from 'zod';
-import type { OverrideDocument } from '@/api/types';
 
 const jsonValue = z.json();
 const pointer = z.string().regex(/^(\/[^/]*)*$/, 'must be a JSON Pointer (RFC 6901)');
@@ -102,6 +101,18 @@ export const overrideDocumentSchema = z.strictObject({
   resourceTemplates: z.record(z.string(), template).optional(),
 });
 
+export type OverrideSection = 'tools' | 'prompts' | 'resources' | 'resourceTemplates';
+
+/**
+ * The document the editor works on: the shape `overrideDocumentSchema` accepts, with items as open records so form
+ * controls can write any field. The API types the body as a plain record (`PUT /installations/{id}/overrides`).
+ */
+export type OverrideDocument = {
+  version: 1;
+  uriPrefix?: boolean;
+  instructions?: { mode: 'append' | 'replace'; text: string };
+} & Partial<Record<OverrideSection, Record<string, Record<string, unknown>>>>;
+
 export type OverrideIssue = { path: string; message: string };
 export type OverrideValidation =
   | { ok: true; document: OverrideDocument; issues: [] }
@@ -131,8 +142,6 @@ export function validateOverrideText(text: string): OverrideValidation {
 }
 
 export const emptyOverrides = (): OverrideDocument => ({ version: 1 });
-
-export type OverrideSection = 'tools' | 'prompts' | 'resources' | 'resourceTemplates';
 
 /** Sets or clears one field of one item in the document (form controls write through this). */
 export function setItemField(

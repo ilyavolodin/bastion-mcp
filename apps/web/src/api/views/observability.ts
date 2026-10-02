@@ -3,7 +3,7 @@
  * reviews. Every type is the generated one (`Schemas`, `Res`, `Query`); what lives here is what the screens derive
  * from them (time slots, outcome groups, joined names, the worst guard verdict).
  */
-import type { CallOutcome, Query, Res, Schemas } from '../schema';
+import type { Body, CallOutcome, Query, Res, Schemas } from '../schema';
 
 export type CallRow = Schemas['CallRecord'];
 export type GuardResult = NonNullable<CallRow['guardResults']>[number];
@@ -72,7 +72,10 @@ export const scopedFilters = (viewer: CallViewer, filters: CallFilters): CallFil
   return team ? { ...filters, team } : { ...filters, user: viewer.id };
 };
 
-export const callsQuery = (filters: CallFilters, now: number = Date.now()): Query<'get', '/calls'> => ({
+export const callsQuery = (
+  filters: CallFilters,
+  now: number = Date.now(),
+): Query<'get', '/calls'> => ({
   ...(filters.user ? { user: filters.user } : {}),
   ...(filters.team ? { team: filters.team } : {}),
   ...(filters.installationId ? { installation: filters.installationId } : {}),
@@ -140,8 +143,7 @@ export const trendOf = (buckets: readonly { calls: number }[]): CallSeries['tren
   return 'flat';
 };
 
-const asOutcome = (g: string | null): CallOutcome =>
-  (g as CallOutcome | null) ?? 'ok';
+const asOutcome = (g: string | null): CallOutcome => (g as CallOutcome | null) ?? 'ok';
 
 /** `GET /stats/calls?groupBy=outcome` as per-slot call counts by outcome. */
 export const seriesFromStats = (
@@ -149,7 +151,10 @@ export const seriesFromStats = (
   window: { from: number; to: number; step: number },
 ): CallSeries => {
   const byTs = new Map(
-    slots(window.from, window.to, window.step).map((t) => [t, emptyBucket(new Date(t).toISOString())]),
+    slots(window.from, window.to, window.step).map((t) => [
+      t,
+      emptyBucket(new Date(t).toISOString()),
+    ]),
   );
   for (const b of stats.buckets) {
     const key = Math.floor(new Date(b.ts).getTime() / window.step) * window.step;
@@ -166,7 +171,10 @@ export const seriesFromCalls = (
   window: { from: number; to: number; step: number },
 ): CallSeries => {
   const byTs = new Map(
-    slots(window.from, window.to, window.step).map((t) => [t, emptyBucket(new Date(t).toISOString())]),
+    slots(window.from, window.to, window.step).map((t) => [
+      t,
+      emptyBucket(new Date(t).toISOString()),
+    ]),
   );
   for (const r of rows) {
     const key = Math.floor(new Date(r.ts).getTime() / window.step) * window.step;
@@ -216,7 +224,14 @@ export const totalsByGroup = (stats: Series): GroupTotal[] => {
 export type Verdict = 'clean' | 'suspicious' | 'malicious' | 'error';
 export const VERDICTS: readonly Verdict[] = ['clean', 'suspicious', 'malicious', 'error'];
 
-export type GuardTotals = { guard: string; clean: number; suspicious: number; malicious: number; error: number; flagged: number };
+export type GuardTotals = {
+  guard: string;
+  clean: number;
+  suspicious: number;
+  malicious: number;
+  error: number;
+  flagged: number;
+};
 
 /** `GET /stats/guards` (group = guard, values per verdict) summed over time, most flagged first. */
 export const guardTotals = (stats: Res<'get', '/stats/guards'>): GuardTotals[] => {
@@ -254,7 +269,12 @@ export const guardSlots = (stats: Res<'get', '/stats/guards'>): GuardSlot[] => {
 };
 
 export type SandboxSlot = { t: string; starts: number; failures: number };
-export type SandboxSeries = { drivers: string[]; slots: SandboxSlot[]; starts: number; failures: number };
+export type SandboxSeries = {
+  drivers: string[];
+  slots: SandboxSlot[];
+  starts: number;
+  failures: number;
+};
 
 export const sandboxSeries = (stats: Res<'get', '/stats/sandboxes'>): SandboxSeries => {
   const by = new Map<string, SandboxSlot>();
@@ -285,8 +305,10 @@ export const previewText = (value: unknown): string | null => {
   return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 };
 
-export const traceHref = (base: string | null | undefined, traceId: string | null): string | null =>
-  base && traceId ? `${base.replace(/\/$/, '')}/${traceId}` : null;
+export const traceHref = (
+  base: string | null | undefined,
+  traceId: string | null,
+): string | null => (base && traceId ? `${base.replace(/\/$/, '')}/${traceId}` : null);
 
 /** The worst verdict among guard results (`error` ranks below `suspicious`: a failed guard proves nothing). */
 export const worstVerdict = (results: readonly { verdict: Verdict }[]): Verdict => {
@@ -319,7 +341,10 @@ export const FINDING_KIND_LABEL: Record<FindingRow['kind'], string> = {
   egress_denied: 'Network access denied',
 };
 
-export type Names = { users: ReadonlyMap<string, string>; installations: ReadonlyMap<string, string> };
+export type Names = {
+  users: ReadonlyMap<string, string>;
+  installations: ReadonlyMap<string, string>;
+};
 
 export type FindingView = FindingRow & { subjectName: string | null };
 
@@ -378,7 +403,7 @@ export const driftViews = (
     };
   });
 
-/** The request a drift decision sends (`POST /drift-reviews/{id}/approve|reject`). */
+/** A drift decision with the body it sends (`POST /drift-reviews/{id}/approve|reject`). */
 export type DriftDecision =
-  | { id: string; decision: 'approve'; note?: string | undefined }
-  | { id: string; decision: 'reject'; reason: string };
+  | { id: string; decision: 'approve'; body: Body<'post', '/drift-reviews/{id}/approve'> }
+  | { id: string; decision: 'reject'; body: Body<'post', '/drift-reviews/{id}/reject'> };

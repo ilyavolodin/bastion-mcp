@@ -3,7 +3,7 @@
  * Lists spec sections containing a MUST that no test title cites (tdd.md 23.5). Without `--strict`
  * it only reports; CI turns on `--strict` once the milestone owning those sections has landed.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { extractMustSections, extractTestTitles, findUncoveredSections } from './must-coverage';
 
@@ -34,7 +34,9 @@ for (const base of ['packages', 'apps']) {
 const sections = extractMustSections(readFileSync(join(root, 'docs', 'tdd.md'), 'utf8'));
 const missing = findUncoveredSections(sections, covered);
 
-console.log(`${sections.length - missing.length}/${sections.length} sections with a MUST are covered`);
+console.log(
+  `${sections.length - missing.length}/${sections.length} sections with a MUST are covered`,
+);
 for (const section of missing) console.log(`  missing: ${section.id} ${section.heading}`);
 
 if (missing.length > 0 && process.argv.includes('--strict')) process.exit(1);

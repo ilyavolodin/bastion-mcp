@@ -56,6 +56,19 @@ describe('14 limit rules', () => {
     expect(api.publisher.messages.some((m) => m.message === '{"topic":"limits"}')).toBe(true);
   });
 
+  it('14.1 PATCH accepts a stored rule whose nullable database columns are null', async () => {
+    api = await buildTestApi();
+    const created = await api.call('admin', 'POST', '/limit-rules', { body: RATE });
+    expect(created.status).toBe(201);
+    const id = rec(created.body).id as string;
+    await api.deps.store.update('limit_rules', id, { cost: null, ownerTeamId: null });
+    const res = await api.call('admin', 'PATCH', `/limit-rules/${id}`, {
+      headers: { 'if-match': '*' },
+      body: { enabled: false },
+    });
+    expect(res.status).toBe(200);
+  });
+
   it('14.1 deletes with If-Match and audits', async () => {
     api = await buildTestApi();
     expect((await api.call('admin', 'DELETE', '/limit-rules/lr-2')).status).toBe(428);

@@ -86,7 +86,10 @@ export function applyServerEvent(qc: QueryClient, event: ServerEvent): Notificat
   }
 }
 
-export function useServerEvents(onNotification: (n: NotificationView) => void, enabled = true): void {
+export function useServerEvents(
+  onNotification: (n: NotificationView) => void,
+  enabled = true,
+): void {
   const qc = useQueryClient();
   const cb = useRef(onNotification);
   cb.current = onNotification;

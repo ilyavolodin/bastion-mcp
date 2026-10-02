@@ -37,7 +37,9 @@ export const updateLimitRule = async (
 ) => {
   const current = await ctx.tx.store.get('limit_rules', id);
   if (!current) throw new NotFoundApiError('limit_rule');
-  const { id: _id, updatedAt: _u, createdAt: _c, ...fields } = current;
+  const { id: _id, updatedAt: _u, createdAt: _c, ...stored } = current;
+  // Nullable database columns come back as null; the rule schema models "absent" as a missing key.
+  const fields = Object.fromEntries(Object.entries(stored).filter(([, value]) => value !== null));
   assertRule({ ...fields, ...patch });
   return limitRules.update(ctx, id, patch);
 };

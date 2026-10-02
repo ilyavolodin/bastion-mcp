@@ -1,183 +1,94 @@
 import { Link } from '@tanstack/react-router';
-import * as React from 'react';
 import {
   Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ComposedChart,
   Line,
-  Rectangle,
-  ReferenceDot,
-  Sankey,
-  Scatter,
-  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
-  ZAxis,
 } from 'recharts';
-import { useFlowStats, useLatency, useSandboxStats } from '@/api/hooks';
-import type { FlowStats, SandboxPhase, StatsRange, StatsScope } from '@/api/types';
+import { type StatsScope, useCallTotals, useLatency, useNames, useSandboxStats } from '@/api/hooks';
+import type { GroupTotal, StatsRange } from '@/api/views/observability';
 import { ChartCard } from '@/components/chart-card';
 import { AutoSize, AXIS_TICK, ChartTooltip, dateLabel, GRID, hourLabel } from '@/components/charts';
-import { Legend, Segmented, Tag } from '@/components/primitives';
+import { Legend, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { HEALTH_LABEL, healthTone, StatusDot } from '@/components/status';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
 import { formatDuration, formatNumber } from '@/lib/format';
-import { PHASE_COLOR } from '../activity/call-detail';
-
-const Topology = React.lazy(() => import('./topology'));
 
 type Args = { range: StatsRange } & StatsScope;
 const axisLabel = (range: StatsRange) =>
   range === '7d' || range === '14d' || range === '90d' ? dateLabel : hourLabel;
 
-// --- Traffic flow (Sankey) -------------------------------------------------------------------------
-type SankeyNode = { name: string; errorRate?: number };
-
-export const buildSankey = (flow: FlowStats) => {
-  const nodes: SankeyNode[] = [
-    ...flow.clients.map((name) => ({ name })),
-    ...flow.installations.map((i) => ({ name: i.name, errorRate: i.errorRate })),
-  ];
-  const links = flow.links
-    .map((l) => {
-      const source = flow.clients.indexOf(l.client);
-      const t = flow.installations.findIndex((i) => i.id === l.installationId);
-      return { source, target: flow.clients.length + t, value: l.calls, errors: l.errors };
-    })
-    .filter((l) => l.source >= 0 && l.target >= flow.clients.length);
-  return { nodes, links };
+/** Totals per server with the server's name (the rollups group by installation id). */
+const useServerTotals = (args: Args) => {
+  const totals = useCallTotals(args, 'installation');
+  const names = useNames();
+  const named = (g: GroupTotal) => names.data?.installations.get(g.group) ?? g.group;
+  return { totals, named };
 };
 
-type NodeProps = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  index: number;
-  payload: SankeyNode & { sourceLinks?: unknown[] };
-};
-const makeNodeShape = (clientCount: number) =>
-  function SankeyNodeShape({ x, y, width, height, index, payload }: NodeProps) {
-    const isTarget = index >= clientCount;
-    const bad = (payload.errorRate ?? 0) > 0.1;
-    return (
-      <g>
-        <Rectangle
-          x={x}
-          y={y}
-          width={width}
-          height={height}
-          fill={isTarget ? (bad ? 'var(--coral)' : 'var(--sky)') : 'var(--ink)'}
-          fillOpacity={1}
-        />
-        <text
-          x={isTarget ? x + width + 8 : x - 8}
-          y={y + height / 2}
-          textAnchor={isTarget ? 'start' : 'end'}
-          dominantBaseline="middle"
-          fontSize={12}
-          fill="var(--ink)"
-        >
-          {payload.name}
-        </text>
-      </g>
-    );
-  };
-
-type LinkProps = {
-  sourceX: number;
-  targetX: number;
-  sourceY: number;
-  targetY: number;
-  sourceControlX: number;
-  targetControlX: number;
-  linkWidth: number;
-  payload: { target: SankeyNode };
-};
-function SankeyLinkShape({
-  sourceX,
-  targetX,
-  sourceY,
-  targetY,
-  sourceControlX,
-  targetControlX,
-  linkWidth,
-  payload,
-}: LinkProps) {
-  const bad = (payload.target.errorRate ?? 0) > 0.1;
-  return (
-    <path
-      d={`M${sourceX},${sourceY}C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
-      fill="none"
-      stroke={bad ? 'var(--coral)' : 'var(--sky)'}
-      strokeOpacity={0.38}
-      strokeWidth={Math.max(1, linkWidth)}
-    />
-  );
-}
-
+// --- Where calls go ---------------------------------------------------------------------------------------
 export function TrafficPanel({ args }: { args: Args }) {
-  const q = useFlowStats(args);
-  const [view, setView] = React.useState<'flow' | 'topology'>('flow');
-  const flow = q.data;
-  const data = React.useMemo(() => (flow ? buildSankey(flow) : null), [flow]);
+  const { totals, named } = useServerTotals(args);
+  const max = Math.max(1, ...(totals.data ?? []).map((t) => t.calls));
   return (
     <ChartCard
       title="Where calls go"
+      interactive
       legend={
-        <>
-          <Legend
-            items={[
-              { label: 'Healthy', color: 'var(--sky)', shape: 'line' },
-              { label: 'Errors', color: 'var(--coral)', shape: 'line' },
-            ]}
-          />
-          <Segmented
-            label="Traffic view"
-            value={view}
-            onChange={setView}
-            options={[
-              { value: 'flow', label: 'Flow' },
-              { value: 'topology', label: 'Topology' },
-            ]}
-          />
-        </>
+        <Legend
+          items={[
+            { label: 'Succeeded', color: 'var(--sky)', shape: 'bar' },
+            { label: 'Errors', color: 'var(--coral)', shape: 'bar' },
+          ]}
+        />
       }
       table={{
-        columns: ['Client', 'Server', 'Calls', 'Errors'],
-        rows: (flow?.links ?? []).map((l) => [
-          l.client,
-          flow?.installations.find((i) => i.id === l.installationId)?.name ?? l.installationId,
-          l.calls,
-          l.errors,
-        ]),
+        columns: ['Server', 'Calls', 'Errors'],
+        rows: (totals.data ?? []).map((t) => [named(t), t.calls, t.errors]),
       }}
     >
-      <QueryBoundary query={q} skeleton={<Skeleton className="h-[320px] w-full" />}>
-        {(f) =>
-          view === 'topology' ? (
-            <React.Suspense fallback={<Skeleton className="h-[340px] w-full" />}>
-              <Topology flow={f} />
-            </React.Suspense>
-          ) : data ? (
-            <AutoSize height={320}>
-              <Sankey
-                data={data}
-                nodePadding={14}
-                nodeWidth={10}
-                margin={{ top: 10, right: 130, bottom: 10, left: 100 }}
-                node={makeNodeShape(f.clients.length) as never}
-                link={SankeyLinkShape as never}
+      <QueryBoundary query={totals} skeleton={<Skeleton className="h-[320px] w-full" />}>
+        {(items) => (
+          <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+            {items.map((t) => (
+              <li
+                key={t.group}
+                className="grid grid-cols-[140px_minmax(0,1fr)_64px] items-center gap-3"
+                title={`${named(t)}: ${formatNumber(t.calls)} calls, ${formatNumber(t.errors)} errors`}
               >
-                <Tooltip content={<ChartTooltip />} />
-              </Sankey>
-            </AutoSize>
-          ) : null
-        }
+                <Link
+                  to={`/servers/${t.group}`}
+                  className="truncate text-[13px] font-medium no-underline"
+                >
+                  {named(t)}
+                </Link>
+                <span className="flex h-4 overflow-hidden rounded-sm bg-sunken" aria-hidden="true">
+                  <span
+                    className="block h-full"
+                    style={{
+                      width: `${((t.calls - t.errors) / max) * 100}%`,
+                      background: 'var(--sky)',
+                    }}
+                  />
+                  <span
+                    className="block h-full"
+                    style={{ width: `${(t.errors / max) * 100}%`, background: 'var(--coral)' }}
+                  />
+                </span>
+                <span className="text-right text-caption tabular-nums text-muted">
+                  {formatNumber(t.calls)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </QueryBoundary>
     </ChartCard>
   );
@@ -185,8 +96,8 @@ export function TrafficPanel({ args }: { args: Args }) {
 
 // --- Server health map -----------------------------------------------------------------------------------
 export function HealthPanel({ args }: { args: Args }) {
-  const q = useFlowStats(args);
-  const items = [...(q.data?.installations ?? [])].sort((a, b) => b.calls - a.calls);
+  const { totals, named } = useServerTotals(args);
+  const items = totals.data ?? [];
   const max = Math.max(1, ...items.map((i) => i.calls));
   const span = (calls: number) => {
     const r = calls / max;
@@ -205,20 +116,20 @@ export function HealthPanel({ args }: { args: Args }) {
       legend={<span className="text-caption text-muted">Size = traffic</span>}
       table={{
         columns: ['Server', 'Calls', 'Error rate'],
-        rows: items.map((i) => [i.name, i.calls, `${(i.errorRate * 100).toFixed(1)}%`]),
+        rows: items.map((i) => [named(i), i.calls, `${(i.errorRate * 100).toFixed(1)}%`]),
       }}
     >
-      <QueryBoundary query={q} skeleton={<Skeleton className="h-[320px] w-full" />}>
+      <QueryBoundary query={totals} skeleton={<Skeleton className="h-[320px] w-full" />}>
         {() => (
           <ul className="m-0 grid list-none auto-rows-[64px] grid-cols-6 gap-1.5 p-0">
             {items.map((i) => {
               const tone = healthTone(i.errorRate);
               const s = span(i.calls);
               return (
-                <li key={i.id} style={{ gridColumn: `span ${s.c}`, gridRow: `span ${s.r}` }}>
+                <li key={i.group} style={{ gridColumn: `span ${s.c}`, gridRow: `span ${s.r}` }}>
                   <Link
-                    to={`/servers/${i.id}`}
-                    title={`${i.name}: ${formatNumber(i.calls)} calls, ${(i.errorRate * 100).toFixed(1)}% errors`}
+                    to={`/servers/${i.group}`}
+                    title={`${named(i)}: ${formatNumber(i.calls)} calls, ${(i.errorRate * 100).toFixed(1)}% errors`}
                     className={cn(
                       'flex h-full flex-col justify-between overflow-hidden rounded-md p-2.5 text-on-bright no-underline hover:text-on-bright',
                       tone === 'ok' && 'bg-mint-soft text-mint-ink hover:text-mint-ink',
@@ -227,7 +138,7 @@ export function HealthPanel({ args }: { args: Args }) {
                     )}
                   >
                     <span className="truncate text-[13px] leading-[18px] font-semibold">
-                      {i.name}
+                      {named(i)}
                     </span>
                     <StatusDot
                       tone={tone}
@@ -245,11 +156,20 @@ export function HealthPanel({ args }: { args: Args }) {
   );
 }
 
+const OrgOnly = ({ title }: { title: string }) => (
+  <ChartCard title={title} table={{ columns: [], rows: [] }}>
+    <p className="m-0 py-10 text-center text-muted">
+      This view reads the org-wide rollups; admins and auditors see it.
+    </p>
+  </ChartCard>
+);
+
 // --- Latency band ---------------------------------------------------------------------------------------
-export function LatencyPanel({ args }: { args: Args }) {
-  const q = useLatency(args);
+export function LatencyPanel({ args, enabled = true }: { args: Args; enabled?: boolean }) {
+  const q = useLatency(args, enabled);
   const data = (q.data ?? []).map((b) => ({ ...b, band: [b.p50, b.p95] as [number, number] }));
   const fmt = axisLabel(args.range);
+  if (!enabled) return <OrgOnly title="Latency" />;
   return (
     <ChartCard
       title="Latency"
@@ -258,13 +178,12 @@ export function LatencyPanel({ args }: { args: Args }) {
           items={[
             { label: 'Typical (p50)', color: 'var(--tangerine)', shape: 'line' },
             { label: 'Slow tail (to p95)', color: 'var(--tangerine-soft)', shape: 'bar' },
-            { label: 'Cold start', color: 'var(--sky)', shape: 'triangle' },
           ]}
         />
       }
       table={{
-        columns: ['Time', 'p50 (ms)', 'p95 (ms)', 'Cold start'],
-        rows: data.map((b) => [fmt(b.t), b.p50, b.p95, b.coldStart ? 'yes' : '']),
+        columns: ['Time', 'p50 (ms)', 'p95 (ms)', 'p99 (ms)', 'Calls'],
+        rows: data.map((b) => [fmt(b.t), b.p50, b.p95, b.p99, b.count]),
       }}
     >
       <QueryBoundary query={q} skeleton={<Skeleton className="h-[200px] w-full" />}>
@@ -308,11 +227,6 @@ export function LatencyPanel({ args }: { args: Args }) {
                 dot={false}
                 isAnimationActive={false}
               />
-              {data
-                .filter((b) => b.coldStart)
-                .map((b) => (
-                  <ReferenceDot key={b.t} x={b.t} y={b.p95} r={5} fill="var(--sky)" stroke="none" />
-                ))}
             </ComposedChart>
           </AutoSize>
         )}
@@ -322,93 +236,74 @@ export function LatencyPanel({ args }: { args: Args }) {
 }
 
 // --- Sandboxes ---------------------------------------------------------------------------------------------
-const PHASES: SandboxPhase[] = ['claim', 'bind', 'install', 'spawn', 'connect'];
-
-export function SandboxPanel({ args }: { args: Args }) {
-  const q = useSandboxStats(args);
+export function SandboxPanel({ args, enabled = true }: { args: Args; enabled?: boolean }) {
+  const q = useSandboxStats(args, enabled);
   const fmt = axisLabel(args.range);
   const d = q.data;
+  if (!enabled) return <OrgOnly title="Sandboxes" />;
   return (
     <ChartCard
       title="Sandboxes"
       legend={
         d ? (
-          <Tag tone="info" className="h-6 text-[12px]">
-            {d.driver}
-          </Tag>
+          <>
+            {d.drivers.map((driver) => (
+              <Tag key={driver} tone="info" className="h-6 text-[12px]">
+                {driver}
+              </Tag>
+            ))}
+            <Legend
+              items={[
+                { label: 'Starts', color: 'var(--sky)', shape: 'bar' },
+                { label: 'Failed starts', color: 'var(--coral)', shape: 'bar' },
+              ]}
+            />
+          </>
         ) : undefined
       }
       table={{
-        columns: ['Time', 'Running sandboxes'],
-        rows: (d?.running ?? []).map((r) => [fmt(r.t), r.count]),
+        columns: ['Time', 'Starts', 'Failed starts'],
+        rows: (d?.slots ?? []).map((r) => [fmt(r.t), r.starts, r.failures]),
       }}
     >
       <QueryBoundary query={q} skeleton={<Skeleton className="h-[240px] w-full" />}>
         {(s) => (
           <div className="flex flex-col gap-3">
-            <AutoSize height={110}>
-              <AreaChart
-                data={s.running}
+            <p className="m-0 text-caption text-muted">
+              {formatNumber(s.starts)} sandbox starts, {formatNumber(s.failures)} failed.
+            </p>
+            <AutoSize height={150}>
+              <BarChart
+                data={s.slots}
                 margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
                 accessibilityLayer={false}
               >
-                <defs>
-                  <linearGradient id="sbArea" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--sky)" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="var(--sky)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="t" hide />
+                <CartesianGrid vertical={false} stroke={GRID} />
+                <XAxis
+                  dataKey="t"
+                  tickFormatter={fmt}
+                  tick={AXIS_TICK}
+                  axisLine={false}
+                  tickLine={false}
+                  minTickGap={30}
+                />
                 <YAxis hide />
                 <Tooltip content={<ChartTooltip labelFormat={fmt} />} />
-                <Area
-                  type="monotone"
-                  dataKey="count"
-                  name="Running"
-                  stroke="var(--sky)"
-                  strokeWidth={2.5}
-                  fill="url(#sbArea)"
+                <Bar
+                  dataKey="starts"
+                  name="Starts"
+                  stackId="s"
+                  fill="var(--sky)"
                   isAnimationActive={false}
                 />
-              </AreaChart>
-            </AutoSize>
-            <span className="text-caption text-muted">Start time by phase</span>
-            <AutoSize height={120}>
-              <ScatterChart
-                margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
-                accessibilityLayer={false}
-              >
-                <XAxis
-                  type="number"
-                  dataKey="ms"
-                  tick={AXIS_TICK}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) => formatDuration(Number(v))}
+                <Bar
+                  dataKey="failures"
+                  name="Failed starts"
+                  stackId="s"
+                  fill="var(--coral)"
+                  isAnimationActive={false}
                 />
-                <YAxis
-                  type="category"
-                  dataKey="phase"
-                  width={64}
-                  tick={AXIS_TICK}
-                  axisLine={false}
-                  tickLine={false}
-                  allowDuplicatedCategory={false}
-                  interval={0}
-                />
-                <ZAxis range={[40, 40]} />
-                <Tooltip content={<ChartTooltip format={(v) => formatDuration(Number(v))} />} />
-                {PHASES.map((p) => (
-                  <Scatter
-                    key={p}
-                    name={p}
-                    data={s.starts.filter((x) => x.phase === p)}
-                    fill={PHASE_COLOR[p]}
-                    fillOpacity={0.75}
-                    isAnimationActive={false}
-                  />
-                ))}
-              </ScatterChart>
+              </BarChart>
             </AutoSize>
           </div>
         )}

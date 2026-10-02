@@ -16,15 +16,22 @@ const row = (over: Partial<Schemas['Notification']>): Schemas['Notification'] =>
 
 describe('session views (18.1)', () => {
   it('18.1 derives the line and the destination of a notification from its type and data', () => {
-    const n = toNotification(row({ type: 'setup', data: { message: 'Sign in', installationId: 'i-github' } }));
+    const n = toNotification(
+      row({ type: 'setup', data: { message: 'Sign in', installationId: 'i-github' } }),
+    );
     expect(n.body).toBe('Sign in');
     expect(n.href).toBe('/servers/i-github');
-    expect(toNotification(row({ type: 'install_request', data: { body: 'Raj asked' } }))).toMatchObject({
+    expect(
+      toNotification(row({ type: 'install_request', data: { body: 'Raj asked' } })),
+    ).toMatchObject({
       body: 'Raj asked',
       href: '/registry',
     });
     expect(notificationHref(row({ type: 'drift.review' }))).toBe('/security');
-    expect(toNotification(row({ type: 'unknown', data: 'oops' }))).toMatchObject({ body: '', href: null });
+    expect(toNotification(row({ type: 'unknown', data: 'oops' }))).toMatchObject({
+      body: '',
+      href: null,
+    });
   });
 
   it('14 shows concurrency as in use and every other limit as what is left', () => {
@@ -36,6 +43,8 @@ describe('session views (18.1)', () => {
       limit: 10,
       mode: 'left',
     });
-    expect(toQuota({ ...base, name: 'Parallel', kind: 'concurrency', limit: 8, consumed: 2 }).mode).toBe('inUse');
+    expect(
+      toQuota({ ...base, name: 'Parallel', kind: 'concurrency', limit: 8, consumed: 2 }).mode,
+    ).toBe('inUse');
   });
 });

@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as React from 'react';
 import { type FieldValues, type UseFormReturn, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import type { FormField as FieldDef } from '@/api/types';
+import type { InstallFieldDef as FieldDef } from '@/api/views/servers';
 import { cn } from '@/lib/cn';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -101,7 +101,6 @@ export function FieldsInputs<T extends FieldValues = Record<string, string>>({
               id={id}
               type={f.secret ? 'password' : 'text'}
               autoComplete={f.secret ? 'new-password' : 'off'}
-              placeholder={f.placeholder}
               aria-describedby={describedBy}
               aria-invalid={invalid}
               {...form.register(f.name as never)}

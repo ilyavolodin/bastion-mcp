@@ -1,9 +1,9 @@
 import { Link } from '@tanstack/react-router';
-import { Check, Plus, Search, ShieldCheck, Store } from 'lucide-react';
+import { Check, Plus, Search, Store } from 'lucide-react';
 import * as React from 'react';
 import { z } from 'zod';
 import { useStore, useStoreEntry } from '@/api/hooks';
-import type { StoreEntry } from '@/api/types';
+import type { StoreEntryView } from '@/api/views/servers';
 import { useAuth } from '@/auth/auth';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { cn } from '@/lib/cn';
-import { AUTH_LABEL, formatNumber, ISOLATION_LABEL, RUNTIME_LABEL } from '@/lib/format';
 import { useSearchState } from '@/lib/search';
 import { EntryDetail } from './entry-detail';
 import { InstallFlow } from './install-flow';
@@ -25,14 +24,14 @@ const searchSchema = z.object({
   entry: z.coerce.string().optional(),
 });
 
-const AUTH_TONE = { oauth: 'warn', userSecret: 'berry', teamSecret: 'ok', none: 'ok' } as const;
+const RISK_TONE = { low: 'ok', medium: 'warn', high: 'bad' } as const;
 
 function StoreCard({
   entry,
   selected,
   onSelect,
 }: {
-  entry: StoreEntry;
+  entry: StoreEntryView;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -66,22 +65,13 @@ function StoreCard({
         ) : null}
       </div>
       <div className="flex flex-wrap gap-1.5">
-        <Tag>{RUNTIME_LABEL[entry.runtime]}</Tag>
-        <Tag tone={AUTH_TONE[entry.authMode]}>{AUTH_LABEL[entry.authMode]}</Tag>
-        {entry.isolation !== 'none' ? (
-          <Tag tone="info" icon={<ShieldCheck className="size-[11px]" aria-hidden="true" />}>
-            {ISOLATION_LABEL[entry.isolation]}
-          </Tag>
-        ) : null}
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="h-1.5 flex-1 overflow-hidden rounded-sm bg-sunken" aria-hidden="true">
-          <div
-            className="h-full rounded-sm"
-            style={{ width: `${entry.popularity}%`, background: entry.color }}
-          />
-        </div>
-        <span className="text-caption text-muted">{formatNumber(entry.installCount)} people</span>
+        <Tag>{entry.category}</Tag>
+        <Tag tone={RISK_TONE[entry.risk]}>
+          {entry.risk === 'low' ? 'Low' : entry.risk === 'medium' ? 'Medium' : 'High'} risk
+        </Tag>
+        {entry.tags.map((t) => (
+          <Tag key={t}>{t}</Tag>
+        ))}
       </div>
     </article>
   );
@@ -160,13 +150,17 @@ export function StorePage() {
           <input
             type="search"
             aria-label="Search the store"
-            placeholder="Search by name, tool or what you want to do"
+            placeholder="Search by name or what it does"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted"
           />
         </div>
-        <div role="group" aria-label="Categories" className="flex flex-wrap gap-2">
+        <div
+          role="group"
+          aria-label="Categories"
+          className={cn('flex flex-wrap gap-2', categories.length <= 2 && 'hidden')}
+        >
           {categories.map((c) => (
             <button
               key={c}

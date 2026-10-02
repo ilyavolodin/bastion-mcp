@@ -1,9 +1,9 @@
 import { useQueries } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { LayoutGrid, Server, Settings2, User, Users, Wrench } from 'lucide-react';
-import { legacyApi as api } from '@/api/client';
+import { api } from '@/api/client';
 import { useInstallations, useTeams, useUsers } from '@/api/hooks';
-import type { EffectiveCapability } from '@/api/types';
+import { toCapabilities } from '@/api/views/servers';
 import { useAuth } from '@/auth/auth';
 import {
   Command,
@@ -83,7 +83,8 @@ export function CommandPalette() {
       queryKey: ['installations', s.id, 'palette-tools'],
       enabled: open,
       staleTime: 5 * 60_000,
-      queryFn: () => api.get<{ items: EffectiveCapability[] }>(`/installations/${s.id}/tools`),
+      queryFn: () =>
+        api.get(`/installations/${s.id}/tools`).then((res) => toCapabilities('tool', res)),
     })),
   });
 
@@ -93,7 +94,7 @@ export function CommandPalette() {
   };
 
   const toolItems = tools.flatMap((q, i) =>
-    (q.data?.items ?? []).filter((t) => !t.hidden).map((t) => ({ tool: t, server: servers[i] })),
+    (q.data ?? []).map((t) => ({ tool: t, server: servers[i] })),
   );
 
   return (
@@ -139,11 +140,11 @@ export function CommandPalette() {
                 {toolItems.map(({ tool, server }) => (
                   <CommandItem
                     key={`${server?.id}-${tool.name}`}
-                    value={`tool ${tool.finalName} ${tool.description} ${server?.displayName}`}
+                    value={`tool ${tool.name} ${tool.description} ${server?.displayName}`}
                     onSelect={() => go(`/servers/${server?.id}`, { tab: 'capabilities' })}
                   >
                     <Wrench className="size-4 text-muted" aria-hidden="true" />
-                    <span className="font-mono text-[13px]">{tool.finalName}</span>
+                    <span className="font-mono text-[13px]">{tool.name}</span>
                     <span className="ml-auto text-caption text-muted">{server?.displayName}</span>
                   </CommandItem>
                 ))}

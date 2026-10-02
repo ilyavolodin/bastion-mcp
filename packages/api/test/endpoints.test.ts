@@ -99,6 +99,20 @@ describe('7.1 endpoints', () => {
   });
 });
 
+describe('11.4 default endpoint client configuration', () => {
+  it('11.4 GET /client-config answers for the default endpoint /mcp', async () => {
+    api = await buildTestApi();
+    for (const client of ['claude-desktop', 'claude-code', 'cursor', 'vscode']) {
+      const res = await api.call('member', 'GET', '/client-config', { query: { client } });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ client, url: 'https://bastion.test/mcp', auth: 'oauth' });
+    }
+    expect(
+      (await api.call('member', 'GET', '/client-config', { query: { client: 'emacs' } })).status,
+    ).toBe(400);
+  });
+});
+
 describe('11.4 endpoint client configuration', () => {
   it('11.4 returns configuration for each supported client', async () => {
     api = await buildTestApi();

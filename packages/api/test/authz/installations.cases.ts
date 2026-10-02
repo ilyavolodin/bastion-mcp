@@ -83,6 +83,7 @@ export const installationsCases: AuthzCase[] = [
     path: `/endpoints/${MY_ENDPOINT}/client-config`,
     query: { client: 'cursor' },
   }),
+  personal('GET /client-config', { path: '/client-config', query: { client: 'cursor' } }),
   personal('POST /overrides/preview', {
     path: '/overrides/preview',
     body: { doc: { version: 1 }, upstream: {} },

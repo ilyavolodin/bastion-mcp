@@ -1,6 +1,7 @@
 import type { ApiPaths } from '@bastion-mcp/api-client';
 import { cachedTheme } from '@/lib/theme';
-import type { Me, OrgRole, TeamRole } from './types';
+import type { OrgRole, TeamRole } from './schema';
+import type { Me } from './views/session';
 
 /** `GET /me` exactly as the OpenAPI document describes it. */
 export type MeResponse = ApiPaths['/me']['get']['responses'][200]['content']['application/json'];

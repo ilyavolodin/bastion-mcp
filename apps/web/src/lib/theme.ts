@@ -1,4 +1,4 @@
-import type { ThemePref } from '@/api/types';
+import type { ThemePref } from '@/api/views/session';
 
 const KEY = 'bastion.theme';
 

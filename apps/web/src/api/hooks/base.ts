@@ -4,7 +4,7 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query';
-import { type ApiPath, fetchAll, type LooseQuery, legacyFetchAll, type Query } from '../client';
+import { type ApiPath, fetchAll, type LooseQuery } from '../client';
 import type { QueryOf } from '../schema';
 
 /**
@@ -18,13 +18,6 @@ export const pagedQuery = <P extends ApiPath<'get'>>(
 ) => ({
   queryKey: [...key, query ?? {}] as QueryKey,
   queryFn: ({ signal }: { signal: AbortSignal }) => fetchAll(path, query, 20, signal),
-});
-
-/** The pre-reconciliation list query (item type named by hand); see `legacyApi`. */
-export const listQuery = <T>(key: QueryKey, path: ApiPath<'get'>, query?: Query) => ({
-  queryKey: [...key, query ?? {}] as QueryKey,
-  queryFn: ({ signal }: { signal: AbortSignal }) =>
-    legacyFetchAll<T>(path, query ?? {}, 20, signal),
 });
 
 /** A mutation that invalidates the given query-key prefixes once it succeeds. */

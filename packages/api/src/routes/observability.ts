@@ -37,7 +37,11 @@ const callsQuery = z.object({
   ...range,
 });
 
-const callSchema = z.looseObject({ id: z.string(), ts: z.string(), userId: z.string().nullable() });
+const _callSchema = z.looseObject({
+  id: z.string(),
+  ts: z.string(),
+  userId: z.string().nullable(),
+});
 
 const statsQuery = z.object({
   groupBy: z

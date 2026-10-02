@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { Lock } from 'lucide-react';
 import type * as React from 'react';
-import type { UiRole } from '@/api/types';
+import type { UiRole } from '@/api/views/session';
 import { useAuth } from '@/auth/auth';
 import { DENIED, type NavSection } from '@/lib/roles';
 import { Button } from './ui/button';

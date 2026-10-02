@@ -1,5 +1,5 @@
 import { setupWorker } from 'msw/browser';
-import type { UiRole } from '@/api/types';
+import type { UiRole } from '@/api/views/session';
 import { resetDb } from './db';
 import { emitMockEvent, handlers } from './handlers';
 

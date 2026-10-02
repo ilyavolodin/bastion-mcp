@@ -335,6 +335,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
       'GET/POST /endpoints',
       'GET/PATCH/DELETE /endpoints/{id}',
       'GET /endpoints/{id}/client-config',
+      'GET /client-config',
       'POST /overrides/preview',
     ],
     action: 'installation.manage',

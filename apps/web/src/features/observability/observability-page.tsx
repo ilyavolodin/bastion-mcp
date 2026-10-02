@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { StatsRange, StatsScope } from '@/api/types';
+import type { StatsScope } from '@/api/hooks';
+import type { StatsRange } from '@/api/views/observability';
 import { useAuth } from '@/auth/auth';
 import { PageHeader } from '@/components/page-header';
 import { Segmented } from '@/components/primitives';
@@ -56,8 +57,8 @@ export function ObservabilityPage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <TrafficPanel args={args} />
         <HealthPanel args={args} />
-        <LatencyPanel args={args} />
-        <SandboxPanel args={args} />
+        <LatencyPanel args={args} enabled={orgAllowed} />
+        <SandboxPanel args={args} enabled={orgAllowed} />
       </div>
     </>
   );

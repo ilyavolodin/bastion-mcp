@@ -2,7 +2,7 @@ import { Play } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { useOverrides, usePreviewOverrides, useSaveOverrides, useTryTool } from '@/api/hooks';
-import type { DefinitionPair, OverrideDocument } from '@/api/types';
+import { type DefinitionPair, toDefinitionPairs } from '@/api/views/servers';
 import { CodeEditor } from '@/components/code-editor';
 import { DiffView } from '@/components/diff-view';
 import { Field } from '@/components/form';
@@ -14,6 +14,7 @@ import { Select, Textarea } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 import { stableStringify } from '@/lib/diff';
 import {
+  type OverrideDocument,
   overrideJsonSchema,
   sectionOf,
   setItemField,
@@ -21,13 +22,17 @@ import {
 } from '@/lib/override-schema';
 import { OverrideForm } from './override-form';
 
+/** The name AI tools call: the override's name, else the upstream one. */
+const finalName = (t: DefinitionPair): string =>
+  typeof t.final?.name === 'string' ? t.final.name : t.name;
+
 function TryIt({ installationId, tools }: { installationId: string; tools: DefinitionPair[] }) {
   const run = useTryTool(installationId);
-  const [tool, setTool] = React.useState(tools[0]?.name ?? '');
+  const [tool, setTool] = React.useState(tools[0] ? finalName(tools[0]) : '');
   const [args, setArgs] = React.useState('{\n  "query": "orders"\n}');
   const [argError, setArgError] = React.useState<string | null>(null);
   React.useEffect(() => {
-    if (!tool && tools[0]) setTool(tools[0].name);
+    if (!tool && tools[0]) setTool(finalName(tools[0]));
   }, [tools, tool]);
   const result = run.data;
   return (
@@ -41,8 +46,8 @@ function TryIt({ installationId, tools }: { installationId: string; tools: Defin
           {({ id }) => (
             <Select id={id} value={tool} onChange={(e) => setTool(e.target.value)}>
               {tools.map((t) => (
-                <option key={t.name} value={t.name}>
-                  {String((t.final?.name as string | undefined) ?? t.name)}
+                <option key={t.name} value={finalName(t)}>
+                  {finalName(t)}
                 </option>
               ))}
             </Select>
@@ -81,9 +86,10 @@ function TryIt({ installationId, tools }: { installationId: string; tools: Defin
         </Button>
         {result ? (
           <>
-            <Tag tone={result.ok ? 'ok' : 'bad'}>{result.ok ? 'Succeeded' : 'Blocked'}</Tag>
+            <Tag tone={result.isError ? 'bad' : 'ok'}>
+              {result.isError ? 'Failed' : 'Succeeded'}
+            </Tag>
             <span className="text-caption text-muted">{result.durationMs} ms</span>
-            {result.guard ? <Tag tone="info">{result.guard}</Tag> : null}
           </>
         ) : null}
       </div>
@@ -93,7 +99,7 @@ function TryIt({ installationId, tools }: { installationId: string; tools: Defin
           aria-label="Result"
           className="m-0 max-h-60 overflow-auto rounded-md bg-sunken p-3 font-mono text-[12px]"
         >
-          {result.text}
+          {JSON.stringify(result.result, null, 2)}
         </pre>
       ) : null}
       {run.isError ? <ProblemAlert error={run.error} /> : null}
@@ -105,10 +111,12 @@ function Editor({
   installationId,
   initial,
   canEdit,
+  rejected,
 }: {
   installationId: string;
   initial: OverrideDocument;
   canEdit: boolean;
+  rejected: { path: string; reason: string }[];
 }) {
   const [doc, setDoc] = React.useState<OverrideDocument>(initial);
   const [saved, setSaved] = React.useState<OverrideDocument>(initial);
@@ -128,7 +136,10 @@ function Editor({
     return () => clearTimeout(t);
   }, [doc, installationId, runPreview]);
 
-  const defs = preview.data?.definitions ?? [];
+  const defs = React.useMemo(
+    () => (preview.data ? toDefinitionPairs(preview.data) : []),
+    [preview.data],
+  );
   const current = defs.find((d) => d.name === selected) ?? defs[0];
   const entry = current ? (doc[sectionOf(current.kind)]?.[current.name] ?? {}) : {};
 
@@ -198,16 +209,19 @@ function Editor({
             </>
           }
         />
-        {preview.data?.errors.length ? (
+        {[...rejected, ...(preview.data?.rejected ?? [])].length ? (
           <ul
             role="alert"
             className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-[13px] text-coral-ink"
           >
-            {preview.data.errors.map((e) => (
-              <li key={e}>{e}</li>
+            {[...rejected, ...(preview.data?.rejected ?? [])].map((r) => (
+              <li key={`${r.path}-${r.reason}`}>
+                {r.path}: {r.reason}
+              </li>
             ))}
           </ul>
         ) : null}
+        {preview.isError ? <ProblemAlert error={preview.error} /> : null}
         {view === 'json' ? (
           <div className="flex flex-col gap-3">
             <CodeEditor
@@ -257,7 +271,7 @@ function Editor({
                       {touched ? (
                         <span className="size-2 rounded-full bg-tangerine" title="Overridden" />
                       ) : null}
-                      {d.final === null ? <span className="sr-only">hidden</span> : null}
+                      {d.hidden ? <span className="sr-only">hidden</span> : null}
                     </button>
                   </li>
                 );
@@ -276,7 +290,11 @@ function Editor({
                   mode="lines"
                   leftLabel="Upstream definition"
                   rightLabel="Final definition"
-                  left={stableStringify(current.upstream)}
+                  left={
+                    current.upstream
+                      ? stableStringify(current.upstream)
+                      : '(the definition is withheld while the item is hidden)'
+                  }
                   right={current.final ? stableStringify(current.final) : '(hidden)'}
                 />
                 <OverrideForm
@@ -300,12 +318,25 @@ function Editor({
   );
 }
 
+/** The stored document, or an empty one (the API stores `{}` until the first save). */
+const asDocument = (doc: Record<string, unknown>): OverrideDocument => {
+  const parsed = validateOverrideText(JSON.stringify({ version: 1, ...doc }));
+  return parsed.ok ? parsed.document : { version: 1 };
+};
+
 /** Override editor (12.5): diff, form controls, raw JSON with schema validation, and a Try-it panel. */
 export function OverridesTab({ installationId }: { installationId: string }) {
   const q = useOverrides(installationId);
   return (
     <QueryBoundary query={q}>
-      {(d) => <Editor installationId={installationId} initial={d.document} canEdit={d.canEdit} />}
+      {(d) => (
+        <Editor
+          installationId={installationId}
+          initial={asDocument(d.doc)}
+          canEdit={d.userOverrides !== 'none'}
+          rejected={d.rejected}
+        />
+      )}
     </QueryBoundary>
   );
 }

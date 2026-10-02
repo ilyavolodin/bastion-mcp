@@ -2,7 +2,7 @@ import { expect, vi } from 'vitest';
 import { server } from '@/mocks/server';
 import { findOperation, type HttpMethod, validateRequest } from './contract';
 
-export type Captured = { method: HttpMethod; path: string; body: unknown };
+export type Captured = { method: HttpMethod; path: string; search: string; body: unknown };
 
 /**
  * Records the requests the app sends to the MSW mock, with their JSON bodies, so a test can submit a real form and
@@ -24,6 +24,7 @@ export function captureRequests() {
         calls.push({
           method: request.method.toLowerCase() as HttpMethod,
           path: new URL(request.url).pathname,
+          search: new URL(request.url).search,
           body,
         });
       }),

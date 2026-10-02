@@ -1,6 +1,6 @@
 import { Ban, Globe, ShieldCheck } from 'lucide-react';
 import { useEgress } from '@/api/hooks';
-import type { Installation } from '@/api/types';
+import type { InstallationView } from '@/api/views/servers';
 import { Card, CardHeader, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { cn } from '@/lib/cn';
@@ -9,7 +9,7 @@ import { cn } from '@/lib/cn';
  * Allowed and denied egress hosts as chips with a badge (18.3, 8.8). The API has no access-request route
  * (17.2): admins extend a server's allowlist from its catalog entry or an override.
  */
-export function NetworkTab({ installation: i }: { installation: Installation }) {
+export function NetworkTab({ installation: i }: { installation: InstallationView }) {
   const q = useEgress(i.id);
   return (
     <QueryBoundary query={q}>

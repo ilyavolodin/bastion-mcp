@@ -7,7 +7,7 @@ import {
   defineRoute,
   type RouteDefinition,
 } from '../framework/route';
-import { idParams, itemPage, itemSchema } from '../schemas/common';
+import { idParams, itemSchema } from '../schemas/common';
 import {
   credentialsBodySchema,
   credentialsResponseSchema,
@@ -16,7 +16,6 @@ import {
   idpTestResponseSchema,
   oauthClientCreateSchema,
   oauthClientPatchSchema,
-  scimTokenCreatedSchema,
   scimTokenCreateSchema,
   serviceAccountCreateSchema,
   serviceAccountListQuery,
@@ -67,7 +66,7 @@ const accountTeamOfRow = async (input: AuthzInput) => {
   return typeof row?.teamId === 'string' ? teamResource(row.teamId) : orgResource();
 };
 
-const serviceAccountCreated = itemSchema.extend({
+const _serviceAccountCreated = itemSchema.extend({
   clientId: z.string(),
   authMethod: z.enum(['client_secret_basic', 'private_key_jwt']),
   clientSecret: z.string().optional(),

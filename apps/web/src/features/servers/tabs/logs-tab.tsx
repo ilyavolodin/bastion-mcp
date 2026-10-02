@@ -2,24 +2,38 @@ import { Pause, Play, Trash2 } from 'lucide-react';
 import * as React from 'react';
 import { API_BASE } from '@/api/client';
 import { useEventLines } from '@/api/events';
-import type { Installation } from '@/api/types';
+import type { InstallationView } from '@/api/views/servers';
 import { EmptyState } from '@/components/empty-state';
 import { StatusDot } from '@/components/status';
 import { Button } from '@/components/ui/button';
 
 const MAX_LINES = 500;
 
+/** The text of one `log` event: `{"line":"..."}`, or the raw data when it is not JSON. */
+export const parseLogLine = (data: string): string => {
+  try {
+    const v: unknown = JSON.parse(data);
+    if (v && typeof v === 'object' && 'line' in v && typeof v.line === 'string') return v.line;
+  } catch {
+    // not JSON: show it as it is
+  }
+  return data;
+};
+
 /** Live stderr tail (SSE) for sandboxed servers. */
-export function LogsTab({ installation: i }: { installation: Installation }) {
-  const sandboxed = i.runtime !== 'remote';
+export function LogsTab({ installation: i }: { installation: InstallationView }) {
+  const sandboxed = i.sandboxed;
   const [lines, setLines] = React.useState<string[]>([]);
   const [paused, setPaused] = React.useState(false);
   const ref = React.useRef<HTMLPreElement>(null);
   const pausedRef = React.useRef(paused);
   pausedRef.current = paused;
 
-  useEventLines(sandboxed ? `${API_BASE}/installations/${i.id}/logs` : null, (line) => {
-    if (!pausedRef.current) setLines((l) => [...l.slice(-(MAX_LINES - 1)), line]);
+  // Every `log` event of the stream carries `{ line }` as JSON (routes/installations.ts).
+  useEventLines(sandboxed ? `${API_BASE}/installations/${i.id}/logs` : null, (data) => {
+    if (pausedRef.current) return;
+    const line = parseLogLine(data);
+    setLines((l) => [...l.slice(-(MAX_LINES - 1)), line]);
   });
   React.useEffect(() => {
     if (!paused && ref.current) ref.current.scrollTop = ref.current.scrollHeight;

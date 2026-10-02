@@ -1,5 +1,5 @@
 import { Eye } from 'lucide-react';
-import type { UiRole } from '@/api/types';
+import type { UiRole } from '@/api/views/session';
 import { useAuth } from '@/auth/auth';
 import { cn } from '@/lib/cn';
 

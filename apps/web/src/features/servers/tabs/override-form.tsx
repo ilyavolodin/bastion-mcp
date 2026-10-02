@@ -1,12 +1,12 @@
 import * as React from 'react';
-import type { ItemKind } from '@/api/types';
+import type { CapabilityKind } from '@/api/views/servers';
 import { Field } from '@/components/form';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 
 type Entry = Record<string, unknown>;
 type Props = {
-  kind: ItemKind;
+  kind: CapabilityKind;
   entry: Entry;
   disabled?: boolean;
   onChange: (field: string, value: unknown) => void;

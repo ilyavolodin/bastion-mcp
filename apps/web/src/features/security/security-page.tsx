@@ -1,13 +1,23 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { ShieldAlert, ShieldCheck } from 'lucide-react';
+import * as React from 'react';
+import { useForm } from 'react-hook-form';
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis } from 'recharts';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { useDecideDrift, useDriftReviews, useFindings, useGuardStats } from '@/api/hooks';
-import type { DriftReview, GuardKind, StatsRange } from '@/api/types';
+import {
+  type DriftView,
+  FINDING_KIND_LABEL,
+  type GuardTotals,
+  guardSlots,
+  type StatsRange,
+} from '@/api/views/observability';
+import { useAuth } from '@/auth/auth';
 import { ChartCard } from '@/components/chart-card';
 import { AutoSize, AXIS_TICK, ChartTooltip, dateLabel, GRID, hourLabel } from '@/components/charts';
-import { DiffView } from '@/components/diff-view';
 import { EmptyState } from '@/components/empty-state';
+import { Field } from '@/components/form';
 import { PageHeader } from '@/components/page-header';
 import {
   Card,
@@ -21,19 +31,29 @@ import {
 } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { letterOf, tintOf } from '@/lib/avatar';
 import { cn } from '@/lib/cn';
 import { formatRelative } from '@/lib/format';
 import { useSearchState } from '@/lib/search';
-import { FindingBlock } from '../activity/call-detail';
+import { GuardResultBlock } from '../activity/call-detail';
+import {
+  type ApproveValues,
+  approveSchema,
+  type RejectValues,
+  rejectSchema,
+  toApproveBody,
+  toRejectBody,
+} from './forms';
 
-export const GUARD_META: Record<GuardKind, { label: string; color: string }> = {
-  prompt_injection: { label: 'Prompt injection', color: 'var(--berry)' },
-  pii: { label: 'PII', color: 'var(--sky)' },
-  regex: { label: 'Regex rules', color: 'var(--tangerine)' },
-  definition_drift: { label: 'Definition drift', color: 'var(--teal)' },
-};
-const KINDS = Object.keys(GUARD_META) as GuardKind[];
+const VERDICT_META = {
+  suspicious: { label: 'Suspicious', color: 'var(--sun)' },
+  malicious: { label: 'Malicious', color: 'var(--coral)' },
+  error: { label: 'Guard errors', color: 'var(--berry)' },
+} as const;
+const VERDICTS = Object.keys(VERDICT_META) as (keyof typeof VERDICT_META)[];
 
 const searchSchema = z.object({
   range: z.enum(['24h', '14d', '90d']).catch('14d').default('14d'),
@@ -43,18 +63,21 @@ const searchSchema = z.object({
 function FindingsChart({ range }: { range: StatsRange }) {
   const q = useGuardStats({ range });
   const fmt = range === '24h' ? hourLabel : dateLabel;
-  const rows = (q.data?.buckets ?? []).map((b) => ({ t: b.t, ...b.counts }));
+  const rows = q.data ? guardSlots(q.data.stats) : [];
   return (
     <ChartCard
       title="Findings by guard"
       legend={
         <Legend
-          items={KINDS.map((k) => ({ label: GUARD_META[k].label, color: GUARD_META[k].color }))}
+          items={VERDICTS.map((v) => ({
+            label: VERDICT_META[v].label,
+            color: VERDICT_META[v].color,
+          }))}
         />
       }
       table={{
-        columns: ['Day', ...KINDS.map((k) => GUARD_META[k].label)],
-        rows: rows.map((r) => [fmt(r.t), ...KINDS.map((k) => r[k])]),
+        columns: ['Day', ...VERDICTS.map((v) => VERDICT_META[v].label)],
+        rows: rows.map((r) => [fmt(r.t), ...VERDICTS.map((v) => r[v])]),
       }}
     >
       <QueryBoundary query={q} skeleton={<Skeleton className="h-[220px] w-full" />}>
@@ -78,13 +101,13 @@ function FindingsChart({ range }: { range: StatsRange }) {
                 content={<ChartTooltip labelFormat={fmt} />}
                 cursor={{ fill: 'var(--surface-sunken)' }}
               />
-              {KINDS.map((k) => (
+              {VERDICTS.map((v) => (
                 <Bar
-                  key={k}
-                  dataKey={k}
-                  name={GUARD_META[k].label}
+                  key={v}
+                  dataKey={v}
+                  name={VERDICT_META[v].label}
                   stackId="g"
-                  fill={GUARD_META[k].color}
+                  fill={VERDICT_META[v].color}
                   isAnimationActive={false}
                 />
               ))}
@@ -96,39 +119,25 @@ function FindingsChart({ range }: { range: StatsRange }) {
   );
 }
 
-function Ranked({
-  title,
-  items,
-  color,
-  mono,
-}: {
-  title: string;
-  items: { name: string; count: number }[];
-  color: string;
-  mono?: boolean;
-}) {
-  const max = Math.max(1, ...items.map((i) => i.count));
+function Ranked({ items }: { items: GuardTotals[] }) {
+  const max = Math.max(1, ...items.map((i) => i.flagged));
   return (
     <div className="flex flex-col gap-2.5">
-      <Overline>{title}</Overline>
+      <Overline>Guards</Overline>
       {items.map((t) => (
         <div
-          key={t.name}
-          className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-2.5"
-          title={`${t.name}: ${t.count} findings`}
+          key={t.guard}
+          className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-2.5"
+          title={`${t.guard}: ${t.flagged} findings`}
         >
-          <span
-            className={cn('truncate font-medium', mono ? 'font-mono text-[12px]' : 'text-[13px]')}
-          >
-            {t.name}
-          </span>
+          <span className="truncate font-mono text-[12px] font-medium">{t.guard}</span>
           <span className="h-3.5 overflow-hidden rounded-sm bg-sunken">
             <span
               className="block h-full rounded-sm"
-              style={{ width: `${(t.count / max) * 100}%`, background: color }}
+              style={{ width: `${(t.flagged / max) * 100}%`, background: 'var(--tangerine)' }}
             />
           </span>
-          <span className="sr-only">{t.count} findings</span>
+          <span className="sr-only">{t.flagged} findings</span>
         </div>
       ))}
     </div>
@@ -137,24 +146,29 @@ function Ranked({
 
 function TopFlagged({ range }: { range: StatsRange }) {
   const q = useGuardStats({ range });
+  const totals = (q.data?.totals ?? []).filter((t) => t.flagged > 0);
   return (
     <ChartCard
       title="Most flagged"
       table={{
-        columns: ['Name', 'Kind', 'Findings'],
-        rows: [
-          ...(q.data?.topServers ?? []).map((s) => [s.name, 'Server', s.count]),
-          ...(q.data?.topTools ?? []).map((s) => [s.name, 'Tool', s.count]),
-        ],
+        columns: ['Guard', 'Suspicious', 'Malicious', 'Errors', 'Clean'],
+        rows: (q.data?.totals ?? []).map((t) => [
+          t.guard,
+          t.suspicious,
+          t.malicious,
+          t.error,
+          t.clean,
+        ]),
       }}
     >
       <QueryBoundary query={q} skeleton={<Skeleton className="h-[220px] w-full" />}>
-        {(d) => (
-          <div className="flex flex-col gap-4">
-            <Ranked title="Servers" items={d.topServers} color="var(--tangerine)" />
-            <Ranked title="Tools" items={d.topTools} color="var(--sky)" mono />
-          </div>
-        )}
+        {() =>
+          totals.length === 0 ? (
+            <p className="m-0 text-muted">No guard flagged anything in this period.</p>
+          ) : (
+            <Ranked items={totals} />
+          )
+        }
       </QueryBoundary>
     </ChartCard>
   );
@@ -166,56 +180,147 @@ const RISK = {
   low: { tone: 'ok', label: 'Low' },
 } as const;
 
-function ReviewDetail({ r }: { r: DriftReview }) {
+type Decision = 'approve' | 'reject';
+
+function DecisionDialog({
+  review,
+  decision,
+  onClose,
+}: {
+  review: DriftView;
+  decision: Decision;
+  onClose: () => void;
+}) {
   const decide = useDecideDrift();
-  const act = (decision: 'approve' | 'reject') =>
-    decide.mutate(
-      { id: r.id, decision },
-      {
-        onSuccess: () =>
-          toast.success(
-            decision === 'approve'
-              ? 'New definition accepted'
-              : `Still blocking ${r.upstreamVersion}`,
-          ),
+  const reject = decision === 'reject';
+  const form = useForm<RejectValues & ApproveValues>({
+    resolver: zodResolver(reject ? rejectSchema : approveSchema) as never,
+    defaultValues: { reason: '', note: '' },
+  });
+  const [problem, setProblem] = React.useState<string | undefined>();
+  const submit = form.handleSubmit((values) => {
+    setProblem(undefined);
+    const done = {
+      onSuccess: () => {
+        toast.success(reject ? `Still blocking ${review.itemKey}` : 'New definition accepted');
+        onClose();
       },
+      onError: (e: Error) => setProblem(e.message),
+    };
+    decide.mutate(
+      reject
+        ? { id: review.id, decision: 'reject', body: toRejectBody(values) }
+        : { id: review.id, decision: 'approve', body: toApproveBody(values) },
+      done,
     );
+  });
+  const error = form.formState.errors[reject ? 'reason' : 'note']?.message;
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        title={reject ? `Keep blocking ${review.itemKey}` : `Accept ${review.itemKey}`}
+        description={
+          reject
+            ? 'Calls stay on the approved definition. Say why, so the owner can see it.'
+            : 'The new definition goes live for everyone who uses this server.'
+        }
+      >
+        <form className="flex flex-col gap-4" onSubmit={submit}>
+          <Field
+            label={reject ? 'Reason' : 'Note'}
+            required={reject}
+            error={error}
+            help={reject ? undefined : 'Optional. Recorded with the approval.'}
+          >
+            {({ id, describedBy, invalid }) => (
+              <Textarea
+                id={id}
+                rows={3}
+                aria-describedby={describedBy}
+                aria-invalid={invalid}
+                {...form.register(reject ? 'reason' : 'note')}
+              />
+            )}
+          </Field>
+          {problem ? (
+            <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
+              {problem}
+            </p>
+          ) : null}
+          <Button type="submit" variant={reject ? 'danger' : 'primary'} disabled={decide.isPending}>
+            {reject ? 'Keep blocking' : 'Accept definition'}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReviewDetail({ r }: { r: DriftView }) {
+  const { role } = useAuth();
+  const [deciding, setDeciding] = React.useState<Decision | null>(null);
+  const canDecide = role === 'admin' || role === 'manager';
   return (
     <div className="flex min-w-0 flex-col gap-3.5">
-      <DiffView
-        leftLabel={`Approved · ${r.approvedVersion}`}
-        rightLabel={`Upstream now · ${r.upstreamVersion}`}
-        left={r.approved}
-        right={r.upstream}
-      />
+      <section
+        aria-label="New definition"
+        data-testid="definition-view"
+        className="flex flex-col gap-2 rounded-md bg-sunken p-3.5"
+      >
+        <Overline>Upstream now</Overline>
+        <div className="font-mono text-[13px] font-semibold">{r.itemKey}</div>
+        <p className="m-0 text-[13px] leading-5">
+          {r.description || 'This definition has no description.'}
+        </p>
+        <div
+          role="region"
+          aria-label="New definition"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be reachable by keyboard
+          tabIndex={0}
+          className="overflow-x-auto"
+        >
+          <pre className="m-0 font-mono text-[12px] text-muted">
+            {JSON.stringify(r.newDefinition, null, 2)}
+          </pre>
+        </div>
+        <p className="m-0 text-caption text-muted">
+          {r.oldHash ? 'Changed from' : 'New since the last approval'}{' '}
+          {r.oldHash ? <span className="font-mono">{r.oldHash.slice(0, 10)}</span> : null}
+          {r.oldHash ? ' to ' : ' · '}
+          <span className="font-mono">{r.newHash.slice(0, 10)}</span>
+        </p>
+      </section>
       <div
         className={cn(
           'flex items-center gap-2.5 rounded-md px-3.5 py-3',
-          r.scan.verdict === 'clean' ? 'bg-mint-soft' : 'bg-berry-soft',
+          r.verdict === 'clean' ? 'bg-mint-soft' : 'bg-berry-soft',
         )}
       >
-        {r.scan.verdict === 'clean' ? (
+        {r.verdict === 'clean' ? (
           <ShieldCheck className="size-[18px] text-mint-ink" aria-hidden="true" />
         ) : (
           <ShieldAlert className="size-[18px] text-berry-ink" aria-hidden="true" />
         )}
         <span className="flex-1 text-[13px] leading-5">
-          <strong className="font-semibold">Description scan:</strong> {r.scan.message}
+          <strong className="font-semibold">Guard scan:</strong> {r.scanMessage}
         </span>
       </div>
-      {r.canDecide ? (
+      {r.guardResults.map((g, i) => (
+        <GuardResultBlock key={`${g.guard}-${i}`} result={g} />
+      ))}
+      {canDecide ? (
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button variant="danger" disabled={decide.isPending} onClick={() => act('reject')}>
-            Keep blocking {r.upstreamVersion}
+          <Button variant="danger" onClick={() => setDeciding('reject')}>
+            Keep blocking {r.itemKey}
           </Button>
           <Button
             variant="outline"
-            disabled={decide.isPending || r.scan.verdict === 'malicious'}
-            onClick={() => act('approve')}
+            disabled={r.verdict === 'malicious'}
+            onClick={() => setDeciding('approve')}
           >
             Accept new definition
           </Button>
-          {r.scan.verdict === 'malicious' ? (
+          {r.verdict === 'malicious' ? (
             <span className="text-caption text-muted">
               A malicious scan needs an Admin override with a reason.
             </span>
@@ -224,6 +329,9 @@ function ReviewDetail({ r }: { r: DriftReview }) {
       ) : (
         <ReadOnlyNote>Read-only. A Manager of the owning team or an Admin decides.</ReadOnlyNote>
       )}
+      {deciding ? (
+        <DecisionDialog review={r} decision={deciding} onClose={() => setDeciding(null)} />
+      ) : null}
     </div>
   );
 }
@@ -246,7 +354,7 @@ function DriftQueue() {
           <EmptyState
             icon={<ShieldCheck />}
             title="No definitions are waiting"
-            description="When a server changes a tool after approval, it shows up here with a diff."
+            description="When a server changes a tool after approval, it shows up here for review."
           />
         }
       >
@@ -264,10 +372,14 @@ function DriftQueue() {
                       r.id === current?.id ? 'bg-surface ring-2 ring-tangerine-ink' : 'bg-sunken',
                     )}
                   >
-                    <ServerIcon letter={r.letter} color={r.color} size={32} />
+                    <ServerIcon
+                      letter={letterOf(r.serverName)}
+                      color={tintOf(r.installationId ?? r.id)}
+                      size={32}
+                    />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-mono text-[13px] leading-5 font-semibold">
-                        {r.itemName}
+                        {r.itemKey}
                       </span>
                       <span className="block text-caption text-muted">
                         {r.serverName} · {formatRelative(r.createdAt)}
@@ -292,7 +404,7 @@ function RecentFindings({ range }: { range: StatsRange }) {
     <Card aria-label="Recent findings" className="gap-3">
       <CardHeader
         title="Recent findings"
-        subtitle="The triggering segment is highlighted in context."
+        subtitle="Guard blocks, changed definitions and denied network access, newest first."
       />
       <QueryBoundary
         query={q}
@@ -302,12 +414,24 @@ function RecentFindings({ range }: { range: StatsRange }) {
         {(items) => (
           <ul className="m-0 grid list-none gap-3 p-0 lg:grid-cols-2">
             {items.map((f) => (
-              <li key={f.id} className="flex flex-col gap-1.5">
-                <span className="text-caption text-muted">
-                  {f.installationName} · <span className="font-mono">{f.tool}</span> ·{' '}
-                  {formatRelative(f.createdAt)}
+              <li
+                key={`${f.kind}-${f.id}`}
+                className="flex flex-col gap-1.5 rounded-md bg-sunken p-3.5"
+              >
+                <span className="flex items-center gap-2 text-[13px] font-semibold">
+                  <Tag
+                    tone={f.kind === 'guard_block' ? 'bad' : f.kind === 'drift' ? 'warn' : 'info'}
+                  >
+                    {FINDING_KIND_LABEL[f.kind]}
+                  </Tag>
+                  <span className="ml-auto text-caption font-normal text-muted">
+                    {formatRelative(f.ts)}
+                  </span>
                 </span>
-                <FindingBlock finding={f} />
+                <span className="font-mono text-[12px]">{f.detail ?? 'No detail'}</span>
+                {f.subject ? (
+                  <span className="text-caption text-muted">{f.subjectName ?? f.subject}</span>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -318,6 +442,8 @@ function RecentFindings({ range }: { range: StatsRange }) {
 }
 
 export function SecurityPage() {
+  const { role } = useAuth();
+  const orgView = role === 'admin' || role === 'auditor';
   const [s, setS] = useSearchState(searchSchema);
   const range: StatsRange = s.range;
   return (
@@ -338,12 +464,18 @@ export function SecurityPage() {
           />
         }
       />
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <FindingsChart range={range} />
-        <TopFlagged range={range} />
-      </div>
+      {orgView ? (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <FindingsChart range={range} />
+          <TopFlagged range={range} />
+        </div>
+      ) : (
+        <ReadOnlyNote>
+          Guard statistics and findings cover the whole org: admins and auditors see them.
+        </ReadOnlyNote>
+      )}
       <DriftQueue />
-      <RecentFindings range={range} />
+      {orgView ? <RecentFindings range={range} /> : null}
     </>
   );
 }

@@ -5,9 +5,17 @@
  */
 import type { HttpHandler } from 'msw';
 import type { Res, Schemas } from '@/api/schema';
-import { getDb, setRole } from '../db';
-import { HttpResponse, latency, noContent, notFound, pageOf, route, type SampleFactory } from '../http';
+import {
+  HttpResponse,
+  latency,
+  noContent,
+  notFound,
+  pageOf,
+  route,
+  type SampleFactory,
+} from '../http';
 import { toMeResponse } from '../me-response';
+import { getDb, setRole } from '../state';
 
 type Quota = Res<'get', '/me/quotas'>['items'][number];
 
@@ -130,7 +138,10 @@ export const sessionSamples: SampleFactory = (db) => [
   { method: 'get', path: '/me' },
   { method: 'patch', path: '/me', body: { displayName: 'Dana W.' } },
   { method: 'get', path: '/me/notifications' },
-  { method: 'post', path: `/me/notifications/${db.data.session.notifications[0]?.id ?? 'n-1'}/read` },
+  {
+    method: 'post',
+    path: `/me/notifications/${db.data.session.notifications[0]?.id ?? 'n-1'}/read`,
+  },
   { method: 'get', path: '/me/quotas' },
 ];
 

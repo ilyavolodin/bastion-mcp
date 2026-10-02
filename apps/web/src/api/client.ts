@@ -296,39 +296,3 @@ export async function fetchAll<P extends ApiPath<'get'>>(
   }
   return out;
 }
-
-/**
- * The pre-reconciliation client: the caller names the response type by hand. Only screens that have not moved to
- * the typed `api` above use it; it disappears with the last of them.
- */
-export const legacyApi = {
-  get: <T>(path: ApiPath<'get'>, options?: RequestOptions) => request<T>('GET', path, options),
-  post: <T>(path: ApiPath<'post'>, body?: unknown, options?: RequestOptions) =>
-    request<T>('POST', path, { ...options, ...(body !== undefined ? { body } : {}) }),
-  put: <T>(path: ApiPath<'put'>, body?: unknown, options?: RequestOptions) =>
-    request<T>('PUT', path, { ...options, ...(body !== undefined ? { body } : {}) }),
-  patch: <T>(path: ApiPath<'patch'>, body?: unknown, options?: RequestOptions) =>
-    request<T>('PATCH', path, { ...options, ...(body !== undefined ? { body } : {}) }),
-  delete: <T = void>(path: ApiPath<'delete'>, options?: RequestOptions) =>
-    request<T>('DELETE', path, options),
-};
-
-export async function legacyFetchAll<T>(
-  path: ApiPath<'get'>,
-  query: Query = {},
-  maxPages = 20,
-  signal?: AbortSignal,
-): Promise<T[]> {
-  const out: T[] = [];
-  let cursor: string | null = null;
-  for (let i = 0; i < maxPages; i++) {
-    const page: CursorPage<T> = await legacyApi.get<CursorPage<T>>(path, {
-      query: { limit: 500, ...query, cursor },
-      ...(signal ? { signal } : {}),
-    });
-    out.push(...page.items);
-    if (!page.nextCursor) break;
-    cursor = page.nextCursor;
-  }
-  return out;
-}

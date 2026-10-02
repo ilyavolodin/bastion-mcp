@@ -7,7 +7,6 @@
 import { slugify } from '@bastion-mcp/core/ids';
 import type { HttpHandler } from 'msw';
 import type { Body, Res, Schemas } from '@/api/schema';
-import { getDb, nextId } from '../db';
 import {
   etagHeaders,
   forbidden,
@@ -20,6 +19,7 @@ import {
   type Sample,
   type SampleFactory,
 } from '../http';
+import { getDb, nextId } from '../state';
 
 type Entry = Schemas['CatalogEntry'];
 type Version = Schemas['CatalogVersion'];
@@ -67,6 +67,12 @@ type Seed = {
   registry?: boolean;
   /** A draft version in addition to the published one. */
   extraDraft?: string;
+  /** The `userSecret` field of the sign-in (default: the Zendesk token). */
+  secret?: { name: string; label: string };
+  /** A package spec (default: the Postgres one). */
+  pkg?: { runtime: 'npm' | 'pypi'; identifier: string; version: string; egress: string[] };
+  /** What the installer fills in, when the spec derives none. */
+  form?: Version['installForm'];
 };
 
 const SEEDS: Seed[] = [
@@ -78,6 +84,18 @@ const SEEDS: Seed[] = [
     label: '1.8.2',
     spec: 'oauth',
     registry: true,
+    form: {
+      variables: [
+        {
+          name: 'SITE_URL',
+          label: 'Jira site',
+          description: 'Your Atlassian cloud address',
+          required: true,
+          default: 'https://acme.atlassian.net',
+        },
+      ],
+      secrets: [],
+    },
   },
   {
     slug: 'linear',
@@ -183,6 +201,69 @@ const SEEDS: Seed[] = [
     label: '1.0.0',
     spec: 'none',
   },
+  {
+    slug: 'notion',
+    name: 'Notion',
+    kind: 'mcp_server',
+    desc: 'Pages and databases',
+    label: '1.0.4',
+    spec: 'userSecret',
+    secret: { name: 'NOTION_API_KEY', label: 'Notion API key' },
+  },
+  {
+    slug: 'filesystem',
+    name: 'Filesystem',
+    kind: 'mcp_server',
+    desc: 'Read and write files in a scratch workspace',
+    label: '0.6.2',
+    spec: 'package',
+    pkg: {
+      runtime: 'npm',
+      identifier: '@modelcontextprotocol/server-filesystem',
+      version: '0.6.2',
+      egress: [],
+    },
+  },
+  {
+    slug: 'web-fetch',
+    name: 'Web fetch',
+    kind: 'mcp_server',
+    desc: 'Fetch a web page as Markdown',
+    label: '2025.4.1',
+    spec: 'package',
+    pkg: {
+      runtime: 'pypi',
+      identifier: 'mcp-server-fetch',
+      version: '2025.4.1',
+      egress: ['*.wikipedia.org', 'docs.acme.dev'],
+    },
+  },
+  {
+    slug: 'servicedesk',
+    name: 'ServiceDesk',
+    kind: 'mcp_server',
+    desc: 'IT requests and approvals',
+    label: '1.0.0',
+    spec: 'oauth',
+  },
+  {
+    slug: 'hubspot',
+    name: 'HubSpot',
+    kind: 'mcp_server',
+    desc: 'Contacts, companies and deals',
+    label: '3.1.0',
+    spec: 'userSecret',
+    secret: { name: 'HUBSPOT_API_KEY', label: 'API key' },
+  },
+  {
+    slug: 'ticket-triage',
+    name: 'Ticket triage',
+    kind: 'mcp_server',
+    desc: 'Internal triage helpers',
+    label: '0.9.0',
+    spec: 'package',
+    pkg: { runtime: 'pypi', identifier: 'acme-ticket-triage', version: '0.9.0', egress: [] },
+  },
 ];
 
 const remote = (
@@ -198,6 +279,13 @@ const remote = (
 const specFor = (
   s: Seed,
 ): { spec: Record<string, unknown> | null; form: Version['installForm'] } => {
+  const base = baseSpecFor(s);
+  return { spec: base.spec, form: s.form ?? base.form };
+};
+
+const baseSpecFor = (
+  s: Seed,
+): { spec: Record<string, unknown> | null; form: Version['installForm'] } => {
   switch (s.spec) {
     case 'oauth':
       return {
@@ -209,34 +297,47 @@ const specFor = (
         }),
         form: { variables: [], secrets: [] },
       };
-    case 'userSecret':
+    case 'userSecret': {
+      const field = s.secret ?? { name: 'ZENDESK_TOKEN', label: 'Zendesk API token' };
       return {
         spec: remote(s.slug, {
           mode: 'userSecret',
-          fields: [{ name: 'ZENDESK_TOKEN', label: 'Zendesk API token' }],
-          inject: [{ to: 'header', name: 'ZENDESK_TOKEN', value: '{{secret.ZENDESK_TOKEN}}' }],
+          fields: [field],
+          inject: [{ to: 'header', name: field.name, value: `{{secret.${field.name}}}` }],
         }),
-        form: { variables: [], secrets: [{ name: 'ZENDESK_TOKEN', label: 'Zendesk API token' }] },
+        form: { variables: [], secrets: [field] },
       };
-    case 'package':
+    }
+    case 'package': {
+      const pkg = s.pkg ?? {
+        runtime: 'npm' as const,
+        identifier: '@acme/pg-mcp',
+        version: '3.2.0',
+        egress: ['warehouse.acme.internal'],
+      };
       return {
         spec: {
           type: 'package',
-          runtime: 'npm',
-          identifier: '@acme/pg-mcp',
-          version: '3.2.0',
+          runtime: pkg.runtime,
+          identifier: pkg.identifier,
+          version: pkg.version,
           size: 'small',
-          egress: { allow: ['warehouse.acme.internal'] },
-          environmentVariables: [
-            { name: 'DATABASE_URL', value: '{{secret.DATABASE_URL}}', isRequired: true },
-          ],
-          auth: {
-            mode: 'orgSecret',
-            inject: [{ to: 'env', name: 'DATABASE_URL', value: '{{secret.DATABASE_URL}}' }],
-          },
+          egress: { allow: pkg.egress },
+          ...(s.pkg
+            ? { auth: { mode: 'none' } }
+            : {
+                environmentVariables: [
+                  { name: 'DATABASE_URL', value: '{{secret.DATABASE_URL}}', isRequired: true },
+                ],
+                auth: {
+                  mode: 'orgSecret',
+                  inject: [{ to: 'env', name: 'DATABASE_URL', value: '{{secret.DATABASE_URL}}' }],
+                },
+              }),
         },
         form: { variables: [], secrets: [] },
       };
+    }
     case 'none':
       return { spec: null, form: { variables: [], secrets: [] } };
   }

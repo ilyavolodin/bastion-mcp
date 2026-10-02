@@ -11,7 +11,7 @@ import {
   type StdioChannel,
   startAndWait,
 } from '@bastion-mcp/sandbox';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startEgressForwarder } from '../src/egress-forward';
 import type { Installer } from '../src/install';
 import { createRunner, type Runner } from '../src/server';
@@ -232,7 +232,10 @@ describe('8.3 runner (real HTTP + WebSocket, fake stdio server)', () => {
     second.handlers = { onmessage: (m) => seen.push(m), onstderr: (l) => stderr.push(l) };
     await new Promise((r) => setTimeout(r, 400));
     expect(second.dropped + seen.length).toBeGreaterThan(0);
-    expect(seen.length).toBeLessThanOrEqual(1000);
+    // When the flood outlives the disconnect window (a busy machine) it streams live and nothing is dropped;
+    // the 1,000-message cap is asserted whenever output was actually buffered. The buffer's own cap and
+    // drop-oldest behavior are covered deterministically by the pure unit tests.
+    if (second.dropped > 0) expect(seen.length).toBeLessThanOrEqual(1000);
     if (second.dropped > 0) {
       expect(stderr.some((l) => l.includes(`dropped ${second.dropped}`))).toBe(true);
     }
@@ -265,7 +268,10 @@ describe('8.3 runner (real HTTP + WebSocket, fake stdio server)', () => {
     const first = await client.openStdio();
     await first.send({ jsonrpc: '2.0', id: 1, method: 'exit' });
     await first.close();
-    await new Promise((r) => setTimeout(r, 300));
+    // Wait for the exit to land (it can lag when the machine is busy), not a fixed sleep.
+    await vi.waitFor(async () => expect(await client.health()).toEqual({ state: 'bound' }), {
+      timeout: 10_000,
+    });
     // state is bound after the exit, so stdio is refused: the manager restarts instead
     await expect(client.openStdio()).rejects.toMatchObject({ status: 409 });
   });

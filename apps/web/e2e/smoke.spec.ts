@@ -24,15 +24,18 @@ test('install a server from the Store', async ({ page }) => {
   await expect(page.getByRole('link', { name: /ServiceDesk/ })).toBeVisible();
 });
 
-test('open an Activity call drawer with the trace waterfall', async ({ page }) => {
+test('open an Activity call drawer with timing, policy decision and tracing link', async ({
+  page,
+}) => {
   await page.goto('/activity');
   await page
     .getByRole('button', { name: /pg_run_query/ })
     .first()
     .click();
   const drawer = page.getByRole('complementary', { name: 'Call detail' });
-  await expect(drawer.getByText('Where the time went')).toBeVisible();
-  await expect(drawer.getByText(/Request guard · SQL write pattern/)).toBeVisible();
+  await expect(drawer.getByRole('term').filter({ hasText: 'Duration' })).toBeVisible();
+  await expect(drawer.getByText('Policy decision')).toBeVisible();
+  await expect(drawer.getByRole('link', { name: /Open in tracing backend/ })).toBeVisible();
 });
 
 test('switch theme from the user menu', async ({ page }) => {

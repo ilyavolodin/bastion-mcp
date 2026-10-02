@@ -8,7 +8,7 @@ import {
   type RouteDefinition,
   RouteReply,
 } from '../framework/route';
-import { idParams, itemPage, itemSchema } from '../schemas/common';
+import { idParams } from '../schemas/common';
 import {
   installBodySchema,
   installResultSchema,
@@ -156,7 +156,10 @@ export const registryRoutes: RouteDefinition[] = [
     url: '/registry/servers',
     tag: TAG,
     summary: 'Browse the mirrored registry servers',
-    schema: { query: serverSearchQuery, response: pageSchema(registryServerSummary).meta({ id: 'RegistryServerPage' }) },
+    schema: {
+      query: serverSearchQuery,
+      response: pageSchema(registryServerSummary).meta({ id: 'RegistryServerPage' }),
+    },
     authz: authz.on('registry.install', org),
     handler: (ctx) => searchServers(ctx, ctx.query),
   }),

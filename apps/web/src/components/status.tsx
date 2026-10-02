@@ -1,6 +1,6 @@
 import { Check, CircleOff, Info, TriangleAlert, X } from 'lucide-react';
 import type * as React from 'react';
-import type { InstallationStatus as InstallationStatusValue } from '@/api/types';
+import type { InstallationStatus as InstallationStatusValue } from '@/api/schema';
 import { cn } from '@/lib/cn';
 
 /**
@@ -91,7 +91,7 @@ export const HEALTH_LABEL: Record<Tone, string> = {
   berry: 'Review',
 };
 
-export type Outcome = import('@/api/types').CallOutcome;
+export type Outcome = import('@/api/schema').CallOutcome;
 export const OUTCOME: Record<
   Outcome,
   { label: string; bg: string; fg: string; bar: string; strip: string }

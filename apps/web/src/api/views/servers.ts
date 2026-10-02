@@ -3,7 +3,6 @@
  * runtime or sign-in mode (those live in the server spec of its catalog version), and the owner is an id: the screens
  * join them here. Everything derives from the generated schema types.
  */
-import { slugify } from '@bastion-mcp/core/ids';
 import { z } from 'zod';
 import { letterOf, tintOf } from '@/lib/avatar';
 import type { Body, Res, Schemas } from '../schema';
@@ -447,10 +446,6 @@ export type InstallValues = {
   pinnedVersion: boolean;
   fields: Record<string, string>;
 };
-
-/** The default URL name of a new installation: the entry's slug (7.1). */
-export const defaultInstallSlug = (entry: Pick<StoreEntry, 'slug' | 'displayName'>): string =>
-  slugify(entry.slug || entry.displayName);
 
 /** The body of `POST /installations` for an entry of the store. */
 export const toInstallBody = (

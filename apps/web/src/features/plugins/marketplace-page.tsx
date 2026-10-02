@@ -1,5 +1,6 @@
 import { useParams } from '@tanstack/react-router';
 import { useMarketplace, useRollout } from '@/api/hooks';
+import { rolloutText } from '@/api/views/plugins';
 import { useAuth } from '@/auth/auth';
 import { CopyField } from '@/components/copy-field';
 import { PageHeader } from '@/components/page-header';
@@ -23,39 +24,43 @@ function RolloutCard({
   label,
 }: {
   marketplaceId: string;
-  client: string;
+  client: (typeof ROLLOUT_CLIENTS)[number][0];
   label: string;
 }) {
   const q = useRollout(marketplaceId, client);
+  const view = q.data ? rolloutText(q.data) : null;
   return (
     <Card aria-label={`${label} rollout`} className="gap-3">
       <CardHeader
         title={label}
         actions={
-          q.data ? (
-            <Tag tone={q.data.kind === 'snippet' ? 'info' : 'warn'}>
-              {q.data.kind === 'snippet' ? 'Config' : 'Checklist'}
+          view ? (
+            <Tag tone={view.kind === 'snippet' ? 'info' : 'warn'}>
+              {view.kind === 'snippet' ? 'Config' : 'Checklist'}
             </Tag>
           ) : undefined
         }
       />
       {q.isPending ? (
         <Skeleton className="h-24 w-full" />
-      ) : q.data ? (
+      ) : view ? (
         <>
-          <p className="m-0 text-caption text-muted">{q.data.label}</p>
           <pre className="m-0 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-[#171a3a] p-3 font-mono text-[12px] leading-5 text-[#f4f4f6]">
-            {q.data.content}
+            {view.text}
           </pre>
           <CopyField
-            value={q.data.content}
-            label={`${label} ${q.data.kind === 'snippet' ? 'configuration' : 'checklist'}`}
+            value={view.text}
+            label={`${label} ${view.kind === 'snippet' ? 'configuration' : 'checklist'}`}
             tone="sunken"
             buttonLabel="Copy"
             className="[&>span:first-child]:text-[13px]"
           />
         </>
-      ) : null}
+      ) : (
+        <p className="m-0 text-caption text-muted">
+          Not available yet: the marketplace needs a release (promoted for Claude Desktop).
+        </p>
+      )}
     </Card>
   );
 }
@@ -79,7 +84,7 @@ export function MarketplacePage() {
             <div className="flex min-w-0 flex-col gap-6">
               <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
                 {m.plugins.map((p) => (
-                  <PluginCard key={p.entryId} p={p} showPolicy />
+                  <PluginCard key={p.slug} p={p} showPolicy />
                 ))}
               </div>
               <section aria-label="Rollout" className="flex flex-col gap-3.5">

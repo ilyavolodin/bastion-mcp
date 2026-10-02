@@ -8,7 +8,11 @@ import type { RegistryServer } from '@/api/views/registry';
 
 /** `requestCreateSchema`: a justification of 1 to 2000 characters. */
 export const requestFormSchema = z.object({
-  justification: z.string().trim().min(1, 'Say what you need it for').max(2000, 'At most 2000 characters'),
+  justification: z
+    .string()
+    .trim()
+    .min(1, 'Say what you need it for')
+    .max(2000, 'At most 2000 characters'),
 });
 export type RequestForm = z.infer<typeof requestFormSchema>;
 

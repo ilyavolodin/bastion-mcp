@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Plug, Plus } from 'lucide-react';
-import { useMarketplaces } from '@/api/hooks';
+import { useClientSetup, useMarketplaces } from '@/api/hooks';
 import { useAuth } from '@/auth/auth';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -14,6 +14,7 @@ export function PluginsPage() {
   const { role } = useAuth();
   const q = useMarketplaces();
   const first = q.data?.[0];
+  const clients = useClientSetup(first?.id);
   return (
     <>
       <PageHeader
@@ -52,7 +53,7 @@ export function PluginsPage() {
               <Card aria-label="Set up your clients" className="gap-3.5">
                 <CardHeader title="Set up your clients" />
                 <div className="grid gap-3 md:grid-cols-2">
-                  {(first?.clients ?? []).map((c) => (
+                  {clients.setups.map((c) => (
                     <ClientSetupCard key={c.client} c={c} />
                   ))}
                 </div>
@@ -76,7 +77,7 @@ export function PluginsPage() {
                   </div>
                   <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
                     {m.plugins.map((p) => (
-                      <PluginCard key={p.entryId} p={p} />
+                      <PluginCard key={p.slug} p={p} />
                     ))}
                   </div>
                 </section>

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  extractMustSections,
-  extractTestTitles,
-  findUncoveredSections,
-} from '../must-coverage';
+import { extractMustSections, extractTestTitles, findUncoveredSections } from '../must-coverage';
 
 const doc = `
 # Title

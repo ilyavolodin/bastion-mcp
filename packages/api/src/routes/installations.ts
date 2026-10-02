@@ -9,7 +9,7 @@ import {
   type RouteDefinition,
   RouteReply,
 } from '../framework/route';
-import { idParams, itemPage, itemSchema, okSchema } from '../schemas/common';
+import { idParams, okSchema } from '../schemas/common';
 import {
   autoInstallCreateSchema,
   autoInstallPatchSchema,
@@ -58,6 +58,7 @@ import {
   targetResource,
   updatePolicy,
 } from '../services/auto-install';
+import { clientConfigFor } from '../services/client-config';
 import { approveReview, driftReviews, rejectReview } from '../services/drift';
 import {
   createEndpoint,
@@ -424,6 +425,20 @@ export const installationsRoutes: RouteDefinition[] = [
     schema: { params: idParams, query: clientConfigQuery, response: clientConfigSchema },
     authz: authz.on('installations.personal', org),
     handler: (ctx) => endpointClientConfig(ctx, ctx.params.id, ctx.query.client, ctx.query.auth),
+  }),
+  defineRoute({
+    method: 'GET',
+    url: '/client-config',
+    tag: ENDPOINTS,
+    summary: 'Configuration to paste into an MCP client for the default endpoint (/mcp)',
+    schema: { query: clientConfigQuery, response: clientConfigSchema },
+    authz: authz.on('installations.personal', org),
+    handler: (ctx) =>
+      clientConfigFor(
+        ctx.query.client,
+        { baseUrl: ctx.deps.config.baseUrl, slug: null },
+        ctx.query.auth,
+      ),
   }),
 
   // --- overrides ---------------------------------------------------------------------------------------

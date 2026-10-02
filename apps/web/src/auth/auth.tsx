@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import * as React from 'react';
 import { useMe } from '@/api/hooks';
-import type { Me, ThemePref, UiRole } from '@/api/types';
+import type { Me, ThemePref, UiRole } from '@/api/views/session';
 import { ProblemScreen } from '@/components/problem';
 import { Skeleton } from '@/components/ui/skeleton';
 import { canSee, type NavSection, uiRole } from '@/lib/roles';

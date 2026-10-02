@@ -2,9 +2,18 @@ import { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { applyServerEvent, openEventStream } from '@/api/events';
-import { buildSankey } from '@/features/observability/panels';
 import { getDb } from '@/mocks/db';
 import { expectNoA11yViolations, renderRoute } from './utils';
+
+/** Share of the last 24 hours' calls of one server that did not succeed, as the health tile computes it. */
+const errorRateOf = (installationId: string): string => {
+  const since = Date.now() - 24 * 3_600_000;
+  const calls = getDb().data.observability.calls.filter(
+    (c) => c.installationId === installationId && new Date(c.ts).getTime() >= since,
+  );
+  const failed = calls.filter((c) => c.outcome !== 'ok' && c.outcome !== 'input_required');
+  return `${((failed.length / calls.length) * 100).toFixed(1)}%`;
+};
 
 describe('Observability (15, 18.3)', () => {
   it('renders four panels, each with an accessible table toggle', async () => {
@@ -17,7 +26,7 @@ describe('Observability (15, 18.3)', () => {
     await user.click(toggles[1]!);
     const table = await screen.findByRole('table', { name: 'Server health' });
     expect(within(table).getByText('Postgres analytics')).toBeInTheDocument();
-    expect(within(table).getByText('12.0%')).toBeInTheDocument();
+    expect(within(table).getByText(errorRateOf('i-postgres'))).toBeInTheDocument();
   });
 
   it('colours health tiles and pairs them with a text label', async () => {
@@ -26,21 +35,13 @@ describe('Observability (15, 18.3)', () => {
     expect(screen.getAllByText('Healthy').length).toBeGreaterThan(0);
   });
 
-  it('18.3 builds Sankey links from clients to installations', () => {
-    const s = buildSankey({
-      clients: ['A', 'B'],
-      installations: [{ id: 'i1', name: 'X', calls: 3, errorRate: 0.2 }],
-      links: [
-        { client: 'A', installationId: 'i1', calls: 2, errors: 0 },
-        { client: 'B', installationId: 'i1', calls: 1, errors: 1 },
-        { client: 'Z', installationId: 'i1', calls: 9, errors: 0 },
-      ],
-    });
-    expect(s.nodes.map((n) => n.name)).toEqual(['A', 'B', 'X']);
-    expect(s.links).toEqual([
-      { source: 0, target: 2, value: 2, errors: 0 },
-      { source: 1, target: 2, value: 1, errors: 1 },
-    ]);
+  it('15.5 ranks servers by calls from the rollups, named by installation', async () => {
+    const { user } = await renderRoute('/observability');
+    await screen.findByRole('heading', { name: 'Where calls go' });
+    await user.click(screen.getAllByRole('button', { name: 'View as table' })[0]!);
+    const table = await screen.findByRole('table', { name: 'Where calls go' });
+    expect(within(table).getByText('GitHub')).toBeInTheDocument();
+    expect(within(table).getByText('Postgres analytics')).toBeInTheDocument();
   });
 
   it('10.1 managers see their team scope only', async () => {
@@ -60,21 +61,30 @@ describe('Observability (15, 18.3)', () => {
 });
 
 describe('Security (13.6)', () => {
-  it('shows the definition diff with the triggering segment highlighted', async () => {
+  it('shows the changed definition with the guard verdict that flagged it', async () => {
     await renderRoute('/security');
     expect(await screen.findByText('Changed tool definitions')).toBeInTheDocument();
-    const diff = await screen.findByTestId('diff-view');
-    const added = diff.querySelector('mark[data-diff="added"]');
-    expect(added?.textContent).toContain('slack_post_message');
-    expect(screen.getByText(/Instruction to call another server/)).toBeInTheDocument();
+    const view = await screen.findByTestId('definition-view');
+    expect(within(view).getAllByText(/slack_post_message/).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/tool-poisoning-judge flagged this definition as malicious/),
+    ).toBeInTheDocument();
   });
 
-  it('a malicious scan blocks accepting; keeping the block rejects the review', async () => {
+  it('a malicious scan blocks accepting; keeping the block asks for a reason and rejects the review', async () => {
     const { user } = await renderRoute('/security');
     expect(await screen.findByRole('button', { name: 'Accept new definition' })).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: /Keep blocking v4.3/ }));
+    await user.click(screen.getByRole('button', { name: /Keep blocking get_event/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Keep blocking get_event/ });
+    await user.type(within(dialog).getByLabelText(/Reason/), 'It tells the model to mirror events');
+    await user.click(within(dialog).getByRole('button', { name: 'Keep blocking' }));
     await waitFor(() =>
-      expect(getDb().drift.find((d) => d.id === 'dr-1')?.status).toBe('rejected'),
+      expect(getDb().data.observability.drift.find((d) => d.id === 'dr-1')?.status).toBe(
+        'rejected',
+      ),
+    );
+    expect(getDb().data.observability.drift.find((d) => d.id === 'dr-1')?.reason).toBe(
+      'It tells the model to mirror events',
     );
   });
 
@@ -82,6 +92,15 @@ describe('Security (13.6)', () => {
     await renderRoute('/security', { role: 'auditor' });
     expect(await screen.findByText(/Read-only\. A Manager of the owning team/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Accept new definition' })).toBeNull();
+  });
+
+  it('13.6 lists guard blocks, changed definitions and denied network access as findings', async () => {
+    await renderRoute('/security');
+    const card = await screen.findByRole('region', { name: 'Recent findings' }).catch(() => null);
+    const scope = card ?? document.body;
+    expect((await within(scope).findAllByText('Blocked by a guard')).length).toBeGreaterThan(0);
+    expect(within(scope).getAllByText('Definition changed').length).toBeGreaterThan(0);
+    expect(within(scope).getByText('telemetry.example.net:443')).toBeInTheDocument();
   });
 });
 

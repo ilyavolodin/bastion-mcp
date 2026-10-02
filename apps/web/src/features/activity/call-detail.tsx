@@ -1,6 +1,13 @@
-import { ArrowUpRight, ShieldAlert, X } from 'lucide-react';
-import { useCall } from '@/api/hooks';
-import type { CallDetail, GuardFinding, TraceSpan } from '@/api/types';
+import { ArrowUpRight, ShieldAlert, ShieldCheck, X } from 'lucide-react';
+import { useCall, useNames } from '@/api/hooks';
+import {
+  type CallRow,
+  callTitle,
+  GUARD_ACTION_LABEL,
+  type GuardResult,
+  previewText,
+  traceHref,
+} from '@/api/views/observability';
 import { useAuth } from '@/auth/auth';
 import { Overline, Tag } from '@/components/primitives';
 import { ProblemAlert } from '@/components/problem';
@@ -8,8 +15,9 @@ import { OutcomeBadge } from '@/components/status';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
-import { formatClock, formatDuration } from '@/lib/format';
+import { formatClock, formatDuration, formatNumber } from '@/lib/format';
 
+/** Colours of the sandbox start phases (8.6); the servers screens chart them. */
 export const PHASE_COLOR: Record<string, string> = {
   claim: 'var(--sky)',
   bind: 'var(--teal)',
@@ -18,132 +26,70 @@ export const PHASE_COLOR: Record<string, string> = {
   connect: 'var(--tangerine)',
 };
 
-const GROUP_COLOR: Record<TraceSpan['group'], string> = {
-  authn: 'var(--line-strong)',
-  policy: 'var(--line-strong)',
-  limits: 'var(--line-strong)',
-  guard: 'var(--sky)',
-  instance: 'var(--berry)',
-  upstream: 'var(--teal)',
-};
+const VERDICT_TONE = {
+  clean: 'ok',
+  suspicious: 'warn',
+  malicious: 'bad',
+  error: 'neutral',
+} as const;
 
-function Waterfall({ detail }: { detail: CallDetail }) {
-  const total = Math.max(detail.totalMs, 1);
-  const ticks = [0, total / 3, (total * 2) / 3, total];
+/** One guard's verdict on a call or a definition (13.1): who judged, in which phase, and what it did. */
+export function GuardResultBlock({ result }: { result: GuardResult }) {
+  const flagged = result.verdict === 'malicious' || result.verdict === 'suspicious';
   return (
-    <section aria-label="Where the time went" className="flex flex-col gap-2">
-      <Overline>Where the time went</Overline>
-      <ul className="m-0 flex list-none flex-col p-0">
-        {detail.spans.map((s) => (
-          <li key={s.id} className="grid h-6 grid-cols-[128px_minmax(0,1fr)] items-center gap-2.5">
-            <span className="truncate text-caption text-ink">{s.name}</span>
-            <span
-              className="relative h-3 rounded-[4px] bg-sunken"
-              title={`${s.name}: ${formatDuration(s.durationMs)}`}
-            >
-              {s.phases ? (
-                <span
-                  className="absolute inset-y-0 flex overflow-hidden rounded-[4px]"
-                  style={{
-                    left: `${(s.startMs / total) * 100}%`,
-                    width: `${Math.max((s.durationMs / total) * 100, 0.6)}%`,
-                  }}
-                >
-                  {s.phases.map((p) => (
-                    <span
-                      key={p.name}
-                      title={`${p.name}: ${formatDuration(p.durationMs)}`}
-                      style={{ flex: p.durationMs, background: PHASE_COLOR[p.name] }}
-                    />
-                  ))}
-                </span>
-              ) : (
-                <span
-                  className="absolute inset-y-0 min-w-[3px] rounded-[4px]"
-                  style={{
-                    left: `${(s.startMs / total) * 100}%`,
-                    width: `${(s.durationMs / total) * 100}%`,
-                    background:
-                      s.status === 'blocked'
-                        ? 'var(--coral)'
-                        : s.status === 'error'
-                          ? 'var(--sun)'
-                          : GROUP_COLOR[s.group],
-                  }}
-                />
-              )}
-              <span className="sr-only">
-                {s.name} took {formatDuration(s.durationMs)}
-                {s.status !== 'ok' ? `, ${s.status}` : ''}
-              </span>
-            </span>
-          </li>
-        ))}
-      </ul>
+    <div
+      className={cn(
+        'flex flex-col gap-1.5 rounded-md p-3.5',
+        flagged ? 'bg-coral-soft' : 'bg-sunken',
+      )}
+    >
       <div
-        className="grid grid-cols-[128px_minmax(0,1fr)] gap-2.5 text-[11px] text-muted"
-        aria-hidden="true"
+        className={cn(
+          'flex items-center gap-2 text-[13px] font-semibold',
+          flagged ? 'text-coral-ink' : 'text-ink',
+        )}
       >
-        <span />
-        <span className="flex justify-between">
-          {ticks.map((t, i) => (
-            <span key={i}>{i === 0 ? '0' : formatDuration(t)}</span>
-          ))}
-        </span>
-      </div>
-      {detail.spans.some((s) => s.phases) ? (
-        <ul
-          className="m-0 flex list-none flex-wrap gap-x-3 gap-y-1 p-0 text-[11px] text-muted"
-          aria-label="Cold start phases"
-        >
-          {Object.entries(PHASE_COLOR).map(([name, color]) => (
-            <li key={name} className="inline-flex items-center gap-1">
-              <span
-                className="size-2 rounded-full"
-                style={{ background: color }}
-                aria-hidden="true"
-              />
-              {name}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
-  );
-}
-
-const GUARD_LABEL: Record<GuardFinding['guard'], string> = {
-  prompt_injection: 'Prompt injection',
-  pii: 'PII',
-  regex: 'Request guard',
-  definition_drift: 'Definition drift',
-};
-
-/** A guard finding with the triggering segment highlighted in its context (18.3). */
-export function FindingBlock({ finding }: { finding: GuardFinding }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-md bg-coral-soft p-3.5">
-      <div className="flex items-center gap-2 text-[13px] font-semibold text-coral-ink">
-        <ShieldAlert className="size-4" aria-hidden="true" />
-        {GUARD_LABEL[finding.guard]} · {finding.rule}
-        <Tag tone="bad" className="ml-auto">
-          {finding.action === 'block'
-            ? 'Blocked'
-            : finding.action === 'redact'
-              ? 'Redacted'
-              : 'Warned'}
+        {flagged ? (
+          <ShieldAlert className="size-4" aria-hidden="true" />
+        ) : (
+          <ShieldCheck className="size-4" aria-hidden="true" />
+        )}
+        {result.guard}
+        <Tag tone={VERDICT_TONE[result.verdict]} className="ml-auto">
+          {result.verdict}
         </Tag>
       </div>
-      <code className="font-mono text-[12px] leading-[18px] text-ink">
-        {finding.before}
-        <mark>{finding.match}</mark>
-        {finding.after}
-      </code>
+      <p className="m-0 text-caption text-muted">
+        {result.type} guard · {result.phase} · {GUARD_ACTION_LABEL(result.action)} ·{' '}
+        {formatDuration(result.latencyMs)}
+        {result.score === undefined ? '' : ` · score ${result.score}`}
+        {result.error ? ` · ${result.error}` : ''}
+      </p>
     </div>
   );
 }
 
-/** Call drawer: trace waterfall, guard findings, policy reasons, previews and the tracing link. */
+const Fact = ({ label, value }: { label: string; value: string }) => (
+  <div className="flex flex-col gap-0.5">
+    <dt className="text-caption text-muted">{label}</dt>
+    <dd className="m-0 text-[13px] font-medium">{value}</dd>
+  </div>
+);
+
+function Facts({ call }: { call: CallRow }) {
+  return (
+    <dl aria-label="Timing and size" className="m-0 grid grid-cols-3 gap-3">
+      <Fact label="Duration" value={formatDuration(call.durationMs)} />
+      <Fact label="Cold start" value={call.coldStart ? 'Yes' : 'No'} />
+      <Fact label="Method" value={call.method} />
+      <Fact label="Sent" value={`${formatNumber(call.bytesIn)} B`} />
+      <Fact label="Received" value={`${formatNumber(call.bytesOut)} B`} />
+      <Fact label="Origin" value={call.origin} />
+    </dl>
+  );
+}
+
+/** Call drawer: what the call log recorded, the guard results, policy reasons, previews and the tracing link. */
 export function CallDetailPanel({
   id,
   onClose,
@@ -154,8 +100,14 @@ export function CallDetailPanel({
   docked?: boolean;
 }) {
   const q = useCall(id);
+  const names = useNames();
   const { me } = useAuth();
   const d = q.data;
+  const server = d?.installationId ? names.data?.installations.get(d.installationId) : undefined;
+  const person = d ? names.data?.users.get(d.principalId) : undefined;
+  const trace = d ? traceHref(me.org.traceUiUrl, d.traceId) : null;
+  const args = d ? previewText(d.argsPreview) : null;
+  const result = d ? previewText(d.resultPreview) : null;
   return (
     <aside
       aria-label="Call detail"
@@ -175,9 +127,11 @@ export function CallDetailPanel({
         <>
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
-              <div className="font-mono text-[15px] leading-[22px] font-semibold">{d.item}</div>
+              <div className="font-mono text-[15px] leading-[22px] font-semibold">
+                {callTitle(d)}
+              </div>
               <div className="text-caption text-muted">
-                {[d.installationName, d.client, formatClock(d.startedAt, true)]
+                {[server, d.clientName, person, formatClock(d.ts, true)]
                   .filter(Boolean)
                   .join(' · ')}
               </div>
@@ -197,41 +151,52 @@ export function CallDetailPanel({
               </Button>
             ) : null}
           </div>
-          <Waterfall detail={d} />
-          {d.findings.map((f) => (
-            <FindingBlock key={f.id} finding={f} />
+          <Facts call={d} />
+          {(d.guardResults ?? []).map((r, i) => (
+            <GuardResultBlock key={`${r.guard}-${r.phase}-${i}`} result={r} />
           ))}
-          {d.errorMessage ? (
+          {d.errorCode ? (
             <p
               role="alert"
               className="m-0 rounded-md bg-tangerine-soft p-3 text-[13px] text-tangerine-ink"
             >
-              {d.errorMessage}
+              <span className="font-mono">{d.errorCode}</span>
+              {d.jsonrpcCode === null ? '' : ` (JSON-RPC ${d.jsonrpcCode})`}
             </p>
           ) : null}
           <section aria-label="Policy decision" className="flex flex-col gap-1.5">
             <Overline>Policy decision</Overline>
-            {d.policy.reasons.map((r) => (
-              <div key={r.rule} className="flex items-center gap-2 text-[13px]">
-                <Tag tone={r.effect === 'permit' ? 'ok' : 'bad'}>{r.effect}</Tag>
-                <span className="font-mono text-[12px]">rule · {r.rule}</span>
-              </div>
-            ))}
+            {(d.policyReasons ?? []).length === 0 ? (
+              <span className="text-caption text-muted">No policy reason was recorded.</span>
+            ) : (
+              (d.policyReasons ?? []).map((r) => (
+                <div key={r} className="flex items-center gap-2 text-[13px]">
+                  <Tag tone={d.outcome === 'denied' ? 'bad' : 'ok'}>
+                    {d.outcome === 'denied' ? 'deny' : 'permit'}
+                  </Tag>
+                  <span className="font-mono text-[12px]">{r}</span>
+                </div>
+              ))
+            )}
           </section>
-          {d.previews ? (
+          {args || result ? (
             <section aria-label="Previews" className="flex flex-col gap-1.5">
               <Overline>Arguments and result (redacted)</Overline>
-              <pre className="m-0 overflow-x-auto rounded-md bg-sunken p-2.5 font-mono text-[12px]">
-                {d.previews.args}
-              </pre>
-              <pre className="m-0 overflow-x-auto rounded-md bg-sunken p-2.5 font-mono text-[12px]">
-                {d.previews.result}
-              </pre>
+              {args ? (
+                <pre className="m-0 overflow-x-auto rounded-md bg-sunken p-2.5 font-mono text-[12px]">
+                  {args}
+                </pre>
+              ) : null}
+              {result ? (
+                <pre className="m-0 overflow-x-auto rounded-md bg-sunken p-2.5 font-mono text-[12px]">
+                  {result}
+                </pre>
+              ) : null}
             </section>
           ) : null}
-          {me.org.traceUiUrl ? (
+          {trace ? (
             <a
-              href={`${me.org.traceUiUrl}/${d.traceId}`}
+              href={trace}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-label no-underline"

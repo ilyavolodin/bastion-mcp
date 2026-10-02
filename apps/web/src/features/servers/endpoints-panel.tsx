@@ -10,25 +10,42 @@ import {
   useEndpoints,
   useInstallations,
   usePatchEndpoint,
+  useToolCounts,
 } from '@/api/hooks';
-import type { Endpoint, Installation } from '@/api/types';
+import {
+  defaultEndpointUrl,
+  type EndpointValues,
+  type EndpointView,
+  type InstallationView,
+  toEndpointBody,
+  toEndpointPatch,
+} from '@/api/views/servers';
 import { useAuth } from '@/auth/auth';
 import { ClientConfigTabs } from '@/components/client-config';
 import { CopyField } from '@/components/copy-field';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/form';
 import { Card, CardHeader, Chip, Tag } from '@/components/primitives';
+import { ProblemAlert } from '@/components/problem';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { Input, Select, Textarea } from '@/components/ui/input';
+import { useSlug } from '@/features/access/forms';
 
-const schema = z.object({
-  name: z.string().trim().min(1, 'Give the endpoint a name').max(60, 'Keep it under 60 characters'),
-  installationIds: z.array(z.string()).min(1, 'Pick at least one server'),
+/** The constraints of `endpointCreateSchema`: slug 2 to 40 of a-z 0-9 and dashes, name 1 to 200, 50 servers. */
+export const endpointFormSchema = z.object({
+  displayName: z
+    .string()
+    .trim()
+    .min(1, 'Give the endpoint a name')
+    .max(200, 'Up to 200 characters'),
+  slug: z.string().regex(/^[a-z0-9-]{2,40}$/, 'Use 2 to 40 lowercase letters, digits and dashes'),
+  installationIds: z.array(z.string()).min(1, 'Pick at least one server').max(50, 'At most 50'),
+  prefixMode: z.enum(['always', 'onCollision']),
+  instructions: z.string().max(8000, 'Up to 8000 characters'),
 });
-type Values = z.infer<typeof schema>;
 
 export function ToolCountWarning({ count, threshold }: { count: number; threshold: number }) {
   if (count <= threshold) return null;
@@ -52,31 +69,53 @@ function EndpointDialog({
   open,
   onOpenChange,
 }: {
-  endpoint: Endpoint | null;
-  installations: Installation[];
+  endpoint: EndpointView | null;
+  installations: InstallationView[];
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
   const { me } = useAuth();
   const create = useCreateEndpoint();
   const patch = usePatchEndpoint(endpoint?.id ?? '');
-  const form = useForm<Values>({
-    resolver: zodResolver(schema),
-    defaultValues: { name: endpoint?.name ?? '', installationIds: endpoint?.installationIds ?? [] },
+  const initial = (): EndpointValues => ({
+    displayName: endpoint?.displayName ?? '',
+    slug: endpoint?.slug ?? '',
+    installationIds: endpoint?.installationIds ?? [],
+    prefixMode: endpoint?.prefixMode ?? 'always',
+    instructions: endpoint?.instructions ?? '',
   });
+  const form = useForm<EndpointValues>({
+    resolver: zodResolver(endpointFormSchema),
+    defaultValues: initial(),
+  });
+  const displayName = form.watch('displayName');
+  const url = useSlug(displayName);
+  // A new endpoint's URL name follows its name until the user edits it; an existing one keeps its own.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the dialog opens or its endpoint changes
   React.useEffect(() => {
-    if (open)
-      form.reset({ name: endpoint?.name ?? '', installationIds: endpoint?.installationIds ?? [] });
-  }, [open, endpoint, form]);
+    if (open) {
+      form.reset(initial());
+      url.reset();
+    }
+  }, [open, endpoint]);
+  React.useEffect(() => {
+    if (!endpoint) form.setValue('slug', url.slug, { shouldValidate: form.formState.isSubmitted });
+  }, [endpoint, url.slug, form]);
   const ids = form.watch('installationIds');
-  const tools = installations
-    .filter((i) => ids.includes(i.id))
-    .reduce((n, i) => n + i.toolCount, 0);
+  const counts = useToolCounts(ids);
+  const tools = ids.reduce((n, id) => n + (counts.get(id) ?? 0), 0);
+  const [error, setError] = React.useState<unknown>(null);
   const submit = form.handleSubmit(async (v) => {
-    if (endpoint) await patch.mutateAsync(v);
-    else await create.mutateAsync(v);
-    toast.success(endpoint ? 'Endpoint saved' : 'Endpoint created');
-    onOpenChange(false);
+    setError(null);
+    try {
+      if (endpoint) {
+        await patch.mutateAsync({ patch: toEndpointPatch(v), updatedAt: endpoint.updatedAt });
+      } else await create.mutateAsync(toEndpointBody(v));
+      toast.success(endpoint ? 'Endpoint saved' : 'Endpoint created');
+      onOpenChange(false);
+    } catch (e) {
+      setError(e);
+    }
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -85,13 +124,28 @@ function EndpointDialog({
         description="A named endpoint carries only the servers you pick."
       >
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          <Field label="Name" required error={form.formState.errors.name?.message}>
+          <Field label="Name" required error={form.formState.errors.displayName?.message}>
             {({ id, describedBy, invalid }) => (
               <Input
                 id={id}
                 aria-describedby={describedBy}
                 aria-invalid={invalid}
-                {...form.register('name')}
+                {...form.register('displayName')}
+              />
+            )}
+          </Field>
+          <Field
+            label="URL name"
+            required
+            help={`Its address is https://${me.org.host}/mcp/e/${form.watch('slug') || '…'}`}
+            error={form.formState.errors.slug?.message}
+          >
+            {({ id, describedBy, invalid }) => (
+              <Input
+                id={id}
+                aria-describedby={describedBy}
+                aria-invalid={invalid}
+                {...form.register('slug', { onChange: (e) => url.setSlug(e.target.value) })}
               />
             )}
           </Field>
@@ -113,7 +167,9 @@ function EndpointDialog({
                   }
                 />
                 <span className="flex-1 text-label">{i.displayName}</span>
-                <span className="text-caption text-muted">{i.toolCount} tools</span>
+                {counts.has(i.id) ? (
+                  <span className="text-caption text-muted">{counts.get(i.id)} tools</span>
+                ) : null}
               </label>
             ))}
             {form.formState.errors.installationIds ? (
@@ -123,6 +179,33 @@ function EndpointDialog({
             ) : null}
           </fieldset>
           <ToolCountWarning count={tools} threshold={me.org.toolWarnThreshold} />
+          <Field
+            label="Tool names"
+            help="Prefix every tool with its server, or only when two servers share a name."
+          >
+            {({ id, describedBy }) => (
+              <Select id={id} aria-describedby={describedBy} {...form.register('prefixMode')}>
+                <option value="always">Always prefix with the server</option>
+                <option value="onCollision">Prefix only when names collide</option>
+              </Select>
+            )}
+          </Field>
+          <Field
+            label="Instructions"
+            help="Optional text AI tools receive with this endpoint."
+            error={form.formState.errors.instructions?.message}
+          >
+            {({ id, describedBy, invalid }) => (
+              <Textarea
+                id={id}
+                aria-describedby={describedBy}
+                aria-invalid={invalid}
+                className="min-h-20"
+                {...form.register('instructions')}
+              />
+            )}
+          </Field>
+          {error ? <ProblemAlert error={error} /> : null}
           <Button type="submit" disabled={create.isPending || patch.isPending}>
             {endpoint ? 'Save endpoint' : 'Create endpoint'}
           </Button>
@@ -138,9 +221,12 @@ export function EndpointsPanel() {
   const endpoints = useEndpoints();
   const installs = useInstallations();
   const del = useDeleteEndpoint();
-  const [editing, setEditing] = React.useState<Endpoint | null | 'new'>(null);
-  const [config, setConfig] = React.useState<Endpoint | null>(null);
+  const [editing, setEditing] = React.useState<EndpointView | null | 'new'>(null);
+  const [config, setConfig] = React.useState<EndpointView | null>(null);
   const items = installs.data ?? [];
+  const all = React.useMemo(() => items.map((i) => i.id), [items]);
+  const counts = useToolCounts(all);
+  const toolsOf = (ids: readonly string[]) => ids.reduce((n, id) => n + (counts.get(id) ?? 0), 0);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
@@ -153,15 +239,30 @@ export function EndpointsPanel() {
           New endpoint
         </Button>
       </div>
+      <Card aria-label="Default endpoint">
+        <CardHeader title="Default endpoint" actions={<Tag tone="info">Default</Tag>} />
+        <CopyField
+          value={defaultEndpointUrl(me.org.host)}
+          label="Default endpoint URL"
+          tone="sunken"
+        />
+        <ToolCountWarning
+          count={toolsOf(items.filter((i) => i.enabled).map((i) => i.id))}
+          threshold={me.org.toolWarnThreshold}
+        />
+        <p className="m-0 text-caption text-muted">
+          For a step-by-step client setup, use a named endpoint below.
+        </p>
+      </Card>
       <QueryBoundary
         query={endpoints}
         isEmpty={(d) => d.length === 0}
         empty={
           <EmptyState
             icon={<Network />}
-            title="No endpoints yet"
-            description="Install a server and your default endpoint appears."
-            action={{ label: 'Browse the store', to: '/store' }}
+            title="No named endpoints yet"
+            description="Create one to give an AI tool only the servers you pick."
+            action={{ label: 'New endpoint', onClick: () => setEditing('new') }}
           />
         }
       >
@@ -169,10 +270,7 @@ export function EndpointsPanel() {
           <div className="grid gap-4 lg:grid-cols-2">
             {list.map((e) => (
               <Card key={e.id} aria-label={e.name}>
-                <CardHeader
-                  title={e.name}
-                  actions={e.isDefault ? <Tag tone="info">Default</Tag> : undefined}
-                />
+                <CardHeader title={e.name} />
                 <CopyField value={e.url} label={`${e.name} URL`} tone="sunken" />
                 <div className="flex flex-wrap gap-1.5">
                   {e.installationIds.map((id) => {
@@ -180,27 +278,29 @@ export function EndpointsPanel() {
                     return <Chip key={id}>{i?.displayName ?? id}</Chip>;
                   })}
                 </div>
-                <ToolCountWarning count={e.toolCount} threshold={me.org.toolWarnThreshold} />
+                <ToolCountWarning
+                  count={toolsOf(e.installationIds)}
+                  threshold={me.org.toolWarnThreshold}
+                />
                 <div className="flex gap-2">
                   <Button variant="soft" size="sm" onClick={() => setConfig(e)}>
                     Client setup
                   </Button>
-                  {!e.isDefault ? (
-                    <>
-                      <Button variant="outline" size="sm" onClick={() => setEditing(e)}>
-                        Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          del.mutate(e.id, { onSuccess: () => toast.success('Endpoint removed') })
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </>
-                  ) : null}
+                  <Button variant="outline" size="sm" onClick={() => setEditing(e)}>
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      del.mutate(
+                        { id: e.id, updatedAt: e.updatedAt },
+                        { onSuccess: () => toast.success('Endpoint removed') },
+                      )
+                    }
+                  >
+                    Remove
+                  </Button>
                 </div>
               </Card>
             ))}

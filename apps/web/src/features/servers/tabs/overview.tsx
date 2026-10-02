@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Pencil, ShieldCheck } from 'lucide-react';
+import { Eye, GitMerge, Pencil } from 'lucide-react';
 import {
   Bar,
   CartesianGrid,
@@ -10,7 +10,8 @@ import {
   YAxis,
 } from 'recharts';
 import { useCallSeries, useCalls, useCapabilities } from '@/api/hooks';
-import type { EffectiveCapability, Installation } from '@/api/types';
+import { type CapabilityView, type InstallationView, installationUrl } from '@/api/views/servers';
+import { useAuth } from '@/auth/auth';
 import { ChartCard } from '@/components/chart-card';
 import { AutoSize, AXIS_TICK, ChartTooltip, GRID, hourLabel } from '@/components/charts';
 import { CopyField } from '@/components/copy-field';
@@ -20,7 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PHASE_COLOR } from '@/features/activity/call-detail';
 import { formatClock } from '@/lib/format';
 
-export function CapabilityMarkers({ c }: { c: EffectiveCapability }) {
+export function CapabilityMarkers({ c }: { c: CapabilityView }) {
   return (
     <span className="flex gap-1.5">
       {c.overridden ? (
@@ -31,14 +32,11 @@ export function CapabilityMarkers({ c }: { c: EffectiveCapability }) {
           role="img"
         />
       ) : null}
-      {c.hidden ? (
-        <EyeOff className="size-4 text-muted" strokeWidth={2} aria-label="Hidden" role="img" />
-      ) : null}
-      {c.guarded ? (
-        <ShieldCheck
+      {c.collided ? (
+        <GitMerge
           className="size-4 text-sky-ink"
           strokeWidth={2}
-          aria-label="Guarded"
+          aria-label="Name collision"
           role="img"
         />
       ) : null}
@@ -48,11 +46,9 @@ export function CapabilityMarkers({ c }: { c: EffectiveCapability }) {
 
 const KIND_LETTER = { tool: 'T', prompt: 'P', resource: 'R', template: 'U' } as const;
 
-export function CapabilityRow({ c }: { c: EffectiveCapability }) {
+export function CapabilityRow({ c }: { c: CapabilityView }) {
   return (
-    <li
-      className={`flex min-h-[52px] items-center gap-3 border-b border-line ${c.hidden ? 'opacity-60' : ''}`}
-    >
+    <li className="flex min-h-[52px] items-center gap-3 border-b border-line">
       <span
         title={c.kind}
         className="inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] bg-sunken text-[10px] font-semibold text-muted"
@@ -61,10 +57,8 @@ export function CapabilityRow({ c }: { c: EffectiveCapability }) {
         <span className="sr-only"> {c.kind}</span>
       </span>
       <div className="min-w-0 flex-1">
-        <div className="font-mono text-[13px] leading-5 font-semibold">{c.finalName}</div>
-        <div className="truncate text-caption text-muted">
-          {c.hidden ? 'Hidden from your AI tools' : c.description}
-        </div>
+        <div className="font-mono text-[13px] leading-5 font-semibold">{c.name}</div>
+        <div className="truncate text-caption text-muted">{c.description}</div>
       </div>
       <CapabilityMarkers c={c} />
     </li>
@@ -79,12 +73,8 @@ export function CapabilityLegend() {
         Overridden
       </span>
       <span className="inline-flex items-center gap-1 text-caption text-muted">
-        <EyeOff className="size-3.5" aria-hidden="true" />
-        Hidden
-      </span>
-      <span className="inline-flex items-center gap-1 text-caption text-muted">
-        <ShieldCheck className="size-3.5 text-sky-ink" aria-hidden="true" />
-        Guarded
+        <GitMerge className="size-3.5 text-sky-ink" aria-hidden="true" />
+        Name collision
       </span>
     </>
   );
@@ -94,7 +84,7 @@ export function OverviewTab({
   installation,
   goTo,
 }: {
-  installation: Installation;
+  installation: InstallationView;
   goTo: (tab: string) => void;
 }) {
   const series = useCallSeries({ range: '24h', installationId: installation.id });
@@ -104,7 +94,8 @@ export function OverviewTab({
   const failed = (errs.data?.pages.flatMap((p) => p.items) ?? [])
     .filter((c) => c.outcome !== 'ok')
     .slice(0, 3);
-  const sandboxed = installation.runtime !== 'remote';
+  const { me } = useAuth();
+  const sandboxed = installation.sandboxed;
   const cold = buckets.filter((b) => b.coldStarts > 0);
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -247,7 +238,7 @@ export function OverviewTab({
         <Card aria-label="Endpoint" className="gap-3">
           <CardHeader title="Use it on its own" />
           <CopyField
-            value={installation.endpointUrl}
+            value={installationUrl(me.org.host, installation.slug)}
             label="installation endpoint URL"
             tone="sunken"
           />
@@ -277,10 +268,10 @@ export function OverviewTab({
                       : c.outcome === 'denied'
                         ? 'Denied by policy'
                         : 'Upstream error'}
-                    : {c.item}
+                    : {c.itemName ?? c.method}
                   </div>
                   <div className="text-caption text-muted">
-                    {formatClock(c.startedAt)} · {c.client}
+                    {formatClock(c.ts)} · {c.clientName ?? c.clientId ?? 'unknown client'}
                   </div>
                 </div>
               </div>

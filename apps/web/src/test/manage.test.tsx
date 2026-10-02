@@ -61,9 +61,9 @@ describe('Catalog editor (11.3, 18.3)', () => {
     const { user } = await renderRoute('/catalog/c-postgres?step=publish');
     await user.click(await screen.findByRole('button', { name: 'Publish v3.2.0' }));
     await waitFor(() =>
-      expect(
-        getDb().data.catalog.entries.find((c) => c.id === 'c-postgres')?.status,
-      ).toBe('published'),
+      expect(getDb().data.catalog.entries.find((c) => c.id === 'c-postgres')?.status).toBe(
+        'published',
+      ),
     );
   });
 
@@ -104,18 +104,35 @@ describe('Catalog list and policies', () => {
 describe('Registry (11.6, 11.7)', () => {
   it('installs when allowed, requests when the policy says so, and shows blocked ones', async () => {
     const { user } = await renderRoute('/registry');
+    const card = async (name: RegExp) =>
+      within((await screen.findByRole('heading', { name })).closest('article') as HTMLElement);
+    await user.click((await card(/crypto-miner/)).getByRole('button', { name: 'Install' }));
     expect(await screen.findByText('Blocked by registry policy')).toBeInTheDocument();
-    await user.click(screen.getAllByRole('button', { name: 'Request install' })[0]!);
+    await user.click((await card(/stripe/)).getByRole('button', { name: 'Install' }));
     await user.type(await screen.findByLabelText(/What do you need it for/), 'Payments');
     await user.click(screen.getByRole('button', { name: 'Send request' }));
-    await waitFor(() => expect(getDb().requests.some((r) => r.reason === 'Payments')).toBe(true));
+    await waitFor(() =>
+      expect(getDb().data.registry.requests.some((r) => r.justification === 'Payments')).toBe(true),
+    );
   });
 
   it('10.1 managers approve install requests', async () => {
     const { user } = await renderRoute('/registry');
     await user.click((await screen.findAllByRole('button', { name: 'Approve' }))[0]!);
     await waitFor(() =>
-      expect(getDb().requests.filter((r) => r.status === 'approved')).toHaveLength(1),
+      expect(getDb().data.registry.requests.filter((r) => r.status === 'approved')).toHaveLength(1),
+    );
+  });
+
+  it('10.1 managers reject install requests with a reason', async () => {
+    const { user } = await renderRoute('/registry');
+    await user.click((await screen.findAllByRole('button', { name: 'Reject' }))[0]!);
+    await user.type(await screen.findByLabelText(/Reason/), 'Use Linear instead');
+    await user.click(screen.getByRole('button', { name: 'Reject request' }));
+    await waitFor(() =>
+      expect(getDb().data.registry.requests.find((r) => r.status === 'rejected')?.reason).toBe(
+        'Use Linear instead',
+      ),
     );
   });
 
@@ -214,14 +231,16 @@ describe('Settings (19.2, 15.7)', () => {
 });
 
 describe('Plugins (25, 18.3)', () => {
-  it('shows per-client set up steps with status dots and the executable badge', async () => {
+  it('shows per-client set up commands and the plugins of the latest release with their policy', async () => {
     await renderRoute('/plugins');
     expect(
       await screen.findByText('/plugin marketplace add https://bastion.acme.dev/plugins/acme.git'),
     ).toBeInTheDocument();
-    expect(screen.getByText('One release behind')).toBeInTheDocument();
-    expect(screen.getAllByText('Managed by IT').length).toBe(2);
-    expect(screen.getAllByText('Runs code locally').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText('codex plugin marketplace add https://bastion.acme.dev/plugins/acme.git'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Release notes')).toBeInTheDocument();
+    expect(screen.getByText('Required')).toBeInTheDocument();
   });
 
   it('10.1 members see neither releases nor approvals nor the author button', async () => {
@@ -250,16 +269,10 @@ describe('Plugins (25, 18.3)', () => {
   it('25.4 promotes the draft release and an admin approves executable content', async () => {
     const { user } = await renderRoute('/plugins');
     await user.click(await screen.findByRole('button', { name: 'Promote draft release' }));
-    await waitFor(() =>
-      expect(getDb().marketplaceDetails['mk-eng']?.releases.find((r) => r.n === 6)?.promoted).toBe(
-        true,
-      ),
-    );
+    await waitFor(() => expect(getDb().data.plugins.marketplaces[0]?.promotedRelease).toBe(6));
     await user.click(await screen.findByRole('button', { name: 'Approve' }));
     await waitFor(() =>
-      expect(
-        Boolean(getDb().data.catalog.approvals['v-incident-kit-2.1.0']),
-      ).toBe(true),
+      expect(Boolean(getDb().data.catalog.approvals['v-incident-kit-2.1.0'])).toBe(true),
     );
   });
 

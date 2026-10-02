@@ -1,4 +1,4 @@
-import type { Installation } from '@/api/types';
+import type { InstallationView } from '@/api/views/servers';
 
 export const initials = (name: string): string =>
   name
@@ -71,7 +71,7 @@ export type InstallationAction = {
 
 /** The one next action for an installation that is not ready (18.1 "one next action per state"). */
 export function installationAction(
-  i: Pick<Installation, 'status' | 'authMode' | 'displayName'>,
+  i: Pick<InstallationView, 'status' | 'authMode' | 'displayName'>,
 ): InstallationAction | null {
   switch (i.status) {
     case 'needs_setup':
@@ -90,6 +90,7 @@ export function installationAction(
 export const RUNTIME_LABEL = {
   remote: 'Remote',
   npm: 'npm',
+  pypi: 'Python',
   python: 'Python',
   oci: 'Container',
 } as const;
@@ -98,6 +99,9 @@ export const AUTH_LABEL = {
   oauth: 'Connect with OAuth',
   userSecret: 'Needs your API key',
   teamSecret: 'Ready to use',
+  orgSecret: 'Ready to use',
+  enterpriseManaged: 'Uses your company sign-in',
+  tokenExchange: 'Uses your company sign-in',
   none: 'Ready to use',
 } as const;
 

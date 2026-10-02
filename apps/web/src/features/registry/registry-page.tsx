@@ -1,14 +1,22 @@
 import { Globe, Search } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
+import { ApiError } from '@/api/client';
 import {
+  useApproveRequest,
   useCreateInstallRequest,
-  useDecideRequest,
   useInstallRequests,
   useRegistryInstall,
   useRegistryServers,
+  useRejectRequest,
 } from '@/api/hooks';
-import type { RegistryServer } from '@/api/types';
+import {
+  type InstallRequestView,
+  type RegistryServerView,
+  reasonsText,
+  runtimeLabel,
+  serverKey,
+} from '@/api/views/registry';
 import { useAuth } from '@/auth/auth';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/form';
@@ -18,23 +26,33 @@ import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { AUTH_LABEL, formatRelative, RUNTIME_LABEL } from '@/lib/format';
+import { fieldErrors } from '@/features/access/forms';
+import { formatRelative } from '@/lib/format';
+import {
+  installToBody,
+  rejectFormSchema,
+  rejectToBody,
+  requestFormSchema,
+  requestToBody,
+} from './forms';
 
-function RequestDialog({
-  server,
-  onClose,
-}: {
-  server: RegistryServer | null;
-  onClose: () => void;
-}) {
+/** A server the policy wants approval for, with what the policy said. */
+type Pending = { server: RegistryServerView; reasons: string[] };
+
+function RequestDialog({ pending, onClose }: { pending: Pending | null; onClose: () => void }) {
   const create = useCreateInstallRequest();
-  const [reason, setReason] = React.useState('');
+  const [justification, setJustification] = React.useState('');
   const [error, setError] = React.useState<string | undefined>();
+  const server = pending?.server;
   return (
-    <Dialog open={server !== null} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={pending !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         title={`Request ${server?.name ?? ''}`}
-        description="A manager or admin reviews the request before it is installed."
+        description={
+          pending && pending.reasons.length > 0
+            ? `${reasonsText(pending.reasons)} A manager or admin reviews the request before it is installed.`
+            : 'A manager or admin reviews the request before it is installed.'
+        }
       >
         <form
           noValidate
@@ -42,17 +60,19 @@ function RequestDialog({
           onSubmit={(e) => {
             e.preventDefault();
             if (!server) return;
-            if (!reason.trim()) return setError('Say what you need it for');
-            create.mutate(
-              { sourceId: server.sourceId, name: server.name, version: server.version, reason },
-              {
-                onSuccess: () => {
-                  toast.success('Request sent');
-                  setReason('');
-                  onClose();
-                },
+            const parsed = requestFormSchema.safeParse({ justification });
+            if (!parsed.success) return setError(fieldErrors(parsed.error).justification);
+            setError(undefined);
+            create.mutate(requestToBody(server, parsed.data), {
+              onSuccess: () => {
+                toast.success('Request sent');
+                setJustification('');
+                onClose();
               },
-            );
+              onError: (err) => {
+                if (err instanceof ApiError) setError(err.errors[0]?.message ?? err.detail);
+              },
+            });
           }}
         >
           <Field label="What do you need it for?" required error={error}>
@@ -61,8 +81,9 @@ function RequestDialog({
                 id={id}
                 aria-describedby={describedBy}
                 aria-invalid={invalid}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                maxLength={2000}
+                value={justification}
+                onChange={(e) => setJustification(e.target.value)}
               />
             )}
           </Field>
@@ -75,7 +96,17 @@ function RequestDialog({
   );
 }
 
-function ServerCard({ s, onRequest }: { s: RegistryServer; onRequest: () => void }) {
+function ServerCard({
+  s,
+  blocked,
+  onBlocked,
+  onNeedsRequest,
+}: {
+  s: RegistryServerView;
+  blocked: boolean;
+  onBlocked: () => void;
+  onNeedsRequest: (reasons: string[]) => void;
+}) {
   const install = useRegistryInstall();
   return (
     <article className="flex flex-col gap-3 rounded-lg bg-surface p-[18px] shadow-card">
@@ -86,46 +117,108 @@ function ServerCard({ s, onRequest }: { s: RegistryServer; onRequest: () => void
         <p className="m-0 mt-0.5 text-caption text-muted">{s.description}</p>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        <Tag>{RUNTIME_LABEL[s.runtime]}</Tag>
-        <Tag tone={s.authMode === 'oauth' ? 'warn' : 'ok'}>{AUTH_LABEL[s.authMode]}</Tag>
+        {s.runtimes.map((r) => (
+          <Tag key={r}>{runtimeLabel(r)}</Tag>
+        ))}
         <Tag tone="surface">
           {s.sourceName} · v{s.version}
         </Tag>
       </div>
       <div className="mt-auto">
-        {s.policy === 'allowed' ? (
+        {blocked ? (
+          <Tag tone="bad">Blocked by registry policy</Tag>
+        ) : s.requested ? (
+          <Tag tone="info">Requested</Tag>
+        ) : (
           <Button
             size="sm"
             disabled={install.isPending}
             onClick={() =>
-              install.mutate(
-                { sourceId: s.sourceId, name: s.name, version: s.version },
-                { onSuccess: () => toast.success(`${s.name} installed`) },
-              )
+              install.mutate(installToBody(s), {
+                onSuccess: (result) => {
+                  if (result.decision === 'needs-request') onNeedsRequest(result.reasons);
+                  else toast.success(`${s.name} installed`);
+                },
+                onError: (err) => {
+                  if (err instanceof ApiError && err.isForbidden) {
+                    onBlocked();
+                    toast.error(err.detail || 'Blocked by registry policy');
+                  }
+                },
+              })
             }
           >
             Install
           </Button>
-        ) : s.policy === 'request' ? (
-          s.requested ? (
-            <Tag tone="info">Requested</Tag>
-          ) : (
-            <Button size="sm" variant="soft" onClick={onRequest}>
-              Request install
-            </Button>
-          )
-        ) : (
-          <Tag tone="bad">Blocked by registry policy</Tag>
         )}
       </div>
     </article>
   );
 }
 
+function RejectDialog({
+  request,
+  onClose,
+}: {
+  request: InstallRequestView | null;
+  onClose: () => void;
+}) {
+  const reject = useRejectRequest();
+  const [reason, setReason] = React.useState('');
+  const [error, setError] = React.useState<string | undefined>();
+  return (
+    <Dialog open={request !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        title={`Reject ${request?.serverName ?? ''}`}
+        description="The person sees your reason."
+      >
+        <form
+          noValidate
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!request) return;
+            const parsed = rejectFormSchema.safeParse({ reason });
+            if (!parsed.success) return setError(fieldErrors(parsed.error).reason);
+            setError(undefined);
+            reject.mutate(
+              { id: request.id, body: rejectToBody(parsed.data) },
+              {
+                onSuccess: () => {
+                  toast.success('Rejected');
+                  setReason('');
+                  onClose();
+                },
+              },
+            );
+          }}
+        >
+          <Field label="Reason" required error={error}>
+            {({ id, describedBy, invalid }) => (
+              <Input
+                id={id}
+                aria-describedby={describedBy}
+                aria-invalid={invalid}
+                maxLength={2000}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            )}
+          </Field>
+          <Button type="submit" disabled={reject.isPending}>
+            Reject request
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function Requests() {
   const { role } = useAuth();
   const q = useInstallRequests('open');
-  const decide = useDecideRequest();
+  const approve = useApproveRequest();
+  const [rejecting, setRejecting] = React.useState<InstallRequestView | null>(null);
   const canDecide = role === 'admin' || role === 'manager';
   return (
     <Card aria-label="Install requests" className="gap-2">
@@ -156,25 +249,14 @@ function Requests() {
                   <>
                     <Button
                       size="xs"
+                      disabled={approve.isPending}
                       onClick={() =>
-                        decide.mutate(
-                          { id: r.id, decision: 'approve' },
-                          { onSuccess: () => toast.success('Approved') },
-                        )
+                        approve.mutate(r.id, { onSuccess: () => toast.success('Approved') })
                       }
                     >
                       Approve
                     </Button>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() =>
-                        decide.mutate(
-                          { id: r.id, decision: 'reject' },
-                          { onSuccess: () => toast.success('Rejected') },
-                        )
-                      }
-                    >
+                    <Button size="xs" variant="outline" onClick={() => setRejecting(r)}>
                       Reject
                     </Button>
                   </>
@@ -186,6 +268,7 @@ function Requests() {
           </ul>
         )}
       </QueryBoundary>
+      <RejectDialog request={rejecting} onClose={() => setRejecting(null)} />
     </Card>
   );
 }
@@ -193,7 +276,8 @@ function Requests() {
 export function RegistryPage() {
   const [q, setQ] = React.useState('');
   const [debounced, setDebounced] = React.useState('');
-  const [requesting, setRequesting] = React.useState<RegistryServer | null>(null);
+  const [requesting, setRequesting] = React.useState<Pending | null>(null);
+  const [blocked, setBlocked] = React.useState<ReadonlySet<string>>(new Set());
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced(q), 250);
     return () => clearTimeout(t);
@@ -233,9 +317,11 @@ export function RegistryPage() {
             <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
               {items.map((s) => (
                 <ServerCard
-                  key={`${s.sourceId}-${s.name}`}
+                  key={serverKey(s)}
                   s={s}
-                  onRequest={() => setRequesting(s)}
+                  blocked={blocked.has(serverKey(s))}
+                  onBlocked={() => setBlocked((prev) => new Set(prev).add(serverKey(s)))}
+                  onNeedsRequest={(reasons) => setRequesting({ server: s, reasons })}
                 />
               ))}
             </div>
@@ -243,7 +329,7 @@ export function RegistryPage() {
         </QueryBoundary>
         <Requests />
       </div>
-      <RequestDialog server={requesting} onClose={() => setRequesting(null)} />
+      <RequestDialog pending={requesting} onClose={() => setRequesting(null)} />
     </>
   );
 }

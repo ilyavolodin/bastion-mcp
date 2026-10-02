@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { UiRole } from '@/api/types';
+import type { UiRole } from '@/api/views/session';
 import { canSee, NAV_ORDER, type NavSection, SECTIONS } from '@/lib/roles';
 import { expectNoA11yViolations, renderRoute } from './utils';
 

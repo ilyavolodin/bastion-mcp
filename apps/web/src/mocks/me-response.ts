@@ -1,5 +1,5 @@
 import type { MeResponse } from '@/api/me';
-import type { Me } from '@/api/types';
+import type { Me } from '@/api/views/session';
 
 /** The mock's `GET /me` body. Typed by the generated response, so API drift is a compile error. */
 export const toMeResponse = (me: Me): MeResponse => ({

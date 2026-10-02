@@ -73,7 +73,7 @@ export type RouteParams<K extends string> = { [N in ParamNames<K>]: string };
 export type Answer<T> =
   | StrictResponse<(T extends DefaultBodyType ? T : never) | ProblemBody>
   | StrictResponse<ProblemBody>
-  | (T extends undefined | null | void ? Response : never);
+  | (T extends undefined | null ? Response : never);
 
 export type RouteInfo<M extends Method, K extends PathKey<M>> = {
   request: Request;
@@ -99,9 +99,9 @@ const make =
   <K extends PathKey<M>>(
     key: K,
     resolve: (info: RouteInfo<M, K>) => Answer<Res<M, K>> | Promise<Answer<Res<M, K>>>,
-  ): HttpHandler => (
-    typedRoutes.push({ method, key }),
-    http[method](toMsw(key), (info) => {
+  ): HttpHandler => {
+    typedRoutes.push({ method, key });
+    return http[method](toMsw(key), (info) => {
       const url = new URL(info.request.url);
       return resolve({
         request: info.request,
@@ -110,8 +110,8 @@ const make =
         body: () => info.request.clone().json() as Promise<Body<M, K>>,
         query: Object.fromEntries(url.searchParams) as unknown as Query<M, K>,
       }) as never;
-    })
-  );
+    });
+  };
 
 /**
  * `route.get('/teams/{id}', ({ params }) => HttpResponse.json(row))`: the path is an operation of the OpenAPI

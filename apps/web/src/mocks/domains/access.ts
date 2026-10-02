@@ -6,7 +6,6 @@
  */
 import { isValidSlug } from '@bastion-mcp/core/ids';
 import type { Body, Res, Schemas } from '@/api/schema';
-import { getDb, nextId } from '../db';
 import {
   etagHeaders,
   forbidden,
@@ -19,6 +18,7 @@ import {
   type Sample,
   type SampleFactory,
 } from '../http';
+import { getDb, nextId } from '../state';
 
 export type AccessData = {
   users: Schemas['User'][];

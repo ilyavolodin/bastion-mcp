@@ -2,7 +2,7 @@ import { PAT_SCOPES } from '@bastion-mcp/auth';
 import { z } from 'zod';
 import { listQuerySchema, pageSchema } from '../framework/conventions';
 import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
-import { idParams, itemPage, itemSchema } from '../schemas/common';
+import { idParams, itemPage } from '../schemas/common';
 import { asRow, notificationRow, pageOf } from '../schemas/rows';
 import {
   createToken,

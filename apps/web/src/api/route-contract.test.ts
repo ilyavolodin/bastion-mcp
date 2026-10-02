@@ -82,17 +82,35 @@ describe('console routes exist in the OpenAPI document (17.2)', () => {
     expect(missing).toEqual([]);
   });
 
-  it('17.2 every route the MSW handlers answer has an operation (no mock-only routes)', () => {
-    const handlers = sources['/src/mocks/handlers.ts'] ?? '';
-    const routes = [
-      ...handlers.matchAll(/http\.(get|post|put|patch|delete)\(\s*P\('([^']+)'/g),
-    ].map((m) => ({ method: m[1] as Method, path: (m[2] ?? '').replace(/:[A-Za-z]+/g, '*') }));
-    // Legacy `http.*(P(...))` handlers plus the typed `route.*` ones (their paths are checked by the compiler).
-    expect(routes.length + new Set(typedRoutes.map((r) => r.key)).size).toBeGreaterThan(60);
-    const missing = routes
-      .filter((r) => !exists(r.method, r.path))
-      .map((r) => `${r.method.toUpperCase()} ${r.path}`);
+  it('17.2 every route the MSW mock answers is an operation of the document (no mock-only routes)', () => {
+    // Typed `route.*` handlers: the compiler checks the path; this guards the runtime registry too.
+    const missing = typedRoutes
+      .filter((r) => !exists(r.method, r.key.replace(/\{[^}]+\}/g, '*')))
+      .map((r) => `${r.method.toUpperCase()} ${r.key}`);
+    expect(new Set(typedRoutes.map((r) => `${r.method} ${r.key}`)).size).toBeGreaterThan(60);
     expect(missing).toEqual([]);
+  });
+
+  it('17.2 every API call of the UI is answered by a typed mock handler', () => {
+    const answered = typedRoutes.map((r) => ({
+      method: r.method,
+      segments: r.key.split('/').filter(Boolean),
+    }));
+    const unanswered = uiCalls
+      .filter((c) => c.path.startsWith('/'))
+      .filter((c) => {
+        const segs = c.path.split('?')[0]?.split('/').filter(Boolean) ?? [];
+        return !answered.some(
+          (r) =>
+            r.method === c.method &&
+            (r.segments.at(-1) === '{path}'
+              ? segs.length >= r.segments.length
+              : segs.length === r.segments.length) &&
+            r.segments.every((seg, i) => seg.startsWith('{') || seg === segs[i] || segs[i] === '*'),
+        );
+      })
+      .map((c) => `${c.method.toUpperCase()} ${c.path} (${c.file})`);
+    expect(unanswered).toEqual([]);
   });
 });
 
@@ -112,11 +130,38 @@ const DOMAINS: Record<string, SampleFactory> = {
 const callMock = async (sample: Sample): Promise<{ status: number; body: unknown }> => {
   const res = await fetch(`/api/v1${sample.path}`, {
     method: sample.method.toUpperCase(),
-    headers: { 'content-type': 'application/json', 'x-bastion-csrf': 'test-csrf' },
+    headers: {
+      'content-type': 'application/json',
+      'x-bastion-csrf': 'test-csrf',
+      // Changes to a stored row name its current version (17.1); `*` matches any.
+      ...(['patch', 'put', 'delete'].includes(sample.method) ? { 'if-match': '*' } : {}),
+    },
     ...(sample.body === undefined ? {} : { body: JSON.stringify(sample.body) }),
   });
   const text = await res.text();
   return { status: res.status, body: text ? JSON.parse(text) : undefined };
+};
+
+/** The same path with extra query parameters (existing ones are kept unless overridden). */
+const withParams = (path: string, params: Record<string, string>): string => {
+  const url = new URL(path, 'http://mock');
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  return `${url.pathname}${url.search}`;
+};
+
+/** Every page of a list: the first answer, then each `nextCursor`, so no fixture row escapes validation. */
+const pagesOf = async (sample: Sample, first: { body: unknown }): Promise<unknown[]> => {
+  const pages = [first.body];
+  let body = first.body as { nextCursor?: string | null } | undefined;
+  for (let i = 0; i < 50 && typeof body?.nextCursor === 'string'; i++) {
+    const next = await callMock({
+      ...sample,
+      path: withParams(sample.path, { limit: '500', cursor: body.nextCursor }),
+    });
+    pages.push(next.body);
+    body = next.body as { nextCursor?: string | null } | undefined;
+  }
+  return pages;
 };
 
 describe('the MSW mock conforms to the OpenAPI document (17.2)', () => {
@@ -144,11 +189,14 @@ describe('the MSW mock conforms to the OpenAPI document (17.2)', () => {
           continue;
         }
         if (hasJsonResponse(op) && answer.body !== undefined) {
-          const verdict = validateResponse(op, answer.body, answer.status);
-          if (!verdict.ok)
-            problems.push(
-              `${sample.method.toUpperCase()} ${op.template} response: ${verdict.errors.slice(0, 5).join('; ')}`,
-            );
+          const bodies = sample.method === 'get' ? await pagesOf(sample, answer) : [answer.body];
+          for (const body of bodies) {
+            const verdict = validateResponse(op, body, answer.status);
+            if (!verdict.ok)
+              problems.push(
+                `${sample.method.toUpperCase()} ${op.template} response: ${verdict.errors.slice(0, 5).join('; ')}`,
+              );
+          }
         }
       }
       expect(problems).toEqual([]);

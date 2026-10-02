@@ -472,7 +472,17 @@ describe.skipIf(!haveDocker())('17 control-plane API over Postgres and Redis', (
         coldStart: false,
         bytesIn: 10,
         bytesOut: 20,
-        guardResults: [{ guard: 'regex-1', type: 'regex', verdict: 'suspicious', action: 'flag' }],
+        guardResults: [
+          {
+            guard: 'regex-1',
+            type: 'regex',
+            phase: 'response',
+            verdict: 'suspicious',
+            action: 'warn',
+            latencyMs: 1,
+            mode: 'blocking',
+          },
+        ],
       },
       {
         id: newId(),

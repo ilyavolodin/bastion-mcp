@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { useEndpoints } from '@/api/hooks';
-import type { ClientId } from '@/api/types';
+import type { ClientKind } from '@/api/views/servers';
+import { defaultEndpointUrl } from '@/api/views/servers';
+import { useAuth } from '@/auth/auth';
 import { CLIENTS, ClientConfigPanel } from '@/components/client-config';
 import { CopyField } from '@/components/copy-field';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/skeleton';
 
 function NetworkArt() {
   return (
@@ -29,9 +29,8 @@ function NetworkArt() {
 
 /** "Connect your AI tools": the endpoint URL, a copy button and one-click config per client (18.3). */
 export function ConnectCard() {
-  const endpoints = useEndpoints();
-  const [client, setClient] = useState<ClientId | null>(null);
-  const endpoint = endpoints.data?.find((e) => e.isDefault) ?? endpoints.data?.[0];
+  const { me } = useAuth();
+  const [client, setClient] = useState<ClientKind | null>(null);
   const current = CLIENTS.find((c) => c.id === client);
   return (
     <section
@@ -48,21 +47,12 @@ export function ConnectCard() {
         </div>
         <NetworkArt />
       </div>
-      {endpoint ? (
-        <CopyField value={endpoint.url} label="endpoint URL" />
-      ) : endpoints.isPending ? (
-        <Skeleton className="h-[52px] bg-white/60" />
-      ) : (
-        <p className="m-0 rounded-md bg-white/70 p-3">
-          No endpoint yet. Install a server and your default endpoint appears here.
-        </p>
-      )}
+      <CopyField value={defaultEndpointUrl(me.org.host)} label="endpoint URL" />
       <div className="flex flex-wrap gap-2" role="group" aria-label="One-click client setup">
         {CLIENTS.map((c) => (
           <button
             key={c.id}
             type="button"
-            disabled={!endpoint}
             onClick={() => setClient(c.id)}
             className="inline-flex h-11 items-center gap-2 rounded-md bg-white/70 px-3.5 text-label text-[#171a3a] hover:bg-white/90 disabled:opacity-60"
           >
@@ -81,7 +71,7 @@ export function ConnectCard() {
           title={`Add Bastion to ${current?.name ?? ''}`}
           description="Copy this into your client, then sign in once."
         >
-          {client ? <ClientConfigPanel endpointId={endpoint?.id} client={client} /> : null}
+          {client ? <ClientConfigPanel client={client} /> : null}
         </DialogContent>
       </Dialog>
     </section>

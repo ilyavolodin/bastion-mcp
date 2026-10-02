@@ -1,19 +1,19 @@
 import { Layers } from 'lucide-react';
 import { useCapabilities } from '@/api/hooks';
-import type { ItemKind } from '@/api/types';
+import type { CapabilityKind } from '@/api/views/servers';
 import { EmptyState } from '@/components/empty-state';
 import { Card, CardHeader } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { CapabilityLegend, CapabilityRow } from './overview';
 
-const SECTIONS: { kind: ItemKind; label: string }[] = [
+const SECTIONS: { kind: CapabilityKind; label: string }[] = [
   { kind: 'tool', label: 'Tools' },
   { kind: 'prompt', label: 'Prompts' },
   { kind: 'resource', label: 'Resources' },
   { kind: 'template', label: 'Resource templates' },
 ];
 
-/** Final definitions of tools, prompts, resources and templates, with override, hidden and guard markers. */
+/** Final definitions of tools, prompts, resources and templates, with override markers. */
 export function CapabilitiesTab({ installationId }: { installationId: string }) {
   const q = useCapabilities(installationId);
   return (

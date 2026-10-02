@@ -17,7 +17,9 @@ const useSourceNames = (enabled = true) =>
     queryKey: [...keys.registry, 'sources'],
     enabled,
     queryFn: async ({ signal }): Promise<Map<string, string>> =>
-      new Map((await fetchAll('/registry-sources', undefined, 5, signal)).map((s) => [s.id, s.name])),
+      new Map(
+        (await fetchAll('/registry-sources', undefined, 5, signal)).map((s) => [s.id, s.name]),
+      ),
     retry: false,
   });
 

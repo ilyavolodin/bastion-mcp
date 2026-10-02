@@ -1,7 +1,13 @@
 import { Activity as ActivityIcon } from 'lucide-react';
 import { z } from 'zod';
-import { useCallSeries, useCalls, useInstallations, useTeams, useUsers } from '@/api/hooks';
-import type { CallBucket, CallFilters, CallOutcome, CallRecord } from '@/api/types';
+import { useCallSeries, useCalls, useNames } from '@/api/hooks';
+import type { CallOutcome } from '@/api/schema';
+import {
+  type CallBucket,
+  type CallFilters,
+  type CallRow,
+  callTitle,
+} from '@/api/views/observability';
 import { useAuth } from '@/auth/auth';
 import { ChartCard } from '@/components/chart-card';
 import { EmptyState } from '@/components/empty-state';
@@ -76,16 +82,18 @@ function TimelineStrip({
   );
 }
 
-function CallRow({
+function CallListItem({
   call,
   selected,
   people,
+  personName,
   maxMs,
   onSelect,
 }: {
-  call: CallRecord;
+  call: CallRow;
   selected: boolean;
   people: boolean;
+  personName: string;
   maxMs: number;
   onSelect: () => void;
 }) {
@@ -107,20 +115,20 @@ function CallRow({
         )}
       >
         <span className="text-caption tabular-nums text-muted">
-          {formatClock(call.startedAt, true).slice(0, 8)}
+          {formatClock(call.ts, true).slice(0, 8)}
         </span>
         <span className="flex min-w-0 flex-col">
           <span className="truncate font-mono text-[13px] leading-5 font-semibold">
-            {call.item}
+            {callTitle(call)}
           </span>
           <span className="text-[11px] leading-4 text-muted">
-            {call.method} · {call.client}
+            {call.method} · {call.clientName ?? 'Unknown client'}
           </span>
         </span>
         {people ? (
           <span className="flex min-w-0 items-center gap-2 max-lg:hidden">
-            <Avatar name={call.principalName} size={24} />
-            <span className="truncate text-[13px]">{call.principalName}</span>
+            <Avatar name={personName} size={24} />
+            <span className="truncate text-[13px]">{personName}</span>
           </span>
         ) : null}
         <span className="flex items-center max-lg:hidden" title={formatDuration(call.durationMs)}>
@@ -141,17 +149,19 @@ function CallRow({
  * in an installation's Activity tab with the server filter fixed.
  */
 export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: string }) {
-  const { role } = useAuth();
+  const { role, me } = useAuth();
   const [s, setS] = useSearchState(activitySearch);
   const wide = useMediaQuery('(min-width: 1280px)');
   const showPeople = role !== 'member';
-  const users = useUsers({}, showPeople);
-  const teams = useTeams(showPeople);
-  const installs = useInstallations();
+  const names = useNames();
+  const people = [...(names.data?.users ?? [])];
+  const teamList = [...(names.data?.teams ?? [])];
+  const installList = [...(names.data?.installations ?? [])];
+  const managedTeamId = me.teams.find((t) => t.role === 'manager')?.id;
 
   const filters: CallFilters = {
-    ...(s.user ? { userId: s.user } : {}),
-    ...(s.team ? { teamId: s.team } : {}),
+    ...(s.user ? { user: s.user } : {}),
+    ...(s.team ? { team: s.team } : {}),
     ...(fixedInstallationId
       ? { installationId: fixedInstallationId }
       : s.server
@@ -163,7 +173,9 @@ export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: st
   };
   const calls = useCalls(filters);
   const series = useCallSeries({
-    range: s.range === '7d' ? '7d' : s.range === '1h' ? '1h' : '24h',
+    range: s.range,
+    scope: role === 'admin' || role === 'auditor' ? 'org' : role === 'manager' ? 'team' : 'me',
+    ...(managedTeamId ? { teamId: managedTeamId } : {}),
     ...(fixedInstallationId ? { installationId: fixedInstallationId } : {}),
   });
   const rows = calls.data?.pages.flatMap((p) => p.items) ?? [];
@@ -180,13 +192,13 @@ export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: st
               label="Person"
               value={s.user ?? ''}
               onChange={(v) => setS({ user: v || undefined })}
-              options={(users.data ?? []).map((u) => ({ value: u.id, label: u.name }))}
+              options={people.map(([id, label]) => ({ value: id, label }))}
             />
             <FilterSelect
               label="Team"
               value={s.team ?? ''}
               onChange={(v) => setS({ team: v || undefined })}
-              options={(teams.data ?? []).map((t) => ({ value: t.id, label: t.name }))}
+              options={teamList.map(([id, label]) => ({ value: id, label }))}
             />
           </>
         ) : null}
@@ -195,7 +207,7 @@ export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: st
             label="Server"
             value={s.server ?? ''}
             onChange={(v) => setS({ server: v || undefined })}
-            options={(installs.data ?? []).map((i) => ({ value: i.id, label: i.displayName }))}
+            options={installList.map(([id, label]) => ({ value: id, label }))}
           />
         ) : null}
         <label className="inline-flex h-10 items-center rounded-md border border-line bg-surface px-3.5 text-[13px] font-medium">
@@ -311,10 +323,11 @@ export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: st
           ) : (
             <ul className="m-0 list-none p-0">
               {rows.map((c) => (
-                <CallRow
+                <CallListItem
                   key={c.id}
                   call={c}
                   people={showPeople}
+                  personName={names.data?.users.get(c.principalId) ?? c.principalId}
                   maxMs={maxMs}
                   selected={s.call === c.id}
                   onSelect={() => setS({ call: c.id })}

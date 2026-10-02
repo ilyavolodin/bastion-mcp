@@ -2,7 +2,7 @@ import { simulateRequestSchema, validatePolicyRequestSchema } from '@bastion-mcp
 import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
 import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
-import { idParams, itemPage, itemSchema } from '../schemas/common';
+import { idParams } from '../schemas/common';
 import {
   customPolicyCreateSchema,
   customPolicyPatchSchema,

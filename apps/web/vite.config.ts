@@ -52,7 +52,6 @@ export default defineConfig(({ mode }) => {
             if (id.includes('monaco-editor')) return 'monaco';
             if (id.includes('recharts') || id.includes('d3-') || id.includes('victory-vendor'))
               return 'charts';
-            if (id.includes('@xyflow')) return 'flow';
             if (id.includes('node_modules')) return 'vendor';
             return undefined;
           },
