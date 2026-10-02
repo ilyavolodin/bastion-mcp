@@ -1,7 +1,6 @@
 /** Shared building blocks of the operations: identities, Cedar inputs, upstream contexts, spans and guard application. */
 import {
   canonicalDigest,
-  META_KEYS,
   type RequestStateBinding,
   type TemplateContext,
   TOKEN_PREFIXES,
@@ -19,23 +18,19 @@ import {
 } from '@bastion-mcp/guards';
 import type {
   CallPrincipal,
-  JsonObject as UpstreamJson,
   UpstreamCallContext,
+  JsonObject as UpstreamJson,
   UpstreamNotification,
 } from '@bastion-mcp/mcp-upstream';
-import {
-  type InstallationData,
-  type McpRequestContext,
-  type ToolAnnotations,
-} from '@bastion-mcp/policy';
+import type { InstallationData, McpRequestContext, ToolAnnotations } from '@bastion-mcp/policy';
 import type { EffectiveEndpoint, InstallationInfo } from '@bastion-mcp/router';
 import { SPAN_NAMES } from '@bastion-mcp/telemetry';
 import {
   context,
   type Span,
+  type SpanContext,
   SpanKind,
   SpanStatusCode,
-  type SpanContext,
   trace,
 } from '@opentelemetry/api';
 import { InvalidParamsError } from '../rpc';
@@ -99,7 +94,12 @@ export const wallClock = (nowMs: number, timeZone = 'UTC'): { hour: number; week
   if (timeZone === 'UTC') return { hour: date.getUTCHours(), weekday: date.getUTCDay() };
   let format = zoneFormats.get(timeZone);
   if (!format) {
-    format = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', hourCycle: 'h23', weekday: 'short' });
+    format = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour: 'numeric',
+      hourCycle: 'h23',
+      weekday: 'short',
+    });
     zoneFormats.set(timeZone, format);
   }
   const parts = format.formatToParts(date);

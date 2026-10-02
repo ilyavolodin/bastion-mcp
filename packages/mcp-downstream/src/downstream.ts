@@ -2,11 +2,12 @@
  * Compose root of the downstream layer (`createDownstream`): wires the operation layer, both adapters, the listen
  * handler, the notify hub and the Fastify plugin, and implements the graceful shutdown of 21.2.
  */
-import { newId } from '@bastion-mcp/core';
-import { FloodLimiter, type Limiter } from '@bastion-mcp/limits';
-import type { GuardPipeline } from '@bastion-mcp/guards';
+
 import type { Keyring } from '@bastion-mcp/core';
-import { type InstallationRegistry, InflightTracker } from '@bastion-mcp/mcp-upstream';
+import { newId } from '@bastion-mcp/core';
+import type { GuardPipeline } from '@bastion-mcp/guards';
+import { FloodLimiter, type Limiter } from '@bastion-mcp/limits';
+import { InflightTracker, type InstallationRegistry } from '@bastion-mcp/mcp-upstream';
 import {
   EndpointCache,
   RedisSeenUriStore,
@@ -23,8 +24,8 @@ import { createDirectHandler } from './adapters/modern/direct';
 import { createListenAdapter } from './adapters/modern/listen';
 import { createModernAdapter, type ModernAdapter } from './adapters/modern/server';
 import type { BastionRequestContext } from './context';
-import { EndpointResolver } from './http/resolver';
 import { registerMcpRoutes } from './http/plugin';
+import { EndpointResolver } from './http/resolver';
 import { NotifyHub } from './notify-hub';
 import {
   DEFAULT_SETTINGS,
@@ -53,8 +54,8 @@ import {
   type SessionResponseForwarder,
   type SkillsProvider,
   systemClock,
-  type ToPolicyPrincipal,
   type TokenVerifierPort,
+  type ToPolicyPrincipal,
   type UpstreamPort,
   type WorkerDirectory,
 } from './ports';

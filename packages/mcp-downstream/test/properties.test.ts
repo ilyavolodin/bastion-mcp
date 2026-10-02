@@ -18,13 +18,26 @@ describe('22.1 requestState tamper rejection (property)', () => {
     const ctx = opContext(resolved);
     const good = wrapRequestState(
       keyring,
-      { principalId: principal().id, endpointId: 'default', installationId: inst.id, method: 'tools/call', name: TOOL, args: { text: 'x' } },
+      {
+        principalId: principal().id,
+        endpointId: 'default',
+        installationId: inst.id,
+        method: 'tools/call',
+        name: TOOL,
+        args: { text: 'x' },
+      },
       { now: Math.floor(Date.now() / 1000) },
     );
     await fc.assert(
       fc.asyncProperty(
         fc.oneof(
-          fc.tuple(fc.nat(good.length - 1), fc.string({ minLength: 1, maxLength: 1 })).map(([i, c]) => (good[i] === c ? `${good.slice(0, i)}${c === 'A' ? 'B' : 'A'}${good.slice(i + 1)}` : `${good.slice(0, i)}${c}${good.slice(i + 1)}`)),
+          fc
+            .tuple(fc.nat(good.length - 1), fc.string({ minLength: 1, maxLength: 1 }))
+            .map(([i, c]) =>
+              good[i] === c
+                ? `${good.slice(0, i)}${c === 'A' ? 'B' : 'A'}${good.slice(i + 1)}`
+                : `${good.slice(0, i)}${c}${good.slice(i + 1)}`,
+            ),
           fc.nat(good.length - 1).map((n) => good.slice(0, n)),
           fc.string(),
           fc.string().map((s) => `bst1.${s}`),
@@ -32,7 +45,11 @@ describe('22.1 requestState tamper rejection (property)', () => {
         async (state) => {
           fc.pre(state !== good);
           const err = await ops
-            .run('tools/call', { name: TOOL, arguments: { text: 'x' }, requestState: state, inputResponses: {} }, ctx)
+            .run(
+              'tools/call',
+              { name: TOOL, arguments: { text: 'x' }, requestState: state, inputResponses: {} },
+              ctx,
+            )
             .then(() => undefined)
             .catch((e: unknown) => e);
           expect(err).toMatchObject({ mcpCode: -32602 });
@@ -50,10 +67,21 @@ describe('22.1 requestState tamper rejection (property)', () => {
     const ctx = opContext(resolved);
     const good = wrapRequestState(
       keyring,
-      { principalId: principal().id, endpointId: 'default', installationId: inst.id, method: 'tools/call', name: TOOL, args: { text: 'x' } },
+      {
+        principalId: principal().id,
+        endpointId: 'default',
+        installationId: inst.id,
+        method: 'tools/call',
+        name: TOOL,
+        args: { text: 'x' },
+      },
       { now: Math.floor(Date.now() / 1000) },
     );
-    const out = await ops.run('tools/call', { name: TOOL, arguments: { text: 'x' }, requestState: good, inputResponses: {} }, ctx);
+    const out = await ops.run(
+      'tools/call',
+      { name: TOOL, arguments: { text: 'x' }, requestState: good, inputResponses: {} },
+      ctx,
+    );
     expect(out.kind).toBe('complete');
   });
 });
@@ -62,10 +90,19 @@ describe('6.5 input partition laws (property)', () => {
   const kinds = ['elicitation/create', 'sampling/createMessage', 'roots/list', 'acme/other'];
   const requests = fc.dictionary(
     fc.string({ minLength: 1, maxLength: 6 }),
-    fc.record({ method: fc.constantFrom(...kinds), params: fc.option(fc.record({ mode: fc.constantFrom('form', 'url') }), { nil: undefined }) }),
+    fc.record({
+      method: fc.constantFrom(...kinds),
+      params: fc.option(fc.record({ mode: fc.constantFrom('form', 'url') }), { nil: undefined }),
+    }),
   );
   const caps = fc.record({
-    elicitation: fc.option(fc.record({ form: fc.option(fc.constant({}), { nil: undefined }), url: fc.option(fc.constant({}), { nil: undefined }) }), { nil: undefined }),
+    elicitation: fc.option(
+      fc.record({
+        form: fc.option(fc.constant({}), { nil: undefined }),
+        url: fc.option(fc.constant({}), { nil: undefined }),
+      }),
+      { nil: undefined },
+    ),
     sampling: fc.option(fc.constant({}), { nil: undefined }),
     roots: fc.option(fc.constant({}), { nil: undefined }),
   });
@@ -105,7 +142,14 @@ describe('23.3 fuzzing the HTTP layer', () => {
       fc.asyncProperty(json, fc.constantFrom('modern', 'legacy'), async (body, era) => {
         const res =
           era === 'modern'
-            ? await rawModern(stack.base, { token, method: 'tools/list', params: typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : { v: body } })
+            ? await rawModern(stack.base, {
+                token,
+                method: 'tools/list',
+                params:
+                  typeof body === 'object' && body !== null && !Array.isArray(body)
+                    ? (body as Record<string, unknown>)
+                    : { v: body },
+              })
             : await rawLegacy(stack.base, { token, protocolVersion: '2025-06-18', body });
         expect(res.status).toBeLessThan(500);
       }),

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { driveLegacyInput } from '../src/bridge/legacy';
 import type { OpOutcome } from '../src/types';
+import { uuidFor } from './helpers/fixtures';
+
+const INST_A = uuidFor('inst-a');
 
 const complete = (text: string): OpOutcome<unknown> => ({
   kind: 'complete',
@@ -13,7 +16,7 @@ const needs = (
   kind: 'input_required',
   inputRequests,
   requestState,
-  installationId: 'inst-a',
+  installationId: INST_A,
 });
 
 const FULL = { elicitation: { form: {} }, sampling: {}, roots: {} };
@@ -53,7 +56,7 @@ describe('6.5 legacy fan-out bridge', () => {
     await driveLegacyInput({
       params: { name: 't' },
       caps: {},
-      roots: async (id) => (id === 'inst-a' ? ['file:///w'] : []),
+      roots: async (id) => (id === INST_A ? ['file:///w'] : []),
       run: async (params) => {
         seen.push(params);
         return seen.length === 1

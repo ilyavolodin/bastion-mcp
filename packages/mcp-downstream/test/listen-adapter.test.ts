@@ -8,7 +8,16 @@ import { createListenAdapter, type ListenAdapterDeps } from '../src/adapters/mod
 import type { BastionRequestContext } from '../src/context';
 import { NotifyHub } from '../src/notify-hub';
 import { FakeRedis } from './helpers/fake-redis';
-import { buildEndpoint, installation, items, principal, requestContext } from './helpers/fixtures';
+import {
+  buildEndpoint,
+  installation,
+  items,
+  principal,
+  requestContext,
+  uuidFor,
+} from './helpers/fixtures';
+
+const INST_A = uuidFor('inst-a');
 
 const ENVELOPE = {
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
@@ -88,10 +97,10 @@ describe('6.6 listen adapter', () => {
     await hub.start();
     calls = [];
     canRead = async (_rc, uri) =>
-      uri.startsWith('test://') ? { ok: true, installationId: 'inst-a' } : { ok: false };
+      uri.startsWith('test://') ? { ok: true, installationId: INST_A } : { ok: false };
     const resolved = await buildEndpoint({
       installations: [installation('a')],
-      items: { 'inst-a': items() },
+      items: { [INST_A]: items() },
     });
     rc = requestContext(resolved, { principal: principal() });
     adapter = createListenAdapter({
@@ -215,14 +224,14 @@ describe('6.6 listen adapter', () => {
     const res = await listen({ toolsListChanged: true, resourceSubscriptions: ['test://static'] });
     await readFrames(res, (f) => f.length >= 1);
     await new Promise((r) => setTimeout(r, 30));
-    expect(calls).toEqual(['join:inst-a', 'sub:test://static']);
+    expect(calls).toEqual([`join:${INST_A}`, 'sub:test://static']);
     expect(adapter.activeStreams()).toBe(1);
     await res.body?.cancel();
     await new Promise((r) => setTimeout(r, 60));
     expect(calls).toEqual([
-      'join:inst-a',
+      `join:${INST_A}`,
       'sub:test://static',
-      'leave:inst-a',
+      `leave:${INST_A}`,
       'unsub:test://static',
     ]);
     expect(adapter.activeStreams()).toBe(0);

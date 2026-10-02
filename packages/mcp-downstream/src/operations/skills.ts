@@ -1,11 +1,16 @@
 /** `skills/list`, `skills/get` (6.8, 25.8) and verbatim forwarding of unknown methods on single-installation endpoints (6.3). */
 import { trace } from '@opentelemetry/api';
-import { CallRecord, byteSize } from '../observability/call-log';
+import { byteSize, CallRecord } from '../observability/call-log';
 import { InvalidParamsError, MethodNotFoundError, UnknownItemError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
 import { recordOperationOutcome } from './outcome';
-import { callPrincipalOf, isRecord, isSingleInstallationEndpoint, upstreamContextOf } from './support';
+import {
+  callPrincipalOf,
+  isRecord,
+  isSingleInstallationEndpoint,
+  upstreamContextOf,
+} from './support';
 
 const singleInstallationId = (ctx: OpContext): string | undefined => {
   if (!isSingleInstallationEndpoint(ctx)) return undefined;
@@ -61,7 +66,8 @@ export const createForward = (deps: OperationDeps, method: string): Operation =>
   run: (params, ctx) => forwardToInstallation(deps, ctx, method, params),
 });
 
-const skillsOf = (value: unknown): unknown[] => (isRecord(value) && Array.isArray(value.skills) ? value.skills : []);
+const skillsOf = (value: unknown): unknown[] =>
+  isRecord(value) && Array.isArray(value.skills) ? value.skills : [];
 
 export const createSkillsList = (deps: OperationDeps): Operation => ({
   method: 'skills/list',

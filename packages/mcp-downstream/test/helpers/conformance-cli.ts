@@ -23,9 +23,13 @@ export const runConformanceScenario = (
   timeoutMs = 60_000,
 ): Promise<ConformanceReport> =>
   new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [conformanceBin(), 'server', '--url', url, '--scenario', scenario, '--verbose'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const child = spawn(
+      process.execPath,
+      [conformanceBin(), 'server', '--url', url, '--scenario', scenario, '--verbose'],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
     let stdout = '';
     child.stdout.on('data', (d: Buffer) => {
       stdout += d.toString('utf8');

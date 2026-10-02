@@ -72,34 +72,46 @@ const build = (): McpServer => {
   }));
   server.registerTool('test_error_handling', { description: 'Always fails' }, () => ({
     isError: true,
-    content: [{ type: 'text' as const, text: 'This tool intentionally returns an error for testing' }],
+    content: [
+      { type: 'text' as const, text: 'This tool intentionally returns an error for testing' },
+    ],
   }));
-  server.registerTool('test_tool_with_logging', { description: 'Logs while running' }, async (ctx) => {
-    await ctx.mcpReq.log('info', 'Tool execution started');
-    await sleep(50);
-    await ctx.mcpReq.log('info', 'Tool processing data');
-    await sleep(50);
-    await ctx.mcpReq.log('info', 'Tool execution completed');
-    return text('Tool execution completed with logging');
-  });
-  server.registerTool('test_tool_with_progress', { description: 'Reports progress' }, async (ctx) => {
-    const token = ctx.mcpReq._meta?.progressToken;
-    for (const progress of [0, 50, 100]) {
-      if (token !== undefined) {
-        await ctx.mcpReq.notify({
-          method: 'notifications/progress',
-          params: { progressToken: token, progress, total: 100 },
-        });
-      }
+  server.registerTool(
+    'test_tool_with_logging',
+    { description: 'Logs while running' },
+    async (ctx) => {
+      await ctx.mcpReq.log('info', 'Tool execution started');
       await sleep(50);
-    }
-    return text('Tool execution completed with progress');
-  });
+      await ctx.mcpReq.log('info', 'Tool processing data');
+      await sleep(50);
+      await ctx.mcpReq.log('info', 'Tool execution completed');
+      return text('Tool execution completed with logging');
+    },
+  );
+  server.registerTool(
+    'test_tool_with_progress',
+    { description: 'Reports progress' },
+    async (ctx) => {
+      const token = ctx.mcpReq._meta?.progressToken;
+      for (const progress of [0, 50, 100]) {
+        if (token !== undefined) {
+          await ctx.mcpReq.notify({
+            method: 'notifications/progress',
+            params: { progressToken: token, progress, total: 100 },
+          });
+        }
+        await sleep(50);
+      }
+      return text('Tool execution completed with progress');
+    },
+  );
   server.registerTool(
     'test_sampling',
     { description: 'Requests sampling', inputSchema: z.object({ prompt: z.string() }) },
     ({ prompt }, ctx) => {
-      const answer = ctx.mcpReq.inputResponses?.sample as { content?: { text?: string } } | undefined;
+      const answer = ctx.mcpReq.inputResponses?.sample as
+        | { content?: { text?: string } }
+        | undefined;
       if (answer) return text(`LLM response: ${answer.content?.text ?? ''}`);
       return inputRequired({
         inputRequests: {
@@ -120,13 +132,18 @@ const build = (): McpServer => {
   ): void => {
     server.registerTool(
       name,
-      { description: `Elicits: ${name}`, inputSchema: z.object({ message: z.string().optional() }) },
+      {
+        description: `Elicits: ${name}`,
+        inputSchema: z.object({ message: z.string().optional() }),
+      },
       (args, ctx) => {
         const answer = ctx.mcpReq.inputResponses?.e as
           | { action?: string; content?: unknown }
           | undefined;
         if (answer) {
-          return text(`${prefix}action=${String(answer.action)}, content=${JSON.stringify(answer.content)}`);
+          return text(
+            `${prefix}action=${String(answer.action)}, content=${JSON.stringify(answer.content)}`,
+          );
         }
         return inputRequired({
           inputRequests: {
@@ -187,7 +204,10 @@ const build = (): McpServer => {
           enum: ['opt1', 'opt2', 'opt3'],
           enumNames: ['Option One', 'Option Two', 'Option Three'],
         },
-        untitledMulti: { type: 'array', items: { type: 'string', enum: ['option1', 'option2', 'option3'] } },
+        untitledMulti: {
+          type: 'array',
+          items: { type: 'string', enum: ['option1', 'option2', 'option3'] },
+        },
         titledMulti: {
           type: 'array',
           items: {
@@ -241,7 +261,11 @@ const build = (): McpServer => {
     { description: 'Static text resource', mimeType: 'text/plain' },
     (uri) => ({
       contents: [
-        { uri: uri.href, mimeType: 'text/plain', text: 'This is the content of the static text resource.' },
+        {
+          uri: uri.href,
+          mimeType: 'text/plain',
+          text: 'This is the content of the static text resource.',
+        },
       ],
     }),
   );
@@ -277,7 +301,9 @@ const build = (): McpServer => {
   );
 
   server.registerPrompt('test_simple_prompt', { description: 'Simple prompt' }, () => ({
-    messages: [{ role: 'user', content: { type: 'text', text: 'This is a simple prompt for testing.' } }],
+    messages: [
+      { role: 'user', content: { type: 'text', text: 'This is a simple prompt for testing.' } },
+    ],
   }));
   server.registerPrompt(
     'test_prompt_with_arguments',
@@ -287,7 +313,10 @@ const build = (): McpServer => {
     },
     ({ arg1, arg2 }) => ({
       messages: [
-        { role: 'user', content: { type: 'text', text: `Prompt with arguments: arg1='${arg1}', arg2='${arg2}'` } },
+        {
+          role: 'user',
+          content: { type: 'text', text: `Prompt with arguments: arg1='${arg1}', arg2='${arg2}'` },
+        },
       ],
     }),
   );
@@ -300,10 +329,17 @@ const build = (): McpServer => {
           role: 'user',
           content: {
             type: 'resource',
-            resource: { uri: resourceUri, mimeType: 'text/plain', text: 'Embedded resource content for testing.' },
+            resource: {
+              uri: resourceUri,
+              mimeType: 'text/plain',
+              text: 'Embedded resource content for testing.',
+            },
           },
         },
-        { role: 'user', content: { type: 'text', text: 'Please process the embedded resource above.' } },
+        {
+          role: 'user',
+          content: { type: 'text', text: 'Please process the embedded resource above.' },
+        },
       ],
     }),
   );
@@ -314,7 +350,11 @@ const build = (): McpServer => {
     ],
   }));
 
-  server.server.registerCapabilities({ logging: {}, completions: {}, resources: { subscribe: true, listChanged: true } });
+  server.server.registerCapabilities({
+    logging: {},
+    completions: {},
+    resources: { subscribe: true, listChanged: true },
+  });
   server.server.setRequestHandler('completion/complete', () => ({
     completion: { values: ['paris', 'park', 'party'], total: 3, hasMore: false },
   }));

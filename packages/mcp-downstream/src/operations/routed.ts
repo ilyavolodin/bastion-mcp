@@ -7,22 +7,22 @@ import {
   ERROR_CODES,
   GuardBlockedError,
   MAX_INPUT_ROUNDS,
+  PolicyDeniedError,
+  QuotaExceededError,
+  RateLimitedError,
   REQUEST_STATE_PREFIX,
   unwrapRequestState,
   wrapRequestState,
 } from '@bastion-mcp/core';
-import {
-  extractStringLeaves,
-  type ItemRef,
-  type TextSegment,
-} from '@bastion-mcp/guards';
+import { extractStringLeaves, type ItemRef, type TextSegment } from '@bastion-mcp/guards';
+import type { OperationContext } from '@bastion-mcp/limits';
 import { clientSupports, type InputRequestMap } from '@bastion-mcp/mcp-upstream';
 import type { ResourceData } from '@bastion-mcp/policy';
 import type { InstallationInfo } from '@bastion-mcp/router';
 import { SPAN_NAMES } from '@bastion-mcp/telemetry';
 import { context, trace } from '@opentelemetry/api';
 import { fullyLocal, partitionInputRequests } from '../bridge/partition';
-import { type CallRecord, byteSize } from '../observability/call-log';
+import { byteSize, type CallRecord } from '../observability/call-log';
 import { InvalidParamsError } from '../rpc';
 import type { JsonObject, OpContext, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
@@ -30,7 +30,6 @@ import {
   applyGuardResult,
   bindingOf,
   callPrincipalOf,
-  installationDataOf,
   isRecord,
   policyContextOf,
   type RetryParts,
@@ -40,8 +39,6 @@ import {
   withMeta,
   withSpan,
 } from './support';
-import { PolicyDeniedError, QuotaExceededError, RateLimitedError } from '@bastion-mcp/core';
-import type { OperationContext } from '@bastion-mcp/limits';
 
 export const CONFIRM_KEY = 'confirm';
 export const CONFIRM_MARKER = 'bastion:confirm:';
@@ -56,7 +53,11 @@ export type RoutedSpec = {
   toolName?: string | undefined;
   item: ItemRef;
   /** Cedar action and resource (10.3). The per-call arguments are attached for `callTool`. */
-  policy: { action: 'callTool' | 'getPrompt' | 'readResource'; resource: ResourceData; call?: JsonObject };
+  policy: {
+    action: 'callTool' | 'getPrompt' | 'readResource';
+    resource: ResourceData;
+    call?: JsonObject;
+  };
   /** Request-phase content: segments addressed relative to `root`, and how to put the guarded root back. */
   request: {
     root: JsonObject;
@@ -81,7 +82,9 @@ export type RoutedSpec = {
 
 const limitsPrincipal = (deps: OperationDeps, ctx: OpContext) => ({
   orgId: deps.settings.orgId,
-  ...(ctx.principal.type === 'user' ? { userId: ctx.principal.id } : { serviceAccountId: ctx.principal.id }),
+  ...(ctx.principal.type === 'user'
+    ? { userId: ctx.principal.id }
+    : { serviceAccountId: ctx.principal.id }),
   teamIds: ctx.principal.teams.map((t) => t.teamId),
   roleIds: [ctx.principal.orgRole],
   ...(ctx.principal.clientId === null ? {} : { clientId: ctx.principal.clientId }),
@@ -112,7 +115,10 @@ const attr = (key: string, value: string | undefined): void => {
 
 const catalogEntryName = (i: InstallationInfo): string => i.catalogSlug ?? i.catalogEntryId;
 
-const REFUNDABLE = new Set<number>([ERROR_CODES.UPSTREAM_UNAVAILABLE, ERROR_CODES.SANDBOX_START_FAILED]);
+const REFUNDABLE = new Set<number>([
+  ERROR_CODES.UPSTREAM_UNAVAILABLE,
+  ERROR_CODES.SANDBOX_START_FAILED,
+]);
 
 const confirmInputRequests = (reason: string): InputRequestMap => ({
   [CONFIRM_KEY]: {
@@ -142,7 +148,9 @@ const chargeSampling = async (
   spec: RoutedSpec,
   inputRequests: InputRequestMap,
 ): Promise<void> => {
-  const count = Object.values(inputRequests).filter((e) => e.method === 'sampling/createMessage').length;
+  const count = Object.values(inputRequests).filter(
+    (e) => e.method === 'sampling/createMessage',
+  ).length;
   if (count === 0) return;
   const op = operationContextOf(deps, ctx, spec, { samplingRequests: count });
   const rules = deps.limitRules
@@ -211,12 +219,21 @@ export const runRouted = async (
   const requestId = deps.newId();
   const admission = await withSpan(deps, SPAN_NAMES.limits, {}, async () => {
     try {
-      return await deps.limiter.check(op, deps.limitRules.rulesFor(op, endpointInfoOf(ctx)), requestId);
+      return await deps.limiter.check(
+        op,
+        deps.limitRules.rulesFor(op, endpointInfoOf(ctx)),
+        requestId,
+      );
     } catch (error) {
       if (error instanceof RateLimitedError || error instanceof QuotaExceededError) {
         deps.metrics.limitsRejections.add(1, {
           rule: String(error.data.limit ?? error.data.quota ?? 'unknown'),
-          kind: error instanceof QuotaExceededError ? 'quota' : 'rate',
+          kind:
+            error instanceof QuotaExceededError
+              ? 'quota'
+              : error.message.startsWith('Concurrency')
+                ? 'concurrency'
+                : 'rate',
         });
       }
       throw error;
@@ -253,7 +270,14 @@ const afterAdmission = async (
     ...spec.request.root,
     ...(retry.inputResponses === undefined ? {} : { inputResponses: retry.inputResponses }),
   };
-  const guardRun = await runGuards(deps, ctx, 'request', { installation, item: spec.item, method: spec.method }, segments, spec.guardProfileId);
+  const guardRun = await runGuards(
+    deps,
+    ctx,
+    'request',
+    { installation, item: spec.item, method: spec.method },
+    segments,
+    spec.guardProfileId,
+  );
   record.guardResults.push(...guardRun.records);
   const applied = applyGuardResult(guardRun, root, segments);
   const guardedRoot = applied.value as JsonObject;
@@ -276,16 +300,18 @@ const afterAdmission = async (
     if (!retry.requestState.startsWith(REQUEST_STATE_PREFIX)) {
       throw new InvalidParamsError('invalid requestState');
     }
-    const state = unwrapRequestState(deps.stateKeyring, retry.requestState, binding, { now: nowSeconds });
+    const state = unwrapRequestState(deps.stateKeyring, retry.requestState, binding, {
+      now: nowSeconds,
+    });
     if (state.upstreamState?.startsWith(CONFIRM_MARKER)) {
       // Bastion's own approval round: nothing of it goes upstream (13.2).
       stripRetry = true;
       confirmApproved = approvedByUser(guardedResponses as Record<string, unknown> | undefined);
       if (!confirmApproved) {
-        throw new GuardBlockedError(
-          `The call to ${spec.downstreamName} was not approved.`,
-          { guard: state.upstreamState.slice(CONFIRM_MARKER.length), ruleId: 'confirm' },
-        );
+        throw new GuardBlockedError(`The call to ${spec.downstreamName} was not approved.`, {
+          guard: state.upstreamState.slice(CONFIRM_MARKER.length),
+          ruleId: 'confirm',
+        });
       }
     }
   } else if (retry.inputResponses !== undefined) {
@@ -316,7 +342,8 @@ const afterAdmission = async (
   // Cached public reads (6.7)
   if (spec.readKey !== undefined && !forUpstream && deps.reads) {
     const cached = await deps.reads.get(installation.id, spec.readKey);
-    if (isRecord(cached)) return finishComplete(deps, ctx, spec, record, cached, applied.meta, limitsMeta);
+    if (isRecord(cached))
+      return finishComplete(deps, ctx, spec, record, cached, applied.meta, limitsMeta);
   }
 
   // 5. Upstream, looping while Bastion can answer the input requests itself (6.5)
@@ -353,11 +380,22 @@ const afterAdmission = async (
     // input_required: response-phase guards on the text the client would see (13.1)
     const inputRequests = outcome.inputRequests ?? {};
     const inputSegments = extractStringLeaves(inputRequests, 'inputRequests');
-    const inputRun = await runGuards(deps, ctx, 'response', { installation, item: spec.item, method: spec.method }, inputSegments, spec.guardProfileId);
+    const inputRun = await runGuards(
+      deps,
+      ctx,
+      'response',
+      { installation, item: spec.item, method: spec.method },
+      inputSegments,
+      spec.guardProfileId,
+    );
     record.guardResults.push(...inputRun.records);
     const guardedInput = applyGuardResult(inputRun, { inputRequests }, inputSegments);
     const checked = (guardedInput.value as { inputRequests: InputRequestMap }).inputRequests;
-    const partition = partitionInputRequests(checked, ctx.clientCapabilities, await rootsOf(deps, installation.id));
+    const partition = partitionInputRequests(
+      checked,
+      ctx.clientCapabilities,
+      await rootsOf(deps, installation.id),
+    );
     if (fullyLocal(partition) && Object.keys(checked).length > 0) {
       params = { ...params, inputResponses: partition.local, requestState: outcome.requestState };
       continue;

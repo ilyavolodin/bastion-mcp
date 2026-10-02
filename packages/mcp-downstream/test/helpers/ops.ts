@@ -2,15 +2,15 @@ import { BastionError, type Keyring, newId, wrapRequestState } from '@bastion-mc
 import { createGuardRegistry, GuardPipeline, type ProfileLayers } from '@bastion-mcp/guards';
 import { EngineLimiter, MemoryBackend, type Rule } from '@bastion-mcp/limits';
 import type { UpstreamOutcome } from '@bastion-mcp/mcp-upstream';
-import { InMemorySeenUriStore, type EndpointPolicy } from '@bastion-mcp/router';
+import { type EndpointPolicy, InMemorySeenUriStore } from '@bastion-mcp/router';
 import { type CallLogRow, createMetrics } from '@bastion-mcp/telemetry';
 import { metrics as otelMetrics, trace } from '@opentelemetry/api';
-import { createOperations, createOpRunner } from '../../src/operations/registry';
 import {
+  DEFAULT_SETTINGS,
   defaultToPolicyPrincipal,
   type OperationDeps,
-  DEFAULT_SETTINGS,
 } from '../../src/operations/deps';
+import { createOperations, createOpRunner } from '../../src/operations/registry';
 import type {
   GuardProfilePort,
   LimitRulesPort,
@@ -37,7 +37,9 @@ export class FakeUpstream implements UpstreamPort {
     kind: 'complete',
     result: { content: [{ type: 'text', text: 'ok' }] },
   });
-  taskScript: (call: Parameters<UpstreamPort['executeTask']>[0]) => UpstreamOutcome | Promise<UpstreamOutcome> = () => ({
+  taskScript: (
+    call: Parameters<UpstreamPort['executeTask']>[0],
+  ) => UpstreamOutcome | Promise<UpstreamOutcome> = () => ({
     kind: 'complete',
     result: { taskId: 'x', status: 'working' },
   });
@@ -79,7 +81,10 @@ export const wrappedState = (
       name,
       args,
     },
-    { now: Math.floor(Date.now() / 1000), ...(upstreamState === undefined ? {} : { upstreamState }) },
+    {
+      now: Math.floor(Date.now() / 1000),
+      ...(upstreamState === undefined ? {} : { upstreamState }),
+    },
   );
 
 export type OpsHarness = {
@@ -101,6 +106,8 @@ export const makeOps = (
     installations?: OperationDeps['installations'] | undefined;
     reads?: OperationDeps['reads'] | undefined;
     settings?: Partial<OperationDeps['settings']> | undefined;
+    tracer?: OperationDeps['tracer'] | undefined;
+    metrics?: OperationDeps['metrics'] | undefined;
   } = {},
 ): OpsHarness => {
   const upstream = new FakeUpstream();
@@ -123,8 +130,8 @@ export const makeOps = (
     skills: options.skills,
     installations: options.installations ?? { get: async () => null },
     reads: options.reads,
-    metrics: createMetrics(otelMetrics.getMeter('test')),
-    tracer: trace.getTracer('test'),
+    metrics: options.metrics ?? createMetrics(otelMetrics.getMeter('test')),
+    tracer: options.tracer ?? trace.getTracer('test'),
     clock: systemClock,
     logger: noopLogger,
     newId,

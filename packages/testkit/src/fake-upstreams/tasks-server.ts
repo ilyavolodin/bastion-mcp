@@ -31,7 +31,11 @@ export const startFakeTasksServer = async (
   const result = (id: unknown, body: Record<string, unknown>) => ({
     jsonrpc: '2.0',
     id,
-    result: { resultType: 'complete', ...body, _meta: { 'io.modelcontextprotocol/serverInfo': SERVER_INFO } },
+    result: {
+      resultType: 'complete',
+      ...body,
+      _meta: { 'io.modelcontextprotocol/serverInfo': SERVER_INFO },
+    },
   });
   const error = (id: unknown, code: number, message: string) => ({
     jsonrpc: '2.0',

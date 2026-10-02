@@ -24,7 +24,10 @@ export const measure = async (options: {
   warmup?: number;
   fn: (index: number) => Promise<void>;
 }): Promise<LatencyStats> => {
-  const run = async (count: number, record: boolean): Promise<{ samples: number[]; errors: number; ms: number }> => {
+  const run = async (
+    count: number,
+    record: boolean,
+  ): Promise<{ samples: number[]; errors: number; ms: number }> => {
     const samples: number[] = [];
     let errors = 0;
     let next = 0;

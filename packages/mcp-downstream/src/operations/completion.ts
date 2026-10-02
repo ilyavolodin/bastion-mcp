@@ -1,7 +1,8 @@
 /** `completion/complete` (6.3): routed by the prompt name or the template URI in `ref`. */
-import { SPAN_NAMES } from '@bastion-mcp/telemetry';
+
 import { PolicyDeniedError } from '@bastion-mcp/core';
 import { ResourceNotFoundError, resolveResourceUri } from '@bastion-mcp/router';
+import { SPAN_NAMES } from '@bastion-mcp/telemetry';
 import { trace } from '@opentelemetry/api';
 import { CallRecord } from '../observability/call-log';
 import { InvalidParamsError, UnknownItemError } from '../rpc';
@@ -21,7 +22,8 @@ export const createCompletion = (deps: OperationDeps): Operation => ({
   method: 'completion/complete',
   async run(params: JsonObject, ctx: OpContext): Promise<OpOutcome<JsonObject>> {
     const ref = params.ref;
-    if (!isRecord(ref) || typeof ref.type !== 'string') throw new InvalidParamsError('ref is required');
+    if (!isRecord(ref) || typeof ref.type !== 'string')
+      throw new InvalidParamsError('ref is required');
     let installationId: string | undefined;
     let upstreamRef: JsonObject;
     let resource: { type: 'Prompt'; name: string } | { type: 'Resource'; uri: string };
@@ -59,13 +61,17 @@ export const createCompletion = (deps: OperationDeps): Operation => ({
     record.itemName = resource.type === 'Prompt' ? resource.name : resource.uri;
     try {
       const profile = deps.profiles ? await deps.profiles.profile(ctx.principal) : {};
-      const decision = await withSpan(deps, SPAN_NAMES.policy, { 'bastion.policy.action': 'complete' }, async () =>
-        deps.policy.current().authorize({
-          principal: deps.toPolicyPrincipal(ctx.principal, profile),
-          action: 'complete',
-          resource: { ...resource, installation: installationDataOf(installation) },
-          context: policyContextOf(ctx, deps.clock.now()),
-        }),
+      const decision = await withSpan(
+        deps,
+        SPAN_NAMES.policy,
+        { 'bastion.policy.action': 'complete' },
+        async () =>
+          deps.policy.current().authorize({
+            principal: deps.toPolicyPrincipal(ctx.principal, profile),
+            action: 'complete',
+            resource: { ...resource, installation: installationDataOf(installation) },
+            context: policyContextOf(ctx, deps.clock.now()),
+          }),
       );
       record.policyReasons = decision.reasons;
       if (decision.decision === 'deny') {
@@ -83,7 +89,8 @@ export const createCompletion = (deps: OperationDeps): Operation => ({
           downstreamName: record.itemName,
         }),
       });
-      if (outcome.kind !== 'complete') throw new InvalidParamsError('completion cannot ask for input');
+      if (outcome.kind !== 'complete')
+        throw new InvalidParamsError('completion cannot ask for input');
       const result = isRecord(outcome.result) ? outcome.result : {};
       return { kind: 'complete', result };
     } catch (error) {

@@ -21,7 +21,7 @@ import {
 } from '@bastion-mcp/testkit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
-import { type Downstream, type DownstreamDeps, createDownstream } from '../../src/downstream';
+import { createDownstream, type Downstream, type DownstreamDeps } from '../../src/downstream';
 import type { SkillsProvider } from '../../src/ports';
 import { allowAllPolicy, installation, uuidFor } from './fixtures';
 import { FakeSandboxDriver } from './upstream-fake-sandbox';
@@ -35,7 +35,10 @@ import {
   MemoryTokenStore,
 } from './upstream-memory-ports';
 
-export const stateKeyring: Keyring = { activeKid: 'k1', keys: new Map([['k1', Buffer.alloc(32, 7)]]) };
+export const stateKeyring: Keyring = {
+  activeKid: 'k1',
+  keys: new Map([['k1', Buffer.alloc(32, 7)]]),
+};
 const SECRET = 's'.repeat(40);
 const LOOPBACK = { privateCidrs: ['127.0.0.0/8'], insecureHosts: ['127.0.0.1'] };
 
@@ -46,7 +49,12 @@ export type TestUser = { name: string; id: string; token: string; scopes?: strin
 export type StackOptions = {
   redisUrl: string;
   /** Installations every user owns, one per entry. */
-  upstreams: { slug: string; kind: UpstreamKind; url?: string; installation?: Partial<InstallationInfo> }[];
+  upstreams: {
+    slug: string;
+    kind: UpstreamKind;
+    url?: string;
+    installation?: Partial<InstallationInfo>;
+  }[];
   policy?: EndpointPolicy;
   guardLayers?: ProfileLayers;
   rules?: Rule[];
@@ -107,7 +115,12 @@ export const userOf = (name: string, scopes: string[] = ['mcp']): TestUser => ({
 const principalOf = (user: TestUser): Principal =>
   buildPrincipal(
     { id: user.id, type: 'user', orgRole: 'member', teams: [], active: true },
-    { authMethod: 'oauth', clientId: 'test-client', scopes: user.scopes ?? ['mcp'], credentialId: `jti-${user.name}` },
+    {
+      authMethod: 'oauth',
+      clientId: 'test-client',
+      scopes: user.scopes ?? ['mcp'],
+      credentialId: `jti-${user.name}`,
+    },
   );
 
 export const startStack = async (options: StackOptions): Promise<Stack> => {
@@ -127,11 +140,21 @@ export const startStack = async (options: StackOptions): Promise<Stack> => {
       });
       // One installation per user and upstream: ids are unique per user.
       const id = uuidFor(`inst-${slug}-${user.name}`);
-      const withId: InstallationInfo = { ...info, id, catalogSlug: u.installation?.catalogSlug ?? slug };
+      const withId: InstallationInfo = {
+        ...info,
+        id,
+        catalogSlug: u.installation?.catalogSlug ?? slug,
+      };
       list.push(withId);
       const spec =
         u.kind === 'stdio'
-          ? parseServerSpec({ type: 'package', runtime: 'npm', identifier: 'fake-stdio', version: '1.0.0', auth: { mode: 'none' } })
+          ? parseServerSpec({
+              type: 'package',
+              runtime: 'npm',
+              identifier: 'fake-stdio',
+              version: '1.0.0',
+              auth: { mode: 'none' },
+            })
           : parseServerSpec({
               type: 'remote',
               transport: u.kind === 'sse' ? 'sse' : 'streamable-http',
@@ -229,7 +252,10 @@ export const startStack = async (options: StackOptions): Promise<Stack> => {
       configVersion: () => '1',
       load: async (principal) => {
         const list = infos.get(principal.id) ?? [];
-        return { installations: list, namedEndpoints: options.named ? options.named(list.map((i) => i.id)) : [] };
+        return {
+          installations: list,
+          namedEndpoints: options.named ? options.named(list.map((i) => i.id)) : [],
+        };
       },
     },
     policy: { current: () => options.policy ?? allowAllPolicy },
@@ -241,8 +267,9 @@ export const startStack = async (options: StackOptions): Promise<Stack> => {
     callLog: { append: (row) => void rows.push(row) },
     ...(options.skills ? { skills: options.skills } : {}),
   });
-  (runtime.service as { sessionResponse?: (id: string, m: unknown) => Promise<void> }).sessionResponse = (id, m) =>
-    downstream.deliverSessionResponse(id, m);
+  (
+    runtime.service as { sessionResponse?: (id: string, m: unknown) => Promise<void> }
+  ).sessionResponse = (id, m) => downstream.deliverSessionResponse(id, m);
   await downstream.start();
   await downstream.registerRoutes(app);
   await app.listen({ port: httpPort, host: '127.0.0.1' });

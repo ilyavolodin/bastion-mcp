@@ -126,7 +126,9 @@ describe('7.1 Protected Resource Metadata', () => {
   it('7.1 unknown resource paths and bad slugs are 404', async () => {
     stack = await startHttpStack();
     for (const path of ['/mcp/x/y', '/mcp/i/BAD_SLUG', '/mcp/z/abc']) {
-      expect((await fetch(`${stack.base}/.well-known/oauth-protected-resource${path}`)).status).toBe(404);
+      expect(
+        (await fetch(`${stack.base}/.well-known/oauth-protected-resource${path}`)).status,
+      ).toBe(404);
     }
   });
 });
@@ -134,7 +136,14 @@ describe('7.1 Protected Resource Metadata', () => {
 describe('7.1 endpoint resolution', () => {
   it('7.1 unknown slugs, malformed slugs and unknown sub-paths are 404 for authenticated callers', async () => {
     stack = await startHttpStack();
-    for (const path of ['/mcp/i/unknown', '/mcp/e/unknown', '/mcp/c/unknown', '/mcp/i/BAD', '/mcp/other', '/mcp/i/a/b']) {
+    for (const path of [
+      '/mcp/i/unknown',
+      '/mcp/e/unknown',
+      '/mcp/c/unknown',
+      '/mcp/i/BAD',
+      '/mcp/other',
+      '/mcp/i/a/b',
+    ]) {
       const res = await rawModern(stack.base, { token: alice(), path, method: 'tools/list' });
       expect(res.status).toBe(404);
     }
@@ -142,19 +151,30 @@ describe('7.1 endpoint resolution', () => {
 
   it('7.1 /mcp, /mcp/i/{slug} and a named /mcp/e/{slug} resolve; names are prefixed except on single-installation endpoints', async () => {
     stack = await startHttpStack({
-      named: [{ id: 'work', kind: 'named', slug: 'work', installationIds: [], prefixMode: 'always' }],
+      named: [
+        { id: 'work', kind: 'named', slug: 'work', installationIds: [], prefixMode: 'always' },
+      ],
     });
     const all = await rawModern(stack.base, { token: alice(), method: 'tools/list' });
     expect(JSON.stringify(all.json?.result?.tools)).toContain('github__echo');
-    const single = await rawModern(stack.base, { token: alice(), path: '/mcp/i/github', method: 'tools/list' });
+    const single = await rawModern(stack.base, {
+      token: alice(),
+      path: '/mcp/i/github',
+      method: 'tools/list',
+    });
     expect(JSON.stringify(single.json?.result?.tools)).toContain('"name":"echo"');
-    const named = await rawModern(stack.base, { token: alice(), path: '/mcp/e/work', method: 'tools/list' });
+    const named = await rawModern(stack.base, {
+      token: alice(),
+      path: '/mcp/e/work',
+      method: 'tools/list',
+    });
     expect(named.status).toBe(200);
   });
 
   it('4.3 the effective endpoint is cached per principal: five requests, one cache entry', async () => {
     stack = await startHttpStack();
-    for (let i = 0; i < 5; i += 1) await rawModern(stack.base, { token: alice(), method: 'tools/list' });
+    for (let i = 0; i < 5; i += 1)
+      await rawModern(stack.base, { token: alice(), method: 'tools/list' });
     expect(stack.downstream.endpointCache.size).toBe(1);
   });
 
@@ -225,7 +245,11 @@ describe('6.2 transport-level rules', () => {
         jsonrpc: '2.0',
         id: 1,
         method: 'initialize',
-        params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'c', version: '1' } },
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'c', version: '1' },
+        },
       },
     });
     expect(res.status).toBe(200);
@@ -235,7 +259,11 @@ describe('6.2 transport-level rules', () => {
 
   it('6.2 modern requests are validated by the SDK: a missing Mcp-Method header is rejected', async () => {
     stack = await startHttpStack();
-    const res = await rawModern(stack.base, { token: alice(), method: 'tools/list', headers: { 'mcp-method': '' } });
+    const res = await rawModern(stack.base, {
+      token: alice(),
+      method: 'tools/list',
+      headers: { 'mcp-method': '' },
+    });
     expect(res.status).toBe(400);
   });
 
@@ -248,12 +276,17 @@ describe('6.2 transport-level rules', () => {
       headers: { accept: 'text/event-stream' },
     });
     expect(get.status).toBe(400);
-    const put = await fetch(`${stack.base}/mcp`, { method: 'PUT', headers: { authorization: `Bearer ${alice()}` } });
+    const put = await fetch(`${stack.base}/mcp`, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${alice()}` },
+    });
     expect(put.status).toBe(404);
   });
 
   it('6.9 Host and Origin validation rejects non-allowed values when configured', async () => {
-    stack = await startHttpStack({ config: { allowedHosts: ['127.0.0.1'], allowedOrigins: ['127.0.0.1'] } });
+    stack = await startHttpStack({
+      config: { allowedHosts: ['127.0.0.1'], allowedOrigins: ['127.0.0.1'] },
+    });
     const ok = await rawModern(stack.base, { token: alice(), method: 'tools/list' });
     expect(ok.status).toBe(200);
     const evil = await rawModern(stack.base, {
@@ -308,11 +341,22 @@ describe('7.1 25.8 /mcp/c/{catalogSlug}', () => {
   });
 
   it('25.8 an entry the caller cannot see is 404, and so is /mcp/c/* without a catalog port', async () => {
-    stack = await startHttpStack({ catalogInstall: { ensure: async () => ({ status: 'not_found' }) } });
-    expect((await rawModern(stack.base, { token: alice(), path: '/mcp/c/github', method: 'tools/list' })).status).toBe(404);
+    stack = await startHttpStack({
+      catalogInstall: { ensure: async () => ({ status: 'not_found' }) },
+    });
+    expect(
+      (await rawModern(stack.base, { token: alice(), path: '/mcp/c/github', method: 'tools/list' }))
+        .status,
+    ).toBe(404);
     const bare = await startHttpStack();
     expect(
-      (await rawModern(bare.base, { token: bare.users.alice?.token ?? '', path: '/mcp/c/github', method: 'tools/list' })).status,
+      (
+        await rawModern(bare.base, {
+          token: bare.users.alice?.token ?? '',
+          path: '/mcp/c/github',
+          method: 'tools/list',
+        })
+      ).status,
     ).toBe(404);
     await bare.stop();
   });

@@ -1,6 +1,6 @@
 /** `resources/read` (6.3, 7.4): URI index routing, prefix stripping, Bastion-hosted `skill://` resources. */
 import { extractResourceContents, extractUriSegments } from '@bastion-mcp/guards';
-import { resolveResourceUriWithSeen, ResourceNotFoundError } from '@bastion-mcp/router';
+import { ResourceNotFoundError, resolveResourceUriWithSeen } from '@bastion-mcp/router';
 import { trace } from '@opentelemetry/api';
 import { CallRecord } from '../observability/call-log';
 import { InvalidParamsError } from '../rpc';

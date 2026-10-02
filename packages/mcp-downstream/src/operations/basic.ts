@@ -3,8 +3,8 @@
  * (modern), `ping`, and the four aggregated lists.
  */
 import { PROTOCOL_VERSIONS } from '@bastion-mcp/core';
-import { listResult, type EffectiveEndpoint, type ItemKind } from '@bastion-mcp/router';
 import { TASKS_EXTENSION } from '@bastion-mcp/mcp-upstream';
+import { type EffectiveEndpoint, type ItemKind, listResult } from '@bastion-mcp/router';
 import { InvalidParamsError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';

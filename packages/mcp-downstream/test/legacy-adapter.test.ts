@@ -1,7 +1,7 @@
 import { BastionError, REDIS_CHANNELS, redisKeys } from '@bastion-mcp/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { OpRunner } from '../src/adapters/contracts';
-import { OTHER_USER_ID, USER_ID } from './helpers/fixtures';
+import { OTHER_USER_ID, USER_ID, uuidFor } from './helpers/fixtures';
 import {
   defaultRun,
   type Harness,
@@ -11,6 +11,8 @@ import {
   sseMessages,
   startHarness,
 } from './legacy-harness';
+
+const INST_A = uuidFor('inst-a');
 
 let h: Harness | undefined;
 afterEach(async () => {
@@ -331,7 +333,7 @@ describe('6.5 server-to-client requests', () => {
           kind: 'input_required',
           inputRequests: { q: { method: 'elicitation/create', params: { message: 'name?' } } },
           requestState: 'bst1.x',
-          installationId: 'inst-a',
+          installationId: INST_A,
         };
       }
       return {

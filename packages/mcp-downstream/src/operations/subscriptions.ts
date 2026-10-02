@@ -9,7 +9,10 @@ import type { OperationDeps } from './deps';
 import { recordOperationOutcome } from './outcome';
 import { callPrincipalOf, installationDataOf, policyContextOf } from './support';
 
-const subscription = (deps: OperationDeps, method: 'resources/subscribe' | 'resources/unsubscribe'): Operation => ({
+const subscription = (
+  deps: OperationDeps,
+  method: 'resources/subscribe' | 'resources/unsubscribe',
+): Operation => ({
   method,
   async run(params: JsonObject, ctx: OpContext): Promise<OpOutcome<JsonObject>> {
     const uri = params.uri;

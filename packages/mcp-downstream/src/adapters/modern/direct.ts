@@ -24,7 +24,11 @@ import type { JsonObject, OpOutcome } from '../../types';
 import type { Exchange, OpRunner } from '../contracts';
 import { modernOpContext } from './server';
 
-export const TASK_METHODS: ReadonlySet<string> = new Set(['tasks/get', 'tasks/update', 'tasks/cancel']);
+export const TASK_METHODS: ReadonlySet<string> = new Set([
+  'tasks/get',
+  'tasks/update',
+  'tasks/cancel',
+]);
 
 const envelopeSchema = z.looseObject({
   [PROTOCOL_VERSION_META_KEY]: z.string(),
@@ -90,12 +94,19 @@ class Writer {
       return;
     }
     const payload = JSON.stringify(body);
-    res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) });
+    res.writeHead(status, {
+      'content-type': 'application/json',
+      'content-length': Buffer.byteLength(payload),
+    });
     res.end(payload);
   }
 }
 
-const withEnvelope = (result: JsonObject, serverInfo: JsonObject, resultType: string): JsonObject => ({
+const withEnvelope = (
+  result: JsonObject,
+  serverInfo: JsonObject,
+  resultType: string,
+): JsonObject => ({
   ...result,
   resultType: typeof result.resultType === 'string' ? result.resultType : resultType,
   _meta: {
@@ -131,20 +142,28 @@ export const createDirectHandler = (deps: { run: OpRunner }) => ({
       code: number,
       message: string,
       data?: Record<string, unknown>,
-    ): void => writer.finish(status, { jsonrpc: '2.0', id, error: { code, message, ...(data ? { data } : {}) } });
+    ): void =>
+      writer.finish(status, {
+        jsonrpc: '2.0',
+        id,
+        error: { code, message, ...(data ? { data } : {}) },
+      });
     const parsed = requestSchema.safeParse(exchange.body);
     if (!parsed.success) return fail(null, 400, -32600, 'Invalid Request');
     const { id, method, params } = parsed.data;
     const headers = exchange.req.headers;
     const isTask = TASK_METHODS.has(method);
     const target = isTask ? params.taskId : params.name;
-    if (target === undefined) return fail(id, 400, -32602, `Invalid params: ${isTask ? 'taskId' : 'name'} is required`);
+    if (target === undefined)
+      return fail(id, 400, -32602, `Invalid params: ${isTask ? 'taskId' : 'name'} is required`);
     const mismatch = (headerValue: string | undefined, body: string) =>
       fail(id, 400, -32020, 'Bad Request: the request headers and body disagree', {
         mismatch: { header: headerValue ?? '(missing)', body },
       });
-    if (header(headers['mcp-method']) !== method) return mismatch(header(headers['mcp-method']), method);
-    if (header(headers['mcp-name']) !== target) return mismatch(header(headers['mcp-name']), target);
+    if (header(headers['mcp-method']) !== method)
+      return mismatch(header(headers['mcp-method']), method);
+    if (header(headers['mcp-name']) !== target)
+      return mismatch(header(headers['mcp-name']), target);
     const envelope = envelopeSchema.safeParse(params._meta);
     if (!envelope.success) return fail(id, 400, -32602, 'Invalid params: _meta envelope');
     const version = header(headers['mcp-protocol-version']);

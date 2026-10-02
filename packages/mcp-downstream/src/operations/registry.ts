@@ -1,4 +1,7 @@
 /** The operation registry (6.3) and the runner that adds spans, metrics and unknown-method handling (15.2, 15.3). */
+
+import { downstreamMcpSpan } from '@bastion-mcp/telemetry';
+import { context, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import type { OpRunner } from '../adapters/contracts';
 import { errorTypeOf, MethodNotFoundError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OperationRegistry, OpOutcome } from '../types';
@@ -22,8 +25,6 @@ import {
 } from './subscriptions';
 import { createTaskCancel, createTaskGet, createTaskUpdate } from './tasks';
 import { createToolsCall } from './tools-call';
-import { downstreamMcpSpan } from '@bastion-mcp/telemetry';
-import { context, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 
 /** Every method of the 6.3 table that Bastion serves through the operation layer. */
 export const createOperations = (deps: OperationDeps): OperationRegistry => {
@@ -50,7 +51,10 @@ export const createOperations = (deps: OperationDeps): OperationRegistry => {
   return { get: (method) => byMethod.get(method), methods: [...byMethod.keys()] };
 };
 
-const nameOf = (method: string, params: JsonObject): { tool?: string; prompt?: string; uri?: string } => {
+const nameOf = (
+  method: string,
+  params: JsonObject,
+): { tool?: string; prompt?: string; uri?: string } => {
   if (method === 'tools/call' && typeof params.name === 'string') return { tool: params.name };
   if (method === 'prompts/get' && typeof params.name === 'string') return { prompt: params.name };
   if (method.startsWith('resources/') && typeof params.uri === 'string') return { uri: params.uri };
@@ -62,11 +66,12 @@ const nameOf = (method: string, params: JsonObject): { tool?: string; prompt?: s
  * `mcp.server.operation.duration` (15.3). Unknown methods are forwarded verbatim on single-installation endpoints and
  * answer `-32601` elsewhere (6.3).
  */
-export const createOpRunner = (
-  deps: OperationDeps,
-  registry: OperationRegistry,
-): OpRunner => {
-  return async (method: string, params: JsonObject, ctx: OpContext): Promise<OpOutcome<unknown>> => {
+export const createOpRunner = (deps: OperationDeps, registry: OperationRegistry): OpRunner => {
+  return async (
+    method: string,
+    params: JsonObject,
+    ctx: OpContext,
+  ): Promise<OpOutcome<unknown>> => {
     const started = performance.now();
     const target = nameOf(method, params);
     const descriptor = downstreamMcpSpan({
@@ -100,10 +105,15 @@ export const createOpRunner = (
     let errorType: string | undefined;
     try {
       return await context.with(active, async () => {
-        const op = registry.get(method) ?? (isRequestLike(method) ? createForward(deps, method) : undefined);
+        const op =
+          registry.get(method) ?? (isRequestLike(method) ? createForward(deps, method) : undefined);
         if (!op) throw new MethodNotFoundError(method);
         const outcome = await op.run(params, traced);
-        if (deps.settings.captureContent && outcome.kind === 'complete' && method === 'tools/call') {
+        if (
+          deps.settings.captureContent &&
+          outcome.kind === 'complete' &&
+          method === 'tools/call'
+        ) {
           span.setAttribute('gen_ai.tool.call.result', safeJson(outcome.result));
         }
         return outcome;

@@ -2,16 +2,26 @@
  * A downstream worker with in-memory fakes for every port (no Docker): real Fastify on an ephemeral port, real
  * `createDownstream`, a scriptable `UpstreamPort`, `FakeRedis`, an in-memory limiter and the real guard pipeline.
  */
-import { AuthenticationError, InsufficientScopeError, buildPrincipal, type Principal } from '@bastion-mcp/auth';
+import {
+  AuthenticationError,
+  buildPrincipal,
+  InsufficientScopeError,
+  type Principal,
+} from '@bastion-mcp/auth';
 import { createGuardRegistry, GuardPipeline, type ProfileLayers } from '@bastion-mcp/guards';
 import { EngineLimiter, MemoryBackend, type Rule } from '@bastion-mcp/limits';
-import type { EndpointDefinition, EndpointPolicy, InstallationInfo, UpstreamItems } from '@bastion-mcp/router';
+import type {
+  EndpointDefinition,
+  EndpointPolicy,
+  InstallationInfo,
+  UpstreamItems,
+} from '@bastion-mcp/router';
 import type { CallLogRow } from '@bastion-mcp/telemetry';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createDownstream, type Downstream, type DownstreamConfig } from '../../src/downstream';
 import type { CatalogInstallPort, SkillsProvider, TokenVerifierPort } from '../../src/ports';
-import { allowAllPolicy, installation, items, sourceOf, uuidFor } from './fixtures';
 import { FakeRedis } from './fake-redis';
+import { allowAllPolicy, installation, items, sourceOf, uuidFor } from './fixtures';
 import { FakeUpstream, keyring } from './ops';
 
 export type HttpStackOptions = {
@@ -68,18 +78,23 @@ export const freePort = async (): Promise<number> => {
 
 export const startHttpStack = async (options: HttpStackOptions = {}): Promise<HttpStack> => {
   const users = Object.fromEntries(
-    (options.users ?? ['alice', 'bob']).map((n) => [n, { id: uuidFor(`user-${n}`), token: `tok-${n}` }]),
+    (options.users ?? ['alice', 'bob']).map((n) => [
+      n,
+      { id: uuidFor(`user-${n}`), token: `tok-${n}` },
+    ]),
   );
   const slugs = options.installs ?? [{ slug: 'github' }];
   const installs = (userId: string): InstallationInfo[] =>
     slugs.map((s) => ({
-      ...installation(s.slug, { owner: { kind: 'user', id: userId }, catalogSlug: s.slug, ...s.info }),
+      ...installation(s.slug, {
+        owner: { kind: 'user', id: userId },
+        catalogSlug: s.slug,
+        ...s.info,
+      }),
       id: uuidFor(`inst-${s.slug}-${userId}`),
     }));
   const itemsFor = (userId: string): Record<string, UpstreamItems> =>
-    Object.fromEntries(
-      installs(userId).map((i, idx) => [i.id, slugs[idx]?.items ?? items()]),
-    );
+    Object.fromEntries(installs(userId).map((i, idx) => [i.id, slugs[idx]?.items ?? items()]));
 
   const port = options.port ?? (await freePort());
   const base = `http://127.0.0.1:${port}`;
@@ -90,17 +105,20 @@ export const startHttpStack = async (options: HttpStackOptions = {}): Promise<Ht
   const guardLayers = { current: options.guardLayers ?? ({} as ProfileLayers) };
   const app = Fastify({ logger: false, forceCloseConnections: true });
 
-  const verifier: TokenVerifierPort =
-    options.verifier ?? {
-      verify: async (authorization) => {
-        const token = /^Bearer\s+(.+)$/i.exec(authorization ?? '')?.[1];
-        const user = Object.values(users).find((u) => u.token === token);
-        if (!user) {
-          throw new AuthenticationError('INVALID_TOKEN', 'invalid token', challenge(base, 'invalid_token'));
-        }
-        return principalFor(user.id);
-      },
-    };
+  const verifier: TokenVerifierPort = options.verifier ?? {
+    verify: async (authorization) => {
+      const token = /^Bearer\s+(.+)$/i.exec(authorization ?? '')?.[1];
+      const user = Object.values(users).find((u) => u.token === token);
+      if (!user) {
+        throw new AuthenticationError(
+          'INVALID_TOKEN',
+          'invalid token',
+          challenge(base, 'invalid_token'),
+        );
+      }
+      return principalFor(user.id);
+    },
+  };
 
   const sourceByUser = new Map<string, ReturnType<typeof sourceOf>>();
   const sourceFor = (userId: string) => {

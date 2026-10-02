@@ -94,7 +94,8 @@ const done = new Promise((resolve) => {
 });
 await done;
 samples.sort((a, b) => a - b);
-const pct = (p) => samples[Math.min(samples.length - 1, Math.max(0, Math.ceil((p / 100) * samples.length) - 1))];
+const pct = (p) =>
+  samples[Math.min(samples.length - 1, Math.max(0, Math.ceil((p / 100) * samples.length) - 1))];
 console.log(
   JSON.stringify({
     count: samples.length,

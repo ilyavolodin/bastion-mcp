@@ -1,9 +1,9 @@
 /** `tasks/get`, `tasks/update`, `tasks/cancel` (6.8): routed by the wrapped `btk1.` id, guards on what flows through. */
+
+import { extractResultSegments, extractStringLeaves, type TextSegment } from '@bastion-mcp/guards';
 import { type TaskIdPayload, unwrapTaskId } from '@bastion-mcp/mcp-upstream';
-import { extractStringLeaves, type TextSegment } from '@bastion-mcp/guards';
-import { extractResultSegments } from '@bastion-mcp/guards';
 import { trace } from '@opentelemetry/api';
-import { CallRecord, byteSize } from '../observability/call-log';
+import { byteSize, CallRecord } from '../observability/call-log';
 import { InvalidParamsError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
@@ -28,7 +28,8 @@ const taskOperation = (deps: OperationDeps, method: TaskMethod): Operation => ({
   method,
   async run(params: JsonObject, ctx: OpContext): Promise<OpOutcome<JsonObject>> {
     const taskId = params.taskId;
-    if (typeof taskId !== 'string' || taskId === '') throw new InvalidParamsError('taskId is required');
+    if (typeof taskId !== 'string' || taskId === '')
+      throw new InvalidParamsError('taskId is required');
     // Verifies the AEAD token, the principal and the expiry; throws -32602 otherwise (22.1).
     const payload: TaskIdPayload = unwrapTaskId(
       deps.stateKeyring,
@@ -64,13 +65,15 @@ const taskOperation = (deps: OperationDeps, method: TaskMethod): Operation => ({
       });
       if (outcome.kind !== 'complete') throw new InvalidParamsError('unexpected task outcome');
       let result = isRecord(outcome.result) ? outcome.result : {};
-      if (method === 'tasks/get') result = await guardTaskResult(deps, ctx, subject, record, result);
+      if (method === 'tasks/get')
+        result = await guardTaskResult(deps, ctx, subject, record, result);
       const status = typeof result.status === 'string' ? result.status : undefined;
       record.bytesOut = byteSize(result);
       // One row per task with its final status (6.8).
       record.resultPreview = { taskStatus: status };
       if (status === 'failed') record.outcome = 'error';
-      if (status !== undefined && !TERMINAL.has(status) && method === 'tasks/get') record.skipLog = true;
+      if (status !== undefined && !TERMINAL.has(status) && method === 'tasks/get')
+        record.skipLog = true;
       return { kind: 'complete', result };
     } catch (error) {
       record.fail(error);
@@ -85,7 +88,11 @@ const taskOperation = (deps: OperationDeps, method: TaskMethod): Operation => ({
 const guardTaskResult = async (
   deps: OperationDeps,
   ctx: OpContext,
-  subject: { installation: import('@bastion-mcp/router').InstallationInfo; item: { kind: 'tool'; name: string }; method: string },
+  subject: {
+    installation: import('@bastion-mcp/router').InstallationInfo;
+    item: { kind: 'tool'; name: string };
+    method: string;
+  },
   record: CallRecord,
   result: JsonObject,
 ): Promise<JsonObject> => {
@@ -104,5 +111,7 @@ const guardTaskResult = async (
 };
 
 export const createTaskGet = (deps: OperationDeps): Operation => taskOperation(deps, 'tasks/get');
-export const createTaskUpdate = (deps: OperationDeps): Operation => taskOperation(deps, 'tasks/update');
-export const createTaskCancel = (deps: OperationDeps): Operation => taskOperation(deps, 'tasks/cancel');
+export const createTaskUpdate = (deps: OperationDeps): Operation =>
+  taskOperation(deps, 'tasks/update');
+export const createTaskCancel = (deps: OperationDeps): Operation =>
+  taskOperation(deps, 'tasks/cancel');

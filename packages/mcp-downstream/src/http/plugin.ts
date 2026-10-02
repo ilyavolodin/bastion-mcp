@@ -14,7 +14,7 @@ import {
   type Principal,
 } from '@bastion-mcp/auth';
 import { type BastionError, isBastionError, sha256Hex } from '@bastion-mcp/core';
-import { floodBucketFor, type FloodLimiter } from '@bastion-mcp/limits';
+import { type FloodLimiter, floodBucketFor } from '@bastion-mcp/limits';
 import {
   type EndpointCache,
   type ParsedEndpointPath,
@@ -28,10 +28,10 @@ import {
   isJsonContentType,
   originValidationResponse,
 } from '@modelcontextprotocol/server';
-import { type Tracer, SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import { SpanKind, SpanStatusCode, type Tracer } from '@opentelemetry/api';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Exchange, LegacyAdapter, ListenAdapter } from '../adapters/contracts';
-import { createDirectHandler, isDirectExchange } from '../adapters/modern/direct';
+import { type createDirectHandler, isDirectExchange } from '../adapters/modern/direct';
 import type { ModernAdapter } from '../adapters/modern/server';
 import { type BastionRequestContext, bastionRequestContext } from '../context';
 import type { CatalogInstallPort, Logger, TokenVerifierPort } from '../ports';
@@ -116,9 +116,13 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
   await app.register(async (scope) => {
     // The raw body is parsed once, here: the SDK handler and the adapters take the parsed value (6.2).
     scope.removeAllContentTypeParsers();
-    scope.addContentTypeParser('*', { parseAs: 'buffer', bodyLimit: MAX_BODY_BYTES }, (_req, body, done) => {
-      done(null, body);
-    });
+    scope.addContentTypeParser(
+      '*',
+      { parseAs: 'buffer', bodyLimit: MAX_BODY_BYTES },
+      (_req, body, done) => {
+        done(null, body);
+      },
+    );
 
     // 1. Per-IP flood limit, before body parsing (14.2, 6.9).
     scope.addHook('onRequest', async (req, reply) => {
@@ -239,7 +243,9 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
         if (!isJsonContentType(header(req.headers['content-type']) ?? '')) {
           await reply
             .code(415)
-            .send(rpcError(-32600, 'Unsupported Media Type: Content-Type must be application/json'));
+            .send(
+              rpcError(-32600, 'Unsupported Media Type: Content-Type must be application/json'),
+            );
           return;
         }
         try {
@@ -268,7 +274,9 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
         origin: prep.origin,
         headers: req.headers,
         ...(body === undefined ? {} : { body }),
-        ...(typeof meta === 'object' && meta !== null && !Array.isArray(meta) ? { meta: meta as JsonObject } : {}),
+        ...(typeof meta === 'object' && meta !== null && !Array.isArray(meta)
+          ? { meta: meta as JsonObject }
+          : {}),
       };
       // `request.raw.auth` is how the SDK receives the verified principal (`authInfo`).
       Object.assign(req.raw, { auth: rc.authInfo });
@@ -349,9 +357,17 @@ export const isLegacyExchange = (input: {
 };
 
 const isLegacy = (exchange: Exchange): boolean =>
-  isLegacyExchange({ method: exchange.req.method ?? 'POST', headers: exchange.req.headers, body: exchange.body });
+  isLegacyExchange({
+    method: exchange.req.method ?? 'POST',
+    headers: exchange.req.headers,
+    body: exchange.body,
+  });
 
-const sendAuthError = async (reply: FastifyReply, error: unknown, logger: Logger): Promise<void> => {
+const sendAuthError = async (
+  reply: FastifyReply,
+  error: unknown,
+  logger: Logger,
+): Promise<void> => {
   if (error instanceof AuthenticationError) {
     await reply
       .code(401)

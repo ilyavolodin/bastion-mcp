@@ -4,12 +4,8 @@
  */
 import type { Principal } from '@bastion-mcp/auth';
 import type { Era } from '@bastion-mcp/core';
-import type {
-  EffectiveEndpoint,
-  EndpointDefinition,
-  InstallationInfo,
-} from '@bastion-mcp/router';
 import type { InputRequestMap } from '@bastion-mcp/mcp-upstream';
+import type { EffectiveEndpoint, EndpointDefinition, InstallationInfo } from '@bastion-mcp/router';
 import type { SpanContext } from '@opentelemetry/api';
 
 export type JsonObject = Record<string, unknown>;

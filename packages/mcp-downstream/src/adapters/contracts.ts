@@ -40,7 +40,11 @@ export type NotifyKind =
 
 /** `{ targets, endpointIds?, kind, uri? }` as published on `bastion:notify` and `bastion:listen` (6.6). */
 export type NotifyEvent = {
-  targets: { principalIds?: string[] | undefined; teamIds?: string[] | undefined; all?: boolean | undefined };
+  targets: {
+    principalIds?: string[] | undefined;
+    teamIds?: string[] | undefined;
+    all?: boolean | undefined;
+  };
   endpointIds?: string[] | undefined;
   kind: NotifyKind;
   uri?: string | undefined;

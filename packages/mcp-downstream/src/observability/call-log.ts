@@ -125,7 +125,9 @@ export const writeCallLog = (
     // The row is built from typed values; only the one field the database cannot take as text (the principal uuid) is
     // checked, so no schema parse runs on the hot path.
     if (!UUID.test(candidate.principalId)) {
-      deps.logger.warn('call log row dropped: the principal id is not a uuid', { method: record.method });
+      deps.logger.warn('call log row dropped: the principal id is not a uuid', {
+        method: record.method,
+      });
       return;
     }
     // Requests that arrived on /mcp/c/* are tagged origin = plugin (25.9). call_log has no such column yet, so the

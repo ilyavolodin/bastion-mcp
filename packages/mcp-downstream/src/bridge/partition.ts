@@ -4,8 +4,8 @@
  * the installation's configured roots. These answers go to the upstream and the client never sees the request.
  */
 import { JSONRPC_CODES } from '@bastion-mcp/core';
-import { answerMissingCapability, clientSupports } from '@bastion-mcp/mcp-upstream';
 import type { InputRequestEntry, InputRequestMap } from '@bastion-mcp/mcp-upstream';
+import { answerMissingCapability, clientSupports } from '@bastion-mcp/mcp-upstream';
 import type { ClientCaps } from '../types';
 
 export type InputKind = 'elicitation' | 'sampling' | 'roots';

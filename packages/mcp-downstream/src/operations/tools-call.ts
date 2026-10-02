@@ -1,12 +1,14 @@
 /** `tools/call` (4.4, 6.9): resolve the name, run the routed pipeline, convert denials into tool results. */
 import { isBastionError, toToolErrorResult } from '@bastion-mcp/core';
 import { extractRequestSegments, extractResultSegments } from '@bastion-mcp/guards';
-import { mapToolCall, applyOutputTransform, type JsonValue } from '@bastion-mcp/overrides';
+import { applyOutputTransform, type JsonValue, mapToolCall } from '@bastion-mcp/overrides';
 import { extractSeenUris } from '@bastion-mcp/router';
+import { trace } from '@opentelemetry/api';
+import { CallRecord } from '../observability/call-log';
 import { InvalidParamsError, UnknownItemError } from '../rpc';
-import { CallRecord, writeCallLog } from '../observability/call-log';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
+import { recordOperationOutcome } from './outcome';
 import { runRouted } from './routed';
 import {
   callPrincipalOf,
@@ -17,8 +19,6 @@ import {
   toolAnnotationsOf,
   toolDefinition,
 } from './support';
-import { trace } from '@opentelemetry/api';
-import { recordOperationOutcome } from './outcome';
 
 export const createToolsCall = (deps: OperationDeps): Operation => ({
   method: 'tools/call',
@@ -38,9 +38,10 @@ export const createToolsCall = (deps: OperationDeps): Operation => ({
     const span = trace.getActiveSpan()?.spanContext() ?? ctx.trace;
     try {
       const principal = await callPrincipalOf(deps, ctx);
-      const resolved = route.plan?.pinned && JSON.stringify(route.plan.pinned).includes('{{')
-        ? await deps.installations.get(installation.id)
-        : null;
+      const resolved =
+        route.plan?.pinned && JSON.stringify(route.plan.pinned).includes('{{')
+          ? await deps.installations.get(installation.id)
+          : null;
       const mapped = mapToolCall(
         { finalName: name, arguments: (args ?? {}) as Record<string, JsonValue> },
         { upstreamName: route.upstreamName, plan: route.plan },
@@ -67,10 +68,14 @@ export const createToolsCall = (deps: OperationDeps): Operation => ({
           item: {
             kind: 'tool',
             name,
-            ...(tool?.annotations && isRecord(tool.annotations) && tool.annotations.destructiveHint === true
+            ...(tool?.annotations &&
+            isRecord(tool.annotations) &&
+            tool.annotations.destructiveHint === true
               ? { destructive: true }
               : {}),
-            ...(tool?.annotations && isRecord(tool.annotations) && tool.annotations.openWorldHint === true
+            ...(tool?.annotations &&
+            isRecord(tool.annotations) &&
+            tool.annotations.openWorldHint === true
               ? { openWorld: true }
               : {}),
           },

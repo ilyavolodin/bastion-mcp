@@ -94,18 +94,15 @@ export const defaultToPolicyPrincipal: ToPolicyPrincipal = (
 /** The 14.3 defaults, matched per caller and endpoint (14.1). */
 export const defaultLimitRulesPort: LimitRulesPort = {
   rulesFor: (op, endpoint) =>
-    compileRulesFor(
-      op.principal,
-      { installationIds: endpoint.installationIds },
-      defaultRules(),
-    ),
+    compileRulesFor(op.principal, { installationIds: endpoint.installationIds }, defaultRules()),
 };
 
 export const defaultGuardProfilePort: GuardProfilePort = {
   layersFor: () => ({ org: ORG_DEFAULT_PROFILE }),
 };
 
-export const noopMetrics = (): BastionMetrics => createMetrics(otelMetrics.getMeter('bastion-mcp-downstream'));
+export const noopMetrics = (): BastionMetrics =>
+  createMetrics(otelMetrics.getMeter('bastion-mcp-downstream'));
 export const defaultTracer = (): Tracer => trace.getTracer('bastion-mcp-downstream');
 
 export { DEFAULT_LIMIT_RULES, noopLogger, systemClock };

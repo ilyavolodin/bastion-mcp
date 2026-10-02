@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { buildPrincipal, type Principal } from '@bastion-mcp/auth';
 import type { PrincipalData } from '@bastion-mcp/policy';
 import {
@@ -13,8 +14,6 @@ import {
 import type { BastionRequestContext } from '../../src/context';
 import type { OpContext, ResolvedEndpoint } from '../../src/types';
 
-import { createHash } from 'node:crypto';
-
 /** A stable, schema-valid UUID derived from a label, so call-log rows validate. */
 export const uuidFor = (label: string): string => {
   const h = createHash('sha256').update(label).digest('hex');
@@ -27,7 +26,13 @@ export const TEAM_ID = '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a60';
 
 export const principal = (overrides: Partial<Principal> = {}): Principal => ({
   ...buildPrincipal(
-    { id: USER_ID, type: 'user', orgRole: 'member', teams: [{ teamId: TEAM_ID, role: 'member' }], active: true },
+    {
+      id: USER_ID,
+      type: 'user',
+      orgRole: 'member',
+      teams: [{ teamId: TEAM_ID, role: 'member' }],
+      active: true,
+    },
     { authMethod: 'oauth', clientId: 'client-1', scopes: ['mcp'], credentialId: 'jti-1' },
   ),
   ...overrides,
@@ -48,7 +53,10 @@ export const allowAllPolicy: EndpointPolicy = {
   filterVisible: (_request, items) => ({ visible: [...items], hidden: [] }),
 };
 
-export const installation = (slug: string, overrides: Partial<InstallationInfo> = {}): InstallationInfo => ({
+export const installation = (
+  slug: string,
+  overrides: Partial<InstallationInfo> = {},
+): InstallationInfo => ({
   id: uuidFor(`inst-${slug}`),
   slug,
   toolPrefix: slug.replace(/-/g, '_'),
@@ -123,7 +131,10 @@ export const buildEndpoint = async (input: {
   };
 };
 
-export const opContext = (resolved: ResolvedEndpoint, overrides: Partial<OpContext> = {}): OpContext => ({
+export const opContext = (
+  resolved: ResolvedEndpoint,
+  overrides: Partial<OpContext> = {},
+): OpContext => ({
   principal: principal(),
   endpoint: resolved.endpoint,
   era: 'modern',
@@ -155,4 +166,3 @@ export const requestContext = (
   headers: {},
   ...overrides,
 });
-

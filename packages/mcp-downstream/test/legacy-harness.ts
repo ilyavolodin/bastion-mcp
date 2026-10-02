@@ -19,7 +19,10 @@ import {
   OTHER_USER_ID,
   requestContext,
   TEAM_ID,
+  uuidFor,
 } from './helpers/fixtures';
+
+const INST_A = uuidFor('inst-a');
 
 export class FakeHub implements NotifyHubPort {
   readonly targets: { target: StreamTarget; handler: (e: NotifyEvent) => void }[] = [];
@@ -81,7 +84,7 @@ export const startHarness = async (
 ): Promise<Harness> => {
   const resolved = await buildEndpoint({
     installations: [installation('a')],
-    items: { 'inst-a': items() },
+    items: { [INST_A]: items() },
   });
   const redis = options.redis ?? new FakeRedis();
   const hub = new FakeHub();

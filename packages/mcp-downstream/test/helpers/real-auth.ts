@@ -1,6 +1,5 @@
 /** A real `TokenVerifier` (ES256 JWTs, personal access tokens) over in-memory stores, for the security tests (23.3). */
 import {
-  type PatRecord,
   type PatRepository,
   type PrincipalRecord,
   type PrincipalStore,
@@ -59,7 +58,14 @@ export const realAuth = (baseUrl: string, principals: PrincipalRecord[]) => {
   });
   const sign = async (
     claims: Record<string, unknown> = {},
-    options: { aud?: string | string[]; iss?: string; exp?: number; iat?: number; typ?: string; sub?: string } = {},
+    options: {
+      aud?: string | string[];
+      iss?: string;
+      exp?: number;
+      iat?: number;
+      typ?: string;
+      sub?: string;
+    } = {},
   ): Promise<string> => {
     const key = await importJWK(pair.privateJwk, 'ES256');
     const iat = options.iat ?? Math.floor(Date.now() / 1000);

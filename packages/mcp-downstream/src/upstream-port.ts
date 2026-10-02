@@ -11,12 +11,17 @@ import type { UpstreamPort } from './ports';
 
 export const upstreamPortFrom = (
   runtime: Pick<UpstreamRuntime, 'service' | 'listen'>,
-  deps: { installations: Pick<InstallationRegistry, 'get'>; credentials: UpstreamCredentialProvider },
+  deps: {
+    installations: Pick<InstallationRegistry, 'get'>;
+    credentials: UpstreamCredentialProvider;
+  },
 ): UpstreamPort => {
   const resolve = async (
     installationId: string,
     principal: CallPrincipal,
-  ): Promise<{ installation: ResolvedInstallation; credential: ResolvedCredential } | undefined> => {
+  ): Promise<
+    { installation: ResolvedInstallation; credential: ResolvedCredential } | undefined
+  > => {
     const installation = await deps.installations.get(installationId);
     if (!installation) return undefined;
     const credential = await deps.credentials.resolve(principal, installation, installation.spec);
@@ -29,7 +34,12 @@ export const upstreamPortFrom = (
       const target = await resolve(args.installationId, args.principal);
       if (!target) return;
       await runtime.listen.subscribeResource(
-        { ...target, principal: args.principal, downstreamUri: args.downstreamUri, endpointId: args.endpointId },
+        {
+          ...target,
+          principal: args.principal,
+          downstreamUri: args.downstreamUri,
+          endpointId: args.endpointId,
+        },
         args.signal,
       );
     },
@@ -37,7 +47,12 @@ export const upstreamPortFrom = (
       const target = await resolve(args.installationId, args.principal);
       if (!target) return;
       await runtime.listen.unsubscribeResource(
-        { ...target, principal: args.principal, downstreamUri: args.downstreamUri, endpointId: args.endpointId },
+        {
+          ...target,
+          principal: args.principal,
+          downstreamUri: args.downstreamUri,
+          endpointId: args.endpointId,
+        },
         args.signal,
       );
     },

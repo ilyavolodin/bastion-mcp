@@ -1,9 +1,6 @@
 /** Endpoint resolution (4.4, 7.1, 7.2): slug to endpoint definition, effective endpoint from the per-worker cache. */
 import type { Principal } from '@bastion-mcp/auth';
-import {
-  clockContext,
-  type McpRequestContext,
-} from '@bastion-mcp/policy';
+import { clockContext, type McpRequestContext } from '@bastion-mcp/policy';
 import {
   compileEndpoint,
   type EffectiveEndpoint,
@@ -13,7 +10,14 @@ import {
   resolveEndpointDefinition,
   type UpstreamItemSource,
 } from '@bastion-mcp/router';
-import type { Clock, EndpointDataPort, Logger, PolicyPort, PrincipalProfilePort, ToPolicyPrincipal } from '../ports';
+import type {
+  Clock,
+  EndpointDataPort,
+  Logger,
+  PolicyPort,
+  PrincipalProfilePort,
+  ToPolicyPrincipal,
+} from '../ports';
 import type { ResolvedEndpoint } from '../types';
 
 export type EndpointResolverDeps = {
@@ -58,39 +62,45 @@ export class EndpointResolver {
     const configVersion = await this.deps.data.configVersion();
     const cacheKey = { principalId: principal.id, endpointId: key, configVersion };
     let missing = false;
-    const endpoint = await this.deps.cache.getOrCompile(cacheKey, async () => {
-      const data = await this.deps.data.load(principal);
-      const definition = resolveEndpointDefinition(parsed, {
-        installations: data.installations,
-        namedEndpoints: data.namedEndpoints,
+    const endpoint = await this.deps.cache
+      .getOrCompile(cacheKey, async () => {
+        const data = await this.deps.data.load(principal);
+        const definition = resolveEndpointDefinition(parsed, {
+          installations: data.installations,
+          namedEndpoints: data.namedEndpoints,
+        });
+        if (!definition) {
+          missing = true;
+          throw new EndpointNotFound();
+        }
+        const profile = this.deps.profiles ? await this.deps.profiles.profile(principal) : {};
+        const compiled = await compileEndpoint({
+          principal: this.deps.toPolicyPrincipal(principal, profile),
+          endpoint: definition,
+          installations: data.installations,
+          ...(data.hiddenInstallationIds
+            ? { hiddenInstallationIds: data.hiddenInstallationIds }
+            : {}),
+          source: this.deps.source,
+          policy: this.deps.policy.current(),
+          requestContext: policyRequestContext(request, this.deps.clock.now()),
+          org: this.deps.org,
+          serverVersion: this.deps.serverVersion,
+          configVersion,
+        });
+        this.resolved.set(compiled, {
+          definition,
+          endpoint: compiled,
+          installations: new Map<string, InstallationInfo>(
+            data.installations.map((i) => [i.id, i]),
+          ),
+        });
+        return compiled;
+      })
+      .catch((error: unknown) => {
+        if (error instanceof EndpointNotFound || missing) return undefined;
+        throw error;
       });
-      if (!definition) {
-        missing = true;
-        throw new EndpointNotFound();
-      }
-      const profile = this.deps.profiles ? await this.deps.profiles.profile(principal) : {};
-      const compiled = await compileEndpoint({
-        principal: this.deps.toPolicyPrincipal(principal, profile),
-        endpoint: definition,
-        installations: data.installations,
-        ...(data.hiddenInstallationIds ? { hiddenInstallationIds: data.hiddenInstallationIds } : {}),
-        source: this.deps.source,
-        policy: this.deps.policy.current(),
-        requestContext: policyRequestContext(request, this.deps.clock.now()),
-        org: this.deps.org,
-        serverVersion: this.deps.serverVersion,
-        configVersion,
-      });
-      this.resolved.set(compiled, {
-        definition,
-        endpoint: compiled,
-        installations: new Map<string, InstallationInfo>(data.installations.map((i) => [i.id, i])),
-      });
-      return compiled;
-    }).catch((error: unknown) => {
-      if (error instanceof EndpointNotFound || missing) return undefined;
-      throw error;
-    });
     if (!endpoint) {
       this.remember(negativeKey);
       return null;

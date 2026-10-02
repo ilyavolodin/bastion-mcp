@@ -7,8 +7,8 @@ import type { ProfileLayers } from '@bastion-mcp/guards';
 import type { OperationContext, Rule } from '@bastion-mcp/limits';
 import type {
   CallPrincipal,
-  JsonObject as UpstreamJsonObject,
   UpstreamCallContext,
+  JsonObject as UpstreamJsonObject,
   UpstreamOutcome,
 } from '@bastion-mcp/mcp-upstream';
 import type { PrincipalData } from '@bastion-mcp/policy';

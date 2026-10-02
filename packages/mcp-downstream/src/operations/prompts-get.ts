@@ -42,9 +42,10 @@ export const createPromptsGet = (deps: OperationDeps): Operation => ({
     const span = trace.getActiveSpan()?.spanContext() ?? ctx.trace;
     try {
       const principal = await callPrincipalOf(deps, ctx);
-      const resolved = route.plan?.pinned && Object.values(route.plan.pinned).some((v) => v.includes('{{'))
-        ? await deps.installations.get(installation.id)
-        : null;
+      const resolved =
+        route.plan?.pinned && Object.values(route.plan.pinned).some((v) => v.includes('{{'))
+          ? await deps.installations.get(installation.id)
+          : null;
       const mapped = mapPromptGet(
         { finalName: name, arguments: args },
         { upstreamName: route.upstreamName, plan: route.plan },
@@ -73,7 +74,10 @@ export const createPromptsGet = (deps: OperationDeps): Operation => ({
           responseSegments: (result) => extractPromptSegments(result.messages),
           transform: (result) =>
             Array.isArray(result.messages)
-              ? applyMessagesTransform(result as { messages: never[] } & JsonObject, mapped.messagesTransform)
+              ? applyMessagesTransform(
+                  result as { messages: never[] } & JsonObject,
+                  mapped.messagesTransform,
+                )
               : result,
         },
         retry,

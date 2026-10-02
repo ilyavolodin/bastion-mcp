@@ -21,11 +21,18 @@ import {
 } from '@modelcontextprotocol/server';
 import { context, trace } from '@opentelemetry/api';
 import { currentRequestContext } from '../../context';
-import type { OperationDeps } from '../../operations/deps';
 import { serverCapabilities, tasksDeclared } from '../../operations/basic';
+import type { OperationDeps } from '../../operations/deps';
 import { isRecord } from '../../operations/support';
 import { MethodNotFoundError, toRpcErrorBody } from '../../rpc';
-import type { ClientCaps, ClientInfo, JsonObject, LoggingLevel, OpContext, OpOutcome } from '../../types';
+import type {
+  ClientCaps,
+  ClientInfo,
+  JsonObject,
+  LoggingLevel,
+  OpContext,
+  OpOutcome,
+} from '../../types';
 import type { OpRunner } from '../contracts';
 
 export const DEFAULT_KEEPALIVE_MS = 25_000;
@@ -74,7 +81,11 @@ const asCaps = (value: unknown): ClientCaps => (isRecord(value) ? (value as Clie
 
 const asInfo = (value: unknown): ClientInfo | undefined =>
   isRecord(value) && typeof value.name === 'string' && typeof value.version === 'string'
-    ? { name: value.name, version: value.version, ...(typeof value.title === 'string' ? { title: value.title } : {}) }
+    ? {
+        name: value.name,
+        version: value.version,
+        ...(typeof value.title === 'string' ? { title: value.title } : {}),
+      }
     : undefined;
 
 /** The operation context of one modern request, from the authenticated request context and the SDK's per-request data. */
@@ -123,7 +134,9 @@ export const toSdkResult = (outcome: OpOutcome<unknown>): JsonObject => {
       return (isRecord(outcome.result) ? outcome.result : {}) as JsonObject;
     case 'input_required':
       return inputRequired({
-        ...(outcome.inputRequests === undefined ? {} : { inputRequests: outcome.inputRequests as never }),
+        ...(outcome.inputRequests === undefined
+          ? {}
+          : { inputRequests: outcome.inputRequests as never }),
         requestState: outcome.requestState,
       }) as unknown as JsonObject;
     case 'task':
@@ -165,11 +178,13 @@ export const buildLowLevelServer = (deps: ModernAdapterDeps): Server => {
     ...(endpoint.instructions === undefined ? {} : { instructions: endpoint.instructions }),
     cacheHints,
   } as never);
-  const emitFor = (c: Pick<ServerContext, 'mcpReq'>): OpContext['emit'] => (n) => {
-    void c.mcpReq
-      .notify({ method: n.method, ...(n.params ? { params: n.params } : {}) } as never)
-      .catch(() => undefined);
-  };
+  const emitFor =
+    (c: Pick<ServerContext, 'mcpReq'>): OpContext['emit'] =>
+    (n) => {
+      void c.mcpReq
+        .notify({ method: n.method, ...(n.params ? { params: n.params } : {}) } as never)
+        .catch(() => undefined);
+    };
   const declared = (method: string): boolean => {
     const needed = CAPABILITY_OF[method];
     return needed === undefined || (caps as Record<string, unknown>)[needed] !== undefined;
@@ -217,11 +232,13 @@ export const createModernAdapter = (deps: ModernAdapterDeps): ModernAdapter => {
     legacy: 'reject',
     keepAliveMs: deps.keepAliveMs ?? DEFAULT_KEEPALIVE_MS,
     bus: deps.bus ?? new InMemoryServerEventBus(),
-    onerror: (error) => deps.operationDeps.logger.debug('mcp handler error', { error: String(error) }),
+    onerror: (error) =>
+      deps.operationDeps.logger.debug('mcp handler error', { error: String(error) }),
   });
   return {
     node: toNodeHandler(handler, {
-      onerror: (error) => deps.operationDeps.logger.warn('mcp handler failed', { error: String(error) }),
+      onerror: (error) =>
+        deps.operationDeps.logger.warn('mcp handler failed', { error: String(error) }),
     }),
     handler,
     close: () => handler.close(),

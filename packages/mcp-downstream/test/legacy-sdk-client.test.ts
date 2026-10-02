@@ -1,7 +1,10 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { OpRunner } from '../src/adapters/contracts';
+import { uuidFor } from './helpers/fixtures';
 import { defaultRun, type Harness, startHarness } from './legacy-harness';
+
+const INST_A = uuidFor('inst-a');
 
 let h: Harness | undefined;
 afterEach(async () => {
@@ -27,7 +30,7 @@ describe('6.5 legacy fan-out with the real TS SDK v2 legacy client', () => {
               },
             },
             requestState: 'bst1.x',
-            installationId: 'inst-a',
+            installationId: INST_A,
           };
         }
         return {

@@ -35,17 +35,21 @@ export const connectClient = async (
   );
   if (options.elicit) {
     const handler = options.elicit;
-    client.setRequestHandler('elicitation/create', (async (request: { params: Record<string, unknown> }) =>
-      handler(request.params)) as never);
+    client.setRequestHandler('elicitation/create', (async (request: {
+      params: Record<string, unknown>;
+    }) => handler(request.params)) as never);
   }
   if (options.sampling) {
     const handler = options.sampling;
-    client.setRequestHandler('sampling/createMessage', (async (request: { params: Record<string, unknown> }) =>
-      handler(request.params)) as never);
+    client.setRequestHandler('sampling/createMessage', (async (request: {
+      params: Record<string, unknown>;
+    }) => handler(request.params)) as never);
   }
   if (options.roots) {
     const roots = options.roots;
-    client.setRequestHandler('roots/list', (async () => ({ roots: roots.map((uri) => ({ uri })) })) as never);
+    client.setRequestHandler('roots/list', (async () => ({
+      roots: roots.map((uri) => ({ uri })),
+    })) as never);
   }
   const transport = new StreamableHTTPClientTransport(new URL(stack.url(options.path ?? '/mcp')), {
     requestInit: { headers: { Authorization: `Bearer ${user.token}` } },

@@ -4,7 +4,6 @@
  * a modern remote, a legacy Streamable HTTP remote, a deprecated HTTP+SSE remote and a sandboxed stdio server.
  */
 import {
-  dockerAvailable,
   type FakeLegacySseServer,
   startFakeLegacySseServer,
   startRedis,
@@ -13,19 +12,26 @@ import {
 import type { Client } from '@modelcontextprotocol/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { connectClient, textOf } from './helpers/clients';
-import { type Fakes, startFakes, startStack, type Stack } from './helpers/stack';
+import { hasDocker } from './helpers/docker';
+import { type Fakes, type Stack, startFakes, startStack } from './helpers/stack';
 
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-describe.skipIf(!dockerAvailable())('23.2 TS SDK v2 auto (modern) downstream, all upstream kinds', () => {
+describe.skipIf(!hasDocker())('23.2 TS SDK v2 auto (modern) downstream, all upstream kinds', () => {
   let redis: TestRedis;
   let fakes: Fakes;
   let sse: FakeLegacySseServer;
   let stack: Stack;
   const clients: Client[] = [];
 
-  const modern = async (opts: Parameters<typeof connectClient>[2] extends infer O ? Partial<O> : never = {}) => {
-    const c = await connectClient(stack, stack.users.alice as never, { era: 'modern', ...opts } as never);
+  const modern = async (
+    opts: Parameters<typeof connectClient>[2] extends infer O ? Partial<O> : never = {},
+  ) => {
+    const c = await connectClient(
+      stack,
+      stack.users.alice as never,
+      { era: 'modern', ...opts } as never,
+    );
     clients.push(c);
     return c;
   };
@@ -58,14 +64,17 @@ describe.skipIf(!dockerAvailable())('23.2 TS SDK v2 auto (modern) downstream, al
     const c = await modern();
     expect(c.getProtocolEra?.()).toBe('modern');
     const names = (await c.listTools()).tools.map((t) => t.name);
-    for (const prefix of ['modern', 'legacy', 'sse', 'stdio']) expect(names).toContain(`${prefix}__echo`);
+    for (const prefix of ['modern', 'legacy', 'sse', 'stdio'])
+      expect(names).toContain(`${prefix}__echo`);
     expect(names).toEqual([...names].sort());
   });
 
   it('4.4 tools/call reaches every upstream kind', async () => {
     const c = await modern();
     for (const prefix of ['modern', 'legacy', 'sse', 'stdio']) {
-      expect(textOf(await c.callTool({ name: `${prefix}__echo`, arguments: { text: prefix } }))).toBe(prefix);
+      expect(
+        textOf(await c.callTool({ name: `${prefix}__echo`, arguments: { text: prefix } })),
+      ).toBe(prefix);
     }
   });
 
@@ -106,32 +115,54 @@ describe.skipIf(!dockerAvailable())('23.2 TS SDK v2 auto (modern) downstream, al
     const c = await modern({
       elicit: (params) => ({
         action: 'accept',
-        content: String(params.message).endsWith('1') || params.message === 'name?' ? { name: 'Ada', v: answers[0] } : { v: answers[1] },
+        content:
+          String(params.message).endsWith('1') || params.message === 'name?'
+            ? { name: 'Ada', v: answers[0] }
+            : { v: answers[1] },
       }),
     });
-    expect(textOf(await c.callTool({ name: 'legacy__ask', arguments: { q: 'name?' } }))).toBe('hello Ada');
-    expect(textOf(await c.callTool({ name: 'legacy__ask2', arguments: { q: 'q' } }))).toBe('one+two');
+    expect(textOf(await c.callTool({ name: 'legacy__ask', arguments: { q: 'name?' } }))).toBe(
+      'hello Ada',
+    );
+    expect(textOf(await c.callTool({ name: 'legacy__ask2', arguments: { q: 'q' } }))).toBe(
+      'one+two',
+    );
   });
 
   it('6.5 stdio upstream in a sandbox: continuation through the owner worker', async () => {
     const c = await modern({ elicit: () => ({ action: 'accept', content: { name: 'Grace' } }) });
-    expect(textOf(await c.callTool({ name: 'stdio__ask', arguments: { q: 'name?' } }))).toBe('hello Grace');
+    expect(textOf(await c.callTool({ name: 'stdio__ask', arguments: { q: 'name?' } }))).toBe(
+      'hello Grace',
+    );
   });
 
   it('6.5 sampling and roots of a legacy upstream reach the modern client as input requests', async () => {
     const c = await modern({
-      sampling: () => ({ role: 'assistant', content: { type: 'text', text: 'sampled!' }, model: 'm', stopReason: 'endTurn' }),
+      sampling: () => ({
+        role: 'assistant',
+        content: { type: 'text', text: 'sampled!' },
+        model: 'm',
+        stopReason: 'endTurn',
+      }),
       roots: ['file:///home/ada'],
     });
-    expect(textOf(await c.callTool({ name: 'legacy__sample', arguments: {} }))).toBe('sampled:sampled!');
-    expect(textOf(await c.callTool({ name: 'legacy__roots', arguments: {} }))).toBe('roots:file:///home/ada');
+    expect(textOf(await c.callTool({ name: 'legacy__sample', arguments: {} }))).toBe(
+      'sampled:sampled!',
+    );
+    expect(textOf(await c.callTool({ name: 'legacy__roots', arguments: {} }))).toBe(
+      'roots:file:///home/ada',
+    );
   });
 
   it('6.5 a client without sampling or roots never sees those requests: Bastion answers -32601 and the configured roots', async () => {
     const c = await modern();
-    expect(textOf(await c.callTool({ name: 'legacy__sample', arguments: {} }))).toMatch(/^sample-error:-32601/);
+    expect(textOf(await c.callTool({ name: 'legacy__sample', arguments: {} }))).toMatch(
+      /^sample-error:-32601/,
+    );
     expect(textOf(await c.callTool({ name: 'legacy__roots', arguments: {} }))).toBe('roots:');
-    expect(textOf(await c.callTool({ name: 'legacy__ask', arguments: { q: 'x' } }))).toBe('action:decline');
+    expect(textOf(await c.callTool({ name: 'legacy__ask', arguments: { q: 'x' } }))).toBe(
+      'action:decline',
+    );
   });
 
   it('6.6 progress notifications reach the client with its own token', async () => {
@@ -151,7 +182,9 @@ describe.skipIf(!dockerAvailable())('23.2 TS SDK v2 auto (modern) downstream, al
     const c = await modern();
     const controller = new AbortController();
     const before = fakes.modern.aborted.length;
-    const call = c.callTool({ name: 'modern__slow', arguments: { ms: 5000 } }, { signal: controller.signal }).catch((e: unknown) => e);
+    const call = c
+      .callTool({ name: 'modern__slow', arguments: { ms: 5000 } }, { signal: controller.signal })
+      .catch((e: unknown) => e);
     await wait(300);
     controller.abort();
     await call;
@@ -162,10 +195,22 @@ describe.skipIf(!dockerAvailable())('23.2 TS SDK v2 auto (modern) downstream, al
   it('6.6 subscriptions/listen delivers list_changed and resources/updated from the upstream, filtered per stream', async () => {
     const c = await modern({ path: '/mcp/i/modern' });
     const events: string[] = [];
-    c.setNotificationHandler('notifications/tools/list_changed' as never, (() => void events.push('tools')) as never);
-    c.setNotificationHandler('notifications/prompts/list_changed' as never, (() => void events.push('prompts')) as never);
-    c.setNotificationHandler('notifications/resources/updated' as never, ((n: { params: { uri: string } }) => void events.push(`updated:${n.params.uri}`)) as never);
-    const sub = await c.listen({ toolsListChanged: true, resourceSubscriptions: ['test://static'] });
+    c.setNotificationHandler(
+      'notifications/tools/list_changed' as never,
+      (() => void events.push('tools')) as never,
+    );
+    c.setNotificationHandler(
+      'notifications/prompts/list_changed' as never,
+      (() => void events.push('prompts')) as never,
+    );
+    c.setNotificationHandler(
+      'notifications/resources/updated' as never,
+      ((n: { params: { uri: string } }) => void events.push(`updated:${n.params.uri}`)) as never,
+    );
+    const sub = await c.listen({
+      toolsListChanged: true,
+      resourceSubscriptions: ['test://static'],
+    });
     expect(sub.honoredFilter.resourceSubscriptions).toEqual(['test://static']);
     await wait(500);
     fakes.modern.toolsChanged();
@@ -180,8 +225,9 @@ describe.skipIf(!dockerAvailable())('23.2 TS SDK v2 auto (modern) downstream, al
   it('6.8 MCP Apps: _meta.ui of a tool and ui:// resources pass through unchanged', async () => {
     const c = await modern();
     const widget = (await c.listTools()).tools.find((t) => t.name === 'modern__widget');
-    expect((widget?._meta as { ui?: { resourceUri?: string; csp?: unknown } }).ui?.resourceUri).toBe('ui://widget/main');
-    expect(JSON.stringify((widget?._meta as { ui?: unknown }).ui)).toContain('api.example.com');
+    const ui = ((widget?._meta ?? {}) as { ui?: { resourceUri?: string } }).ui;
+    expect(ui?.resourceUri).toBe('ui://widget/main');
+    expect(JSON.stringify(ui)).toContain('api.example.com');
     await c.callTool({ name: 'modern__widget', arguments: {} });
     const read = await c.readResource({ uri: 'ui://widget/main' });
     expect(JSON.stringify(read.contents)).toContain('<html><body>widget</body></html>');
@@ -198,8 +244,15 @@ describe.skipIf(!dockerAvailable())('23.2 TS SDK v2 auto (modern) downstream, al
   });
 
   it('15.5 every routed call left a call-log row with the final and upstream names', async () => {
-    const rows = stack.rows.filter((r) => r.method === 'tools/call' && r.itemName === 'modern__echo');
+    const rows = stack.rows.filter(
+      (r) => r.method === 'tools/call' && r.itemName === 'modern__echo',
+    );
     expect(rows.length).toBeGreaterThan(0);
-    expect(rows[0]).toMatchObject({ upstreamName: 'echo', outcome: 'ok', eraDown: 'modern', principalType: 'user' });
+    expect(rows[0]).toMatchObject({
+      upstreamName: 'echo',
+      outcome: 'ok',
+      eraDown: 'modern',
+      principalType: 'user',
+    });
   });
 });
