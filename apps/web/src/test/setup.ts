@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest';
+
 import { cleanup, configure } from '@testing-library/react';
 import { toHaveNoViolations } from 'jest-axe';
 import { afterAll, afterEach, beforeAll, expect, vi } from 'vitest';

@@ -224,7 +224,7 @@ export const settingsHandlers: HttpHandler[] = [
         >
       )[key];
       const parsed = shape?.safeParse(value);
-      if (!parsed || !parsed.success) {
+      if (!parsed?.success) {
         errors.push({
           path: `/${key}`,
           message: parsed?.error?.issues[0]?.message ?? 'Unknown setting',

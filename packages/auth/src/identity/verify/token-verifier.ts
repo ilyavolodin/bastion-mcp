@@ -280,7 +280,7 @@ export class TokenVerifier {
       if (record) this.principalCache.set(id, { record, at: now });
       else this.principalCache.delete(id);
     }
-    if (!record || !record.active) throw this.invalid(surface, url, 'principal inactive');
+    if (!record?.active) throw this.invalid(surface, url, 'principal inactive');
     return record;
   }
 

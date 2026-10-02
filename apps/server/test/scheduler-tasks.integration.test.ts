@@ -33,7 +33,6 @@ class FakeKube implements KubeApi {
     return kind === 'claim' ? this.claims : [];
   }
   async deleteMatching() {}
-  // biome-ignore lint/correctness/useYield: never watched in these tests
   async *watchClaim(): AsyncIterable<KubeObject> {}
 }
 

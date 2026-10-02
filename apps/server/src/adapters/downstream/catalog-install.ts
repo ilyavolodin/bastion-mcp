@@ -30,7 +30,7 @@ const visibleTo = (
 export const createCatalogInstallPort = (infra: Infra): CatalogInstallPort => ({
   async ensure(principal, catalogSlug) {
     const entry = await infra.repos.catalogEntries.getBySlug(catalogSlug);
-    if (!entry || entry.status !== 'published' || entry.kind !== 'mcp_server') {
+    if (entry?.status !== 'published' || entry.kind !== 'mcp_server') {
       return { status: 'not_found' };
     }
     const prisma = infra.db.prisma;

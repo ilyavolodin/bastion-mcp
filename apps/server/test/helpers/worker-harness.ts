@@ -40,7 +40,7 @@ export const stubAuth = (infra: Infra): AuthServices =>
         const token = /^Bearer\s+(.+)$/i.exec(authorization ?? '')?.[1] ?? '';
         const id = token.startsWith('tok:') ? token.slice(4) : '';
         const user = id ? await infra.repos.users.get(id) : null;
-        if (!user || user.status !== 'active') {
+        if (user?.status !== 'active') {
           throw new AuthenticationError(
             'INVALID_TOKEN',
             'invalid token',

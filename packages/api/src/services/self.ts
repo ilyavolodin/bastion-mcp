@@ -145,7 +145,7 @@ export const myQuotas = async (ctx: ReadCtx): Promise<QuotaView[]> => {
   const out: QuotaView[] = [];
   for (const row of page.items) {
     const parsed = parseRuleSafe(row);
-    if (!parsed || !parsed.enabled) continue;
+    if (!parsed?.enabled) continue;
     for (const subjectId of subjectIdsFor(parsed, subject)) {
       const usage = await deps.limits.readUsage(parsed, subjectId);
       out.push({ ...usage, name: parsed.name, metric: parsed.metric, subject: parsed.subject });

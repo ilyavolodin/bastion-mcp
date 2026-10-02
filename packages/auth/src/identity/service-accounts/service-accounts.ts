@@ -139,7 +139,7 @@ export const rotateClientSecret = async (
   clientId: string,
 ): Promise<string | null> => {
   const found = await deps.directory.findByClientId(clientId);
-  if (!found || found.client.authMethod !== 'client_secret_basic') return null;
+  if (found?.client.authMethod !== 'client_secret_basic') return null;
   const secret = generateClientSecret(deps.random);
   await deps.directory.saveClient({ ...found.client, secretSha256: hashClientSecret(secret) });
   return secret;
@@ -152,7 +152,7 @@ export const authenticateClientSecret = async (
   secret: string,
 ): Promise<ServiceAccount | null> => {
   const found = await directory.findByClientId(clientId);
-  if (!found || found.client.authMethod !== 'client_secret_basic') return null;
+  if (found?.client.authMethod !== 'client_secret_basic') return null;
   if (!verifyClientSecret(found.client, secret) || found.account.status !== 'active') return null;
   return found.account;
 };

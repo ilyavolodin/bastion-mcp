@@ -40,6 +40,7 @@ describe('11.4 client configuration generators', () => {
   it('11.4 claude-code with a PAT adds the Authorization header', () => {
     const c = clientConfigFor('claude-code', base, 'pat');
     expect(c.command).toContain('--header "Authorization: Bearer');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal placeholder the client expands from its own environment
     expect(JSON.stringify(c.config)).toContain('${BASTION_TOKEN}');
   });
 

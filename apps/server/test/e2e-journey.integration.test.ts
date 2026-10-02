@@ -115,7 +115,7 @@ describe.skipIf(!haveDocker())(
           .filter((l) => l.startsWith('data:'))
           .map((l) => JSON.parse(l.slice(5).trim()) as { status?: string });
         const last = datas.at(-1);
-        return last && last.status && last.status !== 'running' ? last : undefined;
+        return last?.status && last.status !== 'running' ? last : undefined;
       });
       expect(run.status).toBe('passed');
     });

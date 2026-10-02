@@ -37,7 +37,6 @@ class UnavailableDriver implements SandboxDriver {
   }
   async suspend(): Promise<void> {}
   async destroy(): Promise<void> {}
-  // biome-ignore lint/correctness/useYield: an unavailable driver lists nothing
   async *list() {}
 }
 

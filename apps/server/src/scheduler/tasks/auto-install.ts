@@ -33,7 +33,7 @@ const loadPolicyContext = async (
   const policy = await repos.autoInstall.get(policyId);
   if (!policy?.enabled) return null;
   const entry = await db.prisma.catalogEntry.findUnique({ where: { id: policy.catalogEntryId } });
-  if (!entry || entry.status !== 'published' || !entry.currentVersionId) return null;
+  if (entry?.status !== 'published' || !entry.currentVersionId) return null;
   const version = await db.prisma.catalogVersion.findUnique({
     where: { id: entry.currentVersionId },
   });
@@ -155,7 +155,7 @@ export const autoInstallUser: TaskFn<unknown> = async (ctx, raw) => {
   const { userId } = userPayload.parse(raw);
   const { repos } = ctx.infra;
   const user = await repos.users.get(userId);
-  if (!user || user.status !== 'active') return { skipped: true };
+  if (user?.status !== 'active') return { skipped: true };
   let installed = 0;
   for (const policy of await repos.autoInstall.listEnabledForUserScope()) {
     if (!(await isTargeted(ctx, policy.id, userId))) continue;

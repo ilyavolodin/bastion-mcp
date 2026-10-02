@@ -57,6 +57,7 @@ export const clientConfigFor = (
   switch (client) {
     case 'claude-desktop': {
       const args = ['-y', 'mcp-remote', url];
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal placeholder the client expands from its own environment
       if (auth === 'pat') args.push('--header', 'Authorization:${BASTION_AUTH}');
       return {
         ...base,
@@ -88,6 +89,7 @@ export const clientConfigFor = (
             [name]: {
               type: 'http',
               url,
+              // biome-ignore lint/suspicious/noTemplateCurlyInString: literal placeholder the client expands from its own environment
               ...(auth === 'pat' ? { headers: { Authorization: 'Bearer ${BASTION_TOKEN}' } } : {}),
             },
           },
@@ -107,7 +109,8 @@ export const clientConfigFor = (
             [name]: {
               url,
               ...(auth === 'pat'
-                ? { headers: { Authorization: 'Bearer ${env:BASTION_TOKEN}' } }
+                ? // biome-ignore lint/suspicious/noTemplateCurlyInString: literal placeholder the client expands from its own environment
+                  { headers: { Authorization: 'Bearer ${env:BASTION_TOKEN}' } }
                 : {}),
             },
           },
@@ -129,7 +132,8 @@ export const clientConfigFor = (
               type: 'http',
               url,
               ...(auth === 'pat'
-                ? { headers: { Authorization: 'Bearer ${input:bastion-token}' } }
+                ? // biome-ignore lint/suspicious/noTemplateCurlyInString: literal placeholder the client expands from its own environment
+                  { headers: { Authorization: 'Bearer ${input:bastion-token}' } }
                 : {}),
             },
           },
