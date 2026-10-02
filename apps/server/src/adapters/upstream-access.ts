@@ -16,7 +16,7 @@ import { connectAsPrincipal, effectiveSlugOf } from './gateway-client';
 
 export type ListOutcome =
   | { status: 'ok'; items: UpstreamItems }
-  | { status: 'degraded'; code: string };
+  | { status: 'degraded'; code: string; detail?: string };
 
 export interface UpstreamAccess {
   /** The normal (cached) listing the endpoint compiler uses. */

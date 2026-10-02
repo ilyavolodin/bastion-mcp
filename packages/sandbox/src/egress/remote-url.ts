@@ -1,5 +1,5 @@
 import net from 'node:net';
-import { BastionError, isAddressDenied, pinnedLookup } from '@bastion-mcp/core';
+import { BastionError, classifyAddress, isAddressDenied, pinnedLookup } from '@bastion-mcp/core';
 import { canonicalHost } from './policy';
 import { type Resolver, systemResolver } from './proxy';
 
@@ -34,6 +34,26 @@ const fail = (reason: string, message: string): never => {
   throw new UnsafeRemoteUrlError(message, { reason });
 };
 
+const METADATA_ADDRESSES = new Set(['169.254.169.254', 'fd00:ec2::254']);
+
+const CLASS_WORDS: Record<string, string> = {
+  loopback: 'this machine itself (loopback)',
+  'link-local': 'a link-local address',
+  private: 'a private network address',
+  cgnat: 'a carrier-grade NAT (shared) address',
+  ula: 'a private network address',
+};
+
+/** What the person who entered the URL needs to know: which address, why it is refused, and the one way out. */
+const blockedAddressMessage = (hostname: string, address: string): string => {
+  if (METADATA_ADDRESSES.has(address)) {
+    return `remote host ${hostname} resolves to ${address}, the cloud metadata address, which is never allowed`;
+  }
+  const kind = CLASS_WORDS[classifyAddress(address)] ?? 'an address that is not publicly routable';
+  const mask = address.includes(':') ? 128 : 32;
+  return `remote host ${hostname} resolves to ${address}, ${kind}. Bastion only reaches private networks that an administrator allows: add ${address}/${mask} (or the network it belongs to) to BASTION_PRIVATE_UPSTREAM_CIDRS and restart Bastion. Personal installations can never reach private networks`;
+};
+
 /** Validates a remote upstream URL and resolves its host ONCE (8.9, 23.3). */
 export const assertSafeRemoteUrl = async (
   raw: string,
@@ -54,7 +74,10 @@ export const assertSafeRemoteUrl = async (
   if (url.protocol === 'http:') {
     const allowed = options.insecureHosts.map((h) => h.toLowerCase());
     if (!allowed.includes(hostname) && !allowed.includes(url.host.toLowerCase())) {
-      return fail('insecure', 'remote URL must use HTTPS');
+      return fail(
+        'insecure',
+        `remote URL must use HTTPS. To use plain HTTP for ${hostname}, an administrator must add it to BASTION_INSECURE_UPSTREAM_HOSTS and restart Bastion (only for networks you trust)`,
+      );
     }
   }
   const host = canonicalHost(hostname);
@@ -72,7 +95,7 @@ export const assertSafeRemoteUrl = async (
   if (first === undefined) return fail('unresolvable', `remote host ${hostname} did not resolve`);
   for (const address of addresses) {
     if (isAddressDenied(address, { allowCidrs: options.privateCidrsAllowed })) {
-      return fail('blocked-address', `remote host ${hostname} resolves to a blocked address`);
+      return fail('blocked-address', blockedAddressMessage(hostname, address));
     }
   }
   return { url, address: first, family: net.isIPv6(first) ? 6 : 4, port };

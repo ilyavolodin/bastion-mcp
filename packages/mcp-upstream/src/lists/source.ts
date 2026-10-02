@@ -119,6 +119,21 @@ const degradedCode = (error: unknown): string => {
   return 'list_failed';
 };
 
+const MAX_DETAIL = 500;
+
+/**
+ * Why a listing degraded, for the person fixing it (the catalog TEST, the installation page). Only errors Bastion
+ * raised on purpose carry a message written for people; anything else stays out of API responses (6.9).
+ */
+export const degradedFrom = (
+  error: unknown,
+): { status: 'degraded'; code: string; detail?: string } => {
+  const code = degradedCode(error);
+  return error instanceof BastionError && error.message
+    ? { status: 'degraded', code, detail: error.message.slice(0, MAX_DETAIL) }
+    : { status: 'degraded', code };
+};
+
 const toItems = (snapshot: SnapshotItems): UpstreamItems => ({
   tools: snapshot.tools as UpstreamItems['tools'],
   prompts: snapshot.prompts as UpstreamItems['prompts'],
@@ -191,7 +206,7 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
     try {
       credential = await this.deps.credentials.resolve(principal, installation, installation.spec);
     } catch (error) {
-      return { status: 'degraded', code: degradedCode(error) };
+      return degradedFrom(error);
     }
     const key = `${installation.installationId}:${credential.credentialHash}`;
     const pending = this.inflight.get(key);
@@ -212,7 +227,7 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
     try {
       return { ...result, items: await this.applyPins(installation, result.items) };
     } catch (error) {
-      return { status: 'degraded', code: degradedCode(error) };
+      return degradedFrom(error);
     }
   }
 
@@ -268,7 +283,7 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
         installation: installation.slug,
         error: String(error),
       });
-      return { status: 'degraded', code: degradedCode(error) };
+      return degradedFrom(error);
     }
   }
 

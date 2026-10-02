@@ -293,6 +293,30 @@ describe('8.9 remote connector URL validation', () => {
       data: { reason: 'blocked-address' },
     });
   });
+  it('8.9 a blocked private address names the address and the setting that allows it', async () => {
+    const error = await assertSafeRemoteUrl('https://internal.corp/', opts()).catch((e) => e);
+    const text = String(error.message);
+    for (const part of [
+      'internal.corp resolves to 10.5.5.5',
+      'private network',
+      '10.5.5.5/32',
+      'BASTION_PRIVATE_UPSTREAM_CIDRS',
+    ]) {
+      expect(text).toContain(part);
+    }
+  });
+  it('8.9 the metadata address is never allowable, and the message does not suggest it', async () => {
+    const error = await assertSafeRemoteUrl('https://meta.test/', opts()).catch((e) => e);
+    expect(String(error.message)).toMatch(/cloud metadata/);
+    expect(String(error.message)).not.toMatch(/BASTION_PRIVATE_UPSTREAM_CIDRS/);
+  });
+  it('8.9 plain HTTP names the host and BASTION_INSECURE_UPSTREAM_HOSTS', async () => {
+    const error = await assertSafeRemoteUrl('http://plain.test/mcp', opts()).catch((e) => e);
+    const text = String(error.message);
+    for (const part of ['HTTPS', 'plain.test', 'BASTION_INSECURE_UPSTREAM_HOSTS']) {
+      expect(text).toContain(part);
+    }
+  });
   it('8.9 admin entries may reach BASTION_PRIVATE_UPSTREAM_CIDRS but never the metadata address', async () => {
     await expect(
       assertSafeRemoteUrl('https://internal.corp/', opts({ privateCidrsAllowed: ['10.0.0.0/8'] })),

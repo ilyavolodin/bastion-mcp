@@ -18,7 +18,7 @@ export type ListOrigin = 'cache' | 'live' | 'snapshot' | 'reference' | 'started'
 
 export type UpstreamListResult =
   | { status: 'ok'; items: UpstreamItems; origin: ListOrigin }
-  | { status: 'degraded'; code: string };
+  | { status: 'degraded'; code: string; detail?: string };
 
 /**
  * Port: loads one installation's upstream lists from the cache, the live instance or the latest snapshot
@@ -45,7 +45,7 @@ export interface UpstreamCaller {
 
 export type ProviderListing =
   | { status: 'ok'; items: UpstreamItems }
-  | { status: 'degraded'; code: string };
+  | { status: 'degraded'; code: string; detail?: string };
 
 export interface EndpointProvider {
   kind: 'upstream' | 'native';
@@ -79,7 +79,11 @@ export class UpstreamProvider implements EndpointProvider {
         const result = await this.source.listItems(this.installation, ctx);
         return result.status === 'ok'
           ? { status: 'ok', items: result.items }
-          : { status: 'degraded', code: result.code };
+          : {
+              status: 'degraded',
+              code: result.code,
+              ...(result.detail === undefined ? {} : { detail: result.detail }),
+            };
       } catch {
         return { status: 'degraded', code: 'list_failed' };
       }

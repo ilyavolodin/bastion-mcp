@@ -201,6 +201,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
       const stderr = record ? await readStderrTail(infra, record.id, 20).catch(() => []) : [];
       const failure = record?.error;
       const lines = [`could not list the server (${out.code})`];
+      if (out.detail) lines.push(out.detail);
       if (failure) {
         lines.push(`failed in phase "${failure.phase}": ${failure.message}`);
         if (stderr.length === 0 && failure.stderrTail.length > 0)
