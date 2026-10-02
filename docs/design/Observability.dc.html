@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bastion · Observability</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}a{color:#1d5ad0}a:hover{color:#171a3a}</style>
+</helmet>
+<div style="min-height: 100vh; background: #f4f5fa; font-family: Poppins, ui-sans-serif, system-ui, 'Segoe UI', sans-serif; color: #171a3a; display: flex; flex-direction: column">
+<dc-import name="RoleBar" current="{{role}}" on-pick="{{pickRole}}" hint-size="100%,57px"></dc-import>
+<div style="display: flex; flex-grow: 1; align-items: stretch">
+<dc-import name="Sidebar" role="{{role}}" active="observability" hide-tags="{{hideTags}}" hint-size="248px,1140px"></dc-import>
+<main style="flex-grow: 1; min-width: 0; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box">
+
+<sc-if value="{{v.page}}" hint-placeholder-val="{{true}}">
+<header style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+<div style="flex-grow: 1">
+<div style="display: flex; align-items: center; gap: 12px">
+<h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.01em">Observability</h1>
+<dc-import name="RoleTag" roles="amu" note="Managers: their teams" hide-tag="{{hideTags}}" hint-size="260px,18px"></dc-import>
+</div>
+<p style="margin: 2px 0 0; font-size: 14px; line-height: 22px; color: #5f6580">Traffic, health and sandboxes for {{scopeText}}.</p>
+</div>
+<div style="display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: #e8eaf1">
+<sc-if value="{{v.orgScope}}" hint-placeholder-val="{{true}}"><span style="display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 6px; background: {{scopeOrgBg}}; font-size: 13px; font-weight: 500">Whole org <dc-import name="RoleTag" roles="au" compact="{{yes}}" hide-tag="{{hideTags}}" hint-size="46px,16px"></dc-import></span></sc-if>
+<sc-if value="{{v.teamScope}}" hint-placeholder-val="{{true}}"><span style="display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 6px; background: {{scopeTeamBg}}; font-size: 13px; font-weight: 500">Platform team</span></sc-if>
+</div>
+<div style="display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: #e8eaf1">
+<span style="display: inline-flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #5f6580">1h</span>
+<span style="display: inline-flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 6px; font-size: 13px; font-weight: 500; background: linear-gradient(135deg, #ffc23d 0%, #ff8a1f 55%, #ff7a1a 100%)">24h</span>
+<span style="display: inline-flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #5f6580">7d</span>
+</div>
+</header>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px">
+<section aria-label="Traffic flow" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 12px">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Where calls go</h2>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5f6580"><span style="width: 14px; height: 6px; border-radius: 3px; background: #4c8dff"></span>Healthy</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5f6580"><span style="width: 14px; height: 6px; border-radius: 3px; background: #ff6b6b"></span>Errors</span>
+</div>
+<div style="position: relative; height: 320px">
+<sc-for list="{{sankey.links}}" as="l" hint-placeholder-count="13"><svg viewBox="0 0 560 320" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%"><path d="{{l.d}}" fill="none" stroke="{{l.c}}" stroke-opacity="0.38" stroke-width="{{l.w}}"></path></svg></sc-for>
+<svg viewBox="0 0 560 320" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%"><path d="{{sankey.leftPath}}" fill="#171a3a"></path><path d="{{sankey.okPath}}" fill="#4c8dff"></path><path d="{{sankey.badPath}}" fill="#ff6b6b"></path></svg>
+<sc-for list="{{sankey.left}}" as="n" hint-placeholder-count="5"><span style="position: absolute; right: calc(100% - 17.2%); top: {{n.top}}; transform: translateY(-50%); font-size: 12px; line-height: 16px; white-space: nowrap">{{n.name}}</span></sc-for>
+<sc-for list="{{sankey.right}}" as="n" hint-placeholder-count="6"><span style="position: absolute; left: 83.2%; top: {{n.top}}; transform: translateY(-50%); font-size: 12px; line-height: 16px; white-space: nowrap">{{n.name}}</span></sc-for>
+</div>
+</section>
+
+<section aria-label="Server health" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 12px">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Server health</h2>
+<span style="font-size: 12px; color: #5f6580">Size = traffic</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: 64px; gap: 6px; flex-grow: 1">
+<sc-for list="{{health}}" as="h" hint-placeholder-count="9">
+<a href="Installation.dc.html" style="grid-column: span {{h.cs}}; grid-row: span {{h.rs}}; border-radius: 10px; background: {{h.bg}}; padding: 10px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; text-decoration: none; color: #171a3a; overflow: hidden">
+<span style="font-size: 13px; line-height: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{h.name}}</span>
+<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600">
+<sc-if value="{{h.ok}}" hint-placeholder-val="{{true}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></sc-if>
+<sc-if value="{{h.warn}}" hint-placeholder-val="{{false}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"></path><path d="M12 10v4"></path></svg></sc-if>
+<sc-if value="{{h.bad}}" hint-placeholder-val="{{false}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></sc-if>
+{{h.label}}</span>
+</a>
+</sc-for>
+</div>
+</section>
+
+<section aria-label="Latency" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Latency</h2>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5f6580"><span style="width: 14px; height: 3px; border-radius: 2px; background: #ff8a1f"></span>Typical (p50)</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5f6580"><span style="width: 14px; height: 10px; border-radius: 2px; background: #ffebd6"></span>Slow tail (to p95)</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5f6580"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0 10 9H0z" fill="#4c8dff"></path></svg>Cold start</span>
+</div>
+<svg viewBox="0 0 560 200" width="100%" height="200" preserveAspectRatio="none" aria-hidden="true">
+<path d="M0 50H560M0 100H560M0 150H560" stroke="#e8eaf1" stroke-width="1"></path>
+<path d="{{lat.band}}" fill="#ffebd6"></path>
+<polyline points="{{lat.p50}}" fill="none" stroke="#ff8a1f" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+<path d="{{lat.colds}}" fill="#4c8dff"></path>
+</svg>
+<div style="display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: #5f6580"><span>Yesterday 15:00</span><span>21:00</span><span>03:00</span><span>09:00</span><span>Now</span></div>
+</section>
+
+<section aria-label="Sandboxes" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 12px">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Sandboxes</h2>
+<span style="display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 6px; background: #e3edff; color: #1d5ad0; font-size: 12px; font-weight: 600">Kubernetes · gVisor</span>
+</div>
+<svg viewBox="0 0 560 110" width="100%" height="110" preserveAspectRatio="none" aria-hidden="true">
+<defs><linearGradient id="sbArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4c8dff" stop-opacity="0.3"></stop><stop offset="100%" stop-color="#4c8dff" stop-opacity="0"></stop></linearGradient></defs>
+<path d="{{sb.area}}" fill="url(#sbArea)"></path>
+<polyline points="{{sb.line}}" fill="none" stroke="#4c8dff" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+</svg>
+<span style="font-size: 12px; line-height: 16px; color: #5f6580">Start time by phase</span>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{phases}}" as="p" hint-placeholder-count="5">
+<div style="display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; align-items: center; height: 18px">
+<span style="font-size: 12px">{{p.n}}</span>
+<svg viewBox="0 0 400 18" width="100%" height="18" aria-hidden="true"><path d="M0 9H400" stroke="#e8eaf1" stroke-width="1"></path><path d="{{p.dots}}" fill="{{p.c}}" fill-opacity="0.75"></path></svg>
+</div>
+</sc-for>
+</div>
+</section>
+</div>
+</sc-if>
+
+<sc-if value="{{v.denied}}" hint-placeholder-val="{{false}}">
+<section style="margin: 80px auto; max-width: 480px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center">
+<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#5f6580" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+<h1 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600">Members don’t see this page</h1>
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #5f6580">It isn’t in their navigation. Their own calls are in Activity.</p>
+<a href="Activity.dc.html" style="font-size: 14px; font-weight: 500; text-decoration: none">Open Activity</a>
+</section>
+</sc-if>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"role":{"editor":"enum","options":["all","admin","manager","member","auditor"],"default":"all"},"roleTags":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const st = this.state || {};
+    const role = st.role || this.props.role || 'all';
+    const code = { admin: 'a', manager: 'm', member: 'e', auditor: 'u' }[role];
+    const can = (r) => role === 'all' || r.indexOf(code) >= 0;
+    const tags = this.props.roleTags ?? true;
+    const v = { page: can('amu'), denied: !can('amu'), orgScope: can('au'), teamScope: can('am') };
+    const scopeText = role === 'manager' ? 'the teams you manage' : (role === 'all' ? 'your scope' : 'the whole org');
+    const orgOn = role !== 'manager';
+
+    const L = ['Claude Code', 'Claude Desktop', 'Cursor', 'VS Code', 'ChatGPT'];
+    const R = [['GitHub', 0.01], ['Jira', 0.02], ['Postgres', 0.12], ['Slack', 0.01], ['Sentry', 0.22], ['Linear', 0.03]];
+    const links = [
+      [0, 0, 90], [0, 2, 60], [0, 4, 30], [0, 5, 20], [1, 1, 70], [1, 3, 40], [1, 0, 20],
+      [2, 0, 40], [2, 5, 20], [3, 0, 25], [3, 2, 15], [4, 1, 20], [4, 3, 15]
+    ];
+    const H = 300, gap = 10, top = 10;
+    const lt = L.map((_, i) => links.filter((l) => l[0] === i).reduce((a, l) => a + l[2], 0));
+    const rt = R.map((_, i) => links.filter((l) => l[1] === i).reduce((a, l) => a + l[2], 0));
+    const tot = lt.reduce((a, b) => a + b, 0);
+    const ls = (H - gap * (L.length - 1)) / tot;
+    const rs = (H - gap * (R.length - 1)) / tot;
+    const s = Math.min(ls, rs);
+    let y = top; const ly = lt.map((t) => { const r = y; y += t * s + gap; return r; });
+    y = top; const ry = rt.map((t) => { const r = y; y += t * s + gap; return r; });
+    const lo = ly.slice(), ro = ry.slice();
+    const sLinks = links.map((l) => {
+      const w = l[2] * s;
+      const y0 = lo[l[0]] + w / 2; lo[l[0]] += w;
+      const y1 = ro[l[1]] + w / 2; ro[l[1]] += w;
+      const err = R[l[1]][1];
+      return { d: 'M110 ' + y0.toFixed(1) + ' C280 ' + y0.toFixed(1) + ', 280 ' + y1.toFixed(1) + ', 450 ' + y1.toFixed(1), w: w.toFixed(1), c: err > 0.1 ? '#ff6b6b' : '#4c8dff' };
+    });
+    const rect = (x, y0, w, h) => 'M' + x + ' ' + y0.toFixed(1) + 'h' + w + 'v' + h.toFixed(1) + 'h-' + w + 'Z';
+    const sankey = {
+      links: sLinks,
+      left: L.map((n, i) => ({ name: n, top: ((ly[i] + lt[i] * s / 2) / 320 * 100).toFixed(2) + '%' })),
+      right: R.map((r, i) => ({ name: r[0], top: ((ry[i] + rt[i] * s / 2) / 320 * 100).toFixed(2) + '%' })),
+      leftPath: L.map((n, i) => rect(100, ly[i], 10, lt[i] * s)).join(' '),
+      okPath: R.map((r, i) => r[1] > 0.1 ? '' : rect(450, ry[i], 10, rt[i] * s)).join(' '),
+      badPath: R.map((r, i) => r[1] > 0.1 ? rect(450, ry[i], 10, rt[i] * s) : '').join(' ')
+    };
+
+    const HS = {
+      ok: { bg: '#dcf7eb', label: 'Healthy', ok: true, warn: false, bad: false },
+      warn: { bg: '#ffc23d', label: 'Some errors', ok: false, warn: true, bad: false },
+      bad: { bg: '#ff6b6b', label: 'Failing', ok: false, warn: false, bad: true }
+    };
+    const health = [
+      ['GitHub', 3, 2, 'ok'], ['Jira', 3, 1, 'ok'], ['Slack', 2, 1, 'ok'], ['Linear', 1, 1, 'ok'],
+      ['Postgres analytics', 2, 2, 'warn'], ['Sentry', 2, 1, 'bad'], ['Notion', 2, 1, 'ok'], ['Filesystem', 1, 1, 'bad'], ['Zendesk', 1, 1, 'ok']
+    ].map((h) => Object.assign({ name: h[0], cs: h[1], rs: h[2] }, HS[h[3]]));
+
+    const N = 32, W = 560;
+    const p50v = [], p95v = [];
+    for (let i = 0; i < N; i++) {
+      p50v.push(120 + 20 * Math.sin(i / 3) + (i > 18 && i < 23 ? 40 : 0));
+      p95v.push(70 + 25 * Math.sin(i / 4 + 1) - (i > 18 && i < 23 ? 30 : 0));
+    }
+    const X = (i) => (i * W / (N - 1)).toFixed(1);
+    const p50 = p50v.map((y, i) => X(i) + ',' + y.toFixed(1)).join(' ');
+    const band = 'M' + p95v.map((y, i) => X(i) + ' ' + y.toFixed(1)).join(' L') + ' L' + p50v.map((y, i) => X(N - 1 - i) + ' ' + p50v[N - 1 - i].toFixed(1)).join(' L') + ' Z';
+    const colds = [4, 11, 20, 27].map((i) => { const x = Number(X(i)); return 'M' + (x - 6) + ' 8 L' + (x + 6) + ' 8 L' + x + ' 18 Z'; }).join(' ');
+
+    const run = [8, 9, 9, 10, 12, 18, 26, 34, 40, 44, 46, 45, 47, 50, 52, 48, 44, 40, 34, 28, 20, 16, 12, 10];
+    const sx = (i) => (i * W / (run.length - 1)).toFixed(1);
+    const sline = run.map((r, i) => sx(i) + ',' + (104 - r * 1.8).toFixed(1)).join(' ');
+    const sarea = 'M' + run.map((r, i) => sx(i) + ' ' + (104 - r * 1.8).toFixed(1)).join(' L') + ' L' + W + ' 110 L0 110 Z';
+    const ph = [['claim', '#4c8dff', 20], ['bind', '#1bb5a2', 40], ['install', '#e03fcb', 220], ['spawn', '#ffc23d', 120], ['connect', '#ff8a1f', 60]];
+    const phases = ph.map((p, k) => ({
+      n: p[0], c: p[1],
+      dots: Array.from({ length: 12 }, (_, j) => Math.min(396, p[2] * (0.5 + ((j * 7 + k * 3) % 10) / 9))).map((x) => 'M' + (x - 3.5).toFixed(1) + ' 9a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0').join(' ')
+    }));
+
+    return {
+      role, v, scopeText, sankey, health, phases, yes: true,
+      lat: { p50, band, colds }, sb: { line: sline, area: sarea },
+      scopeOrgBg: orgOn ? '#ffffff' : 'transparent', scopeTeamBg: orgOn ? 'transparent' : '#ffffff',
+      hideTags: !tags,
+      ann: tags ? '1.5px dashed #b4b8cc' : '0px solid transparent',
+      pickRole: (r) => this.setState({ role: r })
+    };
+  }
+}
+</script>
+</body>
+</html>

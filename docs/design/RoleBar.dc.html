@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Role preview bar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 10px 24px; background: #ffffff; border-bottom: 1px solid #e8eaf1; font-family: Poppins, ui-sans-serif, system-ui, 'Segoe UI', sans-serif; color: #171a3a; box-sizing: border-box">
+<div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 280px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b24700" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+<span style="font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5f6580">Role preview</span>
+<span style="font-size: 12px; line-height: 16px; color: #5f6580">{{hint}}</span>
+</div>
+<div style="display: flex; gap: 4px; padding: 4px; background: #f4f5fa; border-radius: 10px">
+<sc-for list="{{opts}}" as="o" hint-placeholder-count="5">
+<button type="button" onClick="{{o.pick}}" aria-pressed="{{o.on}}" style="display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 6px; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; background: {{o.bg}}; color: {{o.fg}}; box-shadow: {{o.sh}}">
+<span style="width: 8px; height: 8px; border-radius: 9999px; background: {{o.dot}}"></span>
+<span>{{o.label}}</span>
+</button>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"current":{"editor":"enum","options":["all","admin","manager","member","auditor"],"default":"all"},"onPick":{"editor":null},"$preview":{"width":1440,"height":64}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const st = this.state || {};
+    const cur = this.props.onPick ? (this.props.current || 'all') : (st.cur || this.props.current || 'all');
+    const list = [
+      { id: 'all', label: 'All roles', dot: 'linear-gradient(90deg, #ff8a1f, #4c8dff, #1bb5a2, #e03fcb)' },
+      { id: 'admin', label: 'Admin', dot: '#ff8a1f' },
+      { id: 'manager', label: 'Manager', dot: '#4c8dff' },
+      { id: 'member', label: 'Member', dot: '#2bc48a' },
+      { id: 'auditor', label: 'Auditor', dot: '#e03fcb' }
+    ];
+    const opts = list.map((o) => {
+      const on = o.id === cur;
+      return {
+        label: o.label,
+        dot: o.dot,
+        on,
+        bg: on ? '#ffffff' : 'transparent',
+        fg: on ? '#171a3a' : '#5f6580',
+        sh: on ? '0 1px 2px #171a3a14, 0 0 0 1.5px #b24700' : 'none',
+        pick: () => {
+          if (this.props.onPick) this.props.onPick(o.id);
+          else this.setState({ cur: o.id });
+        }
+      };
+    });
+    const names = { admin: 'an Admin', manager: 'a Manager', member: 'a Member', auditor: 'an Auditor' };
+    const hint = cur === 'all'
+      ? 'Every element is shown. Dashed outlines and role chips mark what only some roles see.'
+      : 'Showing only what ' + names[cur] + ' sees. Chips still list every role that sees an element.';
+    return { opts, hint };
+  }
+}
+</script>
+</body>
+</html>

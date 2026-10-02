@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bastion · Role map</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}a{color:#1d5ad0}a:hover{color:#171a3a}</style>
+</helmet>
+<div style="width: 1440px; height: 1040px; box-sizing: border-box; padding: 48px 56px; background: #f4f5fa; font-family: Poppins, ui-sans-serif, system-ui, 'Segoe UI', sans-serif; color: #171a3a; display: flex; flex-direction: column; gap: 28px">
+
+<header style="display: flex; align-items: flex-end; gap: 24px">
+<div style="flex-grow: 1">
+<span style="font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5f6580">Bastion console</span>
+<h1 style="margin: 4px 0 0; font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -0.01em">Who sees what</h1>
+<p style="margin: 6px 0 0; font-size: 14px; line-height: 22px; color: #5f6580; max-width: 720px">Every person has one org role. Anyone who manages a team also gets the Manager view for that team. Each screen has a Role preview bar at the top to switch between these views.</p>
+</div>
+</header>
+
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px">
+<sc-for list="{{roles}}" as="r" hint-placeholder-count="4">
+<div style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 10px; position: relative; overflow: hidden">
+<span style="position: absolute; left: 0; top: 0; right: 0; height: 4px; background: {{r.color}}"></span>
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 5px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; background: {{r.bg}}; color: {{r.fg}}">{{r.name}}</span>
+<span style="font-size: 12px; color: #5f6580; flex-grow: 1; text-align: right">{{r.count}} of 11 sections</span>
+</div>
+<p style="margin: 0; font-size: 14px; line-height: 22px">{{r.desc}}</p>
+<div style="display: flex; gap: 3px; margin-top: 4px">
+<sc-for list="{{r.bar}}" as="b" hint-placeholder-count="11"><span style="flex: 1; height: 8px; border-radius: 3px; background: {{b}}"></span></sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+
+<section aria-label="Section access by role" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 8px 24px 16px; display: flex; flex-direction: column">
+<div style="display: grid; grid-template-columns: 260px repeat(4, minmax(0, 1fr)); align-items: center; height: 48px; border-bottom: 1px solid #e8eaf1">
+<span style="font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5f6580">Section</span>
+<span style="font-size: 13px; font-weight: 600; text-align: center; color: #b24700">Admin</span>
+<span style="font-size: 13px; font-weight: 600; text-align: center; color: #1d5ad0">Manager</span>
+<span style="font-size: 13px; font-weight: 600; text-align: center; color: #0a7a4d">Member</span>
+<span style="font-size: 13px; font-weight: 600; text-align: center; color: #a31b91">Auditor</span>
+</div>
+<sc-for list="{{rows}}" as="row" hint-placeholder-count="11">
+<div style="display: grid; grid-template-columns: 260px repeat(4, minmax(0, 1fr)); align-items: center; height: 44px; border-bottom: 1px solid #e8eaf1">
+<span style="font-size: 14px; font-weight: 500">{{row.name}}</span>
+<sc-for list="{{row.cells}}" as="c" hint-placeholder-count="4">
+<span style="display: flex; align-items: center; justify-content: center; gap: 8px">
+<sc-if value="{{c.full}}" hint-placeholder-val="{{true}}"><span style="width: 16px; height: 16px; border-radius: 9999px; background: {{c.color}}"></span></sc-if>
+<sc-if value="{{c.part}}" hint-placeholder-val="{{false}}"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="{{c.color}}" stroke-width="1.5"></circle><path d="M8 1a7 7 0 0 1 0 14z" fill="{{c.color}}"></path></svg></sc-if>
+<sc-if value="{{c.none}}" hint-placeholder-val="{{false}}"><span style="width: 14px; height: 2px; border-radius: 2px; background: #d3d6e2"></span></sc-if>
+<sc-if value="{{c.hasNote}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #5f6580">{{c.note}}</span></sc-if>
+</span>
+</sc-for>
+</div>
+</sc-for>
+</section>
+
+<div style="display: flex; gap: 32px; align-items: center; flex-wrap: wrap; font-size: 13px; color: #171a3a">
+<span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 16px; height: 16px; border-radius: 9999px; background: #171a3a"></span>Full section</span>
+<span style="display: inline-flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="#171a3a" stroke-width="1.5"></circle><path d="M8 1a7 7 0 0 1 0 14z" fill="#171a3a"></path></svg>Scoped (own, team, view only, by policy)</span>
+<span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 14px; height: 2px; border-radius: 2px; background: #d3d6e2"></span>Not in navigation</span>
+<span style="display: inline-flex; align-items: center; gap: 8px; margin-left: auto"><span style="display: inline-block; width: 46px; height: 24px; border-radius: 6px; outline: 1.5px dashed #b4b8cc; outline-offset: 2px; background: #ffffff"></span>On screens: dashed outline + chips mark role-limited elements</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1040}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = { a: '#ff8a1f', m: '#4c8dff', e: '#2bc48a', u: '#e03fcb' };
+    const F = (k, note) => ({ k, t: 'full', note: note || '' });
+    const P = (k, note) => ({ k, t: 'part', note });
+    const N = (k) => ({ k, t: 'none', note: '' });
+    const data = [
+      ['Home', [F('a'), F('m'), F('e'), F('u')]],
+      ['Store', [F('a'), F('m'), F('e'), F('u')]],
+      ['My servers', [F('a'), F('m'), F('e'), F('u')]],
+      ['Activity', [F('a', 'everyone'), P('m', 'team'), P('e', 'own'), F('u', 'everyone')]],
+      ['Plugins', [F('a', 'author, approve'), P('m', 'author'), P('e', 'install'), P('u', 'view')]],
+      ['Observability', [F('a'), P('m', 'team'), N('e'), F('u')]],
+      ['Security', [F('a'), P('m', 'team'), N('e'), P('u', 'view only')]],
+      ['Catalog', [F('a'), P('m', 'own and team'), N('e'), N('u')]],
+      ['Registry', [F('a'), P('m', 'by policy'), P('e', 'by policy'), N('u')]],
+      ['Access', [F('a'), P('m', 'own teams'), N('e'), N('u')]],
+      ['Settings', [F('a'), N('m'), N('e'), N('u')]]
+    ];
+    const rows = data.map((d) => ({
+      name: d[0],
+      cells: d[1].map((c) => ({ full: c.t === 'full', part: c.t === 'part', none: c.t === 'none', color: C[c.k], note: c.note, hasNote: c.note.length > 0 }))
+    }));
+    const idx = { a: 0, m: 1, e: 2, u: 3 };
+    const meta = [
+      { k: 'a', name: 'Admin', bg: '#ffebd6', fg: '#b24700', desc: 'Runs the installation: settings, identity, guards, every team and the whole catalog.' },
+      { k: 'm', name: 'Manager', bg: '#e3edff', fg: '#1d5ad0', desc: 'Manages one or more teams: their catalog entries, installs, approvals and people.' },
+      { k: 'e', name: 'Member', bg: '#dcf7eb', fg: '#0a7a4d', desc: 'Installs approved servers and plugins, connects AI tools, sees their own calls.' },
+      { k: 'u', name: 'Auditor', bg: '#fbe4f7', fg: '#a31b91', desc: 'Reads everything that happened, across all people, and changes nothing.' }
+    ];
+    const roles = meta.map((m) => {
+      const marks = data.map((d) => d[1][idx[m.k]].t);
+      return Object.assign({}, m, {
+        color: C[m.k],
+        count: marks.filter((t) => t !== 'none').length,
+        bar: marks.map((t) => t === 'full' ? C[m.k] : (t === 'part' ? m.bg : '#eef0f5'))
+      });
+    });
+    return { rows, roles };
+  }
+}
+</script>
+</body>
+</html>

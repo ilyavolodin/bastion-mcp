@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bastion · Home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}a{color:#1d5ad0}a:hover{color:#171a3a}</style>
+</helmet>
+<div style="min-height: 100vh; background: #f4f5fa; font-family: Poppins, ui-sans-serif, system-ui, 'Segoe UI', sans-serif; color: #171a3a; display: flex; flex-direction: column">
+<dc-import name="RoleBar" current="{{role}}" on-pick="{{pickRole}}" hint-size="100%,57px"></dc-import>
+<div style="display: flex; flex-grow: 1; align-items: stretch">
+<dc-import name="Sidebar" role="{{role}}" active="home" hide-tags="{{hideTags}}" hint-size="248px,1180px"></dc-import>
+<main style="flex-grow: 1; min-width: 0; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box">
+
+<header style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+<div style="flex-grow: 1">
+<h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.01em">Home</h1>
+<p style="margin: 2px 0 0; font-size: 14px; line-height: 22px; color: #5f6580">Acme Corp · bastion.acme.dev</p>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; height: 44px; width: 340px; max-width: 100%; padding: 0 14px; box-sizing: border-box; background: #ffffff; border-radius: 10px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6580" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+<input type="search" aria-label="Search servers, tools, people and settings" placeholder="Search servers, tools, people" style="flex-grow: 1; min-width: 0; border: 0; outline: none; background: transparent; font-family: inherit; font-size: 14px; color: #171a3a">
+<span style="font-size: 11px; font-weight: 600; color: #5f6580; padding: 2px 6px; border-radius: 6px; background: #f4f5fa">⌘K</span>
+</div>
+<button type="button" aria-label="Notifications" style="width: 44px; height: 44px; border: 0; border-radius: 10px; background: #ffffff; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; position: relative">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#171a3a" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
+<span style="position: absolute; top: 10px; right: 11px; width: 8px; height: 8px; border-radius: 9999px; background: #ff6b6b; box-shadow: 0 0 0 2px #ffffff"></span>
+</button>
+</header>
+
+<section aria-label="Setup" style="display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-radius: 16px; background: #ffebd6">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#b24700" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"></path><path d="M12 10v4M12 17h.01"></path></svg>
+<p style="margin: 0; flex-grow: 1; font-size: 14px; line-height: 22px"><strong style="font-weight: 600">GitHub isn’t connected yet.</strong> Its tools stay out of your AI tools until you sign in. Two more servers need attention below.</p>
+<button type="button" style="height: 44px; padding: 0 18px; border: 0; border-radius: 10px; background: linear-gradient(135deg, #ffc23d 0%, #ff8a1f 55%, #ff7a1a 100%); box-shadow: 0 8px 20px -6px #ff7a1a8c; font-family: inherit; font-size: 14px; font-weight: 500; color: #171a3a; cursor: pointer">Connect GitHub</button>
+</section>
+
+<div style="display: flex; gap: 24px; align-items: stretch; flex-wrap: wrap">
+<section aria-label="Connect your AI tools" style="flex: 2 1 560px; min-width: 0; position: relative; overflow: hidden; border-radius: 20px; padding: 24px; background: linear-gradient(135deg, #ff9a3c 0%, #ff5f7e 100%); color: #171a3a; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: flex-start; gap: 16px">
+<div style="flex-grow: 1">
+<h2 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600">Connect your AI tools</h2>
+<p style="margin: 4px 0 0; font-size: 14px; line-height: 22px; max-width: 520px">One URL carries every server you’ve installed. Sign in once from your client; Bastion handles each server’s credentials.</p>
+</div>
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#171a3a" stroke-width="1.5" aria-hidden="true" style="flex-shrink: 0; opacity: 0.85"><circle cx="12" cy="32" r="6"></circle><circle cx="52" cy="14" r="5"></circle><circle cx="52" cy="32" r="5"></circle><circle cx="52" cy="50" r="5"></circle><path d="M18 32h10M28 32 47 14M28 32h19M28 32l19 18"></path></svg>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 16px; border-radius: 10px; background: #ffffff">
+<span style="flex-grow: 1; font-size: 15px; line-height: 22px; font-weight: 500; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">https://bastion.acme.dev/mcp</span>
+<button type="button" style="display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border: 1px solid #848aa3; border-radius: 10px; background: #ffffff; font-family: inherit; font-size: 14px; font-weight: 500; color: #171a3a; cursor: pointer">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h8"></path></svg>Copy</button>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<sc-for list="{{clients}}" as="c" hint-placeholder-count="4">
+<button type="button" style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border: 0; border-radius: 10px; background: rgba(255,255,255,0.72); font-family: inherit; font-size: 14px; font-weight: 500; color: #171a3a; cursor: pointer">
+<span style="width: 22px; height: 22px; border-radius: 9999px; background: #ffffff; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600">{{c.i}}</span>{{c.name}}</button>
+</sc-for>
+</div>
+<p style="margin: 0; font-size: 12px; line-height: 16px">Need only a few servers in one client? Create a named endpoint in My servers.</p>
+</section>
+
+<sc-if value="{{v.attention}}" hint-placeholder-val="{{true}}">
+<section aria-label="Needs your decision" style="flex: 1 1 340px; min-width: 0; background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 4px; outline: {{ann}}; outline-offset: 4px">
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Needs your decision</h2>
+<dc-import name="RoleTag" roles="amu" hide-tag="{{hideTags}}" hint-size="170px,18px"></dc-import>
+</div>
+<sc-if value="{{v.requests}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid #e8eaf1">
+<span style="font-size: 24px; line-height: 32px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 28px">3</span>
+<div style="flex-grow: 1; min-width: 0">
+<div style="font-size: 14px; line-height: 20px; font-weight: 500">Install requests</div>
+<div style="display: flex; align-items: center; gap: 6px; margin-top: 4px">
+<span style="display: flex"><span style="width: 22px; height: 22px; border-radius: 9999px; background: #4c8dff; border: 2px solid #ffffff; font-size: 9px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">RM</span><span style="width: 22px; height: 22px; margin-left: -6px; border-radius: 9999px; background: #1bb5a2; border: 2px solid #ffffff; font-size: 9px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">JO</span><span style="width: 22px; height: 22px; margin-left: -6px; border-radius: 9999px; background: #ffc23d; border: 2px solid #ffffff; font-size: 9px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">AK</span></span>
+<dc-import name="RoleTag" roles="am" note="Managers: own team" hide-tag="{{hideTags}}" hint-size="190px,18px"></dc-import>
+</div>
+</div>
+<a href="Store.dc.html" style="font-size: 14px; font-weight: 500; color: #b24700; text-decoration: none">Review</a>
+</div>
+</sc-if>
+<sc-if value="{{v.drift}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid #e8eaf1">
+<span style="font-size: 24px; line-height: 32px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 28px">2</span>
+<div style="flex-grow: 1; min-width: 0">
+<div style="font-size: 14px; line-height: 20px; font-weight: 500">Tool definitions changed upstream</div>
+<div style="margin-top: 4px"><dc-import name="RoleTag" roles="amu" note="Auditors: view only" hide-tag="{{hideTags}}" hint-size="230px,18px"></dc-import></div>
+</div>
+<a href="Security.dc.html" style="font-size: 14px; font-weight: 500; color: #b24700; text-decoration: none">Open</a>
+</div>
+</sc-if>
+<sc-if value="{{v.pluginApprovals}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; align-items: center; gap: 14px; padding: 12px 0">
+<span style="font-size: 24px; line-height: 32px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 28px">1</span>
+<div style="flex-grow: 1; min-width: 0">
+<div style="font-size: 14px; line-height: 20px; font-weight: 500">Plugin with executable content</div>
+<div style="margin-top: 4px"><dc-import name="RoleTag" roles="a" hide-tag="{{hideTags}}" hint-size="60px,18px"></dc-import></div>
+</div>
+<a href="Plugins.dc.html" style="font-size: 14px; font-weight: 500; color: #b24700; text-decoration: none">Approve</a>
+</div>
+</sc-if>
+</section>
+</sc-if>
+</div>
+
+<section aria-label="My servers" style="display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: baseline; gap: 12px">
+<h2 style="margin: 0; font-size: 17px; line-height: 24px; font-weight: 600">My servers</h2>
+<span style="font-size: 12px; line-height: 16px; color: #5f6580; flex-grow: 1">Calls in the last 24 hours</span>
+<a href="Store.dc.html" style="font-size: 14px; font-weight: 500; text-decoration: none">Browse the store</a>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+<sc-for list="{{tiles}}" as="t" hint-placeholder-count="8">
+<a href="Installation.dc.html" style="display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 16px; background: #ffffff; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; text-decoration: none; color: #171a3a; min-height: 150px; box-sizing: border-box">
+<div style="display: flex; align-items: center; gap: 12px">
+<span style="width: 40px; height: 40px; border-radius: 9999px; background: {{t.color}}; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; color: #171a3a; flex-shrink: 0">{{t.i}}</span>
+<span style="display: flex; flex-direction: column; min-width: 0; flex-grow: 1">
+<span style="font-size: 15px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.name}}</span>
+<span style="font-size: 12px; line-height: 16px; color: #5f6580">{{t.meta}}</span>
+</span>
+</div>
+<div style="display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; font-weight: 500; color: {{t.sfg}}">
+<span style="width: 8px; height: 8px; border-radius: 9999px; background: {{t.sdot}}"></span>
+<sc-if value="{{t.ok}}" hint-placeholder-val="{{true}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></sc-if>
+<sc-if value="{{t.warn}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"></path><path d="M12 10v4"></path></svg></sc-if>
+<sc-if value="{{t.bad}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></sc-if>
+<span>{{t.status}}</span>
+</div>
+<sc-if value="{{t.hasAction}}" hint-placeholder-val="{{false}}">
+<span style="display: inline-flex; align-items: center; justify-content: center; height: 36px; border-radius: 10px; background: #ffebd6; color: #b24700; font-size: 13px; font-weight: 500">{{t.action}}</span>
+</sc-if>
+<sc-if value="{{t.hasSpark}}" hint-placeholder-val="{{true}}">
+<svg viewBox="0 0 200 36" preserveAspectRatio="none" width="100%" height="36" aria-hidden="true"><polyline points="{{t.spark}}" fill="none" stroke="{{t.color}}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline></svg>
+</sc-if>
+</a>
+</sc-for>
+</div>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px">
+<section aria-label="Your quotas" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 17px; line-height: 24px; font-weight: 600">Your quotas today</h2>
+<sc-for list="{{quotas}}" as="q" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: baseline; gap: 8px">
+<span style="font-size: 14px; line-height: 20px; font-weight: 500; flex-grow: 1">{{q.name}}</span>
+<span style="font-size: 14px; line-height: 20px; font-weight: 600; font-variant-numeric: tabular-nums">{{q.left}}</span>
+</div>
+<div style="height: 10px; border-radius: 6px; background: #f4f5fa; overflow: hidden"><div style="height: 100%; width: {{q.pct}}; border-radius: 6px; background: {{q.color}}"></div></div>
+</div>
+</sc-for>
+</section>
+<section aria-label="Seven-day activity" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 8px">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Your last 7 days</h2>
+<span style="display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 6px; background: #dcf7eb; color: #0a7a4d; font-size: 12px; font-weight: 600">↑ busier than last week</span>
+</div>
+<svg viewBox="0 0 420 130" width="100%" height="130" preserveAspectRatio="none" aria-hidden="true">
+<defs><linearGradient id="homeArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff8a1f" stop-opacity="0.32"></stop><stop offset="100%" stop-color="#ff8a1f" stop-opacity="0"></stop></linearGradient></defs>
+<path d="M0 96 L70 82 L140 88 L210 60 L280 66 L350 38 L420 46 L420 130 L0 130 Z" fill="url(#homeArea)"></path>
+<polyline points="0,96 70,82 140,88 210,60 280,66 350,38 420,46" fill="none" stroke="#ff8a1f" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+</svg>
+<div style="display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: #5f6580"><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span></div>
+</section>
+<sc-if value="{{v.team}}" hint-placeholder-val="{{true}}">
+<section aria-label="Team adoption" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 14px; outline: {{ann}}; outline-offset: 4px">
+<div style="display: flex; align-items: center; gap: 8px">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Platform team</h2>
+<dc-import name="RoleTag" roles="am" note="Admins: every team" hide-tag="{{hideTags}}" hint-size="200px,18px"></dc-import>
+</div>
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #5f6580">Who has connected an AI tool this week</p>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px">
+<sc-for list="{{people}}" as="p" hint-placeholder-count="14">
+<span title="{{p.n}}" style="aspect-ratio: 1; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; background: {{p.bg}}; color: {{p.fg}}; border: {{p.bd}}">{{p.i}}</span>
+</sc-for>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; font-size: 12px; line-height: 16px; color: #5f6580">
+<span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; border-radius: 9999px; background: #4c8dff"></span>Connected</span>
+<span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; border-radius: 9999px; border: 1.5px dashed #848aa3"></span>Not yet</span>
+<a href="Access.dc.html" style="margin-left: auto; font-size: 14px; font-weight: 500; text-decoration: none">Nudge 3 people</a>
+</div>
+</section>
+</sc-if>
+</div>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"role":{"editor":"enum","options":["all","admin","manager","member","auditor"],"default":"all"},"roleTags":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const st = this.state || {};
+    const role = st.role || this.props.role || 'all';
+    const code = { admin: 'a', manager: 'm', member: 'e', auditor: 'u' }[role];
+    const can = (r) => role === 'all' || r.indexOf(code) >= 0;
+    const tags = this.props.roleTags ?? true;
+    const v = { attention: can('amu'), requests: can('am'), drift: can('amu'), pluginApprovals: can('a'), team: can('am') };
+    const spark = (arr) => {
+      const max = Math.max.apply(null, arr);
+      return arr.map((y, i) => (i * 200 / (arr.length - 1)).toFixed(1) + ',' + (34 - (y / max) * 30).toFixed(1)).join(' ');
+    };
+    const S = {
+      ready: { status: 'Ready', sdot: '#2bc48a', sfg: '#0a7a4d', ok: true, warn: false, bad: false },
+      setup: { status: 'Needs setup', sdot: '#ffc23d', sfg: '#b24700', ok: false, warn: true, bad: false },
+      reconnect: { status: 'Reconnect required', sdot: '#ffc23d', sfg: '#b24700', ok: false, warn: true, bad: false },
+      error: { status: 'Not starting', sdot: '#ff6b6b', sfg: '#c42b2b', ok: false, warn: false, bad: true }
+    };
+    const raw = [
+      { i: 'G', name: 'GitHub', meta: 'Remote · OAuth', color: '#ff8a1f', s: 'setup', action: 'Connect GitHub' },
+      { i: 'J', name: 'Jira', meta: 'Remote · OAuth', color: '#4c8dff', s: 'ready', d: [3, 5, 4, 8, 12, 9, 14, 11, 16, 13, 18, 15] },
+      { i: 'L', name: 'Linear', meta: 'Remote · Team', color: '#1bb5a2', s: 'ready', d: [8, 7, 9, 6, 10, 12, 11, 9, 13, 12, 10, 14] },
+      { i: 'P', name: 'Postgres analytics', meta: 'npm sandbox · Team', color: '#e03fcb', s: 'ready', d: [2, 2, 6, 14, 9, 4, 3, 12, 18, 7, 5, 9] },
+      { i: 'S', name: 'Sentry', meta: 'Remote · OAuth', color: '#2bc48a', s: 'reconnect', action: 'Reconnect Sentry' },
+      { i: 'S', name: 'Slack', meta: 'Remote · OAuth', color: '#ffc23d', s: 'ready', d: [5, 6, 5, 7, 6, 8, 7, 9, 8, 10, 9, 11] },
+      { i: 'N', name: 'Notion', meta: 'Remote · API key', color: '#4c8dff', s: 'setup', action: 'Add API key' },
+      { i: 'F', name: 'Filesystem', meta: 'npm sandbox', color: '#1bb5a2', s: 'error', action: 'See why' }
+    ];
+    const tiles = raw.map((t) => Object.assign({}, t, S[t.s], {
+      hasAction: !!t.action, hasSpark: !t.action, spark: t.d ? spark(t.d) : ''
+    }));
+    const quotas = [
+      { name: 'Tool calls', left: '3,760 left of 5,000', pct: '25%', color: '#ff8a1f' },
+      { name: 'Sandbox minutes', left: '96 left of 240', pct: '60%', color: '#4c8dff' },
+      { name: 'Concurrent calls', left: '2 of 8 in use', pct: '25%', color: '#1bb5a2' }
+    ];
+    const names = ['Dana W', 'Raj M', 'Jo O', 'Ana K', 'Li C', 'Sam P', 'Eve T', 'Max R', 'Ivy N', 'Ben S', 'Kai L', 'Zoe F', 'Tom H', 'Uma G'];
+    const people = names.map((n, k) => {
+      const on = [3, 8, 12].indexOf(k) < 0;
+      const ini = n.split(' ').map((x) => x[0]).join('');
+      return { n, i: ini, bg: on ? '#4c8dff' : '#ffffff', fg: '#171a3a', bd: on ? '0px solid transparent' : '1.5px dashed #848aa3' };
+    });
+    const clients = [
+      { i: 'C', name: 'Claude Desktop' }, { i: '>_', name: 'Claude Code' }, { i: 'Cu', name: 'Cursor' }, { i: 'VS', name: 'VS Code' }
+    ];
+    return {
+      role, v, tiles, quotas, people, clients,
+      hideTags: !tags,
+      ann: tags ? '1.5px dashed #b4b8cc' : '0px solid transparent',
+      pickRole: (r) => this.setState({ role: r })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Role tag</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<sc-if value="{{show}}" hint-placeholder-val="{{true}}">
+<span style="display: inline-flex; align-items: center; gap: 3px; font-family: Poppins, ui-sans-serif, system-ui, 'Segoe UI', sans-serif; color: #171a3a; white-space: nowrap; vertical-align: middle">
+<sc-for list="{{chips}}" as="c" hint-placeholder-count="2">
+<span title="Visible to {{c.full}}" style="display: inline-flex; align-items: center; justify-content: center; height: {{c.h}}; min-width: {{c.w}}; padding: 0 {{c.pad}}; box-sizing: border-box; border-radius: 5px; font-size: 10px; line-height: 1; font-weight: 600; letter-spacing: 0.04em; background: {{c.bg}}; color: {{c.fg}}">{{c.t}}</span>
+</sc-for>
+<sc-if value="{{hasNote}}" hint-placeholder-val="{{false}}">
+<span style="font-size: 11px; line-height: 14px; font-weight: 500; color: #5f6580; margin-left: 3px">{{note}}</span>
+</sc-if>
+</span>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"roles":{"editor":"text","default":"amu"},"note":{"editor":"text","default":""},"compact":{"editor":"boolean","default":false},"hideTag":{"editor":"boolean","default":false},"$preview":{"width":240,"height":24}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const meta = {
+      a: { full: 'Admin', t: 'Admin', s: 'AD', bg: '#ffebd6', fg: '#b24700' },
+      m: { full: 'Manager', t: 'Manager', s: 'MG', bg: '#e3edff', fg: '#1d5ad0' },
+      e: { full: 'Member', t: 'Member', s: 'ME', bg: '#dcf7eb', fg: '#0a7a4d' },
+      u: { full: 'Auditor', t: 'Auditor', s: 'AU', bg: '#fbe4f7', fg: '#a31b91' }
+    };
+    const roles = String(this.props.roles ?? 'amu');
+    const compact = !!this.props.compact;
+    const chips = ['a', 'm', 'e', 'u'].filter((k) => roles.indexOf(k) >= 0).map((k) => ({
+      full: meta[k].full,
+      t: compact ? meta[k].s : meta[k].t,
+      bg: meta[k].bg,
+      fg: meta[k].fg,
+      h: compact ? '16px' : '18px',
+      w: compact ? '20px' : '0px',
+      pad: compact ? '3px' : '6px'
+    }));
+    const note = this.props.note ?? '';
+    return { show: !this.props.hideTag, chips, note, hasNote: note.length > 0 };
+  }
+}
+</script>
+</body>
+</html>

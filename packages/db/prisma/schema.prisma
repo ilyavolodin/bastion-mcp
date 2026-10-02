@@ -1,0 +1,857 @@
+// Generated once from docs/tdd.md section 16.2, then maintained by hand. See docs/adr/0001-deviations.md.
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model OrgSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  @@map("org_settings")
+}
+
+model IdpConnection {
+  id                    String            @id @db.Uuid
+  name                  String
+  issuer                String
+  discoveryUrl          String            @map("discovery_url")
+  clientId              String            @map("client_id")
+  clientSecretId        String            @map("client_secret_id") @db.Uuid
+  scopes                String[]
+  claimMap              Json              @map("claim_map")
+  emailDomains          String[]          @default([]) @map("email_domains")
+  storeRefreshToken     Boolean           @default(false) @map("store_refresh_token")
+  apiScope              String?           @map("api_scope")
+  enterpriseManagedAuth Boolean           @default(false) @map("enterprise_managed_auth")
+  enabled               Boolean           @default(true)
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime?         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  users                 User[]            @relation("Users_IdpConnectionId")
+  roleMappingRules      RoleMappingRule[] @relation("RoleMappingRules_IdpConnectionId")
+  idpTokens             IdpToken[]        @relation("IdpTokens_IdpConnectionId")
+
+  @@map("idp_connections")
+}
+
+model User {
+  id                    String             @id @db.Uuid
+  email                 String             @unique @db.Citext
+  displayName           String             @map("display_name")
+  idpConnectionId       String?            @map("idp_connection_id") @db.Uuid
+  externalSubject       String?            @map("external_subject")
+  orgRole               String             @default("member") @map("org_role")
+  status                String             @default("active")
+  localPasswordHash     String?            @map("local_password_hash")
+  catalogPublishOrgWide Boolean            @default(false) @map("catalog_publish_org_wide")
+  lastLoginAt           DateTime?          @map("last_login_at") @db.Timestamptz(6)
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime?          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  idpConnection         IdpConnection?     @relation("Users_IdpConnectionId", fields: [idpConnectionId], references: [id])
+  teamMemberships       TeamMembership[]   @relation("TeamMemberships_UserId")
+  idpTokens             IdpToken[]         @relation("IdpTokens_UserId")
+  installationPrefs     InstallationPref[] @relation("InstallationPrefs_UserId")
+  installRequests       InstallRequest[]   @relation("InstallRequests_RequesterId")
+  notifications         Notification[]     @relation("Notifications_UserId")
+
+  @@unique([idpConnectionId, externalSubject])
+  @@map("users")
+}
+
+model Team {
+  id              String           @id @db.Uuid
+  slug            String           @unique
+  displayName     String           @map("display_name")
+  idpGroup        String?          @map("idp_group")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime?        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  teamMemberships TeamMembership[] @relation("TeamMemberships_TeamId")
+  serviceAccounts ServiceAccount[] @relation("ServiceAccounts_TeamId")
+  catalogEntries  CatalogEntry[]   @relation("CatalogEntries_OwnerTeamId")
+  limitRules      LimitRule[]      @relation("LimitRules_OwnerTeamId")
+  policyRules     PolicyRule[]     @relation("PolicyRules_OwnerTeamId")
+  marketplaces    Marketplace[]    @relation("Marketplaces_OwnerTeamId")
+
+  @@map("teams")
+}
+
+model TeamMembership {
+  teamId    String   @map("team_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      String
+  source    String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  team      Team     @relation("TeamMemberships_TeamId", fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation("TeamMemberships_UserId", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+  @@map("team_memberships")
+}
+
+model RoleMappingRule {
+  id              String         @id @db.Uuid
+  idpConnectionId String?        @map("idp_connection_id") @db.Uuid
+  groupPattern    String         @map("group_pattern")
+  mapsTo          Json           @map("maps_to")
+  priority        Int            @default(100)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  idpConnection   IdpConnection? @relation("RoleMappingRules_IdpConnectionId", fields: [idpConnectionId], references: [id])
+
+  @@map("role_mapping_rules")
+}
+
+model ServiceAccount {
+  id            String   @id @db.Uuid
+  teamId        String   @map("team_id") @db.Uuid
+  slug          String
+  displayName   String   @map("display_name")
+  status        String   @default("active")
+  oauthClientId String?  @unique @map("oauth_client_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  team          Team     @relation("ServiceAccounts_TeamId", fields: [teamId], references: [id])
+
+  @@unique([teamId, slug])
+  @@map("service_accounts")
+}
+
+model PersonalAccessToken {
+  id            String    @id @db.Uuid
+  principalType String    @map("principal_type")
+  principalId   String    @map("principal_id") @db.Uuid
+  name          String
+  tokenSha256   Bytes     @unique @map("token_sha256")
+  scopes        String[]
+  endpointId    String?   @map("endpoint_id") @db.Uuid
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(6)
+  lastUsedAt    DateTime? @map("last_used_at") @db.Timestamptz(6)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("personal_access_tokens")
+}
+
+model OidcModel {
+  id         String
+  type       String
+  payload    Json
+  grantId    String?   @map("grant_id")
+  userCode   String?   @map("user_code")
+  uid        String?
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+
+  @@id([type, id])
+  @@index([type, grantId])
+  @@index([type, uid])
+  @@map("oidc_models")
+}
+
+model SigningKey {
+  id              String   @id @db.Uuid
+  purpose         String
+  kid             String   @unique
+  alg             String
+  publicJwk       Json     @map("public_jwk")
+  privateSecretId String   @map("private_secret_id") @db.Uuid
+  activeFrom      DateTime @map("active_from") @db.Timestamptz(6)
+  retireAfter     DateTime @map("retire_after") @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("signing_keys")
+}
+
+model IdpToken {
+  userId          String        @map("user_id") @db.Uuid
+  idpConnectionId String        @map("idp_connection_id") @db.Uuid
+  secretId        String        @map("secret_id") @db.Uuid
+  expiresAt       DateTime?     @map("expires_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user            User          @relation("IdpTokens_UserId", fields: [userId], references: [id], onDelete: Cascade)
+  idpConnection   IdpConnection @relation("IdpTokens_IdpConnectionId", fields: [idpConnectionId], references: [id])
+
+  @@id([userId, idpConnectionId])
+  @@map("idp_tokens")
+}
+
+model Secret {
+  id         String    @id @db.Uuid
+  scope      String
+  ownerId    String?   @map("owner_id") @db.Uuid
+  name       String
+  ciphertext Bytes
+  iv         Bytes
+  authTag    Bytes     @map("auth_tag")
+  wrappedDek Bytes     @map("wrapped_dek")
+  kekRef     String    @map("kek_ref")
+  version    Int       @default(1)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([scope, ownerId, name])
+  @@map("secrets")
+}
+
+model CatalogEntry {
+  id                  String                   @id @db.Uuid
+  slug                String                   @unique
+  kind                String                   @default("mcp_server")
+  displayName         String                   @map("display_name")
+  description         String
+  iconBlob            Bytes?                   @map("icon_blob")
+  tags                String[]                 @default([])
+  ownerTeamId         String?                  @map("owner_team_id") @db.Uuid
+  visibility          Json
+  status              String                   @default("draft")
+  risk                String                   @default("medium")
+  source              Json
+  currentVersionId    String?                  @map("current_version_id") @db.Uuid
+  autoUpgrade         Boolean                  @default(true) @map("auto_upgrade")
+  userOverrides       String                   @default("cosmetic") @map("user_overrides")
+  onDrift             String                   @default("hideChanged") @map("on_drift")
+  search              Unsupported("tsvector")?
+  createdBy           String                   @map("created_by") @db.Uuid
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime?                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  ownerTeam           Team?                    @relation("CatalogEntries_OwnerTeamId", fields: [ownerTeamId], references: [id])
+  catalogVersions     CatalogVersion[]         @relation("CatalogVersions_EntryId")
+  installations       Installation[]           @relation("Installations_CatalogEntryId")
+  autoInstallPolicies AutoInstallPolicy[]      @relation("AutoInstallPolicies_CatalogEntryId")
+  marketplaceItems    MarketplaceItem[]        @relation("MarketplaceItems_CatalogEntryId")
+
+  @@index([search], type: Gin)
+  @@map("catalog_entries")
+}
+
+model CatalogVersion {
+  id                  String               @id @db.Uuid
+  entryId             String               @map("entry_id") @db.Uuid
+  label               String
+  serverSpec          Json                 @map("server_spec")
+  overrides           Json                 @default("{}")
+  guardProfileId      String?              @map("guard_profile_id") @db.Uuid
+  limits              Json                 @default("[]")
+  installForm         Json                 @map("install_form")
+  lockfile            Json?
+  referenceSnapshotId String?              @map("reference_snapshot_id") @db.Uuid
+  protocolEra         String?              @map("protocol_era")
+  testResult          Json?                @map("test_result")
+  status              String               @default("draft")
+  changelog           String?
+  createdBy           String               @map("created_by") @db.Uuid
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt         DateTime?            @map("published_at") @db.Timestamptz(6)
+  entry               CatalogEntry         @relation("CatalogVersions_EntryId", fields: [entryId], references: [id], onDelete: Cascade)
+  upstreamSnapshots   UpstreamSnapshot[]   @relation("UpstreamSnapshots_CatalogVersionId")
+  definitionPins      DefinitionPin[]      @relation("DefinitionPins_CatalogVersionId")
+  installations       Installation[]       @relation("Installations_CatalogVersionId")
+  catalogFiles        CatalogFile[]        @relation("CatalogFiles_CatalogVersionId")
+  executableApprovals ExecutableApproval[] @relation("ExecutableApprovals_CatalogVersionId")
+  marketplaceItems    MarketplaceItem[]    @relation("MarketplaceItems_PinnedVersionId")
+
+  @@unique([entryId, label])
+  @@map("catalog_versions")
+}
+
+model UpstreamSnapshot {
+  id                String          @id @db.Uuid
+  catalogVersionId  String?         @map("catalog_version_id") @db.Uuid
+  installationId    String?         @map("installation_id") @db.Uuid
+  configHash        Bytes           @map("config_hash")
+  tools             Json
+  prompts           Json
+  resources         Json
+  resourceTemplates Json            @map("resource_templates")
+  serverInfo        Json?           @map("server_info")
+  instructions      String?
+  capturedAt        DateTime        @default(now()) @map("captured_at") @db.Timestamptz(6)
+  catalogVersion    CatalogVersion? @relation("UpstreamSnapshots_CatalogVersionId", fields: [catalogVersionId], references: [id])
+
+  @@index([installationId, configHash, capturedAt(sort: Desc)])
+  @@map("upstream_snapshots")
+}
+
+model DefinitionPin {
+  id               String          @id @db.Uuid
+  catalogVersionId String?         @map("catalog_version_id") @db.Uuid
+  installationId   String?         @map("installation_id") @db.Uuid
+  itemKind         String          @map("item_kind")
+  itemKey          String          @map("item_key")
+  hash             Bytes
+  definition       Json
+  approvedBy       String?         @map("approved_by") @db.Uuid
+  approvedAt       DateTime?       @map("approved_at") @db.Timestamptz(6)
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  catalogVersion   CatalogVersion? @relation("DefinitionPins_CatalogVersionId", fields: [catalogVersionId], references: [id], onDelete: Cascade)
+
+  @@map("definition_pins")
+}
+
+model DriftReview {
+  id               String    @id @db.Uuid
+  catalogVersionId String?   @map("catalog_version_id") @db.Uuid
+  installationId   String?   @map("installation_id") @db.Uuid
+  itemKind         String    @map("item_kind")
+  itemKey          String    @map("item_key")
+  oldHash          Bytes?    @map("old_hash")
+  newHash          Bytes     @map("new_hash")
+  newDefinition    Json      @map("new_definition")
+  guardResults     Json      @map("guard_results")
+  status           String    @default("open")
+  decidedBy        String?   @map("decided_by") @db.Uuid
+  decidedAt        DateTime? @map("decided_at") @db.Timestamptz(6)
+  reason           String?
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("drift_reviews")
+}
+
+model GuardProfile {
+  id              String    @id @db.Uuid
+  name            String    @unique
+  isOrgDefault    Boolean   @default(false) @map("is_org_default")
+  latencyBudgetMs Int       @default(1500) @map("latency_budget_ms")
+  guards          Json
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("guard_profiles")
+}
+
+model LimitRule {
+  id           String    @id @db.Uuid
+  name         String
+  ownerTeamId  String?   @map("owner_team_id") @db.Uuid
+  subject      String
+  subjectMatch Json      @map("subject_match")
+  scope        Json      @default("{}")
+  kind         String
+  params       Json
+  metric       String    @default("calls")
+  cost         Json?
+  action       String    @default("reject")
+  enabled      Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  ownerTeam    Team?     @relation("LimitRules_OwnerTeamId", fields: [ownerTeamId], references: [id])
+
+  @@map("limit_rules")
+}
+
+model PolicyRule {
+  id          String    @id @db.Uuid
+  name        String
+  ownerTeamId String?   @map("owner_team_id") @db.Uuid
+  effect      String
+  who         Json
+  what        Json
+  when        Json      @default("{}")
+  enabled     Boolean   @default(true)
+  priority    Int       @default(100)
+  createdBy   String    @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  ownerTeam   Team?     @relation("PolicyRules_OwnerTeamId", fields: [ownerTeamId], references: [id])
+
+  @@map("policy_rules")
+}
+
+model CustomPolicy {
+  id        String    @id @db.Uuid
+  name      String    @unique
+  cedar     String
+  tests     Json
+  enabled   Boolean   @default(true)
+  createdBy String    @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("custom_policies")
+}
+
+model Installation {
+  id                   String                @id @db.Uuid
+  ownerType            String                @map("owner_type")
+  ownerId              String                @map("owner_id") @db.Uuid
+  catalogEntryId       String?               @map("catalog_entry_id") @db.Uuid
+  catalogVersionId     String?               @map("catalog_version_id") @db.Uuid
+  pinnedVersion        Boolean               @default(false) @map("pinned_version")
+  personalSpec         Json?                 @map("personal_spec")
+  slug                 String
+  toolPrefix           String                @map("tool_prefix")
+  displayName          String                @map("display_name")
+  enabled              Boolean               @default(true)
+  variables            Json                  @default("{}")
+  secretRefs           Json                  @default("{}") @map("secret_refs")
+  overrides            Json                  @default("{}")
+  origin               String
+  status               String                @default("ready")
+  statusDetail         Json?                 @map("status_detail")
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime?             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  catalogEntry         CatalogEntry?         @relation("Installations_CatalogEntryId", fields: [catalogEntryId], references: [id])
+  catalogVersion       CatalogVersion?       @relation("Installations_CatalogVersionId", fields: [catalogVersionId], references: [id])
+  installationPrefs    InstallationPref[]    @relation("InstallationPrefs_InstallationId")
+  instances            Instance[]            @relation("Instances_InstallationId")
+  upstreamTokens       UpstreamToken[]       @relation("UpstreamTokens_InstallationId")
+  egressAccessRequests EgressAccessRequest[] @relation("EgressAccessRequests_InstallationId")
+
+  @@unique([ownerType, ownerId, slug])
+  @@map("installations")
+}
+
+model InstallationPref {
+  installationId String       @map("installation_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  hidden         Boolean      @default(false)
+  installation   Installation @relation("InstallationPrefs_InstallationId", fields: [installationId], references: [id], onDelete: Cascade)
+  user           User         @relation("InstallationPrefs_UserId", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([installationId, userId])
+  @@map("installation_prefs")
+}
+
+model Endpoint {
+  id              String    @id @db.Uuid
+  ownerType       String    @map("owner_type")
+  ownerId         String    @map("owner_id") @db.Uuid
+  slug            String
+  displayName     String    @map("display_name")
+  installationIds String[]  @map("installation_ids") @db.Uuid
+  prefixMode      String    @default("always") @map("prefix_mode")
+  instructions    String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([ownerType, ownerId, slug])
+  @@map("endpoints")
+}
+
+model Instance {
+  id               String        @id @db.Uuid
+  installationId   String?       @map("installation_id") @db.Uuid
+  replica          Int           @default(0)
+  kind             String
+  driver           String?
+  sandboxRef       Json?         @map("sandbox_ref")
+  catalogVersionId String?       @map("catalog_version_id") @db.Uuid
+  state            String
+  startedAt        DateTime?     @map("started_at") @db.Timestamptz(6)
+  lastUsedAt       DateTime?     @map("last_used_at") @db.Timestamptz(6)
+  failureCount     Int           @default(0) @map("failure_count")
+  lastError        Json?         @map("last_error")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime?     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  installation     Installation? @relation("Instances_InstallationId", fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@unique([installationId, replica])
+  @@map("instances")
+}
+
+model UpstreamClient {
+  id             String   @id @db.Uuid
+  issuer         String   @unique
+  registration   String
+  clientId       String   @map("client_id")
+  clientSecretId String?  @map("client_secret_id") @db.Uuid
+  metadata       Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("upstream_clients")
+}
+
+model UpstreamToken {
+  id             String       @id @db.Uuid
+  principalType  String       @map("principal_type")
+  principalId    String       @map("principal_id") @db.Uuid
+  installationId String       @map("installation_id") @db.Uuid
+  issuer         String
+  secretId       String       @map("secret_id") @db.Uuid
+  scopes         String[]
+  expiresAt      DateTime?    @map("expires_at") @db.Timestamptz(6)
+  status         String       @default("valid")
+  updatedAt      DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
+  installation   Installation @relation("UpstreamTokens_InstallationId", fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@unique([principalType, principalId, installationId])
+  @@map("upstream_tokens")
+}
+
+model AutoInstallPolicy {
+  id                      String                   @id @db.Uuid
+  catalogEntryId          String                   @map("catalog_entry_id") @db.Uuid
+  target                  Json
+  mode                    String
+  scope                   String                   @default("user")
+  applyToExisting         Boolean                  @default(true) @map("apply_to_existing")
+  enabled                 Boolean                  @default(true)
+  createdBy               String                   @map("created_by") @db.Uuid
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  catalogEntry            CatalogEntry             @relation("AutoInstallPolicies_CatalogEntryId", fields: [catalogEntryId], references: [id], onDelete: Cascade)
+  autoInstallApplications AutoInstallApplication[] @relation("AutoInstallApplications_PolicyId")
+
+  @@map("auto_install_policies")
+}
+
+model AutoInstallApplication {
+  policyId       String            @map("policy_id") @db.Uuid
+  subjectType    String            @map("subject_type")
+  subjectId      String            @map("subject_id") @db.Uuid
+  installationId String?           @map("installation_id") @db.Uuid
+  result         String
+  appliedAt      DateTime          @default(now()) @map("applied_at") @db.Timestamptz(6)
+  policy         AutoInstallPolicy @relation("AutoInstallApplications_PolicyId", fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@id([policyId, subjectType, subjectId])
+  @@map("auto_install_applications")
+}
+
+model RegistrySource {
+  id               String           @id @db.Uuid
+  name             String
+  baseUrl          String           @unique @map("base_url")
+  authSecretId     String?          @map("auth_secret_id") @db.Uuid
+  trust            String           @default("community")
+  enabled          Boolean          @default(false)
+  syncIntervalS    Int              @default(3600) @map("sync_interval_s")
+  lastUpdatedSince DateTime?        @map("last_updated_since") @db.Timestamptz(6)
+  lastSync         Json?            @map("last_sync")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  registryServers  RegistryServer[] @relation("RegistryServers_SourceId")
+  registryPolicies RegistryPolicy[] @relation("RegistryPolicies_SourceId")
+
+  @@map("registry_sources")
+}
+
+model RegistryServer {
+  sourceId    String                   @map("source_id") @db.Uuid
+  name        String
+  version     String
+  serverJson  Json                     @map("server_json")
+  status      String
+  isLatest    Boolean                  @map("is_latest")
+  publishedAt DateTime?                @map("published_at") @db.Timestamptz(6)
+  search      Unsupported("tsvector")?
+  syncedAt    DateTime                 @default(now()) @map("synced_at") @db.Timestamptz(6)
+  source      RegistrySource           @relation("RegistryServers_SourceId", fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@id([sourceId, name, version])
+  @@index([search], type: Gin)
+  @@map("registry_servers")
+}
+
+model RegistryPolicy {
+  sourceId  String         @id @map("source_id") @db.Uuid
+  policy    Json
+  updatedAt DateTime       @default(now()) @map("updated_at") @db.Timestamptz(6)
+  source    RegistrySource @relation("RegistryPolicies_SourceId", fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@map("registry_policies")
+}
+
+model InstallRequest {
+  id            String    @id @db.Uuid
+  requesterId   String    @map("requester_id") @db.Uuid
+  sourceId      String    @map("source_id") @db.Uuid
+  serverName    String    @map("server_name")
+  version       String
+  justification String?
+  status        String    @default("open")
+  decidedBy     String?   @map("decided_by") @db.Uuid
+  decidedAt     DateTime? @map("decided_at") @db.Timestamptz(6)
+  reason        String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  requester     User      @relation("InstallRequests_RequesterId", fields: [requesterId], references: [id])
+
+  @@map("install_requests")
+}
+
+model CallLog {
+  id               String   @db.Uuid
+  ts               DateTime @db.Timestamptz(6)
+  durationMs       Int      @map("duration_ms")
+  principalType    String   @map("principal_type")
+  principalId      String   @map("principal_id") @db.Uuid
+  clientId         String?  @map("client_id")
+  clientName       String?  @map("client_name")
+  endpointId       String?  @map("endpoint_id") @db.Uuid
+  installationId   String?  @map("installation_id") @db.Uuid
+  catalogEntryId   String?  @map("catalog_entry_id") @db.Uuid
+  catalogVersionId String?  @map("catalog_version_id") @db.Uuid
+  method           String
+  itemName         String?  @map("item_name")
+  upstreamName     String?  @map("upstream_name")
+  outcome          String
+  errorCode        String?  @map("error_code")
+  jsonrpcCode      Int?     @map("jsonrpc_code")
+  eraDown          String   @map("era_down")
+  eraUp            String?  @map("era_up")
+  coldStart        Boolean  @default(false) @map("cold_start")
+  bytesIn          Int      @default(0) @map("bytes_in")
+  bytesOut         Int      @default(0) @map("bytes_out")
+  guardResults     Json?    @map("guard_results")
+  policyReasons    Json?    @map("policy_reasons")
+  argsPreview      Json?    @map("args_preview")
+  resultPreview    Json?    @map("result_preview")
+  traceId          String?  @map("trace_id")
+  spanId           String?  @map("span_id")
+
+  @@id([ts, id])
+  @@index([principalId, ts(sort: Desc)])
+  @@index([installationId, ts(sort: Desc)])
+  @@map("call_log")
+}
+
+model CallStatsMinute {
+  bucket         DateTime @db.Timestamptz(6)
+  installationId String   @default("00000000-0000-0000-0000-000000000000") @map("installation_id") @db.Uuid
+  catalogEntryId String?  @map("catalog_entry_id") @db.Uuid
+  itemName       String   @default("") @map("item_name")
+  outcome        String
+  count          Int
+  bytesOut       BigInt   @map("bytes_out")
+  latencyBuckets Int[]    @map("latency_buckets")
+
+  @@id([bucket, installationId, itemName, outcome])
+  @@map("call_stats_minute")
+}
+
+model EgressEvent {
+  id         String   @db.Uuid
+  ts         DateTime @db.Timestamptz(6)
+  instanceId String   @map("instance_id") @db.Uuid
+  host       String
+  port       Int
+  ip         String?  @db.Inet
+  decision   String
+  bytesUp    BigInt?  @map("bytes_up")
+  bytesDown  BigInt?  @map("bytes_down")
+  durationMs Int?     @map("duration_ms")
+
+  @@id([ts, id])
+  @@map("egress_events")
+}
+
+model AuditEvent {
+  seq        BigInt   @id @default(autoincrement())
+  id         String   @unique @db.Uuid
+  ts         DateTime @default(now()) @db.Timestamptz(6)
+  actorType  String   @map("actor_type")
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  targetType String   @map("target_type")
+  targetId   String?  @map("target_id")
+  diff       Json?
+  ip         String?  @db.Inet
+  userAgent  String?  @map("user_agent")
+  requestId  String?  @map("request_id")
+  prevHash   Bytes?   @map("prev_hash")
+  hash       Bytes
+
+  @@map("audit_events")
+}
+
+model Notification {
+  id        String    @id @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  kind      String
+  payload   Json
+  readAt    DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User      @relation("Notifications_UserId", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model ScimToken {
+  id          String    @id @db.Uuid
+  name        String
+  tokenSha256 Bytes     @unique @map("token_sha256")
+  createdBy   String    @map("created_by") @db.Uuid
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("scim_tokens")
+}
+
+model OauthClientPolicy {
+  clientId    String   @id @map("client_id")
+  preApproved Boolean  @default(false) @map("pre_approved")
+  blocked     Boolean  @default(false)
+  updatedBy   String?  @map("updated_by") @db.Uuid
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("oauth_client_policies")
+}
+
+model EgressAccessRequest {
+  id             String       @id @db.Uuid
+  installationId String       @map("installation_id") @db.Uuid
+  host           String
+  port           Int
+  requesterId    String       @map("requester_id") @db.Uuid
+  status         String       @default("open")
+  decidedBy      String?      @map("decided_by") @db.Uuid
+  decidedAt      DateTime?    @map("decided_at") @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  installation   Installation @relation("EgressAccessRequests_InstallationId", fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@map("egress_access_requests")
+}
+
+model Blob {
+  sha256       Bytes         @id
+  size         Int
+  content      Bytes
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  catalogFiles CatalogFile[] @relation("CatalogFiles_BlobSha256")
+
+  @@map("blobs")
+}
+
+model CatalogFile {
+  catalogVersionId String         @map("catalog_version_id") @db.Uuid
+  path             String
+  blobSha256       Bytes          @map("blob_sha256")
+  mode             String         @default("file")
+  classification   String
+  catalogVersion   CatalogVersion @relation("CatalogFiles_CatalogVersionId", fields: [catalogVersionId], references: [id], onDelete: Cascade)
+  blobSha256Rel    Blob           @relation("CatalogFiles_BlobSha256", fields: [blobSha256], references: [sha256])
+
+  @@id([catalogVersionId, path])
+  @@map("catalog_files")
+}
+
+model ExecutableApproval {
+  catalogVersionId   String         @id @map("catalog_version_id") @db.Uuid
+  approvedBy         String         @map("approved_by") @db.Uuid
+  reviewedDiffSha256 Bytes          @map("reviewed_diff_sha256")
+  note               String?
+  approvedAt         DateTime       @default(now()) @map("approved_at") @db.Timestamptz(6)
+  catalogVersion     CatalogVersion @relation("ExecutableApprovals_CatalogVersionId", fields: [catalogVersionId], references: [id], onDelete: Cascade)
+
+  @@map("executable_approvals")
+}
+
+model PluginSource {
+  id           String   @id @db.Uuid
+  name         String
+  gitUrl       String   @map("git_url")
+  ref          String   @default("main")
+  path         String?
+  authSecretId String?  @map("auth_secret_id") @db.Uuid
+  tracked      Boolean  @default(true)
+  lastCommit   String?  @map("last_commit")
+  lastSync     Json?    @map("last_sync")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("plugin_sources")
+}
+
+model Marketplace {
+  id                  String               @id @db.Uuid
+  slug                String               @unique
+  displayName         String               @map("display_name")
+  description         String?
+  ownerTeamId         String?              @map("owner_team_id") @db.Uuid
+  audience            Json
+  desktopInstallation String               @default("available") @map("desktop_installation")
+  mirror              Json?
+  mirrorStatus        Json?                @map("mirror_status")
+  promotedRelease     Int?                 @map("promoted_release")
+  createdBy           String               @map("created_by") @db.Uuid
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime?            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  ownerTeam           Team?                @relation("Marketplaces_OwnerTeamId", fields: [ownerTeamId], references: [id])
+  marketplaceItems    MarketplaceItem[]    @relation("MarketplaceItems_MarketplaceId")
+  marketplaceReleases MarketplaceRelease[] @relation("MarketplaceReleases_MarketplaceId")
+
+  @@map("marketplaces")
+}
+
+model MarketplaceItem {
+  marketplaceId   String          @map("marketplace_id") @db.Uuid
+  catalogEntryId  String          @map("catalog_entry_id") @db.Uuid
+  policy          String
+  pinnedVersionId String?         @map("pinned_version_id") @db.Uuid
+  position        Int
+  marketplace     Marketplace     @relation("MarketplaceItems_MarketplaceId", fields: [marketplaceId], references: [id], onDelete: Cascade)
+  catalogEntry    CatalogEntry    @relation("MarketplaceItems_CatalogEntryId", fields: [catalogEntryId], references: [id])
+  pinnedVersion   CatalogVersion? @relation("MarketplaceItems_PinnedVersionId", fields: [pinnedVersionId], references: [id])
+
+  @@id([marketplaceId, catalogEntryId])
+  @@map("marketplace_items")
+}
+
+model MarketplaceRelease {
+  marketplaceId        String      @map("marketplace_id") @db.Uuid
+  seq                  Int
+  items                Json
+  gitCommit            String      @map("git_commit")
+  claudeManifestSha256 Bytes       @map("claude_manifest_sha256")
+  agentsManifestSha256 Bytes       @map("agents_manifest_sha256")
+  archives             Json
+  createdBy            String?     @map("created_by") @db.Uuid
+  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  marketplace          Marketplace @relation("MarketplaceReleases_MarketplaceId", fields: [marketplaceId], references: [id], onDelete: Cascade)
+
+  @@id([marketplaceId, seq])
+  @@map("marketplace_releases")
+}
+
+model DistributionEvent {
+  id            String   @db.Uuid
+  ts            DateTime @db.Timestamptz(6)
+  principalId   String?  @map("principal_id") @db.Uuid
+  marketplaceId String   @map("marketplace_id") @db.Uuid
+  releaseSeq    Int?     @map("release_seq")
+  channel       String
+  action        String
+  userAgent     String?  @map("user_agent")
+
+  @@id([ts, id])
+  @@map("distribution_events")
+}
+
+model ConfigVersion {
+  scope   String
+  scopeId String @default("00000000-0000-0000-0000-000000000000") @map("scope_id") @db.Uuid
+  version BigInt @default(0)
+
+  @@id([scope, scopeId])
+  @@map("config_versions")
+}
+
+model CallStatsHour {
+  bucket         DateTime @db.Timestamptz(6)
+  installationId String   @default("00000000-0000-0000-0000-000000000000") @map("installation_id") @db.Uuid
+  catalogEntryId String?  @map("catalog_entry_id") @db.Uuid
+  itemName       String   @default("") @map("item_name")
+  outcome        String
+  count          Int
+  bytesOut       BigInt   @map("bytes_out")
+  latencyBuckets Int[]    @map("latency_buckets")
+
+  @@id([bucket, installationId, itemName, outcome])
+  @@map("call_stats_hour")
+}
+
+model CallStatsDay {
+  bucket         DateTime @db.Timestamptz(6)
+  installationId String   @default("00000000-0000-0000-0000-000000000000") @map("installation_id") @db.Uuid
+  catalogEntryId String?  @map("catalog_entry_id") @db.Uuid
+  itemName       String   @default("") @map("item_name")
+  outcome        String
+  count          Int
+  bytesOut       BigInt   @map("bytes_out")
+  latencyBuckets Int[]    @map("latency_buckets")
+
+  @@id([bucket, installationId, itemName, outcome])
+  @@map("call_stats_day")
+}

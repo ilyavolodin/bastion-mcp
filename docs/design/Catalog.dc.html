@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bastion · Catalog editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}a{color:#1d5ad0}a:hover{color:#171a3a}</style>
+</helmet>
+<div style="min-height: 100vh; background: #f4f5fa; font-family: Poppins, ui-sans-serif, system-ui, 'Segoe UI', sans-serif; color: #171a3a; display: flex; flex-direction: column">
+<dc-import name="RoleBar" current="{{role}}" on-pick="{{pickRole}}" hint-size="100%,57px"></dc-import>
+<div style="display: flex; flex-grow: 1; align-items: stretch">
+<dc-import name="Sidebar" role="{{role}}" active="catalog" hide-tags="{{hideTags}}" hint-size="248px,1220px"></dc-import>
+<main style="flex-grow: 1; min-width: 0; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box">
+
+<sc-if value="{{v.page}}" hint-placeholder-val="{{true}}">
+<header style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+<div style="flex-grow: 1">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5f6580"><a href="Store.dc.html" style="text-decoration: none; color: #5f6580">Catalog</a><span>/</span><span>New entry</span></div>
+<div style="display: flex; align-items: center; gap: 12px; margin-top: 4px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.01em">Postgres analytics</h1>
+<dc-import name="RoleTag" roles="am" note="Managers: own and team entries" hide-tag="{{hideTags}}" hint-size="280px,18px"></dc-import>
+</div>
+</div>
+<button type="button" style="height: 44px; padding: 0 16px; border: 1px solid #848aa3; border-radius: 10px; background: #ffffff; font-family: inherit; font-size: 14px; font-weight: 500; color: #171a3a; cursor: pointer">Save draft</button>
+</header>
+
+<nav aria-label="Steps" style="display: flex; align-items: center; gap: 0; padding: 14px 20px; background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; overflow: hidden">
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="8">
+<span style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0">
+<span style="width: 28px; height: 28px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; background: {{s.bg}}; color: {{s.fg}}; box-shadow: {{s.sh}}">{{s.mark}}</span>
+<span style="font-size: 13px; line-height: 18px; font-weight: {{s.fw}}; color: {{s.tc}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{s.n}}</span>
+<span style="flex-grow: 1; height: 2px; min-width: 8px; margin: 0 8px; background: {{s.line}}"></span>
+</span>
+</sc-for>
+</nav>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 24px; align-items: start">
+<div style="display: flex; flex-direction: column; gap: 24px; min-width: 0">
+
+<section aria-label="Test start" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 10px">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Test run</h2>
+<span style="display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 9999px; background: #dcf7eb; color: #0a7a4d; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Passed as you</span>
+<button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #848aa3; border-radius: 10px; background: #ffffff; font-family: inherit; font-size: 13px; font-weight: 500; color: #171a3a; cursor: pointer">Run again</button>
+</div>
+<div style="display: flex; height: 40px; gap: 3px">
+<sc-for list="{{phases}}" as="p" hint-placeholder-count="5">
+<span style="flex: {{p.f}}; min-width: 56px; border-radius: 6px; background: {{p.c}}; display: flex; flex-direction: column; justify-content: center; padding: 0 8px; overflow: hidden">
+<span style="font-size: 11px; line-height: 14px; font-weight: 600; white-space: nowrap">{{p.n}}</span>
+<span style="font-size: 11px; line-height: 14px; white-space: nowrap">{{p.d}}</span>
+</span>
+</sc-for>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{found}}" as="f" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 12px; background: #f4f5fa">
+<span style="font-size: 24px; line-height: 32px; font-weight: 700; font-variant-numeric: tabular-nums">{{f.n}}</span>
+<span style="font-size: 12px; line-height: 16px; color: #5f6580">{{f.l}}</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section aria-label="Guard scan" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 4px">
+<h2 style="margin: 0 0 8px; font-size: 17px; line-height: 24px; font-weight: 600">Tool description scan</h2>
+<sc-for list="{{scan}}" as="s" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid #e8eaf1">
+<span style="width: 24px; height: 24px; border-radius: 9999px; background: {{s.bg}}; color: {{s.fg}}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">
+<sc-if value="{{s.ok}}" hint-placeholder-val="{{true}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></sc-if>
+<sc-if value="{{s.warn}}" hint-placeholder-val="{{false}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 6v7M12 17h.01"></path></svg></sc-if>
+</span>
+<span style="font-size: 13px; font-weight: 600; font-family: ui-monospace, 'SF Mono', Menlo, monospace; min-width: 180px">{{s.tool}}</span>
+<span style="font-size: 13px; color: #5f6580; flex-grow: 1">{{s.msg}}</span>
+</div>
+</sc-for>
+</section>
+
+<section aria-label="Server output" style="background: #171a3a; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; color: #f4f4f6">
+<span style="font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #a7a9b8">stderr</span>
+<pre style="margin: 0; font-size: 12px; line-height: 20px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; white-space: pre-wrap">npx -y @acme/pg-mcp@3.2.0
+added 41 packages in 2.3s
+pg-mcp listening on stdio · protocol 2025-11-25
+<span style="color: #ffc84f">warn: DATABASE_URL uses a read-write role; consider analytics_ro</span></pre>
+</section>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 24px; min-width: 0">
+<section aria-label="Publish" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 17px; line-height: 24px; font-weight: 600">Who gets it</h2>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<sc-if value="{{v.orgWide}}" hint-placeholder-val="{{true}}">
+<label style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid #e8eaf1; outline: {{ann}}; outline-offset: 3px">
+<input type="radio" name="vis" style="width: 18px; height: 18px; accent-color: #b24700">
+<span style="font-size: 14px; font-weight: 500; flex-grow: 1">Everyone in Acme</span>
+<dc-import name="RoleTag" roles="am" compact="{{yes}}" note="MG needs publishOrgWide" hide-tag="{{hideTags}}" hint-size="200px,16px"></dc-import>
+</label>
+</sc-if>
+<label style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1.5px solid #b24700; background: #ffebd6">
+<input type="radio" name="vis" checked style="width: 18px; height: 18px; accent-color: #b24700">
+<span style="font-size: 14px; font-weight: 500; flex-grow: 1">Selected teams</span>
+</label>
+<div style="display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0 0 4px">
+<span style="height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 9999px; background: #f4f5fa; font-size: 12px; font-weight: 500">Data platform</span>
+<span style="height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 9999px; background: #f4f5fa; font-size: 12px; font-weight: 500">Analytics</span>
+<span style="height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 9999px; border: 1px dashed #848aa3; font-size: 12px; font-weight: 500; color: #5f6580">+ Add team</span>
+</div>
+</div>
+<sc-if value="{{v.risk}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 4px; border-radius: 10px; outline: {{ann}}; outline-offset: 3px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 13px; font-weight: 600; flex-grow: 1">Risk</span><dc-import name="RoleTag" roles="a" hide-tag="{{hideTags}}" hint-size="60px,18px"></dc-import></div>
+<div style="display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: #f4f5fa">
+<span style="flex: 1; display: inline-flex; align-items: center; justify-content: center; height: 36px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #5f6580">Low</span>
+<span style="flex: 1; display: inline-flex; align-items: center; justify-content: center; height: 36px; border-radius: 6px; font-size: 13px; font-weight: 600; background: #ffffff; box-shadow: 0 0 0 1.5px #b24700">Medium</span>
+<span style="flex: 1; display: inline-flex; align-items: center; justify-content: center; height: 36px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #5f6580">High</span>
+</div>
+</div>
+</sc-if>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 14px">
+<span style="width: 38px; height: 22px; border-radius: 9999px; background: #ff8a1f; position: relative; display: inline-block; flex-shrink: 0"><span style="position: absolute; top: 3px; left: 19px; width: 16px; height: 16px; border-radius: 9999px; background: #ffffff"></span></span>
+Installs follow new versions</label>
+<button type="button" style="height: 48px; border: 0; border-radius: 10px; background: linear-gradient(135deg, #ffc23d 0%, #ff8a1f 55%, #ff7a1a 100%); box-shadow: 0 8px 20px -6px #ff7a1a8c; font-family: inherit; font-size: 15px; font-weight: 600; color: #171a3a; cursor: pointer">Publish v3.2.0</button>
+</section>
+
+<section aria-label="Auto-install preview" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 8px">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Auto-install</h2>
+<dc-import name="RoleTag" roles="am" note="Managers: own teams" hide-tag="{{hideTags}}" hint-size="200px,18px"></dc-import>
+</div>
+<div style="display: flex; gap: 6px; flex-wrap: wrap">
+<span style="height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 9999px; background: #e3edff; color: #1d5ad0; font-size: 12px; font-weight: 600">Team · Data platform</span>
+<span style="height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 9999px; background: #e3edff; color: #1d5ad0; font-size: 12px; font-weight: 600">Team · Analytics</span>
+<span style="height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 9999px; background: #f4f5fa; font-size: 12px; font-weight: 600">New and existing people</span>
+</div>
+<div style="display: flex; align-items: center">
+<sc-for list="{{faces}}" as="f" hint-placeholder-count="12"><span style="width: 28px; height: 28px; margin-left: -6px; border-radius: 9999px; border: 2px solid #ffffff; background: {{f.c}}; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600">{{f.i}}</span></sc-for>
+<span style="margin-left: 8px; font-size: 12px; color: #5f6580">+ 52</span>
+</div>
+<p style="margin: 0; font-size: 14px; line-height: 22px"><strong style="font-weight: 600">64 people in 2 teams</strong> get this when you publish. None need to sign in; it uses a shared team secret.</p>
+</section>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{v.denied}}" hint-placeholder-val="{{false}}">
+<section style="margin: 80px auto; max-width: 480px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center">
+<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#5f6580" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+<h1 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600">Not in this role’s navigation</h1>
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #5f6580">Members and Auditors find published servers in the Store.</p>
+<a href="Store.dc.html" style="font-size: 14px; font-weight: 500; text-decoration: none">Open the Store</a>
+</section>
+</sc-if>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"role":{"editor":"enum","options":["all","admin","manager","member","auditor"],"default":"all"},"roleTags":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":1280}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const st = this.state || {};
+    const role = st.role || this.props.role || 'all';
+    const code = { admin: 'a', manager: 'm', member: 'e', auditor: 'u' }[role];
+    const can = (r) => role === 'all' || r.indexOf(code) >= 0;
+    const tags = this.props.roleTags ?? true;
+    const v = { page: can('am'), denied: !can('am'), orgWide: can('am'), risk: can('a') };
+    const names = ['Source', 'Configuration', 'Authentication', 'Network', 'Overrides', 'Security and limits', 'Test', 'Publish'];
+    const steps = names.map((n, k) => {
+      const done = k < 6, cur = k === 6;
+      return {
+        n, mark: done ? '✓' : String(k + 1),
+        bg: done ? '#dcf7eb' : (cur ? 'linear-gradient(135deg, #ffc23d 0%, #ff8a1f 55%, #ff7a1a 100%)' : '#f4f5fa'),
+        fg: done ? '#0a7a4d' : (cur ? '#171a3a' : '#5f6580'),
+        sh: cur ? '0 8px 20px -6px #ff7a1a8c' : 'none',
+        fw: cur ? 600 : 500, tc: cur || done ? '#171a3a' : '#5f6580',
+        line: k === names.length - 1 ? 'transparent' : (done ? '#2bc48a' : '#e8eaf1')
+      };
+    });
+    const phases = [
+      { n: 'claim', d: '120 ms', f: 1.2, c: '#e3edff' }, { n: 'bind', d: '80 ms', f: 1, c: '#dcf7eb' },
+      { n: 'install', d: '2.3 s', f: 6, c: '#fbe4f7' }, { n: 'spawn', d: '900 ms', f: 3, c: '#ffe4e4' }, { n: 'connect', d: '310 ms', f: 1.6, c: '#ffebd6' }
+    ];
+    const found = [{ n: 7, l: 'tools' }, { n: 2, l: 'prompts' }, { n: 1, l: 'resource template' }, { n: 0, l: 'resources' }];
+    const scan = [
+      { tool: 'pg_run_query', msg: 'Clean', s: 'ok' }, { tool: 'pg_list_tables', msg: 'Clean', s: 'ok' },
+      { tool: 'pg_write_rows', msg: 'Destructive and not read-only; hidden by your overrides', s: 'warn' },
+      { tool: 'pg_explain', msg: 'Clean', s: 'ok' }, { tool: 'weekly_metrics', msg: 'Clean', s: 'ok' }
+    ].map((s) => Object.assign({}, s, {
+      ok: s.s === 'ok', warn: s.s === 'warn',
+      bg: s.s === 'ok' ? '#dcf7eb' : '#ffebd6', fg: s.s === 'ok' ? '#0a7a4d' : '#b24700'
+    }));
+    const pal = ['#ff8a1f', '#4c8dff', '#1bb5a2', '#e03fcb', '#2bc48a', '#ffc23d'];
+    const faces = ['RM', 'JO', 'AK', 'LC', 'SP', 'ET', 'MR', 'IN', 'BS', 'KL', 'ZF', 'TH'].map((i, k) => ({ i, c: pal[k % 6] }));
+    return {
+      role, v, steps, phases, found, scan, faces, yes: true,
+      hideTags: !tags,
+      ann: tags ? '1.5px dashed #b4b8cc' : '0px solid transparent',
+      pickRole: (r) => this.setState({ role: r })
+    };
+  }
+}
+</script>
+</body>
+</html>

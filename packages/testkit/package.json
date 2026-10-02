@@ -1,0 +1,19 @@
+{
+  "name": "@bastion-mcp/testkit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests"
+  },
+  "dependencies": {
+    "@bastion-mcp/core": "workspace:*",
+    "@testcontainers/postgresql": "11.7.1",
+    "testcontainers": "11.7.1"
+  }
+}

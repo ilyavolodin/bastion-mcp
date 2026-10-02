@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bastion · System status</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}a{color:#1d5ad0}a:hover{color:#171a3a}</style>
+</helmet>
+<div style="min-height: 100vh; background: #f4f5fa; font-family: Poppins, ui-sans-serif, system-ui, 'Segoe UI', sans-serif; color: #171a3a; display: flex; flex-direction: column">
+<dc-import name="RoleBar" current="{{role}}" on-pick="{{pickRole}}" hint-size="100%,57px"></dc-import>
+<div style="display: flex; flex-grow: 1; align-items: stretch">
+<dc-import name="Sidebar" role="{{role}}" active="settings" hide-tags="{{hideTags}}" hint-size="248px,1040px"></dc-import>
+<main style="flex-grow: 1; min-width: 0; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box">
+
+<sc-if value="{{v.page}}" hint-placeholder-val="{{true}}">
+<header style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.01em">Settings</h1>
+<dc-import name="RoleTag" roles="a" hide-tag="{{hideTags}}" hint-size="60px,18px"></dc-import>
+</header>
+
+<div style="display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; align-items: start">
+<nav aria-label="Settings sections" style="display: flex; flex-direction: column; gap: 2px; background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 10px">
+<sc-for list="{{sections}}" as="s" hint-placeholder-count="8">
+<span style="display: flex; align-items: center; height: 44px; padding: 0 12px; border-radius: 10px; font-size: 14px; font-weight: {{s.fw}}; background: {{s.bg}}; color: {{s.fg}}">{{s.n}}</span>
+</sc-for>
+</nav>
+
+<div style="display: flex; flex-direction: column; gap: 24px; min-width: 0">
+<section aria-label="Replicas" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 12px">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Replicas</h2>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5f6580"><span style="width: 10px; height: 10px; border-radius: 3px; background: #ff8a1f"></span>worker</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5f6580"><span style="width: 10px; height: 10px; border-radius: 3px; background: #4c8dff"></span>ui</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{replicas}}" as="r" hint-placeholder-count="8">
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: #f4f5fa; position: relative; overflow: hidden">
+<span style="position: absolute; left: 0; top: 0; right: 0; height: 4px; background: {{r.c}}"></span>
+<div style="display: flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; border-radius: 9999px; background: {{r.dot}}"></span><span style="font-size: 13px; font-weight: 600">{{r.n}}</span></div>
+<span style="font-size: 11px; line-height: 14px; color: #5f6580">{{r.ver}}</span>
+<span style="height: 6px; border-radius: 3px; background: #e8eaf1; overflow: hidden"><span style="display: block; height: 100%; width: {{r.up}}; background: {{r.c}}"></span></span>
+<span style="font-size: 11px; line-height: 14px; color: #5f6580">up {{r.upText}}</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+<section aria-label="Queues" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 17px; line-height: 24px; font-weight: 600">Queues</h2>
+<sc-for list="{{queues}}" as="q" hint-placeholder-count="4">
+<div style="display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; align-items: center">
+<span style="font-size: 13px; font-weight: 500">{{q.n}}</span>
+<span style="height: 12px; border-radius: 6px; background: #f4f5fa; overflow: hidden"><span style="display: block; height: 100%; width: {{q.w}}; border-radius: 6px; background: {{q.c}}"></span></span>
+</div>
+</sc-for>
+</section>
+
+<section aria-label="Checks" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 4px">
+<h2 style="margin: 0 0 8px; font-size: 17px; line-height: 24px; font-weight: 600">Dependencies</h2>
+<sc-for list="{{checks}}" as="c" hint-placeholder-count="6">
+<div style="display: flex; align-items: center; gap: 10px; min-height: 40px; border-bottom: 1px solid #e8eaf1">
+<span style="width: 20px; height: 20px; border-radius: 9999px; background: {{c.bg}}; color: {{c.fg}}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">
+<sc-if value="{{c.ok}}" hint-placeholder-val="{{true}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></sc-if>
+<sc-if value="{{c.warn}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 6v7M12 17h.01"></path></svg></sc-if>
+</span>
+<span style="font-size: 13px; font-weight: 500; flex-grow: 1">{{c.n}}</span>
+<span style="font-size: 12px; color: #5f6580">{{c.d}}</span>
+</div>
+</sc-for>
+</section>
+</div>
+
+<section aria-label="Registry sync" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Registry sync</h2>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5f6580"><span style="width: 10px; height: 10px; border-radius: 9999px; background: #2bc48a"></span>Synced</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5f6580"><span style="width: 10px; height: 10px; border-radius: 2px; background: #ff6b6b"></span>Failed</span>
+</div>
+<sc-for list="{{sources}}" as="src" hint-placeholder-count="2">
+<div style="display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 12px; align-items: center">
+<span style="font-size: 13px; font-weight: 500">{{src.n}}</span>
+<div style="display: flex; align-items: center; gap: 4px; height: 20px">
+<sc-for list="{{src.runs}}" as="r" hint-placeholder-count="28"><span title="{{r.t}}" style="flex: 1; height: {{r.h}}; border-radius: {{r.rad}}; background: {{r.c}}"></span></sc-for>
+</div>
+</div>
+</sc-for>
+<div style="display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 12px; font-size: 12px; color: #5f6580"><span></span><span style="display: flex; justify-content: space-between"><span>7 days ago</span><span>Today</span></span></div>
+</section>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{v.denied}}" hint-placeholder-val="{{false}}">
+<section style="margin: 80px auto; max-width: 480px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center">
+<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#5f6580" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+<h1 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600">Only Admins see Settings</h1>
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #5f6580">Theme and personal tokens live in the user menu for everyone.</p>
+<a href="Main.dc.html" style="font-size: 14px; font-weight: 500; text-decoration: none">Back to Home</a>
+</section>
+</sc-if>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"role":{"editor":"enum","options":["all","admin","manager","member","auditor"],"default":"all"},"roleTags":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const st = this.state || {};
+    const role = st.role || this.props.role || 'all';
+    const code = { admin: 'a', manager: 'm', member: 'e', auditor: 'u' }[role];
+    const can = (r) => role === 'all' || r.indexOf(code) >= 0;
+    const tags = this.props.roleTags ?? true;
+    const v = { page: can('a'), denied: !can('a') };
+    const names = ['Organization', 'Identity provider', 'Encryption keys', 'Sandboxes', 'Model guards', 'Limits', 'Retention', 'System status'];
+    const sections = names.map((n, k) => {
+      const on = k === names.length - 1;
+      return { n, fw: on ? 600 : 500, bg: on ? 'linear-gradient(135deg, #ffc23d 0%, #ff8a1f 55%, #ff7a1a 100%)' : 'transparent', fg: on ? '#171a3a' : '#171a3a' };
+    });
+    const replicas = [
+      ['worker-1', 'w', 96, '6 d'], ['worker-2', 'w', 96, '6 d'], ['worker-3', 'w', 80, '5 d'], ['worker-4', 'w', 40, '2 d'],
+      ['worker-5', 'w', 12, '14 h'], ['worker-6', 'w', 3, '18 min', true], ['ui-1', 'u', 96, '6 d'], ['ui-2', 'u', 96, '6 d']
+    ].map((r) => ({
+      n: r[0], c: r[1] === 'w' ? '#ff8a1f' : '#4c8dff', up: r[2] + '%', upText: r[3],
+      ver: r[4] ? '1.4.1 · rolling out' : '1.4.0', dot: r[4] ? '#ffc23d' : '#2bc48a'
+    }));
+    const queues = [['Upstream reconnects', 8, '#2bc48a'], ['Sandbox starts', 34, '#4c8dff'], ['Guard model calls', 62, '#ffc23d'], ['Audit export', 4, '#2bc48a']]
+      .map((q) => ({ n: q[0], w: q[1] + '%', c: q[2] }));
+    const OK = { ok: true, warn: false, bg: '#dcf7eb', fg: '#0a7a4d' };
+    const W = { ok: false, warn: true, bg: '#ffebd6', fg: '#b24700' };
+    const checks = [
+      Object.assign({ n: 'Sandbox driver', d: 'Kubernetes · gVisor' }, OK),
+      Object.assign({ n: 'Key management', d: 'Cloud KMS · rotated 12 days ago' }, OK),
+      Object.assign({ n: 'Postgres', d: 'Primary + 1 replica' }, OK),
+      Object.assign({ n: 'Redis', d: '3 nodes' }, OK),
+      Object.assign({ n: 'Identity provider', d: 'Okta · last group sync 4 min ago' }, OK),
+      Object.assign({ n: 'Trace export', d: 'Collector slow to respond' }, W)
+    ];
+    const mk = (fails) => Array.from({ length: 28 }, (_, i) => {
+      const bad = fails.indexOf(i) >= 0;
+      return { t: bad ? 'Failed' : 'Synced', c: bad ? '#ff6b6b' : '#2bc48a', h: bad ? '18px' : '10px', rad: bad ? '3px' : '9999px' };
+    });
+    const sources = [
+      { n: 'Official MCP Registry', runs: mk([9]) },
+      { n: 'Acme internal registry', runs: mk([20, 21]) }
+    ];
+    return {
+      role, v, sections, replicas, queues, checks, sources,
+      hideTags: !tags,
+      ann: tags ? '1.5px dashed #b4b8cc' : '0px solid transparent',
+      pickRole: (r) => this.setState({ role: r })
+    };
+  }
+}
+</script>
+</body>
+</html>

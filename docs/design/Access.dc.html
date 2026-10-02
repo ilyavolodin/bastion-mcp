@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bastion · Access</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}a{color:#1d5ad0}a:hover{color:#171a3a}</style>
+</helmet>
+<div style="min-height: 100vh; background: #f4f5fa; font-family: Poppins, ui-sans-serif, system-ui, 'Segoe UI', sans-serif; color: #171a3a; display: flex; flex-direction: column">
+<dc-import name="RoleBar" current="{{role}}" on-pick="{{pickRole}}" hint-size="100%,57px"></dc-import>
+<div style="display: flex; flex-grow: 1; align-items: stretch">
+<dc-import name="Sidebar" role="{{role}}" active="access" hide-tags="{{hideTags}}" hint-size="248px,1140px"></dc-import>
+<main style="flex-grow: 1; min-width: 0; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box">
+
+<sc-if value="{{v.page}}" hint-placeholder-val="{{true}}">
+<header style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+<div style="flex-grow: 1">
+<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.01em">Access</h1>
+<dc-import name="RoleTag" roles="am" note="Managers: the teams they manage" hide-tag="{{hideTags}}" hint-size="300px,18px"></dc-import>
+</div>
+<p style="margin: 2px 0 0; font-size: 14px; line-height: 22px; color: #5f6580">People, teams and the rules that decide which tools they can see and call.</p>
+</div>
+<sc-if value="{{v.cedar}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; align-items: center; gap: 10px; padding: 4px; border-radius: 12px; outline: {{ann}}; outline-offset: 2px">
+<dc-import name="RoleTag" roles="a" hide-tag="{{hideTags}}" hint-size="60px,18px"></dc-import>
+<button type="button" style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid #848aa3; background: #ffffff; font-family: inherit; font-size: 14px; font-weight: 500; color: #171a3a; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"></path></svg>Custom Cedar policies</button>
+</div>
+</sc-if>
+</header>
+
+<nav aria-label="Access sections" style="display: flex; gap: 4px; border-bottom: 1px solid #e8eaf1; flex-wrap: wrap">
+<span style="display: inline-flex; align-items: center; height: 44px; padding: 0 14px; font-size: 14px; font-weight: 500; color: #5f6580">People</span>
+<span style="display: inline-flex; align-items: center; height: 44px; padding: 0 14px; font-size: 14px; font-weight: 500; color: #5f6580">Teams</span>
+<sc-if value="{{v.adminOnly}}" hint-placeholder-val="{{true}}"><span style="display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 14px; font-size: 14px; font-weight: 500; color: #5f6580">IdP group mapping <dc-import name="RoleTag" roles="a" compact="{{yes}}" hide-tag="{{hideTags}}" hint-size="22px,16px"></dc-import></span></sc-if>
+<span style="display: inline-flex; align-items: center; height: 44px; padding: 0 14px; font-size: 14px; font-weight: 500; color: #5f6580">Service accounts</span>
+<sc-if value="{{v.adminOnly}}" hint-placeholder-val="{{true}}"><span style="display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 14px; font-size: 14px; font-weight: 500; color: #5f6580">OAuth clients <dc-import name="RoleTag" roles="a" compact="{{yes}}" hide-tag="{{hideTags}}" hint-size="22px,16px"></dc-import></span></sc-if>
+<span style="display: inline-flex; align-items: center; height: 44px; padding: 0 14px; font-size: 14px; font-weight: 600; color: #171a3a; box-shadow: inset 0 -3px 0 #ff8a1f">Tool rules</span>
+</nav>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 24px; align-items: start">
+<section aria-label="Tool rules" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 10px">
+<h2 style="margin: 0; flex-grow: 1; font-size: 17px; line-height: 24px; font-weight: 600">Tool rules</h2>
+<span style="font-size: 12px; color: #5f6580">Forbid always wins</span>
+<button type="button" style="height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: linear-gradient(135deg, #ffc23d 0%, #ff8a1f 55%, #ff7a1a 100%); box-shadow: 0 8px 20px -6px #ff7a1a8c; font-family: inherit; font-size: 13px; font-weight: 500; color: #171a3a; cursor: pointer">Add rule</button>
+</div>
+<sc-for list="{{rules}}" as="r" hint-placeholder-count="5">
+<div style="display: grid; grid-template-columns: 76px minmax(0, 1fr) 150px; gap: 14px; align-items: center; padding: 14px; border-radius: 12px; border: 1px solid #e8eaf1; background: {{r.rowBg}}">
+<span style="display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 26px; border-radius: 6px; font-size: 12px; font-weight: 600; background: {{r.ebg}}; color: {{r.efg}}">{{r.effect}}</span>
+<div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+<span style="font-size: 11px; font-weight: 600; color: #5f6580; width: 42px">WHO</span>
+<sc-for list="{{r.who}}" as="x" hint-placeholder-count="2"><span style="height: 24px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; background: #e3edff; color: #1d5ad0; font-size: 12px; font-weight: 500">{{x}}</span></sc-for>
+</div>
+<div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+<span style="font-size: 11px; font-weight: 600; color: #5f6580; width: 42px">WHAT</span>
+<sc-for list="{{r.what}}" as="x" hint-placeholder-count="2"><span style="height: 24px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; background: #f4f5fa; font-size: 12px; font-weight: 500; font-family: ui-monospace, 'SF Mono', Menlo, monospace">{{x}}</span></sc-for>
+</div>
+<sc-if value="{{r.hasWhen}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+<span style="font-size: 11px; font-weight: 600; color: #5f6580; width: 42px">WHEN</span>
+<sc-for list="{{r.when}}" as="x" hint-placeholder-count="1"><span style="height: 24px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; background: #fbe4f7; color: #a31b91; font-size: 12px; font-weight: 500">{{x}}</span></sc-for>
+</div>
+</sc-if>
+</div>
+<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px">
+<div style="display: flex">
+<sc-for list="{{r.faces}}" as="f" hint-placeholder-count="4"><span style="width: 22px; height: 22px; margin-left: -5px; border-radius: 9999px; border: 2px solid #ffffff; background: {{f}}"></span></sc-for>
+</div>
+<span style="font-size: 12px; color: #5f6580; text-align: right">{{r.reach}}</span>
+<sc-if value="{{r.locked}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: #5f6580"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>Org rule · Admins edit</span></sc-if>
+</div>
+</div>
+</sc-for>
+</section>
+
+<section aria-label="Policy simulator" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px #171a3a0a, 0 6px 20px -6px #171a3a14; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 17px; line-height: 24px; font-weight: 600">Try a decision</h2>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5f6580">Person
+<span style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border-radius: 10px; background: #f4f5fa; color: #171a3a; font-size: 14px"><span style="width: 24px; height: 24px; border-radius: 9999px; background: #ffc23d; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600">AK</span>Ana Kim · Support</span></label>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5f6580">Action
+<span style="display: flex; align-items: center; height: 44px; padding: 0 12px; border-radius: 10px; background: #f4f5fa; color: #171a3a; font-size: 14px">Call a tool</span></label>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5f6580">Tool
+<span style="display: flex; align-items: center; height: 44px; padding: 0 12px; border-radius: 10px; background: #f4f5fa; color: #171a3a; font-size: 14px; font-family: ui-monospace, 'SF Mono', Menlo, monospace">slack_post_message</span></label>
+<div style="display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 14px; background: #ffe4e4">
+<span style="width: 44px; height: 44px; border-radius: 9999px; background: #ff6b6b; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#171a3a" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
+<div><div style="font-size: 17px; line-height: 24px; font-weight: 600; color: #c42b2b">Denied</div><div style="font-size: 12px; line-height: 16px; color: #171a3a">Decided by the forbid rule on destructive Slack tools</div></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5f6580">Rules that matched</span>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1.5px solid #c42b2b"><span style="height: 20px; display: inline-flex; align-items: center; padding: 0 6px; border-radius: 5px; background: #ffe4e4; color: #c42b2b; font-size: 10px; font-weight: 600">forbid</span><span style="font-size: 12px; font-family: ui-monospace, 'SF Mono', Menlo, monospace">rule-support-no-destructive</span></div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid #e8eaf1; opacity: 0.7"><span style="height: 20px; display: inline-flex; align-items: center; padding: 0 6px; border-radius: 5px; background: #dcf7eb; color: #0a7a4d; font-size: 10px; font-weight: 600">permit</span><span style="font-size: 12px; font-family: ui-monospace, 'SF Mono', Menlo, monospace">installation default</span></div>
+</div>
+</section>
+</div>
+</sc-if>
+
+<sc-if value="{{v.denied}}" hint-placeholder-val="{{false}}">
+<section style="margin: 80px auto; max-width: 480px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center">
+<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#5f6580" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+<h1 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600">Not in this role’s navigation</h1>
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #5f6580">Members and Auditors don’t manage people or rules.</p>
+<a href="Main.dc.html" style="font-size: 14px; font-weight: 500; text-decoration: none">Back to Home</a>
+</section>
+</sc-if>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"role":{"editor":"enum","options":["all","admin","manager","member","auditor"],"default":"all"},"roleTags":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const st = this.state || {};
+    const role = st.role || this.props.role || 'all';
+    const code = { admin: 'a', manager: 'm', member: 'e', auditor: 'u' }[role];
+    const can = (r) => role === 'all' || r.indexOf(code) >= 0;
+    const tags = this.props.roleTags ?? true;
+    const v = { page: can('am'), denied: !can('am'), cedar: can('a'), adminOnly: can('a') };
+    const isMgr = role === 'manager';
+    const pal = ['#ff8a1f', '#4c8dff', '#1bb5a2', '#e03fcb', '#2bc48a', '#ffc23d'];
+    const faces = (n) => Array.from({ length: n }, (_, k) => pal[k % 6]);
+    const E = {
+      permit: { effect: 'Permit', ebg: '#dcf7eb', efg: '#0a7a4d' },
+      forbid: { effect: 'Forbid', ebg: '#ffe4e4', efg: '#c42b2b' }
+    };
+    const rules = [
+      { e: 'forbid', who: ['Team · Support'], what: ['Slack', 'destructive tools'], when: [], reach: '38 people · 6 tools', f: 4, org: false },
+      { e: 'permit', who: ['Team · Data platform', 'Team · Analytics'], what: ['Postgres analytics', 'pg_*'], when: [], reach: '64 people · 5 tools', f: 5, org: false },
+      { e: 'forbid', who: ['Everyone'], what: ['GitHub', 'delete_*'], when: [], reach: '451 people · 3 tools', f: 6, org: true },
+      { e: 'permit', who: ['Role · Member'], what: ['Jira', 'transition_issue'], when: ['Weekdays 08:00–19:00'], reach: '412 people · 1 tool', f: 6, org: true },
+      { e: 'forbid', who: ['Service account · ci-bot'], what: ['Any server', 'open-world tools'], when: ['Outside 10.0.0.0/8'], reach: '1 account · 22 tools', f: 1, org: false }
+    ].map((r) => Object.assign({}, E[r.e], {
+      who: r.who, what: r.what, when: r.when, hasWhen: r.when.length > 0, reach: r.reach, faces: faces(r.f),
+      locked: (isMgr || role === 'all') && r.org, rowBg: isMgr && r.org ? '#f4f5fa' : '#ffffff'
+    }));
+    return {
+      role, v, rules, yes: true,
+      hideTags: !tags,
+      ann: tags ? '1.5px dashed #b4b8cc' : '0px solid transparent',
+      pickRole: (r) => this.setState({ role: r })
+    };
+  }
+}
+</script>
+</body>
+</html>
