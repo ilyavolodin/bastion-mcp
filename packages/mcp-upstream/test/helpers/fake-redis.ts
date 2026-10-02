@@ -7,7 +7,10 @@ type Entry = { value: string; expiresAt: number | undefined };
 export class FakeRedis implements RedisLike {
   failing = false;
   readonly strings = new Map<string, Entry>();
-  readonly hashes = new Map<string, { fields: Record<string, string>; expiresAt: number | undefined }>();
+  readonly hashes = new Map<
+    string,
+    { fields: Record<string, string>; expiresAt: number | undefined }
+  >();
   readonly published: { channel: string; message: string }[] = [];
   now = (): number => Date.now();
 
@@ -38,6 +41,9 @@ export class FakeRedis implements RedisLike {
     return this.live(key)?.value ?? null;
   }
 
+  set(key: string, value: string): Promise<'OK'>;
+  set(key: string, value: string, token: 'EX' | 'PX', ttl: number): Promise<'OK'>;
+  set(key: string, value: string, token: 'EX' | 'PX', ttl: number, nx: 'NX'): Promise<'OK' | null>;
   async set(key: string, value: string, ...options: (string | number)[]): Promise<'OK' | null> {
     this.guard();
     let nx = false;
@@ -45,8 +51,13 @@ export class FakeRedis implements RedisLike {
     for (let i = 0; i < options.length; i += 1) {
       const token = String(options[i]).toUpperCase();
       if (token === 'NX') nx = true;
-      else if (token === 'PX') ttl = Number(options[(i += 1)]);
-      else if (token === 'EX') ttl = Number(options[(i += 1)]) * 1000;
+      else if (token === 'PX') {
+        i += 1;
+        ttl = Number(options[i]);
+      } else if (token === 'EX') {
+        i += 1;
+        ttl = Number(options[i]) * 1000;
+      }
     }
     if (nx && this.live(key)) return null;
     this.strings.set(key, { value, expiresAt: ttl === undefined ? undefined : this.now() + ttl });

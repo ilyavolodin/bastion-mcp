@@ -11,7 +11,10 @@ export const KNOWN_EXTENSIONS = [
 export const TASKS_EXTENSION = 'io.modelcontextprotocol/tasks';
 export const UI_EXTENSION = 'io.modelcontextprotocol/ui';
 
-export type ExtensionPolicy = { allow?: readonly string[] | undefined; block?: readonly string[] | undefined };
+export type ExtensionPolicy = {
+  allow?: readonly string[] | undefined;
+  block?: readonly string[] | undefined;
+};
 
 const isKnown = (id: string): boolean => (KNOWN_EXTENSIONS as readonly string[]).includes(id);
 

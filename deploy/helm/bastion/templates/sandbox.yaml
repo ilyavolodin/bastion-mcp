@@ -1,0 +1,164 @@
+{{- /*
+Agent-sandbox resources in the sandbox namespace (tdd 8.4): namespace, three SandboxTemplates with their
+networkPolicy, one SandboxWarmPool per template plus a -pvc pool per size (replicas 0, persistent workspaces), and the
+Role and RoleBinding for the Bastion ServiceAccount. API groups and fields were checked against the v1.0.2 CRDs
+(see deploy/helm/validate.sh). Pool names must match packages/sandbox warmPoolName(): bastion-runtime-<size>[-pvc].
+*/ -}}
+{{- if .Values.sandbox.enabled }}
+{{- $sb := .Values.sandbox }}
+{{- $worker := include "bastion.workerComponent" . }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $sb.namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "sandbox") | nindent 4 }}
+    {{- with $sb.namespaceLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if $sb.keepNamespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+{{- range $size := list "small" "medium" "large" }}
+{{- $res := get $sb.sizes $size }}
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxTemplate
+metadata:
+  name: bastion-runtime-{{ $size }}
+  namespace: {{ $sb.namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" $ "component" "sandbox") | nindent 4 }}
+    bastion-mcp.github.io/size: {{ $size }}
+spec:
+  # Required for the -pvc warm pools: claims may add volumeClaimTemplates (persistent workspaces).
+  volumeClaimTemplatesPolicy: Allowed
+  # Ingress on TCP 8080 only from worker pods; egress only to worker pods on TCP 3128. No DNS: the runner receives
+  # the proxy address as the worker Service ClusterIP and the proxy resolves names (8.8).
+  networkPolicy:
+    ingress:
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/component: {{ $worker }}
+        ports:
+          - { protocol: TCP, port: 8080 }
+    egress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/component: {{ $worker }}
+        ports:
+          - { protocol: TCP, port: {{ $.Values.worker.ports.egress }} }
+  podTemplate:
+    spec:
+      runtimeClassName: {{ $sb.runtimeClassName }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: runner
+          image: {{ include "bastion.sandboxImage" $ | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - { name: http, containerPort: 8080, protocol: TCP }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            {{- toYaml $res | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: mcp, mountPath: /opt/mcp }
+            - { name: home, mountPath: /home/sandbox }
+            - { name: workspace, mountPath: /workspace }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: {{ $sb.volumes.tmpSizeLimit }} }
+        - name: mcp
+          emptyDir: { sizeLimit: {{ $sb.volumes.mcpSizeLimit }} }
+        - name: home
+          emptyDir: { sizeLimit: {{ $sb.volumes.homeSizeLimit }} }
+        - name: workspace
+          emptyDir: { sizeLimit: {{ $sb.volumes.workspaceSizeLimit }} }
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: bastion-runtime-{{ $size }}
+  namespace: {{ $sb.namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" $ "component" "sandbox") | nindent 4 }}
+spec:
+  replicas: {{ get $sb.warmPool $size }}
+  sandboxTemplateRef:
+    name: bastion-runtime-{{ $size }}
+---
+# Persistent workspaces (8.4): replicas 0, so every claim against this pool gets a fresh sandbox with its PVC.
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: bastion-runtime-{{ $size }}-pvc
+  namespace: {{ $sb.namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" $ "component" "sandbox") | nindent 4 }}
+spec:
+  replicas: 0
+  sandboxTemplateRef:
+    name: bastion-runtime-{{ $size }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "bastion.fullname" . }}-sandboxes
+  namespace: {{ $sb.namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "sandbox") | nindent 4 }}
+rules:
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: ["sandboxclaims"]
+    verbs: ["create", "get", "list", "watch", "patch", "delete"]
+  - apiGroups: ["agents.x-k8s.io"]
+    resources: ["sandboxes"]
+    verbs: ["create", "get", "list", "watch", "patch", "delete"]
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: ["sandboxtemplates", "sandboxwarmpools"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "bastion.fullname" . }}-sandboxes
+  namespace: {{ $sb.namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "sandbox") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "bastion.fullname" . }}-sandboxes
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "bastion.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

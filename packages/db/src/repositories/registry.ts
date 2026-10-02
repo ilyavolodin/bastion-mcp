@@ -1,0 +1,445 @@
+import { REQUEST_STATUSES } from '@bastion-mcp/core';
+import { z } from 'zod';
+import { Prisma } from '../generated/client';
+import {
+  type AuditContext,
+  afterIdDesc,
+  clampLimit,
+  ConflictError,
+  decodeCursor,
+  encodeCursor,
+  idCursorOf,
+  InvalidCursorError,
+  jsonObjectSchema,
+  mutate,
+  NotFoundError,
+  orConflict,
+  type Paged,
+  type PrismaLike,
+  type RepoContext,
+  type RepoOptions,
+  toContext,
+  toJson,
+  toJsonOrNull,
+  toPage,
+} from './support';
+
+// --- registry_sources (11.6) ---------------------------------------------------------------------------------------------
+
+export const REGISTRY_TRUST_LEVELS = ['official', 'internal', 'community'] as const;
+export const SERVER_STATUSES = ['active', 'deprecated', 'deleted'] as const;
+
+const syncStatsSchema = z.object({
+  startedAt: z.string(),
+  finishedAt: z.string(),
+  ok: z.boolean(),
+  full: z.boolean(),
+  pages: z.number(),
+  fetched: z.number(),
+  upserted: z.number(),
+  invalid: z.number(),
+  deleted: z.number(),
+  deprecated: z.number(),
+  error: z.string().optional(),
+  lastFullAt: z.string().optional(),
+});
+export type SyncStats = z.infer<typeof syncStatsSchema>;
+
+/** `RegistrySource` of `@bastion-mcp/registry`. */
+export type RegistrySource = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  authSecretId?: string | null;
+  authHeaderName?: string | null;
+  trust: (typeof REGISTRY_TRUST_LEVELS)[number];
+  enabled: boolean;
+  syncIntervalS: number;
+  lastUpdatedSince: Date | null;
+  lastSync: SyncStats | null;
+};
+
+const trustSchema = z.enum(REGISTRY_TRUST_LEVELS);
+
+const toSource = (row: {
+  id: string;
+  name: string;
+  baseUrl: string;
+  authSecretId: string | null;
+  authHeaderName: string | null;
+  trust: string;
+  enabled: boolean;
+  syncIntervalS: number;
+  lastUpdatedSince: Date | null;
+  lastSync: unknown;
+}): RegistrySource => ({
+  id: row.id,
+  name: row.name,
+  baseUrl: row.baseUrl,
+  authSecretId: row.authSecretId,
+  authHeaderName: row.authHeaderName,
+  trust: trustSchema.parse(row.trust),
+  enabled: row.enabled,
+  syncIntervalS: row.syncIntervalS,
+  lastUpdatedSince: row.lastUpdatedSince,
+  lastSync: row.lastSync === null ? null : syncStatsSchema.parse(row.lastSync),
+});
+
+/** `RegistrySourceStore`. */
+export const createRegistrySourceStore = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+  const ctx = toContext(arg, options);
+  const { db } = ctx;
+  return {
+    async get(id: string): Promise<RegistrySource | null> {
+      const row = await db.registrySource.findUnique({ where: { id } });
+      return row ? toSource(row) : null;
+    },
+    async list(): Promise<RegistrySource[]> {
+      const rows = await db.registrySource.findMany({ orderBy: [{ name: 'asc' }, { id: 'asc' }] });
+      return rows.map(toSource);
+    },
+    /** Upsert by id; a duplicate `base_url` is a 409. Does not touch sync state. */
+    save(source: RegistrySource, audit?: AuditContext): Promise<void> {
+      return mutate(ctx, async (tx, unit) => {
+        const existing = await tx.registrySource.findUnique({ where: { id: source.id } });
+        const data = {
+          name: source.name,
+          baseUrl: source.baseUrl,
+          authSecretId: source.authSecretId ?? null,
+          authHeaderName: source.authHeaderName ?? null,
+          trust: source.trust,
+          enabled: source.enabled,
+          syncIntervalS: source.syncIntervalS,
+        };
+        await orConflict('registry source', () =>
+          existing
+            ? tx.registrySource.update({ where: { id: source.id }, data })
+            : tx.registrySource.create({
+                data: {
+                  id: source.id,
+                  ...data,
+                  lastUpdatedSince: source.lastUpdatedSince,
+                  lastSync: toJsonOrNull(source.lastSync),
+                },
+              }),
+        );
+        unit.bump('org');
+        unit.audit(audit, {
+          action: existing ? 'registry.source.update' : 'registry.source.create',
+          targetType: 'registry_source',
+          targetId: source.id,
+          diff: {
+            before: existing ? { enabled: existing.enabled, trust: existing.trust } : null,
+            after: { enabled: source.enabled, trust: source.trust, baseUrl: source.baseUrl },
+          },
+        });
+      });
+    },
+    remove(id: string, audit?: AuditContext): Promise<void> {
+      return mutate(ctx, async (tx, unit) => {
+        const existing = await tx.registrySource.findUnique({ where: { id } });
+        if (!existing) throw new NotFoundError('registry source', id);
+        await tx.registrySource.delete({ where: { id } });
+        unit.bump('org');
+        unit.audit(audit, {
+          action: 'registry.source.delete',
+          targetType: 'registry_source',
+          targetId: id,
+          diff: { before: { baseUrl: existing.baseUrl }, after: null },
+        });
+      });
+    },
+    /** Persists `last_sync`; `lastUpdatedSince` only moves when passed (the cursor advanced). */
+    async recordSync(
+      id: string,
+      result: { lastSync: SyncStats; lastUpdatedSince?: Date | undefined },
+    ): Promise<void> {
+      await db.registrySource.update({
+        where: { id },
+        data: {
+          lastSync: toJson(syncStatsSchema.parse(result.lastSync)),
+          ...(result.lastUpdatedSince === undefined ? {} : { lastUpdatedSince: result.lastUpdatedSince }),
+        },
+      });
+    },
+  };
+};
+
+// --- registry_servers (11.6) ---------------------------------------------------------------------------------------------
+
+/** `RegistryServerRow`; `searchDocument` feeds `to_tsvector` on write and is not persisted. */
+export type RegistryServerRow = {
+  sourceId: string;
+  name: string;
+  version: string;
+  serverJson: Record<string, unknown>;
+  status: (typeof SERVER_STATUSES)[number];
+  publishedAt: Date | null;
+  isLatest: boolean;
+  meta: Record<string, unknown>;
+  searchDocument: string;
+};
+
+export type RegistrySearchQuery = {
+  q?: string;
+  sourceId?: string;
+  latestOnly?: boolean;
+  includeDeleted?: boolean;
+  limit: number;
+  cursor?: string | undefined;
+};
+
+const statusSchema = z.enum(SERVER_STATUSES);
+
+type RawServer = {
+  source_id: string;
+  name: string;
+  version: string;
+  server_json: unknown;
+  status: string;
+  is_latest: boolean;
+  published_at: Date | null;
+  meta: unknown;
+};
+
+const fromRaw = (r: RawServer): RegistryServerRow => ({
+  sourceId: r.source_id,
+  name: r.name,
+  version: r.version,
+  serverJson: jsonObjectSchema.parse(r.server_json),
+  status: statusSchema.parse(r.status),
+  publishedAt: r.published_at,
+  isLatest: r.is_latest,
+  meta: jsonObjectSchema.parse(r.meta),
+  searchDocument: '',
+});
+
+const COLUMNS = Prisma.sql`source_id::text AS source_id, name, version, server_json, status, is_latest, published_at, meta`;
+
+/**
+ * `RegistryServerStore`: idempotent upserts on `(source_id, name, version)` and Postgres full-text search with
+ * `to_tsvector('simple', searchDocument)` (11.6). Search with `q` is ranked and pages by offset; without `q` it
+ * is a keyset over `(name, source_id, version)`.
+ */
+export const createRegistryServerStore = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+  const ctx = toContext(arg, options);
+  const { db } = ctx;
+  return {
+    async upsert(rows: readonly RegistryServerRow[]): Promise<void> {
+      if (rows.length === 0) return;
+      await mutate(ctx, async (tx) => {
+        for (const row of rows) {
+          await tx.$executeRaw`
+            INSERT INTO registry_servers
+              (source_id, name, version, server_json, status, is_latest, published_at, meta, search, synced_at)
+            VALUES
+              (${row.sourceId}::uuid, ${row.name}, ${row.version}, ${JSON.stringify(row.serverJson)}::jsonb,
+               ${row.status}, ${row.isLatest}, ${row.publishedAt}, ${JSON.stringify(row.meta)}::jsonb,
+               to_tsvector('simple', ${row.searchDocument}), now())
+            ON CONFLICT (source_id, name, version) DO UPDATE SET
+              server_json = EXCLUDED.server_json, status = EXCLUDED.status, is_latest = EXCLUDED.is_latest,
+              published_at = EXCLUDED.published_at, meta = EXCLUDED.meta, search = EXCLUDED.search,
+              synced_at = now()`;
+        }
+      });
+    },
+
+    async list(sourceId: string, opts: { name?: string } = {}): Promise<RegistryServerRow[]> {
+      const rows = await db.$queryRaw<RawServer[]>`
+        SELECT ${COLUMNS} FROM registry_servers
+        WHERE source_id = ${sourceId}::uuid
+          ${opts.name === undefined ? Prisma.empty : Prisma.sql`AND name = ${opts.name}`}
+        ORDER BY name ASC, version ASC`;
+      return rows.map(fromRaw);
+    },
+
+    async search(query: RegistrySearchQuery): Promise<{ items: RegistryServerRow[]; nextCursor?: string }> {
+      const limit = clampLimit(query.limit);
+      const filters = [
+        query.sourceId === undefined ? Prisma.empty : Prisma.sql`AND source_id = ${query.sourceId}::uuid`,
+        query.latestOnly === false ? Prisma.empty : Prisma.sql`AND is_latest`,
+        query.includeDeleted ? Prisma.empty : Prisma.sql`AND status <> 'deleted'`,
+      ];
+      const where = Prisma.join(filters, ' ');
+      const q = query.q?.trim();
+      let rows: RawServer[];
+      let next: string | undefined;
+      if (q) {
+        const offset = Number(decodeCursor(query.cursor)?.[0] ?? 0);
+        if (!Number.isInteger(offset) || offset < 0) throw new InvalidCursorError();
+        rows = await db.$queryRaw<RawServer[]>`
+          SELECT ${COLUMNS} FROM registry_servers
+          WHERE search @@ websearch_to_tsquery('simple', ${q}) ${where}
+          ORDER BY ts_rank(search, websearch_to_tsquery('simple', ${q})) DESC, name ASC, source_id ASC, version DESC
+          LIMIT ${limit + 1} OFFSET ${offset}`;
+        if (rows.length > limit) next = encodeCursor([offset + limit]);
+      } else {
+        const c = decodeCursor(query.cursor);
+        if (c && (c.length !== 3 || c.some((v) => typeof v !== 'string'))) throw new InvalidCursorError();
+        const after =
+          c === undefined
+            ? Prisma.empty
+            : Prisma.sql`AND (name, source_id, version) > (${String(c[0])}, ${String(c[1])}::uuid, ${String(c[2])})`;
+        rows = await db.$queryRaw<RawServer[]>`
+          SELECT ${COLUMNS} FROM registry_servers
+          WHERE true ${where} ${after}
+          ORDER BY name ASC, source_id ASC, version ASC
+          LIMIT ${limit + 1}`;
+        const last = rows[limit - 1];
+        if (rows.length > limit && last) next = encodeCursor([last.name, last.source_id, last.version]);
+      }
+      const items = rows.slice(0, limit).map(fromRaw);
+      return next === undefined ? { items } : { items, nextCursor: next };
+    },
+
+    /** Marks versions of a source that vanished upstream as deleted (11.6); returns how many changed. */
+    async markMissingDeleted(sourceId: string, seenKeys: readonly { name: string; version: string }[]): Promise<number> {
+      const names = seenKeys.map((k) => k.name);
+      const versions = seenKeys.map((k) => k.version);
+      return db.$executeRaw`
+        UPDATE registry_servers SET status = 'deleted', synced_at = now()
+        WHERE source_id = ${sourceId}::uuid AND status <> 'deleted'
+          AND (name, version) NOT IN (SELECT * FROM unnest(${names}::text[], ${versions}::text[]))`;
+    },
+  };
+};
+
+// --- registry_policies (11.7) ----------------------------------------------------------------------------------------------
+
+/** One JSON policy per source; the shape is owned by `@bastion-mcp/registry` (`RegistryPolicy`). */
+export const createRegistryPolicyStore = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+  const ctx = toContext(arg, options);
+  const { db } = ctx;
+  return {
+    async get(sourceId: string): Promise<Record<string, unknown> | null> {
+      const row = await db.registryPolicy.findUnique({ where: { sourceId } });
+      return row ? jsonObjectSchema.parse(row.policy) : null;
+    },
+    set(sourceId: string, policy: Record<string, unknown>, audit?: AuditContext): Promise<void> {
+      return mutate(ctx, async (tx, unit) => {
+        const before = await tx.registryPolicy.findUnique({ where: { sourceId } });
+        await tx.registryPolicy.upsert({
+          where: { sourceId },
+          create: { sourceId, policy: toJson(policy) },
+          update: { policy: toJson(policy), updatedAt: new Date() },
+        });
+        unit.bump('org');
+        unit.audit(audit, {
+          action: 'registry.policy.set',
+          targetType: 'registry_source',
+          targetId: sourceId,
+          diff: { before: before?.policy ?? null, after: policy },
+        });
+      });
+    },
+  };
+};
+
+// --- install_requests (11.7) -------------------------------------------------------------------------------------------------
+
+export type InstallRequestStatus = (typeof REQUEST_STATUSES)[number];
+
+/** `InstallRequest` of `@bastion-mcp/registry`. */
+export type InstallRequest = {
+  id: string;
+  requesterId: string;
+  sourceId: string;
+  serverName: string;
+  version: string;
+  justification: string | null;
+  status: InstallRequestStatus;
+  decidedBy: string | null;
+  decidedAt: Date | null;
+  reason: string | null;
+  createdAt: Date;
+};
+
+const requestStatus = z.enum(REQUEST_STATUSES);
+
+const toRequest = (row: {
+  id: string;
+  requesterId: string;
+  sourceId: string;
+  serverName: string;
+  version: string;
+  justification: string | null;
+  status: string;
+  decidedBy: string | null;
+  decidedAt: Date | null;
+  reason: string | null;
+  createdAt: Date;
+}): InstallRequest => ({ ...row, status: requestStatus.parse(row.status) });
+
+/** `InstallRequestStore`: `save` only updates while the stored status is `open` (409 otherwise). */
+export const createInstallRequestStore = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+  const ctx = toContext(arg, options);
+  const { db } = ctx;
+  return {
+    create(request: InstallRequest, audit?: AuditContext): Promise<void> {
+      return mutate(ctx, async (tx, unit) => {
+        await tx.installRequest.create({ data: request });
+        unit.audit(audit, {
+          action: 'install_request.create',
+          targetType: 'install_request',
+          targetId: request.id,
+          diff: { before: null, after: { serverName: request.serverName, version: request.version } },
+        });
+      });
+    },
+    async get(id: string): Promise<InstallRequest | null> {
+      const row = await db.installRequest.findUnique({ where: { id } });
+      return row ? toRequest(row) : null;
+    },
+    save(request: InstallRequest, audit?: AuditContext): Promise<void> {
+      return mutate(ctx, async (tx, unit) => {
+        const res = await tx.installRequest.updateMany({
+          where: { id: request.id, status: 'open' },
+          data: {
+            status: request.status,
+            decidedBy: request.decidedBy,
+            decidedAt: request.decidedAt,
+            reason: request.reason,
+            justification: request.justification,
+          },
+        });
+        if (res.count === 0) {
+          const exists = await tx.installRequest.count({ where: { id: request.id } });
+          if (exists === 0) throw new NotFoundError('install request', request.id);
+          throw new ConflictError('install request was already decided', { id: request.id });
+        }
+        unit.audit(audit, {
+          action: `install_request.${request.status}`,
+          targetType: 'install_request',
+          targetId: request.id,
+          diff: { before: { status: 'open' }, after: { status: request.status, reason: request.reason } },
+        });
+      });
+    },
+    async list(filter: { requesterId?: string; status?: InstallRequestStatus } = {}): Promise<InstallRequest[]> {
+      const rows = await db.installRequest.findMany({
+        where: {
+          ...(filter.requesterId ? { requesterId: filter.requesterId } : {}),
+          ...(filter.status ? { status: filter.status } : {}),
+        },
+        orderBy: { id: 'desc' },
+      });
+      return rows.map(toRequest);
+    },
+    async listPage(
+      filter: { requesterId?: string; status?: InstallRequestStatus; limit?: number; cursor?: string } = {},
+    ): Promise<Paged<InstallRequest>> {
+      const limit = clampLimit(filter.limit);
+      const rows = await db.installRequest.findMany({
+        where: {
+          ...(filter.requesterId ? { requesterId: filter.requesterId } : {}),
+          ...(filter.status ? { status: filter.status } : {}),
+          ...afterIdDesc(filter.cursor),
+        },
+        orderBy: { id: 'desc' },
+        take: limit + 1,
+      });
+      const page = toPage(rows, limit, idCursorOf);
+      return { items: page.items.map(toRequest), nextCursor: page.nextCursor };
+    },
+  };
+};

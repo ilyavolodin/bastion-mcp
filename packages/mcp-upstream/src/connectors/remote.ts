@@ -122,7 +122,12 @@ export const resolveRemoteTarget = async (
     }
     throw error;
   }
-  return { url: safe.url, safe, headers, tls: await loadTls(spec, installation, principal, settings) };
+  return {
+    url: safe.url,
+    safe,
+    headers,
+    tls: await loadTls(spec, installation, principal, settings),
+  };
 };
 
 const loadTls = async (
@@ -165,12 +170,16 @@ export const createRemoteFetch = (options: {
       if (!headers.has(name)) headers.set(name, value);
     }
     const trace = traceStorage.getStore();
-    if (trace) for (const [name, value] of Object.entries(traceHeaders(trace))) headers.set(name, value);
-    const response = await undiciFetch(input as never, {
-      ...(init as object),
-      headers,
-      dispatcher: options.agent,
-    } as never);
+    if (trace)
+      for (const [name, value] of Object.entries(traceHeaders(trace))) headers.set(name, value);
+    const response = await undiciFetch(
+      input as never,
+      {
+        ...(init as object),
+        headers,
+        dispatcher: options.agent,
+      } as never,
+    );
     return options.caps.wrap(response as unknown as Response);
   };
 };

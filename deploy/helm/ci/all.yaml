@@ -1,0 +1,5 @@
+publicUrl: https://mcp.example.com
+existingSecret: bastion-secrets
+deploymentMode: all
+all:
+  replicas: 2

@@ -1,0 +1,104 @@
+{{- define "bastion.deployment" -}}
+{{- $root := .root -}}
+{{- $v := $root.Values -}}
+{{- $cfg := .cfg -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bastion.fullname" $root }}-{{ .component }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" $root "component" .component) | nindent 4 }}
+spec:
+  {{- if not .autoscaled }}
+  replicas: {{ $cfg.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "bastion.selectorLabels" (dict "root" $root "component" .component) | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- include "bastion.labels" (dict "root" $root "component" .component) | nindent 8 }}
+        {{- with $cfg.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $cfg.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "bastion.serviceAccountName" $root }}
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: {{ $v.terminationGracePeriodSeconds }}
+      {{- with $v.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml $v.podSecurityContext | nindent 8 }}
+      {{- if $v.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- include "bastion.topologySpread" (dict "root" $root "component" .component) | nindent 8 }}
+      {{- end }}
+      {{- with $cfg.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $cfg.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $cfg.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bastion
+          image: {{ include "bastion.image" $root | quote }}
+          imagePullPolicy: {{ $v.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $v.containerSecurityContext | nindent 12 }}
+          ports:
+            - { name: http, containerPort: {{ $v.worker.ports.http }}, protocol: TCP }
+            {{- if ne .role "ui" }}
+            - { name: internal, containerPort: {{ $v.worker.ports.internal }}, protocol: TCP }
+            - { name: egress, containerPort: {{ $v.worker.ports.egress }}, protocol: TCP }
+            {{- end }}
+          env:
+            {{- include "bastion.env" (dict "root" $root "role" .role) | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml $cfg.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "bastion.volumeMounts" (dict "root" $root "role" .role) | nindent 12 }}
+      volumes:
+        {{- include "bastion.volumes" (dict "root" $root "role" .role) | nindent 8 }}
+{{- end -}}
+
+{{- if eq .Values.deploymentMode "all" }}
+{{ include "bastion.deployment" (dict "root" . "component" "all" "role" "all" "cfg" .Values.all "autoscaled" false) }}
+{{- else }}
+{{ include "bastion.deployment" (dict "root" . "component" "worker" "role" "worker" "cfg" .Values.worker "autoscaled" .Values.worker.autoscaling.enabled) }}
+---
+{{ include "bastion.deployment" (dict "root" . "component" "ui" "role" "ui" "cfg" .Values.ui "autoscaled" false) }}
+{{- end }}

@@ -1,8 +1,5 @@
 import { UpstreamUnavailableError } from '@bastion-mcp/core';
-import {
-  type PriorDiscovery,
-  StreamableHTTPClientTransport,
-} from '@modelcontextprotocol/client';
+import { type PriorDiscovery, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { type Logger, noopLogger } from '../ports';
 import type { RemoteAgentRegistry } from './agent';
 import { CapTracker } from './caps';
@@ -149,5 +146,8 @@ export class HttpConnector implements UpstreamConnector {
   }
 }
 
-export const unavailable = (slug: string, message: string, cause?: unknown): UpstreamUnavailableError =>
-  new UpstreamUnavailableError(message, { installation: slug }, cause);
+export const unavailable = (
+  slug: string,
+  message: string,
+  cause?: unknown,
+): UpstreamUnavailableError => new UpstreamUnavailableError(message, { installation: slug }, cause);

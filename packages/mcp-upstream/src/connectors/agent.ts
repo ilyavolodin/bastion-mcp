@@ -1,10 +1,14 @@
 import { createHash } from 'node:crypto';
-import { type SafeRemoteUrl, pinnedLookup } from '@bastion-mcp/sandbox';
+import { pinnedLookup, type SafeRemoteUrl } from '@bastion-mcp/sandbox';
 import { Agent } from 'undici';
 
 /** Per-installation `undici` Agents (8.9): keep-alive, 64 connections, 30 s connect timeout, custom CA and client cert. */
 
-export type TlsMaterial = { ca?: string | undefined; cert?: string | undefined; key?: string | undefined };
+export type TlsMaterial = {
+  ca?: string | undefined;
+  cert?: string | undefined;
+  key?: string | undefined;
+};
 
 export const AGENT_CONNECTIONS = 64;
 export const AGENT_CONNECT_TIMEOUT_MS = 30_000;

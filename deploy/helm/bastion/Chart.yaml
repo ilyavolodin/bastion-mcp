@@ -1,0 +1,11 @@
+apiVersion: v2
+name: bastion
+description: Bastion MCP gateway - worker and ui roles, agent-sandbox sandboxes, migrations and optional OTEL collector (tdd 20.2)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.29.0-0"
+home: https://github.com/bastion-mcp/bastion-mcp
+sources:
+  - https://github.com/bastion-mcp/bastion-mcp
+keywords: [mcp, gateway, sandbox, agent-sandbox]

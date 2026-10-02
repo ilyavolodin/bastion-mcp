@@ -1,0 +1,121 @@
+{{- /* Optional collector (tdd 15.1): tail sampling that keeps every trace containing an error. */ -}}
+{{- if .Values.otelCollector.enabled }}
+{{- $c := .Values.otelCollector }}
+{{- $name := printf "%s-otel-collector" (include "bastion.fullname" .) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "otel-collector") | nindent 4 }}
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc: { endpoint: 0.0.0.0:4317 }
+          http: { endpoint: 0.0.0.0:4318 }
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+      # Tail sampling needs every span of a trace on one collector replica; keep replicas at 1 or put a
+      # load-balancing exporter tier in front before scaling out.
+      tail_sampling:
+        decision_wait: {{ $c.tailSampling.decisionWait }}
+        num_traces: {{ $c.tailSampling.numTraces }}
+        policies:
+          - name: keep-errors
+            type: status_code
+            status_code: { status_codes: [ERROR] }
+          - name: baseline
+            type: probabilistic
+            probabilistic: { sampling_percentage: {{ $c.tailSampling.baselinePercentage }} }
+      batch: {}
+    exporters:
+      {{- if $c.exporter.endpoint }}
+      otlphttp:
+        endpoint: {{ $c.exporter.endpoint | quote }}
+        {{- with $c.exporter.headers }}
+        headers:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      {{- else }}
+      debug: { verbosity: basic }
+      {{- end }}
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, tail_sampling, batch]
+          exporters: [{{ ternary "otlphttp" "debug" (ne $c.exporter.endpoint "") }}]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [{{ ternary "otlphttp" "debug" (ne $c.exporter.endpoint "") }}]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [{{ ternary "otlphttp" "debug" (ne $c.exporter.endpoint "") }}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "otel-collector") | nindent 4 }}
+spec:
+  replicas: {{ $c.replicas }}
+  selector:
+    matchLabels:
+      {{- include "bastion.selectorLabels" (dict "root" . "component" "otel-collector") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "bastion.labels" (dict "root" . "component" "otel-collector") | nindent 8 }}
+      annotations:
+        checksum/config: {{ toYaml $c | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: collector
+          image: {{ printf "%s:%s" $c.image.repository $c.image.tag | quote }}
+          args: ["--config=/etc/otelcol/config.yaml"]
+          ports:
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: otlp-http, containerPort: 4318 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            {{- toYaml $c.resources | nindent 12 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/otelcol, readOnly: true }
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "otel-collector") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "bastion.selectorLabels" (dict "root" . "component" "otel-collector") | nindent 4 }}
+  ports:
+    - { name: otlp-grpc, port: 4317, targetPort: otlp-grpc }
+    - { name: otlp-http, port: 4318, targetPort: otlp-http }
+{{- end }}

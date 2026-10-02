@@ -1,0 +1,109 @@
+# Evaluation stack (tdd 20.3): Bastion (BASTION_ROLE=all), postgres:17, valkey/valkey:8.
+#   cp .env.example .env   # set BASTION_PUBLIC_URL, BASTION_BOOTSTRAP_ADMIN_EMAIL and the passwords
+#   docker compose up -d
+# The KEK (local KMS key) is generated on the first start by the `init-kek` service into the `bastion-keys`
+# volume and is never regenerated. BACK IT UP: without it the encrypted secrets in Postgres are unreadable.
+# Not for production: one Postgres, one Valkey, local KMS, bubblewrap sandboxes. Use the Helm chart for production.
+name: bastion
+
+x-bastion-env: &bastion-env
+  BASTION_ROLE: all
+  BASTION_PUBLIC_URL: ${BASTION_PUBLIC_URL:-http://localhost:8080}
+  BASTION_DATABASE_URL: postgres://bastion:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/bastion
+  BASTION_REDIS_URL: redis://valkey:6379
+  BASTION_INTERNAL_SECRET: ${BASTION_INTERNAL_SECRET:?set BASTION_INTERNAL_SECRET (32+ bytes) in .env}
+  BASTION_KMS: local
+  BASTION_KMS_KEY: /keys/kek
+  BASTION_BOOTSTRAP_ADMIN_EMAIL: ${BASTION_BOOTSTRAP_ADMIN_EMAIL:?set BASTION_BOOTSTRAP_ADMIN_EMAIL in .env}
+  BASTION_SANDBOX_DRIVER: bubblewrap
+  BASTION_LOG_LEVEL: ${BASTION_LOG_LEVEL:-info}
+
+services:
+  init-kek:
+    image: busybox:1.37
+    # Creates a 32-byte key once. The file is owned by uid 10001 (the bastion user) and readable only by it.
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        if [ ! -s /keys/kek ]; then
+          head -c 32 /dev/urandom > /keys/kek
+          echo "generated a new local KEK at /keys/kek"
+        fi
+        chown 10001:10001 /keys/kek
+        chmod 0400 /keys/kek
+    volumes:
+      - bastion-keys:/keys
+    restart: "no"
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: bastion
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: bastion
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bastion -d bastion"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  valkey:
+    image: valkey/valkey:8
+    command: ["valkey-server", "--appendonly", "yes"]
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    image: ${BASTION_IMAGE:-ghcr.io/bastion-mcp/bastion}:${BASTION_VERSION:-latest}
+    entrypoint: ["bastion", "migrate"]
+    environment: *bastion-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  bastion:
+    image: ${BASTION_IMAGE:-ghcr.io/bastion-mcp/bastion}:${BASTION_VERSION:-latest}
+    environment: *bastion-env
+    ports:
+      - "${BASTION_HTTP_PORT_HOST:-8080}:8080"
+    volumes:
+      - bastion-data:/var/lib/bastion
+      - bastion-keys:/keys:ro
+    # Bubblewrap needs unprivileged user namespaces (8.5). The profile is Docker's default plus clone/unshare with
+    # CLONE_NEWUSER. On Ubuntu 24.04 hosts also set kernel.apparmor_restrict_unprivileged_userns=0.
+    security_opt:
+      - seccomp=./seccomp-bastion.json
+    depends_on:
+      init-kek:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  bastion-data:
+  bastion-keys:
+  postgres-data:
+  valkey-data:

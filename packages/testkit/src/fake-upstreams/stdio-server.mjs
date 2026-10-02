@@ -93,12 +93,20 @@ const handle = async (message) => {
         result = await callTool(params);
         break;
       default:
-        send({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } });
+        send({
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32601, message: `Method not found: ${method}` },
+        });
         return;
     }
     send({ jsonrpc: '2.0', id, result });
   } catch (error) {
-    send({ jsonrpc: '2.0', id, error: { code: error.code ?? -32603, message: String(error.message) } });
+    send({
+      jsonrpc: '2.0',
+      id,
+      error: { code: error.code ?? -32603, message: String(error.message) },
+    });
   }
 };
 
@@ -114,7 +122,8 @@ rl.on('line', (line) => {
     const waiter = pending.get(message.id);
     pending.delete(message.id);
     if (waiter) {
-      if (message.error) waiter.reject(Object.assign(new Error(message.error.message), message.error));
+      if (message.error)
+        waiter.reject(Object.assign(new Error(message.error.message), message.error));
       else waiter.resolve(message.result);
     }
     return;

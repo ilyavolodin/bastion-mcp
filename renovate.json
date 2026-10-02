@@ -1,0 +1,74 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests", "docker:pinDigests"],
+  "timezone": "UTC",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 10,
+  "rangeStrategy": "pin",
+  "labels": ["dependencies"],
+  "lockFileMaintenance": { "enabled": true, "schedule": ["before 6am on monday"] },
+  "pin": { "enabled": true },
+  "packageRules": [
+    {
+      "description": "Every dependency is pinned to an exact version (CONTRIBUTING rule 10); the MCP SDK split core/client/server 2.2.x and node 2.1.x is deliberate (docs/spikes/m1-sdk-2.2.md), so it is grouped and never auto-merged.",
+      "matchPackageNames": ["/^@modelcontextprotocol//"],
+      "groupName": "MCP SDK",
+      "automerge": false
+    },
+    {
+      "description": "OpenTelemetry JS packages move together.",
+      "matchPackageNames": ["/^@opentelemetry//", "/^@types\\/opentelemetry/"],
+      "groupName": "OpenTelemetry"
+    },
+    {
+      "description": "Collector image and OpenTelemetry semantic conventions follow the OTEL group.",
+      "matchPackageNames": ["otel/opentelemetry-collector-contrib"],
+      "groupName": "OpenTelemetry"
+    },
+    {
+      "description": "Prisma CLI, client and adapters must stay on one version.",
+      "matchPackageNames": ["prisma", "/^@prisma//"],
+      "groupName": "Prisma"
+    },
+    {
+      "description": "Docker base images keep their digest pinned; Node stays on the 24 LTS line.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["node"],
+      "allowedVersions": "/^24\\./"
+    },
+    {
+      "description": "GitHub Actions: one weekly PR, digests pinned by the preset.",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Majors of anything touching signing or provenance need a human look.",
+      "matchPackageNames": [
+        "sigstore/cosign-installer",
+        "actions/attest-build-provenance",
+        "anchore/sbom-action"
+      ],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "addLabels": ["supply-chain"]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "uv version baked into the sandbox runtimes (Dockerfile, Dockerfile.sandbox)",
+      "managerFilePatterns": ["/^deploy/docker/Dockerfile(\\.sandbox)?$/"],
+      "matchStrings": ["ARG UV_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "astral-sh/uv",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "agent-sandbox controller version used by the kind scripts and chart validation",
+      "managerFilePatterns": ["/^deploy\\/(kind|helm)\\/.+\\.sh$/"],
+      "matchStrings": ["AGENT_SANDBOX_VERSION:-(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "kubernetes-sigs/agent-sandbox",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}

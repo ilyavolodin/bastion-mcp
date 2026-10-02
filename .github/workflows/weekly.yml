@@ -1,0 +1,126 @@
+name: weekly
+
+# tdd 23.1: load suite (targets of 23.4) and chaos suite, both on a kind cluster. Also runnable before a release
+# through workflow_dispatch.
+#
+# Honest status: nothing here has run. It needs the Bastion server image (apps/server does not exist yet), a fake
+# upstream with an `echo` tool installed as installation "echo", a PAT for the load user, and a 30-installation
+# endpoint for list-30. The seeding step is a placeholder that fails loudly until `bastion` grows a seeding command or
+# the Playwright/API seeding of M4 exists. A kind cluster on a hosted runner cannot reproduce the absolute numbers of
+# 23.4 (2,000 calls/s, 5,000 streams across 6 workers): treat the kind run as a regression signal and run the full
+# targets on the staging cluster with the same scripts (set KUBECONFIG and skip setup).
+
+on:
+  schedule:
+    - cron: "43 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "Space-separated load scenarios (defaults to all rows of 23.4)"
+        default: "call-guards-off call-guards-default list-30 cold-start forwarded-calls listen-streams"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly
+  cancel-in-progress: false
+
+jobs:
+  load:
+    name: load (23.4)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          install_only: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - name: Unit tests of the load harness (pure parts)
+        run: pnpm exec vitest run --root packages/testkit/load
+      - name: Install the generator (standalone package, pinned SDK 2.2.0)
+        working-directory: packages/testkit/load
+        run: pnpm install --ignore-workspace --frozen-lockfile
+      - name: Cluster and chart
+        run: |
+          HELM_EXTRA_ARGS="--set worker.replicas=6" deploy/kind/setup.sh
+      - name: Seed the fake upstream, the 30-installation endpoint and the load user
+        run: |
+          echo "::error::seeding is not implemented yet (needs the Bastion CLI or API); see docs/admin-guide.md, Validation status"
+          exit 1
+      - name: Run scenarios
+        env:
+          BASTION_LOAD_TOKEN: ${{ secrets.BASTION_LOAD_TOKEN }}
+        working-directory: packages/testkit/load
+        run: |
+          mkdir -p results
+          kubectl -n bastion port-forward svc/bastion-worker 18080:8080 &
+          sleep 5
+          for s in ${{ inputs.scenarios || 'call-guards-off call-guards-default list-30 cold-start forwarded-calls listen-streams' }}; do
+            case "$s" in
+              call-guards-off|call-guards-default)
+                pnpm exec tsx src/cli.ts run --scenario "$s" --url http://127.0.0.1:18080/mcp/i/echo --direct-url "$FAKE_UPSTREAM_URL" ;;
+              list-30)
+                pnpm exec tsx src/cli.ts run --scenario "$s" --url http://127.0.0.1:18080/mcp/e/thirty ;;
+              cold-start)
+                pnpm exec tsx src/cli.ts run --scenario "$s" --url http://127.0.0.1:18080/mcp/i/cold-0 ;;
+              forwarded-calls)
+                pnpm exec tsx src/cli.ts run --scenario "$s" --owner-url "$OWNER_URL" --non-owner-url "$NON_OWNER_URL" ;;
+              listen-streams)
+                pnpm exec tsx src/cli.ts run --scenario "$s" --url http://127.0.0.1:18080/mcp ;;
+            esac
+          done
+      - name: Check against the targets of 23.4
+        if: always()
+        working-directory: packages/testkit/load
+        run: pnpm exec tsx src/cli.ts check results/*.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: load-results
+          path: packages/testkit/load/results
+
+  chaos:
+    name: chaos (${{ matrix.script }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        script: [kill-workers, redis-failover, postgres-restart, network-partition]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          install_only: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - name: Install the generator
+        working-directory: packages/testkit/load
+        run: pnpm install --ignore-workspace --frozen-lockfile
+      - run: deploy/kind/setup.sh
+      - name: Seed the fake upstream and the load user
+        run: |
+          echo "::error::seeding is not implemented yet (needs the Bastion CLI or API); see docs/admin-guide.md, Validation status"
+          exit 1
+      - name: ${{ matrix.script }}
+        env:
+          BASTION_LOAD_TOKEN: ${{ secrets.BASTION_LOAD_TOKEN }}
+        run: deploy/chaos/${{ matrix.script }}.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: chaos-${{ matrix.script }}
+          path: packages/testkit/load/results/chaos

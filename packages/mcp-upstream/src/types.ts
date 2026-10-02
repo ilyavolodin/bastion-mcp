@@ -88,7 +88,9 @@ export const wireOutcomeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('complete'), result: z.unknown() }),
   z.object({
     kind: z.literal('input_required'),
-    inputRequests: z.record(z.string(), z.object({ method: z.string(), params: z.unknown() })).optional(),
+    inputRequests: z
+      .record(z.string(), z.object({ method: z.string(), params: z.unknown().optional() }))
+      .optional(),
     requestState: z.string(),
   }),
   z.object({ kind: z.literal('task'), task: z.unknown() }),

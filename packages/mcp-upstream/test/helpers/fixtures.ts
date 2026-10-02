@@ -1,9 +1,5 @@
-import { type ServerSpec, parseServerSpec } from '@bastion-mcp/core';
-import type {
-  CallPrincipal,
-  ResolvedCredential,
-  ResolvedInstallation,
-} from '../../src/ports';
+import { parseServerSpec, type ServerSpec } from '@bastion-mcp/core';
+import type { CallPrincipal, ResolvedCredential, ResolvedInstallation } from '../../src/ports';
 import type { UpstreamCallContext } from '../../src/types';
 
 export const principal: CallPrincipal = {
@@ -74,4 +70,5 @@ export const LOOPBACK_SETTINGS = {
   insecureHosts: ['127.0.0.1'],
 };
 
-export const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+export const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));

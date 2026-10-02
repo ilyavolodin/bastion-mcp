@@ -1,0 +1,187 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["publicUrl", "existingSecret"],
+  "properties": {
+    "publicUrl": {
+      "type": "string",
+      "pattern": "^https?://[^/]+$",
+      "description": "External base URL without a path, for example https://mcp.example.com"
+    },
+    "deploymentMode": { "enum": ["split", "all"] },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "digest": { "type": "string", "pattern": "^(sha256:[a-f0-9]{64})?$" },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "imagePullSecrets": { "type": "array" },
+    "existingSecret": { "type": "string", "minLength": 1 },
+    "worker": {
+      "type": "object",
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1 },
+        "autoscaling": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "minReplicas": { "type": "integer", "minimum": 1 },
+            "maxReplicas": { "type": "integer", "minimum": 1 },
+            "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
+          }
+        },
+        "resources": { "type": "object" },
+        "ports": {
+          "type": "object",
+          "properties": {
+            "http": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "internal": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "egress": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1 },
+        "resources": { "type": "object" },
+        "gitCache": {
+          "type": "object",
+          "properties": {
+            "mountPath": { "type": "string", "pattern": "^/" },
+            "sizeLimit": { "type": "string" }
+          }
+        }
+      }
+    },
+    "all": { "type": "object", "properties": { "replicas": { "type": "integer", "minimum": 1 } } },
+    "terminationGracePeriodSeconds": { "type": "integer", "minimum": 30 },
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": { "type": ["integer", "string"] }
+      }
+    },
+    "topologySpreadConstraints": { "type": "array" },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "kms": {
+      "type": "object",
+      "properties": {
+        "provider": { "enum": ["local", "gcp", "aws", "azure", "vault"] },
+        "key": { "type": "string" },
+        "localKeySecret": { "type": "string" },
+        "localKeySecretKey": { "type": "string" },
+        "credentialKeys": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+        }
+      }
+    },
+    "bootstrapAdminEmail": { "type": "string" },
+    "localLogin": { "type": "boolean" },
+    "logLevel": { "enum": ["fatal", "error", "warn", "info", "debug", "trace"] },
+    "clusterCIDRs": { "type": "array", "items": { "type": "string" } },
+    "env": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    },
+    "extraEnv": { "type": "array" },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "host": { "type": "string" },
+        "annotations": { "type": "object" },
+        "streamingAnnotations": { "type": "object" },
+        "tls": { "type": "array" }
+      }
+    },
+    "httpRoute": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "parentRefs": { "type": "array" },
+        "hostnames": { "type": "array", "items": { "type": "string" } },
+        "mcpRequestTimeout": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" }
+      }
+    },
+    "gke": {
+      "type": "object",
+      "properties": {
+        "backendConfig": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "timeoutSec": { "type": "integer", "minimum": 30 }
+          }
+        }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "namespace": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "driver": { "enum": ["", "kubernetes", "bubblewrap"] },
+        "runtimeClassName": { "type": "string", "minLength": 1 },
+        "image": { "type": "object" },
+        "warmPool": {
+          "type": "object",
+          "properties": {
+            "small": { "type": "integer", "minimum": 0 },
+            "medium": { "type": "integer", "minimum": 0 },
+            "large": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "sizes": { "type": "object" },
+        "volumes": { "type": "object" },
+        "namespaceLabels": { "type": "object" },
+        "keepNamespace": { "type": "boolean" }
+      }
+    },
+    "networkPolicies": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "ingressController": { "type": "object" },
+        "extraIngress": { "type": "object" }
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "backoffLimit": { "type": "integer", "minimum": 0 },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "otelCollector": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicas": { "type": "integer", "minimum": 1 },
+        "tailSampling": {
+          "type": "object",
+          "properties": {
+            "baselinePercentage": { "type": "number", "minimum": 0, "maximum": 100 }
+          }
+        },
+        "exporter": { "type": "object" }
+      }
+    }
+  }
+}

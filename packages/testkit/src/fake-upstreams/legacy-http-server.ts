@@ -108,7 +108,13 @@ export const startFakeLegacyHttpServer = async (
         return;
       }
       const message = body as
-        | { id?: JsonRpcId; method?: string; params?: JsonObject; result?: unknown; error?: unknown }
+        | {
+            id?: JsonRpcId;
+            method?: string;
+            params?: JsonObject;
+            result?: unknown;
+            error?: unknown;
+          }
         | undefined;
       if (!message || typeof message !== 'object') {
         res.writeHead(400).end();
@@ -184,7 +190,12 @@ export const startFakeLegacyHttpServer = async (
           }),
         notifyRelated: (method, params) => sse(res, { jsonrpc: '2.0', method, params }),
       };
-      const reply = await brain.handle(session.state, message.method ?? '', message.params, connection);
+      const reply = await brain.handle(
+        session.state,
+        message.method ?? '',
+        message.params,
+        connection,
+      );
       sse(res, { jsonrpc: '2.0', id: message.id, ...reply });
       res.end();
     })().catch(() => {

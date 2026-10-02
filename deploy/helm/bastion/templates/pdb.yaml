@@ -1,0 +1,23 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- $roles := list }}
+{{- if eq .Values.deploymentMode "all" }}
+{{- if gt (int .Values.all.replicas) 1 }}{{ $roles = append $roles "all" }}{{ end }}
+{{- else }}
+{{- $roles = list "worker" "ui" }}
+{{- end }}
+{{- range $roles }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "bastion.fullname" $ }}-{{ . }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" $ "component" .) | nindent 4 }}
+spec:
+  minAvailable: {{ $.Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "bastion.selectorLabels" (dict "root" $ "component" .) | nindent 6 }}
+{{- end }}
+{{- end }}

@@ -14,6 +14,7 @@ import { HttpConnector } from '../src/connectors/http';
 import { SseConnector } from '../src/connectors/sse';
 import type { ConnectContext, UpstreamSession } from '../src/connectors/types';
 import { ContinuationRegistry } from '../src/input-required/registry';
+import { FakeRedis } from './helpers/fake-redis';
 import {
   credential,
   ctxOf,
@@ -24,7 +25,6 @@ import {
   remoteSpec,
   sleep,
 } from './helpers/fixtures';
-import { FakeRedis } from './helpers/fake-redis';
 
 const text = (outcome: { kind: string; result?: unknown }): string => {
   const result = outcome.result as { content: { text: string }[] };
@@ -68,7 +68,11 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
     ...extra,
   });
 
-  const connect = async (url: string, extra: Partial<ConnectContext> = {}, caps?: { messageBytes?: number }) => {
+  const connect = async (
+    url: string,
+    extra: Partial<ConnectContext> = {},
+    caps?: { messageBytes?: number },
+  ) => {
     const session = await connector(caps).connect(connectCtx(url, extra));
     open.push(session);
     return session;
@@ -131,7 +135,10 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
 
   it('6.5 passes an upstream InputRequiredResult through with inputRequests and requestState unchanged', async () => {
     const session = await connect(modern.url);
-    const first = await session.callTool({ name: 'ask', arguments: { q: 'name?' } }, { ctx: ctxOf() });
+    const first = await session.callTool(
+      { name: 'ask', arguments: { q: 'name?' } },
+      { ctx: ctxOf() },
+    );
     expect(first.kind).toBe('input_required');
     if (first.kind !== 'input_required') throw new Error('unreachable');
     expect(Object.keys(first.inputRequests ?? {})).toEqual(['name']);
@@ -237,7 +244,9 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
         ...connectCtx(modern.url),
         credential: {
           credentialHash: 'c2',
-          injections: [{ to: 'header' as const, name: 'Authorization', value: 'Bearer {{secret.TOKEN}}' }],
+          injections: [
+            { to: 'header' as const, name: 'Authorization', value: 'Bearer {{secret.TOKEN}}' },
+          ],
           templateContext: { secret: { TOKEN: 's3cret' } },
         },
       };
@@ -255,7 +264,10 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
     expect(session.era).toBe('legacy');
     expect(session.sessionId).toBeTruthy();
     expect(verdictKind).toBe('legacy');
-    const out = await session.callTool({ name: 'echo', arguments: { text: 'hi' } }, { ctx: ctxOf({ era: 'legacy' }) });
+    const out = await session.callTool(
+      { name: 'echo', arguments: { text: 'hi' } },
+      { ctx: ctxOf({ era: 'legacy' }) },
+    );
     expect(text(out as never)).toBe('hi');
   });
 
@@ -267,7 +279,11 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
       capabilities: Record<string, unknown>;
       meta: Record<string, unknown>;
     };
-    expect(who.clientInfo).toMatchObject({ name: 'bastion', title: 'Bastion MCP Gateway', version: '9.9.9' });
+    expect(who.clientInfo).toMatchObject({
+      name: 'bastion',
+      title: 'Bastion MCP Gateway',
+      version: '9.9.9',
+    });
     expect(who.capabilities.elicitation).toEqual({ form: {}, url: {} });
     expect(who.capabilities.sampling).toBeUndefined();
     expect(who.meta['io.github.bastion-mcp/onBehalfOf']).toBeDefined();
@@ -276,7 +292,10 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
   it('6.4 sampling and roots are declared only when the catalog entry enables them', async () => {
     const ctx = {
       ...connectCtx(legacy.url),
-      installation: installationOf(remoteSpec(legacy.url), { enableSampling: true, enableRoots: true }),
+      installation: installationOf(remoteSpec(legacy.url), {
+        enableSampling: true,
+        enableRoots: true,
+      }),
     };
     const session = await connector().connect(ctx);
     open.push(session);
@@ -293,7 +312,10 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
       instanceId: 'instance-1',
     });
     const session = await connect(legacy.url, { continuations: registry });
-    const first = await session.callTool({ name: 'ask', arguments: { q: 'who?' } }, { ctx: ctxOf({ era: 'modern' }) });
+    const first = await session.callTool(
+      { name: 'ask', arguments: { q: 'who?' } },
+      { ctx: ctxOf({ era: 'modern' }) },
+    );
     expect(first.kind).toBe('input_required');
     if (first.kind !== 'input_required') throw new Error('unreachable');
     expect(Object.keys(first.inputRequests ?? {})).toEqual(['b0']);
@@ -311,14 +333,21 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
   });
 
   it('6.5 parallel server requests from one call are batched into b0 and b1', async () => {
-    const registry = new ContinuationRegistry({ redis: new FakeRedis(), workerId: 'w1', instanceId: 'i' });
+    const registry = new ContinuationRegistry({
+      redis: new FakeRedis(),
+      workerId: 'w1',
+      instanceId: 'i',
+    });
     const session = await connect(legacy.url, { continuations: registry });
     const first = await session.callTool({ name: 'ask2', arguments: { q: 'p' } }, { ctx: ctxOf() });
     if (first.kind !== 'input_required') throw new Error('expected input_required');
     expect(Object.keys(first.inputRequests ?? {})).toEqual(['b0', 'b1']);
     const done = await session.resumeContinuation(
       first.continuationId as string,
-      { b0: { action: 'accept', content: { v: 'A' } }, b1: { action: 'accept', content: { v: 'B' } } },
+      {
+        b0: { action: 'accept', content: { v: 'A' } },
+        b1: { action: 'accept', content: { v: 'B' } },
+      },
       { ctx: ctxOf() },
     );
     expect(text(done as never)).toBe('A+B');
@@ -326,7 +355,11 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
 
   it('6.5 a missing downstream elicitation capability is answered decline without reaching the client', async () => {
     const session = await connect(legacy.url, {
-      continuations: new ContinuationRegistry({ redis: new FakeRedis(), workerId: 'w1', instanceId: 'i' }),
+      continuations: new ContinuationRegistry({
+        redis: new FakeRedis(),
+        workerId: 'w1',
+        instanceId: 'i',
+      }),
     });
     const out = await session.callTool(
       { name: 'ask', arguments: { q: 'x' } },
@@ -345,12 +378,22 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
     const session = await connector().connect({
       ...connectCtx(legacy.url),
       installation,
-      continuations: new ContinuationRegistry({ redis: new FakeRedis(), workerId: 'w1', instanceId: 'i' }),
+      continuations: new ContinuationRegistry({
+        redis: new FakeRedis(),
+        workerId: 'w1',
+        instanceId: 'i',
+      }),
     });
     open.push(session);
-    const sampled = await session.callTool({ name: 'sample', arguments: {} }, { ctx: ctxOf({ clientCapabilities: {} }) });
+    const sampled = await session.callTool(
+      { name: 'sample', arguments: {} },
+      { ctx: ctxOf({ clientCapabilities: {} }) },
+    );
     expect(text(sampled as never)).toBe('sample-error:-32601');
-    const roots = await session.callTool({ name: 'roots', arguments: {} }, { ctx: ctxOf({ clientCapabilities: {} }) });
+    const roots = await session.callTool(
+      { name: 'roots', arguments: {} },
+      { ctx: ctxOf({ clientCapabilities: {} }) },
+    );
     expect(text(roots as never)).toBe('roots:file:///workspace');
   });
 
@@ -366,7 +409,10 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
     });
     expect(legacy.initializeCount()).toBe(initializes);
     expect(resumed.sessionId).toBe(first.sessionId);
-    const out = await resumed.callTool({ name: 'echo', arguments: { text: 'again' } }, { ctx: ctxOf() });
+    const out = await resumed.callTool(
+      { name: 'echo', arguments: { text: 'again' } },
+      { ctx: ctxOf() },
+    );
     expect(text(out as never)).toBe('again');
     await sleep(100);
     expect(legacy.hasGetStream()).toBe(true);
@@ -383,13 +429,20 @@ describe('6.4 upstream connectors against real fake upstream servers', () => {
 
   it('6.1 an HTTP+SSE upstream works through SseConnector', async () => {
     const spec = remoteSpec(sse.url, 'sse');
-    const session = await new SseConnector({ agents, settings: LOOPBACK_SETTINGS, version: '1' }).connect({
+    const session = await new SseConnector({
+      agents,
+      settings: LOOPBACK_SETTINGS,
+      version: '1',
+    }).connect({
       ...connectCtx(sse.url),
       installation: installationOf(spec),
     });
     open.push(session);
     expect(session.era).toBe('legacy');
-    const out = await session.callTool({ name: 'echo', arguments: { text: 'sse' } }, { ctx: ctxOf() });
+    const out = await session.callTool(
+      { name: 'echo', arguments: { text: 'sse' } },
+      { ctx: ctxOf() },
+    );
     expect(text(out as never)).toBe('sse');
     const list = await session.listTools({}, { ctx: ctxOf() });
     expect((list.tools as unknown[]).length).toBeGreaterThan(0);

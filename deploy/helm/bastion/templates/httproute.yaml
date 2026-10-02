@@ -1,0 +1,38 @@
+{{- if .Values.httpRoute.enabled }}
+{{- $worker := printf "%s-%s" (include "bastion.fullname" .) (include "bastion.workerComponent" .) }}
+{{- $ui := ternary $worker (printf "%s-ui" (include "bastion.fullname" .)) (eq .Values.deploymentMode "all") }}
+{{- $port := .Values.worker.ports.http }}
+{{- $hostnames := default (list (include "bastion.host" .)) .Values.httpRoute.hostnames }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "bastion.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "httproute") | nindent 4 }}
+spec:
+  {{- with .Values.httpRoute.parentRefs }}
+  parentRefs:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  hostnames:
+    {{- range $hostnames }}
+    - {{ . | quote }}
+    {{- end }}
+  rules:
+    # MCP route: long-lived streams (subscriptions/listen, legacy GET) need an unlimited request timeout (20.2).
+    - matches:
+        - path: { type: PathPrefix, value: /mcp }
+        - path: { type: PathPrefix, value: /.well-known/oauth-protected-resource }
+      timeouts:
+        request: {{ .Values.httpRoute.mcpRequestTimeout }}
+      backendRefs:
+        - { name: {{ $worker }}, port: {{ $port }} }
+    - matches:
+        - path: { type: PathPrefix, value: /plugins }
+        - path: { type: PathPrefix, value: /registry }
+        - path: { type: PathPrefix, value: /oauth }
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - { name: {{ $ui }}, port: {{ $port }} }
+{{- end }}

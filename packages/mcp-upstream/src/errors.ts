@@ -7,7 +7,12 @@ import {
   UpstreamTimeoutError,
   UpstreamUnavailableError,
 } from '@bastion-mcp/core';
-import { ProtocolError, SdkError, SdkErrorCode, UnauthorizedError } from '@modelcontextprotocol/client';
+import {
+  ProtocolError,
+  SdkError,
+  SdkErrorCode,
+  UnauthorizedError,
+} from '@modelcontextprotocol/client';
 import { AuthRequiredError } from './ports';
 
 /** An upstream JSON-RPC error passed through unchanged except for truncation and stack removal (6.9). */
@@ -56,7 +61,10 @@ const httpStatusOf = (error: unknown): number | undefined => {
  * upstream JSON-RPC errors pass through, timeouts become `-32017`, missing credentials `-32015`, and everything
  * else (refused connections, closed streams, oversized messages) `-32014`.
  */
-export const mapUpstreamError = async (error: unknown, ctx: ErrorContext): Promise<BastionError> => {
+export const mapUpstreamError = async (
+  error: unknown,
+  ctx: ErrorContext,
+): Promise<BastionError> => {
   if (isBastionError(error)) return error;
   if (error instanceof AuthRequiredError) {
     return new UpstreamAuthRequiredError('upstream credential required', {

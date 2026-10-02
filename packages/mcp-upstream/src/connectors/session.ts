@@ -1,4 +1,4 @@
-import { newId, TIMEOUTS_MS, type Era } from '@bastion-mcp/core';
+import { type Era, newId, TIMEOUTS_MS } from '@bastion-mcp/core';
 import {
   type Client,
   isInputRequiredResult,
@@ -7,9 +7,8 @@ import {
   type Transport,
 } from '@modelcontextprotocol/client';
 import { ContinuationLostError } from '../errors';
-import { runWithTrace } from './trace';
-import { answerMissingCapability, type ServerRequestKind } from '../input-required/helpers';
 import { LegacyCallScope, type ScopeEvent } from '../input-required/call-scope';
+import { answerMissingCapability, type ServerRequestKind } from '../input-required/helpers';
 import type { ContinuationRegistry } from '../input-required/registry';
 import { type Logger, noopLogger, type ResolvedInstallation } from '../ports';
 import { extensionAllowed, filterExtensions } from '../tasks/extensions';
@@ -25,6 +24,7 @@ import {
   intersectCapabilities,
   timeoutFor,
 } from './identity';
+import { runWithTrace } from './trace';
 import type {
   CloseInfo,
   ListenFilter,
@@ -197,11 +197,16 @@ export class SdkUpstreamSession implements UpstreamSession {
     if (this.installation.enableSampling) handlers.push(['sampling/createMessage', 'sampling']);
     if (this.installation.enableRoots) handlers.push(['roots/list', 'roots']);
     for (const [method, kind] of handlers) {
-      client.setRequestHandler(method as 'elicitation/create', ((request: { params?: unknown }) =>
-        this.routeServerRequest(kind, request.params)) as never);
+      client.setRequestHandler(
+        method as 'elicitation/create',
+        ((request: { params?: unknown }) => this.routeServerRequest(kind, request.params)) as never,
+      );
     }
     const forward = (method: string) => (notification: { params?: unknown }) => {
-      this.dispatchNotification({ method, ...(isObject(notification.params) ? { params: notification.params } : {}) });
+      this.dispatchNotification({
+        method,
+        ...(isObject(notification.params) ? { params: notification.params } : {}),
+      });
     };
     for (const method of [
       'notifications/tools/list_changed',
@@ -209,19 +214,23 @@ export class SdkUpstreamSession implements UpstreamSession {
       'notifications/resources/list_changed',
       'notifications/resources/updated',
     ]) {
-      client.setNotificationHandler(method as 'notifications/tools/list_changed', forward(method) as never);
+      client.setNotificationHandler(
+        method as 'notifications/tools/list_changed',
+        forward(method) as never,
+      );
     }
-    client.setNotificationHandler('notifications/message' as 'notifications/message', ((n: {
-      params?: unknown;
-    }) => {
-      const note: UpstreamNotification = {
-        method: 'notifications/message',
-        ...(isObject(n.params) ? { params: n.params } : {}),
-      };
-      const emitters = [...this.inflight].flatMap((call) => (call.emit ? [call.emit] : []));
-      if (emitters.length === 0) this.dispatchNotification(note);
-      for (const emit of emitters) emit(note);
-    }) as never);
+    client.setNotificationHandler(
+      'notifications/message' as 'notifications/message',
+      ((n: { params?: unknown }) => {
+        const note: UpstreamNotification = {
+          method: 'notifications/message',
+          ...(isObject(n.params) ? { params: n.params } : {}),
+        };
+        const emitters = [...this.inflight].flatMap((call) => (call.emit ? [call.emit] : []));
+        if (emitters.length === 0) this.dispatchNotification(note);
+        for (const emit of emitters) emit(note);
+      }) as never,
+    );
     client.fallbackNotificationHandler = async (notification) => {
       if (notification.method.startsWith('notifications/progress')) return;
       this.dispatchNotification({
@@ -281,7 +290,9 @@ export class SdkUpstreamSession implements UpstreamSession {
       const declared = declaredCapabilities(this.installation);
       capabilities = intersectCapabilities(declared, ctx.clientCapabilities);
       const extensions = filterExtensions(
-        (ctx.clientCapabilities as { extensions?: Record<string, unknown> })[MODERN_ONLY_EXTENSIONS_KEY],
+        (ctx.clientCapabilities as { extensions?: Record<string, unknown> })[
+          MODERN_ONLY_EXTENSIONS_KEY
+        ],
         this.installation.extensions,
         { singleInstallationEndpoint: ctx.singleInstallationEndpoint ?? false },
       );
@@ -334,7 +345,8 @@ export class SdkUpstreamSession implements UpstreamSession {
 
   async request(method: string, params: JsonObject, options: OpOptions): Promise<SessionOutcome> {
     if (this._closed) throw new Error('upstream session is closed');
-    if (method.startsWith('tasks/') || method === 'tools/call') this.assertExtensionUse(method, params, options);
+    if (method.startsWith('tasks/') || method === 'tools/call')
+      this.assertExtensionUse(method, params, options);
     const timeout = this.effectiveTimeout(method, options);
     const sendParams = this.sendParams(method, params, options);
     if (this.era === 'legacy' && CONTINUABLE.has(method)) {
@@ -364,10 +376,17 @@ export class SdkUpstreamSession implements UpstreamSession {
   /** A blocked or unlisted extension must not be used even if the downstream asked for it (6.8). */
   private assertExtensionUse(method: string, _params: JsonObject, options: OpOptions): void {
     if (!method.startsWith('tasks/')) return;
-    const allowed = extensionAllowed('io.modelcontextprotocol/tasks', this.installation.extensions, {
-      singleInstallationEndpoint: options.ctx.singleInstallationEndpoint ?? false,
-    });
-    if (!allowed) throw Object.assign(new Error('extension not allowed for this installation'), { code: -32601 });
+    const allowed = extensionAllowed(
+      'io.modelcontextprotocol/tasks',
+      this.installation.extensions,
+      {
+        singleInstallationEndpoint: options.ctx.singleInstallationEndpoint ?? false,
+      },
+    );
+    if (!allowed)
+      throw Object.assign(new Error('extension not allowed for this installation'), {
+        code: -32601,
+      });
   }
 
   // --- legacy continuations (6.5) --------------------------------------------------------------------------------
@@ -470,7 +489,10 @@ const linkSignal = (signal: AbortSignal | undefined, abort: AbortController): ((
 /** The OpOutcome shape (6.2) of a raw upstream result. */
 export const toOutcome = (raw: unknown): SessionOutcome => {
   if (isInputRequiredResult(raw)) {
-    const r = raw as { inputRequests?: Record<string, { method: string; params?: unknown }>; requestState?: string };
+    const r = raw as {
+      inputRequests?: Record<string, { method: string; params?: unknown }>;
+      requestState?: string;
+    };
     return {
       kind: 'input_required',
       inputRequests: r.inputRequests,

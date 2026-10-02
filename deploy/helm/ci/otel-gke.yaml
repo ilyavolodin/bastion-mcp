@@ -1,0 +1,21 @@
+publicUrl: https://mcp.example.com
+existingSecret: bastion-secrets
+kms:
+  provider: gcp
+  key: projects/p/locations/global/keyRings/r/cryptoKeys/k
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: bastion@p.iam.gserviceaccount.com
+ingress:
+  className: gce
+  tls:
+    - secretName: bastion-tls
+gke:
+  backendConfig:
+    enabled: true
+otelCollector:
+  enabled: true
+  exporter:
+    endpoint: https://otlp.example.com
+    headers:
+      authorization: Bearer example

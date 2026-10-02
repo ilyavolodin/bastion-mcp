@@ -1,0 +1,85 @@
+{{- /*
+NetworkPolicies (tdd 20.2). Ingress only; egress is not restricted here because workers and ui talk to Postgres,
+Redis, the KMS, upstream servers and sandboxes. The sandbox side is restricted by the SandboxTemplate networkPolicy.
+*/ -}}
+{{- if .Values.networkPolicies.enabled }}
+{{- $ic := .Values.networkPolicies.ingressController }}
+{{- $w := include "bastion.workerComponent" . }}
+{{- $http := .Values.worker.ports.http }}
+{{- $internal := .Values.worker.ports.internal }}
+{{- $egress := .Values.worker.ports.egress }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "bastion.fullname" . }}-{{ $w }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" $w) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "bastion.selectorLabels" (dict "root" . "component" $w) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    # 8080 from the ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $ic.namespaceSelector | nindent 14 }}
+          {{- with $ic.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+      ports:
+        - { protocol: TCP, port: {{ $http }} }
+    # 7443 only from worker pods (internal RPC, 21.2)
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "bastion.selectorLabels" (dict "root" . "component" $w) | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: {{ $internal }} }
+    {{- if .Values.sandbox.enabled }}
+    # 3128 (egress proxy) only from sandbox pods
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.sandbox.namespace }}
+      ports:
+        - { protocol: TCP, port: {{ $egress }} }
+    {{- end }}
+    {{- with .Values.networkPolicies.extraIngress.worker }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- if ne .Values.deploymentMode "all" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "bastion.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "ui") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "bastion.selectorLabels" (dict "root" . "component" "ui") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $ic.namespaceSelector | nindent 14 }}
+          {{- with $ic.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+      ports:
+        - { protocol: TCP, port: {{ $http }} }
+    {{- with .Values.networkPolicies.extraIngress.ui }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- end }}

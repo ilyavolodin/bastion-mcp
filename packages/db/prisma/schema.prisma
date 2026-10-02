@@ -46,6 +46,7 @@ model User {
   displayName           String             @map("display_name")
   idpConnectionId       String?            @map("idp_connection_id") @db.Uuid
   externalSubject       String?            @map("external_subject")
+  scimExternalId        String?            @map("scim_external_id")
   orgRole               String             @default("member") @map("org_role")
   status                String             @default("active")
   localPasswordHash     String?            @map("local_password_hash")
@@ -61,6 +62,7 @@ model User {
   notifications         Notification[]     @relation("Notifications_UserId")
 
   @@unique([idpConnectionId, externalSubject])
+  @@unique([idpConnectionId, scimExternalId])
   @@map("users")
 }
 
@@ -101,20 +103,25 @@ model RoleMappingRule {
   mapsTo          Json           @map("maps_to")
   priority        Int            @default(100)
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime?      @updatedAt @map("updated_at") @db.Timestamptz(6)
   idpConnection   IdpConnection? @relation("RoleMappingRules_IdpConnectionId", fields: [idpConnectionId], references: [id])
 
   @@map("role_mapping_rules")
 }
 
 model ServiceAccount {
-  id            String   @id @db.Uuid
-  teamId        String   @map("team_id") @db.Uuid
+  id            String    @id @db.Uuid
+  teamId        String    @map("team_id") @db.Uuid
   slug          String
-  displayName   String   @map("display_name")
-  status        String   @default("active")
-  oauthClientId String?  @unique @map("oauth_client_id")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  team          Team     @relation("ServiceAccounts_TeamId", fields: [teamId], references: [id])
+  displayName   String    @map("display_name")
+  status        String    @default("active")
+  oauthClientId String?   @unique @map("oauth_client_id")
+  authMethod    String    @default("client_secret_basic") @map("auth_method")
+  secretSha256  String?   @map("secret_sha256")
+  jwks          Json?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  team          Team      @relation("ServiceAccounts_TeamId", fields: [teamId], references: [id])
 
   @@unique([teamId, slug])
   @@map("service_accounts")
@@ -241,6 +248,7 @@ model CatalogVersion {
   referenceSnapshotId String?              @map("reference_snapshot_id") @db.Uuid
   protocolEra         String?              @map("protocol_era")
   testResult          Json?                @map("test_result")
+  runtime             Json                 @default("{}")
   status              String               @default("draft")
   changelog           String?
   createdBy           String               @map("created_by") @db.Uuid
@@ -269,6 +277,7 @@ model UpstreamSnapshot {
   resourceTemplates Json            @map("resource_templates")
   serverInfo        Json?           @map("server_info")
   instructions      String?
+  ttlMs             Int?            @map("ttl_ms")
   capturedAt        DateTime        @default(now()) @map("captured_at") @db.Timestamptz(6)
   catalogVersion    CatalogVersion? @relation("UpstreamSnapshots_CatalogVersionId", fields: [catalogVersionId], references: [id])
 
@@ -317,6 +326,7 @@ model GuardProfile {
   isOrgDefault    Boolean   @default(false) @map("is_org_default")
   latencyBudgetMs Int       @default(1500) @map("latency_budget_ms")
   guards          Json
+  settings        Json      @default("{}")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -445,6 +455,10 @@ model Instance {
   lastUsedAt       DateTime?     @map("last_used_at") @db.Timestamptz(6)
   failureCount     Int           @default(0) @map("failure_count")
   lastError        Json?         @map("last_error")
+  userId           String?       @map("user_id") @db.Uuid
+  remoteSession    Json?         @map("remote_session")
+  runningVersionId String?       @map("running_version_id") @db.Uuid
+  failures         Json          @default("[]")
   createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime?     @updatedAt @map("updated_at") @db.Timestamptz(6)
   installation     Installation? @relation("Instances_InstallationId", fields: [installationId], references: [id], onDelete: Cascade)
@@ -492,6 +506,7 @@ model AutoInstallPolicy {
   enabled                 Boolean                  @default(true)
   createdBy               String                   @map("created_by") @db.Uuid
   createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime?                @updatedAt @map("updated_at") @db.Timestamptz(6)
   catalogEntry            CatalogEntry             @relation("AutoInstallPolicies_CatalogEntryId", fields: [catalogEntryId], references: [id], onDelete: Cascade)
   autoInstallApplications AutoInstallApplication[] @relation("AutoInstallApplications_PolicyId")
 
@@ -516,12 +531,14 @@ model RegistrySource {
   name             String
   baseUrl          String           @unique @map("base_url")
   authSecretId     String?          @map("auth_secret_id") @db.Uuid
+  authHeaderName   String?          @map("auth_header_name")
   trust            String           @default("community")
   enabled          Boolean          @default(false)
   syncIntervalS    Int              @default(3600) @map("sync_interval_s")
   lastUpdatedSince DateTime?        @map("last_updated_since") @db.Timestamptz(6)
   lastSync         Json?            @map("last_sync")
   createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime?        @updatedAt @map("updated_at") @db.Timestamptz(6)
   registryServers  RegistryServer[] @relation("RegistryServers_SourceId")
   registryPolicies RegistryPolicy[] @relation("RegistryPolicies_SourceId")
 
@@ -535,6 +552,7 @@ model RegistryServer {
   serverJson  Json                     @map("server_json")
   status      String
   isLatest    Boolean                  @map("is_latest")
+  meta        Json                     @default("{}")
   publishedAt DateTime?                @map("published_at") @db.Timestamptz(6)
   search      Unsupported("tsvector")?
   syncedAt    DateTime                 @default(now()) @map("synced_at") @db.Timestamptz(6)
@@ -615,6 +633,7 @@ model CallStatsMinute {
   outcome        String
   count          Int
   bytesOut       BigInt   @map("bytes_out")
+  errorCount     Int      @default(0) @map("error_count")
   latencyBuckets Int[]    @map("latency_buckets")
 
   @@id([bucket, installationId, itemName, outcome])
@@ -632,6 +651,8 @@ model EgressEvent {
   bytesUp    BigInt?  @map("bytes_up")
   bytesDown  BigInt?  @map("bytes_down")
   durationMs Int?     @map("duration_ms")
+  protocol   String?
+  reason     String?
 
   @@id([ts, id])
   @@map("egress_events")
@@ -836,6 +857,7 @@ model CallStatsHour {
   outcome        String
   count          Int
   bytesOut       BigInt   @map("bytes_out")
+  errorCount     Int      @default(0) @map("error_count")
   latencyBuckets Int[]    @map("latency_buckets")
 
   @@id([bucket, installationId, itemName, outcome])
@@ -850,6 +872,7 @@ model CallStatsDay {
   outcome        String
   count          Int
   bytesOut       BigInt   @map("bytes_out")
+  errorCount     Int      @default(0) @map("error_count")
   latencyBuckets Int[]    @map("latency_buckets")
 
   @@id([bucket, installationId, itemName, outcome])

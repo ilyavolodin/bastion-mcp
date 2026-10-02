@@ -1,0 +1,21 @@
+{
+  "name": "@bastion-mcp/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "generate": "vite-node scripts/generate.ts",
+    "openapi:check": "vite-node scripts/openapi-diff.ts --"
+  },
+  "devDependencies": {
+    "@bastion-mcp/api": "workspace:*",
+    "openapi-typescript": "7.13.0",
+    "vite-node": "3.2.4"
+  }
+}

@@ -1,0 +1,12 @@
+{{- if .Values.gke.backendConfig.enabled }}
+{{- $w := include "bastion.workerComponent" . }}
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ include "bastion.fullname" . }}-{{ $w }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" $w) | nindent 4 }}
+spec:
+  timeoutSec: {{ .Values.gke.backendConfig.timeoutSec }}
+{{- end }}

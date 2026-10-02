@@ -1,0 +1,312 @@
+name: release
+
+# tdd 20.1 and 25.6. Triggered by a version tag (vX.Y.Z or vX.Y.Z-rc.N). Builds and publishes:
+#   - ghcr.io/bastion-mcp/bastion and ghcr.io/bastion-mcp/sandbox-runtime (linux/amd64 + linux/arm64),
+#     signed keylessly with cosign (GitHub OIDC), with an SPDX SBOM (syft) attached as a cosign attestation and as a
+#     release asset, and SLSA build provenance (actions/attest-build-provenance + BuildKit provenance)
+#   - the Helm chart as an OCI artifact (ghcr.io/bastion-mcp/charts/bastion), signed
+#   - bastion-credential binaries for macOS arm64/x64, Windows x64, Linux x64/arm64 (bun build --compile)
+#   - a GitHub release with binaries, checksums, SBOMs and the packaged chart
+# Third-party actions are pinned to full commit SHAs (resolved from the release tags through the GitHub API on
+# 2026-10-02; Renovate keeps them current, see renovate.json). Verify an image with:
+#   cosign verify ghcr.io/bastion-mcp/bastion@<digest> \
+#     --certificate-identity-regexp '^https://github.com/bastion-mcp/bastion-mcp/\.github/workflows/release\.yml@' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build without publishing a release (for example 0.0.0-test). Pushes nothing when dry_run is true."
+        required: true
+      dry_run:
+        description: "Build everything but do not push images, sign, or create a release"
+        type: boolean
+        default: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  VERSION: ${{ github.event_name == 'push' && github.ref_name || format('v{0}', inputs.version) }}
+  PUBLISH: ${{ github.event_name == 'push' || inputs.dry_run == false }}
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    name: image ${{ matrix.image }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # keyless cosign signing and provenance
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: bastion
+            dockerfile: deploy/docker/Dockerfile
+          - image: sandbox-runtime
+            dockerfile: deploy/docker/Dockerfile.sandbox
+    outputs:
+      bastion-digest: ${{ steps.digest.outputs.bastion }}
+      sandbox-runtime-digest: ${{ steps.digest.outputs.sandbox-runtime }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=${{ env.VERSION }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.VERSION }},enable=${{ !contains(env.VERSION, '-') }}
+            type=raw,value=latest,enable=${{ !contains(env.VERSION, '-') }}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max # BuildKit SLSA provenance attestation stored next to the image
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - id: digest
+        run: echo "${{ matrix.image }}=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+      - name: Install cosign
+        if: env.PUBLISH == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign image (keyless)
+        if: env.PUBLISH == 'true'
+        run: cosign sign --yes "${REGISTRY}/${{ github.repository_owner }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}"
+      - name: SPDX SBOM (syft)
+        if: env.PUBLISH == 'true'
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-${{ matrix.image }}.spdx.json
+          artifact-name: sbom-${{ matrix.image }}.spdx.json
+          upload-release-assets: false
+      - name: Attach SBOM as a signed attestation
+        if: env.PUBLISH == 'true'
+        run: |
+          cosign attest --yes --type spdxjson --predicate "sbom-${{ matrix.image }}.spdx.json" \
+            "${REGISTRY}/${{ github.repository_owner }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}"
+      - name: SLSA build provenance (GitHub attestation)
+        if: env.PUBLISH == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  chart:
+    name: helm chart
+    needs: images
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate the chart (lint, template, assertions, kubeconform with agent-sandbox CRDs)
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | sudo tar -xz -C /usr/local/bin kubeconform
+          deploy/helm/validate.sh
+      - name: Package
+        id: package
+        run: |
+          version="${VERSION#v}"
+          helm package deploy/helm/bastion --version "$version" --app-version "$version" --destination dist
+          echo "file=dist/bastion-${version}.tgz" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install cosign
+        if: env.PUBLISH == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Push chart and sign its digest
+        if: env.PUBLISH == 'true'
+        run: |
+          out="$(helm push "${{ steps.package.outputs.file }}" "oci://${REGISTRY}/${{ github.repository_owner }}/charts" 2>&1 | tee /dev/stderr)"
+          digest="$(printf '%s\n' "$out" | sed -n 's/^Digest: //p')"
+          test -n "$digest"
+          cosign sign --yes "${REGISTRY}/${{ github.repository_owner }}/charts/bastion@${digest}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: chart
+          path: dist/*.tgz
+
+  credential-build:
+    name: bastion-credential (build all targets)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - run: pnpm install --frozen-lockfile
+      # apps/credential/scripts/build-targets.mjs runs `bun build --compile --target=...` for
+      # bun-darwin-arm64, bun-darwin-x64, bun-windows-x64, bun-linux-x64 and bun-linux-arm64.
+      - run: pnpm --filter bastion-credential build:targets
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: credential-unsigned
+          path: apps/credential/dist/bastion-credential-*
+          if-no-files-found: error
+
+  credential-sign-macos:
+    name: bastion-credential (macOS sign and notarize)
+    needs: credential-build
+    runs-on: macos-14
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: credential-unsigned
+          path: bin
+      # SECRETS-GATED PLACEHOLDER. Needs repository secrets APPLE_CERTIFICATE_P12 (base64 Developer ID Application
+      # certificate), APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_TEAM_ID and
+      # APPLE_APP_PASSWORD. Without them the binaries pass through unsigned (macOS will quarantine them). This
+      # block has never run: it is untested until the Apple Developer account exists.
+      - name: Sign and notarize (only when the Apple secrets exist)
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE_P12" ]; then
+            echo "::warning::Apple signing secrets are not configured; shipping UNSIGNED macOS binaries"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p ci "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p ci "$keychain"
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k ci "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain
+          cat > "$RUNNER_TEMP/entitlements.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>com.apple.security.cs.allow-jit</key><true/>
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+          </dict></plist>
+          PLIST
+          for f in bin/bastion-credential-darwin-*; do
+            # bun's compiled executables need the JIT and unsigned-executable-memory entitlements under the hardened runtime.
+            codesign --force --timestamp --options runtime --entitlements "$RUNNER_TEMP/entitlements.plist" --sign "$APPLE_SIGNING_IDENTITY" "$f"
+            ditto -c -k --keepParent "$f" "$f.zip"
+            xcrun notarytool submit "$f.zip" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+            rm "$f.zip" # a bare Mach-O cannot be stapled; Gatekeeper checks the notarization ticket online
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: credential-macos
+          path: bin/bastion-credential-darwin-*
+
+  credential-sign-windows:
+    name: bastion-credential (Authenticode)
+    needs: credential-build
+    runs-on: windows-2022
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: credential-unsigned
+          path: bin
+      # SECRETS-GATED PLACEHOLDER. Needs WINDOWS_CERTIFICATE_PFX (base64 code-signing certificate) and
+      # WINDOWS_CERTIFICATE_PASSWORD. For an EV or cloud HSM certificate (Azure Trusted Signing, DigiCert KeyLocker)
+      # replace this step with that vendor's signing action. Never run: untested until a certificate exists.
+      - name: Sign (only when the certificate secret exists)
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE_PFX) {
+            Write-Host "::warning::Windows signing certificate is not configured; shipping UNSIGNED Windows binary"
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX))
+          $signtool = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          & $signtool sign /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 bin\bastion-credential-windows-x64.exe
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed" }
+          Remove-Item $pfx
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: credential-windows
+          path: bin/bastion-credential-windows-x64.exe
+
+  release:
+    name: github release
+    needs: [images, chart, credential-build, credential-sign-macos, credential-sign-windows]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: assets
+          merge-multiple: false
+      - name: Collect assets
+        run: |
+          mkdir release
+          cp assets/credential-unsigned/bastion-credential-linux-* release/
+          cp assets/credential-macos/* assets/credential-windows/* release/
+          cp assets/chart/*.tgz release/
+          cp assets/sbom-*/* release/ 2>/dev/null || true
+          (cd release && sha256sum -- * > SHA256SUMS)
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign checksums (keyless)
+        run: cosign sign-blob --yes --bundle release/SHA256SUMS.cosign.bundle release/SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            release/bastion-credential-*
+            release/*.tgz
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: release/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

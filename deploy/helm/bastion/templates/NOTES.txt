@@ -1,0 +1,53 @@
+Bastion {{ .Chart.AppVersion }} installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Mode:        {{ .Values.deploymentMode }}{{ if eq .Values.deploymentMode "split" }} (bastion-worker x{{ .Values.worker.autoscaling.enabled | ternary .Values.worker.autoscaling.minReplicas .Values.worker.replicas }}+, bastion-ui x{{ .Values.ui.replicas }}){{ else }} (BASTION_ROLE=all x{{ .Values.all.replicas }}){{ end }}
+Public URL:  {{ .Values.publicUrl }}
+MCP URL:     {{ .Values.publicUrl }}/mcp
+Routing:     {{ if .Values.httpRoute.enabled }}Gateway API HTTPRoute{{ else if .Values.ingress.enabled }}Ingress (class "{{ .Values.ingress.className }}"){{ else }}none (you must route /mcp, /.well-known/oauth-protected-resource to the worker Service and everything else to ui yourself){{ end }}
+
+PREREQUISITES (the chart cannot check these at render time; /readyz checks the first two at runtime)
+  1. PostgreSQL 16+ reachable through the DATABASE_URL key of Secret "{{ .Values.existingSecret }}" (sslmode=verify-full recommended).
+  2. Redis 7+ or Valkey 8 (standalone, Sentinel or Cluster) through REDIS_URL.
+{{- if .Values.sandbox.enabled }}
+  3. The agent-sandbox controller with extensions, v1.0.2 or newer, installed BEFORE this chart (it provides the
+     SandboxTemplate, SandboxWarmPool and SandboxClaim CRDs). Check:
+       kubectl get crd sandboxtemplates.extensions.agents.x-k8s.io sandboxwarmpools.extensions.agents.x-k8s.io sandboxclaims.extensions.agents.x-k8s.io
+  4. A RuntimeClass named "{{ .Values.sandbox.runtimeClassName }}" (gVisor "runsc", or Kata) on at least one node pool. Check:
+       kubectl get runtimeclass {{ .Values.sandbox.runtimeClassName }}
+     GKE Sandbox node pools work as they are. Sandbox pods stay Pending until a node can run that RuntimeClass.
+{{- else }}
+  3. Sandboxes are disabled (sandbox.enabled=false): BASTION_SANDBOX_DRIVER={{ default "bubblewrap" .Values.sandbox.driver }}. Package installations need
+     unprivileged user namespaces in the container (docs/admin-guide.md, "Sandbox drivers"); remote installations always work.
+{{- end }}
+  5. {{ if eq .Values.kms.provider "local" }}KMS provider "local": the 32-byte key file must exist at {{ .Values.kms.key }}{{ if .Values.kms.localKeySecret }} (mounted from Secret "{{ .Values.kms.localKeySecret }}"){{ else }}. Set kms.localKeySecret, or use a cloud KMS. A local key kept only in the pod filesystem is lost on restart.{{ end }}{{ else }}KMS provider "{{ .Values.kms.provider }}": grant the ServiceAccount access through serviceAccount.annotations (workload identity) or kms.credentialKeys.{{ end }}
+
+NEXT STEPS
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "bastion.fullname" . }}-{{ include "bastion.workerComponent" . }}
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  Create the first admin:  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "bastion.fullname" . }}-{{ ternary "all" "ui" (eq .Values.deploymentMode "all") }} -- bastion create-admin --email you@example.com
+{{- if not .Values.bootstrapAdminEmail }}
+  (bootstrapAdminEmail is not set, so no break-glass admin is created automatically.)
+{{- end }}
+
+{{- if and (eq .Values.deploymentMode "all") (gt (int .Values.all.replicas) 1) }}
+
+NOTE: with several `all` replicas each replica can only own bubblewrap sandboxes it started itself (tdd 20.3).
+{{- end }}
+{{- if not .Values.networkPolicies.enabled }}
+
+WARNING: networkPolicies.enabled=false. Worker port 7443 and the egress proxy (3128) are then open to every pod in the cluster.
+{{- end }}
+{{- if and .Values.sandbox.enabled (not .Values.networkPolicies.enabled) }}
+WARNING: SandboxTemplate NetworkPolicies are still created by the agent-sandbox controller, but they need a CNI that enforces NetworkPolicy.
+{{- end }}
+{{- if and (not .Values.ingress.enabled) (not .Values.httpRoute.enabled) }}
+
+WARNING: neither ingress nor httpRoute is enabled. Clients cannot reach {{ .Values.publicUrl }}.
+{{- end }}
+{{- if or (not (hasPrefix "https://" .Values.publicUrl)) }}
+
+WARNING: publicUrl is not https. TLS must terminate at the ingress for any shared deployment (tdd 22.4).
+{{- end }}
+
+Encryption in transit inside the cluster (worker to worker, worker to sandbox, Postgres, Redis) is your platform's job
+(tdd 22.4): enable CNI transparent encryption or a service mesh, and use sslmode=verify-full and rediss:// in the Secret.

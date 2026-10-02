@@ -27,6 +27,8 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@bastion-mcp/testkit": "workspace:*"
+    "@bastion-mcp/testkit": "workspace:*",
+    "@opentelemetry/context-async-hooks": "2.11.0",
+    "@opentelemetry/sdk-trace-base": "2.11.0"
   }
 }

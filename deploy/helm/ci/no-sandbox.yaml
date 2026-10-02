@@ -1,0 +1,4 @@
+publicUrl: https://mcp.example.com
+existingSecret: bastion-secrets
+sandbox:
+  enabled: false

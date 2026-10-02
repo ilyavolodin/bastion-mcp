@@ -54,7 +54,12 @@ export const startFakeModernServer = async (
   const build = (): McpServer => {
     const server = new McpServer(
       { name: 'fake-modern', version: '1.0.0' },
-      { capabilities: { tools: { listChanged: true }, resources: { listChanged: true } } },
+      {
+        capabilities: {
+          tools: { listChanged: true },
+          resources: { subscribe: true, listChanged: true },
+        },
+      },
     );
     server.registerTool(
       'echo',
@@ -65,7 +70,10 @@ export const startFakeModernServer = async (
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ ...(ctx.mcpReq._meta ?? {}), envelope: ctx.mcpReq.envelope ?? {} }),
+          text: JSON.stringify({
+            ...(ctx.mcpReq._meta ?? {}),
+            envelope: ctx.mcpReq.envelope ?? {},
+          }),
         },
       ],
     }));
@@ -132,6 +140,37 @@ export const startFakeModernServer = async (
         return { content: [{ type: 'text', text: `progress ${steps}` }] };
       },
     );
+    server.registerTool(
+      'widget',
+      {
+        description: 'A tool with an MCP Apps UI',
+        _meta: {
+          ui: {
+            resourceUri: 'ui://widget/main',
+            csp: { connectDomains: ['https://api.example.com'] },
+          },
+        },
+      },
+      () => ({ content: [{ type: 'text', text: 'widget' }] }),
+    );
+    server.registerResource(
+      'widget-ui',
+      'ui://widget/main',
+      {
+        description: 'The widget',
+        mimeType: 'text/html;profile=mcp-app',
+        _meta: { ui: { csp: { frameDomains: [] } } },
+      },
+      (uri) => ({
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: 'text/html;profile=mcp-app',
+            text: '<html><body>widget</body></html>',
+          },
+        ],
+      }),
+    );
     server.registerTool('huge', { description: 'Returns a huge text' }, () => ({
       content: [{ type: 'text', text: 'x'.repeat(options.hugeResultBytes ?? 1024) }],
     }));
@@ -180,7 +219,7 @@ export const startFakeModernServer = async (
         res.end(JSON.stringify({ error: 'unauthorized' }));
         return;
       }
-      await node(req, res, body);
+      await node(req as never, res, body);
     })().catch(() => {
       if (!res.headersSent) res.writeHead(500);
       res.end();

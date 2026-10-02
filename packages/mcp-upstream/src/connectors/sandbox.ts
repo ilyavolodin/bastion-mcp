@@ -1,6 +1,6 @@
 import { SandboxStdioTransport } from '@bastion-mcp/sandbox';
 import { type Logger, noopLogger } from '../ports';
-import { type Negotiation, createUpstreamClient } from './client-factory';
+import { createUpstreamClient, type Negotiation } from './client-factory';
 import { SdkUpstreamSession } from './session';
 import type { CloseInfo, ConnectContext, UpstreamConnector, UpstreamSession } from './types';
 
@@ -19,7 +19,8 @@ export class SandboxConnector implements UpstreamConnector {
 
   async connect(ctx: ConnectContext): Promise<UpstreamSession> {
     const { installation } = ctx;
-    if (installation.spec.type !== 'package') throw new Error('SandboxConnector needs a package spec');
+    if (installation.spec.type !== 'package')
+      throw new Error('SandboxConnector needs a package spec');
     const sandbox = ctx.sandbox;
     if (!sandbox) throw new Error('SandboxConnector needs the runner channel');
     const transport = new SandboxStdioTransport(sandbox.channel, {

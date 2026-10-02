@@ -1,0 +1,42 @@
+{{- /*
+Worker (or all-in-one) Service: 8080 http, 7443 internal, 3128 egress. Deliberately a plain ClusterIP Service (never
+headless): sandboxes are given this Service's ClusterIP as the proxy address (tdd 8.8) because their NetworkPolicy
+allows no DNS, and kube-proxy spreads sandbox connections across worker pods. Any worker can validate the proxy
+credentials because the owner writes egress:{instanceId} to Redis.
+*/ -}}
+{{- $w := include "bastion.workerComponent" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bastion.fullname" . }}-{{ $w }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" $w) | nindent 4 }}
+  {{- if .Values.gke.backendConfig.enabled }}
+  annotations:
+    cloud.google.com/backend-config: {{ printf `{"default":"%s-%s"}` (include "bastion.fullname" .) $w | quote }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "bastion.selectorLabels" (dict "root" . "component" $w) | nindent 4 }}
+  ports:
+    - { name: http, port: {{ .Values.worker.ports.http }}, targetPort: http, protocol: TCP }
+    - { name: internal, port: {{ .Values.worker.ports.internal }}, targetPort: internal, protocol: TCP }
+    - { name: egress, port: {{ .Values.worker.ports.egress }}, targetPort: egress, protocol: TCP }
+{{- if ne .Values.deploymentMode "all" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bastion.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "ui") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "bastion.selectorLabels" (dict "root" . "component" "ui") | nindent 4 }}
+  ports:
+    - { name: http, port: {{ .Values.worker.ports.http }}, targetPort: http, protocol: TCP }
+{{- end }}

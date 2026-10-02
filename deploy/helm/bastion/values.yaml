@@ -1,0 +1,217 @@
+# Bastion Helm chart values (tdd 20.2). Every key below is documented in docs/admin-guide.md.
+
+# External base URL (BASTION_PUBLIC_URL). REQUIRED. Issuer and resource URIs derive from it.
+publicUrl: ""
+
+# split: two Deployments, bastion-worker (BASTION_ROLE=worker) and bastion-ui (BASTION_ROLE=ui) from one image (4.2).
+# all:   one Deployment, BASTION_ROLE=all, every path on one port (small installs).
+deploymentMode: split
+
+image:
+  repository: ghcr.io/bastion-mcp/bastion
+  tag: "" # defaults to the chart appVersion
+  digest: "" # sha256:... pins the image and overrides tag
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Secret holding the connection settings. REQUIRED. Keys: DATABASE_URL, REDIS_URL, INTERNAL_SECRET.
+# Optional keys: INTERNAL_SECRET_PREVIOUS (rotation, 22.3), DATABASE_REPLICA_URL, plus any KMS credential keys
+# listed in kms.credentialKeys. The chart never creates this Secret.
+existingSecret: ""
+
+worker:
+  replicas: 3 # ignored while autoscaling.enabled
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+  resources:
+    requests: { cpu: "1", memory: 2Gi }
+    limits: { cpu: "4", memory: 8Gi }
+  ports:
+    http: 8080
+    internal: 7443
+    egress: 3128
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+
+ui:
+  replicas: 2
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { cpu: "2", memory: 2Gi }
+  # Plugin git channel cache (25.5), mounted at BASTION_GIT_CACHE_DIR.
+  gitCache:
+    mountPath: /var/cache/bastion/git
+    sizeLimit: 10Gi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+
+# Used only with deploymentMode=all.
+all:
+  replicas: 1
+  resources:
+    requests: { cpu: "1", memory: 2Gi }
+    limits: { cpu: "4", memory: 8Gi }
+  gitCache:
+    mountPath: /var/cache/bastion/git
+    sizeLimit: 10Gi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+
+# 21.2: SIGTERM drain is up to 25 s inside this grace period.
+terminationGracePeriodSeconds: 30
+
+# One PodDisruptionBudget per role (a single `all` Deployment only gets one when it has more than one replica).
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Spread by zone and by node. The labelSelector is added per role by the chart.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# One ServiceAccount for worker, ui and the sandbox Role binding. KMS access comes through its annotations:
+#   GKE Workload Identity: iam.gke.io/gcp-service-account
+#   EKS IRSA:              eks.amazonaws.com/role-arn
+#   Azure WI:              azure.workload.identity/client-id (and label azure.workload.identity/use via podLabels)
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# KMS (BASTION_KMS, BASTION_KMS_KEY). provider: local | gcp | aws | azure | vault.
+kms:
+  provider: local
+  # local: file path; gcp: key resource name; aws: key ARN; azure: key URL; vault: transit/keys/<name>
+  key: /keys/kek
+  localKeySecret: "" # local only: Secret with a 32-byte key under localKeySecretKey, mounted read-only at /keys
+  localKeySecretKey: kek
+  credentialKeys: [] # keys of existingSecret exposed as env vars of the same name (VAULT_TOKEN, AWS_ACCESS_KEY_ID, ...)
+
+# Behavior settings that map to BASTION_* variables (19.1). Anything else goes in `env`.
+bootstrapAdminEmail: "" # BASTION_BOOTSTRAP_ADMIN_EMAIL
+localLogin: false # BASTION_LOCAL_LOGIN
+logLevel: info # BASTION_LOG_LEVEL
+clusterCIDRs: [] # BASTION_CLUSTER_CIDRS: pod and service CIDRs the egress proxy always denies
+env: {} # extra literal env vars, for example { BASTION_NPM_REGISTRY: "https://npm.corp/" }
+extraEnv: [] # extra env entries in Kubernetes EnvVar format (valueFrom allowed)
+
+# Routing. Ingress is the default; set ingress.enabled=false and httpRoute.enabled=true for Gateway API.
+ingress:
+  enabled: true
+  className: nginx
+  host: "" # defaults to the host of publicUrl
+  annotations: {} # merged over the streaming defaults below
+  streamingAnnotations: # ingress-nginx: keep long-lived streams open (20.2)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+  tls: [] # [{ secretName: bastion-tls }] (hosts default to the ingress host)
+
+httpRoute:
+  enabled: false
+  parentRefs: [] # [{ name: gateway, namespace: infra }]
+  hostnames: [] # defaults to the host of publicUrl
+  mcpRequestTimeout: 0s # timeouts.request on the MCP route; 0s = no timeout
+
+# GKE only: BackendConfig with timeoutSec 3600 attached to the worker Service (the all-in-one Service in mode all).
+gke:
+  backendConfig:
+    enabled: false
+    timeoutSec: 3600
+
+# Agent-sandbox resources (8.4). Requires the agent-sandbox controller with extensions (v1.0.2+) and a RuntimeClass.
+sandbox:
+  enabled: true
+  namespace: bastion-sandboxes
+  driver: "" # BASTION_SANDBOX_DRIVER; empty = kubernetes when enabled, bubblewrap otherwise
+  runtimeClassName: gvisor # kata-qemu for Kata
+  image:
+    repository: ghcr.io/bastion-mcp/sandbox-runtime
+    tag: "" # defaults to the chart appVersion
+    digest: ""
+  warmPool:
+    small: 5
+    medium: 2
+    large: 0
+  sizes: # per-size pod resources (8.4)
+    small:
+      requests: { cpu: 250m, memory: 512Mi }
+      limits: { cpu: "1", memory: 512Mi }
+    medium:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { cpu: "2", memory: 1Gi }
+    large:
+      requests: { cpu: "1", memory: 4Gi }
+      limits: { cpu: "4", memory: 4Gi }
+  volumes:
+    tmpSizeLimit: 256Mi
+    mcpSizeLimit: 2Gi
+    homeSizeLimit: 256Mi
+    workspaceSizeLimit: 2Gi
+  namespaceLabels:
+    pod-security.kubernetes.io/enforce: restricted
+  keepNamespace: true # annotate the namespace helm.sh/resource-policy: keep so uninstall does not delete workspaces
+
+networkPolicies:
+  enabled: true
+  ingressController: # where the ingress controller or gateway runs
+    namespaceSelector:
+      kubernetes.io/metadata.name: ingress-nginx
+    podSelector: {} # optional pod labels of the controller
+  extraIngress:
+    worker: [] # extra NetworkPolicyIngressRule entries (all-in-one: appended to the single policy)
+    ui: []
+
+migrations:
+  enabled: true
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+
+otelCollector:
+  enabled: false
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    tag: 0.161.0
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  # Tail sampling: every trace with an ERROR span is kept, plus a baseline percentage of the rest.
+  tailSampling:
+    decisionWait: 10s
+    numTraces: 50000
+    baselinePercentage: 10
+  # OTLP/HTTP backend the collector exports to. Empty = a `debug` exporter only (for trying it out).
+  exporter:
+    endpoint: ""
+    headers: {}

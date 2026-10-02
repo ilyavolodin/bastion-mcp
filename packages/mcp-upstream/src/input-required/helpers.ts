@@ -43,7 +43,9 @@ export const clientSupports = (
       const elicitation = capabilities.elicitation;
       if (!elicitation) return false;
       const mode =
-        typeof params === 'object' && params !== null && (params as { mode?: unknown }).mode === 'url'
+        typeof params === 'object' &&
+        params !== null &&
+        (params as { mode?: unknown }).mode === 'url'
           ? 'url'
           : 'form';
       if (mode === 'url') return elicitation.url !== undefined;
@@ -80,7 +82,10 @@ export const answerMissingCapability = (
 /** TTL expiry (6.5): elicitations `{action:"cancel"}`, sampling and roots JSON-RPC `-32603`. */
 export const answerExpired = (kind: ServerRequestKind): unknown => {
   if (kind === 'elicitation') return { action: 'cancel' };
-  throw new ProtocolError(JSONRPC_CODES.INTERNAL_ERROR, 'the downstream client did not answer in time');
+  throw new ProtocolError(
+    JSONRPC_CODES.INTERNAL_ERROR,
+    'the downstream client did not answer in time',
+  );
 };
 
 /** An `inputResponses` entry the downstream client sent as a JSON-RPC style error. */

@@ -1,4 +1,8 @@
-import { MAX_UPSTREAM_MESSAGE_BYTES, MAX_UPSTREAM_STREAM_BYTES, UpstreamUnavailableError } from '@bastion-mcp/core';
+import {
+  MAX_UPSTREAM_MESSAGE_BYTES,
+  MAX_UPSTREAM_STREAM_BYTES,
+  UpstreamUnavailableError,
+} from '@bastion-mcp/core';
 import { type Logger, noopLogger } from '../ports';
 
 /**
@@ -14,14 +18,41 @@ export type CapOptions = {
   onViolation?: (error: UpstreamUnavailableError) => void;
 };
 
-const BLANK_LINE = [Buffer.from('\n\n'), Buffer.from('\r\n\r\n'), Buffer.from('\r\r')];
+const BOUNDARY = /\r\n\r\n|\n\n|\r\r/g;
+
+export type SseTrack = { pending: number; carry: Buffer; largest: number };
+
+/**
+ * Size accounting for an SSE stream (8.9): feeds one chunk and returns the bytes of the event still being received,
+ * the last bytes (a terminator may be split across chunks) and the largest event seen in this chunk.
+ */
+export const trackSseEvents = (
+  state: Pick<SseTrack, 'pending' | 'carry'>,
+  chunk: Uint8Array,
+): SseTrack => {
+  const view = Buffer.concat([state.carry, Buffer.from(chunk)]);
+  const text = view.toString('latin1');
+  let segmentStart = state.carry.length - state.pending;
+  let largest = 0;
+  let lastEnd = -1;
+  for (const match of text.matchAll(BOUNDARY)) {
+    const end = (match.index ?? 0) + match[0].length;
+    // A terminator that ended inside the carried bytes was already counted by the previous chunk.
+    if (end <= state.carry.length && state.pending === 0) continue;
+    largest = Math.max(largest, end - segmentStart);
+    segmentStart = end;
+    lastEnd = end;
+  }
+  const pending = lastEnd >= 0 ? view.length - lastEnd : state.pending + chunk.length;
+  largest = Math.max(largest, pending);
+  return { pending, carry: view.subarray(Math.max(0, view.length - 3)), largest };
+};
 
 /** Index just past the last SSE event terminator in `buffer`, or -1. */
 export const lastEventBoundary = (buffer: Buffer): number => {
   let best = -1;
-  for (const terminator of BLANK_LINE) {
-    const at = buffer.lastIndexOf(terminator);
-    if (at >= 0) best = Math.max(best, at + terminator.length);
+  for (const match of buffer.toString('latin1').matchAll(BOUNDARY)) {
+    best = (match.index ?? 0) + match[0].length;
   }
   return best;
 };
@@ -39,10 +70,9 @@ export class CapTracker {
   }
 
   private fail(what: string, limit: number): UpstreamUnavailableError {
-    const error = new UpstreamUnavailableError(
-      `upstream ${what} exceeds the ${limit} byte limit`,
-      { installation: this.options.installation },
-    );
+    const error = new UpstreamUnavailableError(`upstream ${what} exceeds the ${limit} byte limit`, {
+      installation: this.options.installation,
+    });
     this.violation ??= error;
     this.logger.error('upstream response cap exceeded', {
       installation: this.options.installation,
@@ -69,18 +99,17 @@ export class CapTracker {
     }
     if (!response.body) return response;
     let total = 0;
-    let event = 0;
-    let tail: Buffer = Buffer.alloc(0);
+    let sse: Pick<SseTrack, 'pending' | 'carry'> = { pending: 0, carry: Buffer.alloc(0) };
     const transform = new TransformStream<Uint8Array, Uint8Array>({
       transform: (chunk, controller) => {
         total += chunk.length;
         if (isStream) {
-          const view = Buffer.concat([tail, Buffer.from(chunk)]);
-          const boundary = lastEventBoundary(view);
-          event = boundary >= 0 ? view.length - boundary : event + chunk.length;
-          tail = view.subarray(Math.max(0, view.length - 3));
-          if (total > this.streamBytes) return controller.error(this.fail('stream', this.streamBytes));
-          if (event > this.messageBytes) return controller.error(this.fail('message', this.messageBytes));
+          const tracked = trackSseEvents(sse, chunk);
+          sse = tracked;
+          if (total > this.streamBytes)
+            return controller.error(this.fail('stream', this.streamBytes));
+          if (tracked.largest > this.messageBytes)
+            return controller.error(this.fail('message', this.messageBytes));
         } else if (total > this.messageBytes) {
           return controller.error(this.fail('message', this.messageBytes));
         }

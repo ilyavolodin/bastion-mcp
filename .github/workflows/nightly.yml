@@ -1,0 +1,133 @@
+name: nightly
+
+# tdd 23.1 and 23.3: security suites, fuzzing, the sandbox suite on a kind cluster with agent-sandbox (runc), and the
+# same on gVisor. Action versions are pinned to commit SHAs (see release.yml for how they were resolved).
+#
+# Honest status: the kind and gVisor jobs build the images from apps/server, which does not exist yet, and call test
+# files (`*.kind.test.ts`) that arrive with the M3 live verification (docs/spikes/m3-agent-sandbox.md). Until then those
+# two jobs fail at the image build or run no tests (`--passWithNoTests`); they are wired so the first real run is the
+# only missing step.
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      fuzz_runs:
+        description: "fast-check runs per fuzz property (about 10 minutes at the default)"
+        default: "500000"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  FUZZ_RUNS: ${{ inputs.fuzz_runs || '500000' }}
+
+jobs:
+  security:
+    name: security suites (23.3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      # MUST tests are named "<section> ..." (23.5), so the 23.3 suites are the tests whose title starts with 23.3.
+      # Integration tests need Docker (available on the runner).
+      - name: Security suites
+        run: pnpm exec turbo run test -- --testNamePattern '^23\.3'
+
+  fuzz:
+    name: fuzz (23.3, FUZZ_RUNS=${{ inputs.fuzz_runs || '500000' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      # The runner frame parser (apps/runner/test/fuzz.test.ts) and the sandbox frame decoder
+      # (packages/sandbox/test/frames.test.ts) read FUZZ_RUNS. The legacy adapter fuzz arrives with mcp-downstream.
+      - name: Fuzz
+        run: pnpm exec turbo run test -- --testNamePattern 'fuzz'
+
+  kind-sandbox:
+    name: sandbox suite on kind (runc)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          install_only: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - name: Cluster, agent-sandbox v1.0.2, Postgres, Valkey, images, chart
+        run: deploy/kind/setup.sh
+      - name: Sandbox suite against the cluster
+        env:
+          BASTION_KIND: "1"
+          BASTION_KIND_NAMESPACE: bastion-sandboxes
+        run: pnpm --filter @bastion-mcp/sandbox exec vitest run --passWithNoTests kind
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide || true
+          kubectl -n bastion-sandboxes get sandboxtemplates,sandboxwarmpools,sandboxclaims,sandboxes,pods || true
+          kubectl -n bastion logs -l app.kubernetes.io/instance=bastion --all-containers --tail=200 || true
+
+  gvisor:
+    name: sandbox suite on kind with gVisor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          install_only: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      # setup.sh --gvisor copies runsc and containerd-shim-runsc-v1 into every kind node, registers the runtime in
+      # containerd and creates RuntimeClass "gvisor" (handler runsc). The containerd config edit is version-detected
+      # but has never run; docs/spikes/m3-agent-sandbox.md item 7 (runner reachable on 0.0.0.0:8080 under runsc) is
+      # exactly what this job verifies.
+      - name: Cluster with gVisor
+        run: deploy/kind/setup.sh --gvisor
+      - name: Pods run under runsc
+        run: |
+          kubectl -n bastion-sandboxes get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.runtimeClassName}{"\n"}{end}'
+          kubectl -n bastion-sandboxes wait --for=condition=Ready pod --all --timeout=300s
+      - name: Sandbox escape smoke tests and egress suite under gVisor (23.3)
+        env:
+          BASTION_KIND: "1"
+          BASTION_KIND_NAMESPACE: bastion-sandboxes
+          BASTION_RUNTIME_CLASS: gvisor
+        run: pnpm --filter @bastion-mcp/sandbox exec vitest run --passWithNoTests kind
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide || true
+          kubectl -n bastion-sandboxes describe pods | tail -200 || true

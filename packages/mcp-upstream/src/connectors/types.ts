@@ -8,7 +8,12 @@ import type {
   ResolvedCredential,
   ResolvedInstallation,
 } from '../ports';
-import type { JsonObject, SessionOutcome, UpstreamCallContext, UpstreamNotification } from '../types';
+import type {
+  JsonObject,
+  SessionOutcome,
+  UpstreamCallContext,
+  UpstreamNotification,
+} from '../types';
 
 export type OpOptions = {
   ctx: UpstreamCallContext;

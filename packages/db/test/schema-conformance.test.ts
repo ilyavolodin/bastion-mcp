@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   AUTO_INSTALL_MODES,
   AUTO_INSTALL_SCOPES,
   CATALOG_KINDS,
   CATALOG_STATUSES,
+  CALL_OUTCOMES,
   CATALOG_VERSION_STATUSES,
   DESKTOP_INSTALLATION_MODES,
   DISTRIBUTION_CHANNELS,
@@ -19,6 +20,7 @@ import {
   MEMBERSHIP_SOURCES,
   ORG_ROLES,
   OWNER_TYPES,
+  PRINCIPAL_TYPES,
   POLICY_EFFECTS,
   REQUEST_STATUSES,
   REVIEW_STATUSES,
@@ -33,7 +35,14 @@ import {
 import { describe, expect, it } from 'vitest';
 
 const root = join(import.meta.dirname, '..', 'prisma');
-const migration = readFileSync(join(root, 'migrations', '0001_init', 'migration.sql'), 'utf8');
+const migrationsDir = join(root, 'migrations');
+/** Every migration in order: CHECKs may be added or replaced by later ones. */
+const migration = readdirSync(migrationsDir, { withFileTypes: true })
+  .filter((d) => d.isDirectory())
+  .map((d) => d.name)
+  .sort()
+  .map((name) => readFileSync(join(migrationsDir, name, 'migration.sql'), 'utf8'))
+  .join('\n');
 const schema = readFileSync(join(root, 'schema.prisma'), 'utf8');
 
 /** Extracts `column IN ('a','b')` from `ALTER TABLE t ADD CONSTRAINT ... CHECK (...)`. */
@@ -78,6 +87,19 @@ describe('16.2 schema conformance: CHECK constraints mirror @bastion-mcp/core co
     ['marketplaces', 'desktop_installation', DESKTOP_INSTALLATION_MODES],
     ['marketplace_items', 'policy', MARKETPLACE_ITEM_POLICIES],
     ['distribution_events', 'channel', DISTRIBUTION_CHANNELS],
+    // 0002_repositories
+    ['service_accounts', 'status', ['active', 'disabled']],
+    ['service_accounts', 'auth_method', ['client_secret_basic', 'private_key_jwt']],
+    ['personal_access_tokens', 'principal_type', PRINCIPAL_TYPES],
+    ['upstream_tokens', 'principal_type', PRINCIPAL_TYPES],
+    ['endpoints', 'prefix_mode', ['always', 'onCollision']],
+    ['upstream_clients', 'registration', ['preRegistered', 'cimd', 'dcr']],
+    ['auto_install_applications', 'subject_type', ['user', 'team']],
+    ['egress_events', 'decision', ['allow', 'deny']],
+    ['call_log', 'outcome', CALL_OUTCOMES],
+    ['call_log', 'principal_type', PRINCIPAL_TYPES],
+    ['registry_sources', 'trust', ['official', 'internal', 'community']],
+    ['registry_servers', 'status', ['active', 'deprecated', 'deleted']],
   ];
 
   it.each(cases)('%s.%s', (table, column, expected) => {

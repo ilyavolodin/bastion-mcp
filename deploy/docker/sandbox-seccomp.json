@@ -3,11 +3,7 @@
   "defaultAction": "SCMP_ACT_ALLOW",
   "syscalls": [
     {
-      "names": [
-        "ptrace",
-        "process_vm_readv",
-        "process_vm_writev"
-      ],
+      "names": ["ptrace", "process_vm_readv", "process_vm_writev"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No tracing of other processes"
@@ -31,21 +27,13 @@
       "comment": "No filesystem mounting or root changes"
     },
     {
-      "names": [
-        "keyctl",
-        "add_key",
-        "request_key"
-      ],
+      "names": ["keyctl", "add_key", "request_key"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No kernel keyring"
     },
     {
-      "names": [
-        "bpf",
-        "userfaultfd",
-        "perf_event_open"
-      ],
+      "names": ["bpf", "userfaultfd", "perf_event_open"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No bpf, userfaultfd or perf events"
@@ -71,35 +59,25 @@
       "comment": "No kernel or system administration"
     },
     {
-      "names": [
-        "name_to_handle_at",
-        "open_by_handle_at"
-      ],
+      "names": ["name_to_handle_at", "open_by_handle_at"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No file handle escapes"
     },
     {
-      "names": [
-        "setns"
-      ],
+      "names": ["setns"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No joining namespaces"
     },
     {
-      "names": [
-        "clone3"
-      ],
+      "names": ["clone3"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 38,
       "comment": "clone3 flags live in memory and cannot be inspected; ENOSYS makes glibc fall back to clone"
     },
     {
-      "names": [
-        "clone",
-        "unshare"
-      ],
+      "names": ["clone", "unshare"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No namespace creation: CLONE_NEWNS",
@@ -113,10 +91,7 @@
       ]
     },
     {
-      "names": [
-        "clone",
-        "unshare"
-      ],
+      "names": ["clone", "unshare"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No namespace creation: CLONE_NEWCGROUP",
@@ -130,10 +105,7 @@
       ]
     },
     {
-      "names": [
-        "clone",
-        "unshare"
-      ],
+      "names": ["clone", "unshare"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No namespace creation: CLONE_NEWUTS",
@@ -147,10 +119,7 @@
       ]
     },
     {
-      "names": [
-        "clone",
-        "unshare"
-      ],
+      "names": ["clone", "unshare"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No namespace creation: CLONE_NEWIPC",
@@ -164,10 +133,7 @@
       ]
     },
     {
-      "names": [
-        "clone",
-        "unshare"
-      ],
+      "names": ["clone", "unshare"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No namespace creation: CLONE_NEWUSER",
@@ -181,10 +147,7 @@
       ]
     },
     {
-      "names": [
-        "clone",
-        "unshare"
-      ],
+      "names": ["clone", "unshare"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No namespace creation: CLONE_NEWPID",
@@ -198,10 +161,7 @@
       ]
     },
     {
-      "names": [
-        "clone",
-        "unshare"
-      ],
+      "names": ["clone", "unshare"],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1,
       "comment": "No namespace creation: CLONE_NEWNET",

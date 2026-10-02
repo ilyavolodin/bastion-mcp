@@ -1,0 +1,51 @@
+{{- /*
+pre-install / pre-upgrade Job running `bastion migrate` (tdd 20.2). It runs before the release's own resources exist,
+so it uses the namespace's default ServiceAccount with no token (migrations only talk to Postgres) and reads the
+connection settings from existingSecret, which must already exist. Migrations are expand-then-contract (20.2), so the
+rolling upgrade that follows is safe with old and new pods side by side.
+*/ -}}
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "bastion.fullname" . }}-migrate-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "migrate") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "bastion.labels" (dict "root" . "component" "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "bastion.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["bastion", "migrate"]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          env:
+            {{- include "bastion.env" (dict "root" . "role" "ui") | nindent 12 }}
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          volumeMounts:
+            {{- include "bastion.volumeMounts" (dict "root" . "role" "ui") | nindent 12 }}
+      volumes:
+        {{- include "bastion.volumes" (dict "root" . "role" "ui") | nindent 8 }}
+{{- end }}

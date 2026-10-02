@@ -2182,6 +2182,23 @@ Bastion treats every upstream server, every sandboxed package and all content fl
 ### 22.2 Threats and mitigations
 
 |  Threat  |  Mitigation  | 
+|  Token passthrough and confused deputy  |  Bastion tokens have audience `https://<host>/mcp` and are never forwarded; upstream tokens are separate per user and upstream (9.5); upstream OAuth consent is a Bastion page naming the upstream (9.6)  | 
+|  Stolen downstream token  |  15-minute access tokens, refresh rotation with reuse detection, revocation watermark, PAT hashing and expiry  | 
+|  Legacy session hijacking  |  Session IDs bound to the principal (6.2)  | 
+|  Forged `requestState`, task IDs or cursors  |  AES-256-GCM with principal, method, name digest and expiry inside (6.5, 6.8)  | 
+|  Prompt injection via tool output  |  Response guards, quarantine envelope, session risk escalation, `confirm` on risky tools (13)  | 
+|  Tool poisoning and rug pulls  |  Definition scanning and pinning with approval on drift (13.6)  | 
+|  Malicious or compromised package  |  Sandbox isolation, lockfile integrity, scripts off, OSV check, egress allowlist, no secrets other than its own  | 
+|  Sandbox escape attempts  |  gVisor user-space kernel (or Kata VM); seccomp; no capabilities; non-root; no service account token; NetworkPolicy  | 
+|  SSRF through remote URLs or egress  |  Address checks on resolved IPs, private ranges denied, metadata endpoint denied, connect to the checked IP (8.8, 8.9)  | 
+|  Data exfiltration through tool arguments  |  `url` guard, `exfiltration` model question, egress allowlists, Cedar argument rules  | 
+|  Cross-user data leakage  |  Per-user instances by default, per-user list caches, `cacheScope: "private"`, shared instances only for credential-free servers  | 
+|  Secret disclosure  |  Envelope encryption, no API returns secret values, log redaction, previews off by default, secrets only injected into their own instance  | 
+|  ReDoS in admin regex  |  RE2 only  | 
+|  Supply chain of Bastion itself  |  Pinned dependencies, Renovate, signed images, SBOM, provenance, `npm audit` and OSV scan in CI  | 
+|  Insider misuse by admins  |  Hash-chained audit log, SIEM export, Auditor role, secret values never viewable even by admins  | 
+|  Malicious or compromised plugin running on user machines  |  Executable-content classification with Admin approval per version, definition guards and OSV checks at test time, deterministic releases pinned by commit SHA or digest for Claude Desktop, audit of every publish  | 
+|  Theft of the mirror credential  |  GitHub App token limited to one repository with short-lived installation tokens (or a GitLab project token), fast-forward-only pushes, push audit, mirror marked diverged on unexpected history  | 
 
 ### 22.3 Keys and encryption
 

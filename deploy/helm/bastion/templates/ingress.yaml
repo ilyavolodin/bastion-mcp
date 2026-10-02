@@ -1,0 +1,57 @@
+{{- /*
+Path rules (tdd 4.2). Kubernetes `Prefix` matching is by path element, so Prefix /mcp already covers /mcp and /mcp/*
+(and not /mcpfoo); Prefix /.well-known/oauth-protected-resource covers the /* variants. Everything else goes to ui,
+with /plugins, /registry and /oauth listed explicitly for readability. The longest prefix wins in ingress-nginx.
+*/ -}}
+{{- if and .Values.ingress.enabled (not .Values.httpRoute.enabled) }}
+{{- $host := default (include "bastion.host" .) .Values.ingress.host }}
+{{- $worker := printf "%s-%s" (include "bastion.fullname" .) (include "bastion.workerComponent" .) }}
+{{- $ui := ternary $worker (printf "%s-ui" (include "bastion.fullname" .)) (eq .Values.deploymentMode "all") }}
+{{- $port := .Values.worker.ports.http }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "bastion.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "bastion.labels" (dict "root" . "component" "ingress") | nindent 4 }}
+  annotations:
+    {{- $ann := merge (deepCopy .Values.ingress.annotations) (deepCopy .Values.ingress.streamingAnnotations) }}
+    {{- toYaml $ann | nindent 4 }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range (default (list $host) .hosts) }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /mcp
+            pathType: Prefix
+            backend: { service: { name: {{ $worker }}, port: { number: {{ $port }} } } }
+          - path: /.well-known/oauth-protected-resource
+            pathType: Prefix
+            backend: { service: { name: {{ $worker }}, port: { number: {{ $port }} } } }
+          - path: /plugins
+            pathType: Prefix
+            backend: { service: { name: {{ $ui }}, port: { number: {{ $port }} } } }
+          - path: /registry
+            pathType: Prefix
+            backend: { service: { name: {{ $ui }}, port: { number: {{ $port }} } } }
+          - path: /oauth
+            pathType: Prefix
+            backend: { service: { name: {{ $ui }}, port: { number: {{ $port }} } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: {{ $ui }}, port: { number: {{ $port }} } } }
+{{- end }}

@@ -1,6 +1,6 @@
 import { META_KEYS, TIMEOUTS_MS } from '@bastion-mcp/core';
-import { CLIENT_CAPABILITIES_META_KEY, LOG_LEVEL_META_KEY } from '@modelcontextprotocol/client';
 import { injectTraceContext } from '@bastion-mcp/telemetry';
+import { CLIENT_CAPABILITIES_META_KEY, LOG_LEVEL_META_KEY } from '@modelcontextprotocol/client';
 import type { CallPrincipal, ResolvedInstallation } from '../ports';
 import type { ClientCapabilitiesLike, JsonObject, TraceCarrier } from '../types';
 
@@ -37,7 +37,8 @@ export const intersectCapabilities = (
   if (d && c) {
     const form = d.form !== undefined && (c.form !== undefined || c.url === undefined);
     const url = d.url !== undefined && c.url !== undefined;
-    if (form || url) out.elicitation = { ...(form ? { form: {} } : {}), ...(url ? { url: {} } : {}) };
+    if (form || url)
+      out.elicitation = { ...(form ? { form: {} } : {}), ...(url ? { url: {} } : {}) };
   }
   if (declared.sampling && downstream.sampling) out.sampling = {};
   if (declared.roots && downstream.roots) out.roots = {};
@@ -61,9 +62,13 @@ export type MetaInput = {
  * `params._meta` of every upstream request (6.4, 6.6): the attribution key, trace context (SEP-414), the log level
  * only when the downstream request carried one, and the per-request capabilities for modern upstreams.
  */
-export const buildRequestMeta = (input: MetaInput, existing: JsonObject | undefined): JsonObject => {
+export const buildRequestMeta = (
+  input: MetaInput,
+  existing: JsonObject | undefined,
+): JsonObject => {
   const meta: JsonObject = { ...existing, [META_KEYS.onBehalfOf]: onBehalfOf(input.principal) };
-  for (const [key, value] of Object.entries(input.trace)) if (value !== undefined) meta[key] = value;
+  for (const [key, value] of Object.entries(input.trace))
+    if (value !== undefined) meta[key] = value;
   if (input.logLevel !== undefined) meta[LOG_LEVEL_META_KEY] = input.logLevel;
   if (input.capabilities !== undefined) meta[CLIENT_CAPABILITIES_META_KEY] = input.capabilities;
   return meta;
@@ -103,8 +108,9 @@ export const timeoutFor = (
   if (method === 'tools/call') {
     return Math.min(timeouts?.toolCallMs ?? TIMEOUTS_MS.toolCall, TIMEOUTS_MS.maxOverride);
   }
-  const override = LIST_METHODS.has(method) || method.startsWith('prompts/') || method.startsWith('resources/')
-    ? timeouts?.listMs
-    : undefined;
+  const override =
+    LIST_METHODS.has(method) || method.startsWith('prompts/') || method.startsWith('resources/')
+      ? timeouts?.listMs
+      : undefined;
   return Math.min(override ?? TIMEOUTS_MS.list, TIMEOUTS_MS.maxOverride);
 };

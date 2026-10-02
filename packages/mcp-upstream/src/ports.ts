@@ -8,12 +8,29 @@ import type { EgressPolicy, EgressPolicyStore } from '@bastion-mcp/sandbox';
 // --- Redis ----------------------------------------------------------------------------------------------------
 
 /**
- * The subset of an `ioredis` 5.x client used here. Values are strings. `set` takes the raw option tokens
- * (`'PX', 15000, 'NX'`), `eval` runs the Lua scripts of `ownership/lua`.
+ * The subset of an `ioredis` 5.x client used here (a real `Redis` instance is assignable to it, checked by a test).
+ * Values are strings. `set` has the overloads of ioredis for the option tokens used here (`'PX', 15000, 'NX'`);
+ * `eval` runs the Lua scripts of `ownership/lua`.
  */
 export interface RedisLike {
   get(key: string): Promise<string | null>;
-  set(key: string, value: string, ...options: (string | number)[]): Promise<'OK' | null>;
+  set(key: string, value: string): Promise<'OK'>;
+  set(key: string, value: string, secondsToken: 'EX', seconds: number): Promise<'OK'>;
+  set(key: string, value: string, millisecondsToken: 'PX', milliseconds: number): Promise<'OK'>;
+  set(
+    key: string,
+    value: string,
+    secondsToken: 'EX',
+    seconds: number,
+    nx: 'NX',
+  ): Promise<'OK' | null>;
+  set(
+    key: string,
+    value: string,
+    millisecondsToken: 'PX',
+    milliseconds: number,
+    nx: 'NX',
+  ): Promise<'OK' | null>;
   del(...keys: string[]): Promise<number>;
   expire(key: string, seconds: number): Promise<number>;
   pexpire(key: string, milliseconds: number): Promise<number>;
@@ -41,10 +58,10 @@ export const noopLogger: Logger = { debug() {}, info() {}, warn() {}, error() {}
 
 export type CallPrincipal = {
   userId: string;
-  type?: 'user' | 'service';
-  clientName?: string;
-  email?: string;
-  teams?: string[];
+  type?: 'user' | 'service' | undefined;
+  clientName?: string | undefined;
+  email?: string | undefined;
+  teams?: string[] | undefined;
 };
 
 // --- installations --------------------------------------------------------------------------------------------
@@ -75,10 +92,16 @@ export type ResolvedInstallation = {
   extensions: { allow?: string[]; block?: string[] };
   /** Shared pool size, 1 to 10 (8.6). */
   replicas: number;
-  /** Seconds-scale upstream-specific overrides come from `spec.timeouts`. */
+  /**
+   * Who sees changes of this installation's upstream (6.6): the `bastion:notify` targets. Defaults to the principal
+   * whose connection produced the change.
+   */
+  notifyTargets?: NotifyTargets | undefined;
   /** Redis `lc:` TTL when the upstream sends no `ttlMs` (6.7). Defaults to the service setting. */
   listTtlMs?: number;
 };
+
+export type NotifyTargets = { principalIds?: string[]; teamIds?: string[]; all?: boolean };
 
 export interface InstallationRegistry {
   get(installationId: string): Promise<ResolvedInstallation | null>;
@@ -199,10 +222,16 @@ export interface SnapshotStore {
   put(installationId: string, configHash: string, items: SnapshotItems): Promise<void>;
 }
 
-/** Emitted when a re-list differs from the stored snapshot (7.5). */
+/** Emitted when a re-list differs from the stored snapshot (7.5) or the upstream reports a change (6.6). */
 export interface ListChangedPublisher {
-  listChanged(installationId: string, kinds: string[]): void | Promise<void>;
+  listChanged(
+    installation: ResolvedInstallation,
+    kinds: ListKind[],
+    fallbackPrincipalId?: string,
+  ): void | Promise<void>;
 }
+
+export type ListKind = 'tools' | 'prompts' | 'resources';
 
 // --- tool-definition pinning (13.6; implemented with the guards package functions by the caller) -----------------
 

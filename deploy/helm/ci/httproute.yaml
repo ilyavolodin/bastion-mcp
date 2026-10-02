@@ -1,0 +1,9 @@
+publicUrl: https://mcp.example.com
+existingSecret: bastion-secrets
+ingress:
+  enabled: false
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: public-gateway
+      namespace: infra

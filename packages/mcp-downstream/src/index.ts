@@ -1,0 +1,16 @@
+export { createLegacyAdapter } from './adapters/legacy';
+export type { Exchange, LegacyAdapter, ListenAdapter, NotifyEvent, OpRunner, StreamTarget } from './adapters/contracts';
+export { createListenAdapter } from './adapters/modern/listen';
+export { createModernAdapter } from './adapters/modern/server';
+export { bastionRequestContext, currentRequestContext } from './context';
+export type { BastionRequestContext } from './context';
+export { createDownstream } from './downstream';
+export type { Downstream, DownstreamConfig, DownstreamDeps } from './downstream';
+export { EndpointResolver } from './http/resolver';
+export { registerMcpRoutes } from './http/plugin';
+export { NotifyHub } from './notify-hub';
+export { createOperations, createOpRunner } from './operations/registry';
+export type { OperationDeps, ReadCachePort } from './operations/deps';
+export type * from './ports';
+export { upstreamPortFrom } from './upstream-port';
+export type * from './types';

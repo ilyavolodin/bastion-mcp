@@ -108,7 +108,10 @@ export class LegacyCallScope {
     this.unbind();
     if (!signal) return;
     const onAbort = (): void => this.abort.abort(signal.reason);
-    if (signal.aborted) return onAbort();
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
     signal.addEventListener('abort', onAbort, { once: true });
     this.unbindSignal = () => signal.removeEventListener('abort', onAbort);
   }
@@ -137,7 +140,9 @@ export class LegacyCallScope {
     this.clearCallTimer();
     this.timeoutDeadline = Date.now() + ms;
     this.callTimer = setTimeout(() => {
-      this.abort.abort(new SdkError(SdkErrorCode.RequestTimeout, `Request timed out after ${this.timeoutMs} ms`));
+      this.abort.abort(
+        new SdkError(SdkErrorCode.RequestTimeout, `Request timed out after ${this.timeoutMs} ms`),
+      );
     }, ms);
     this.callTimer.unref?.();
   }
@@ -267,7 +272,7 @@ export class LegacyCallScope {
     if (clientCapabilities) this.clientCapabilities = clientCapabilities;
     const batch = this.frozen;
     this.frozen = [];
-    batch.forEach((pending, index) => this.answer(pending, responses[`b${index}`]));
+    for (const [index, pending] of batch.entries()) this.answer(pending, responses[`b${index}`]);
     // Requests that arrived after the freeze start the next batch.
     if (this.waiting.length > 0) this.startDebounce();
     else this.resumeTimeout();
@@ -298,6 +303,10 @@ export class LegacyCallScope {
     this.expire();
     this.clearCallTimer();
     this.unbind();
-    if (!this.abort.signal.aborted) this.abort.abort(new Error('continuation disposed'));
+    if (!this.abort.signal.aborted) {
+      this.abort.abort(
+        new SdkError(SdkErrorCode.ConnectionClosed, 'the upstream connection closed'),
+      );
+    }
   }
 }
