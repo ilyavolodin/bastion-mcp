@@ -26,7 +26,11 @@ import {
   createUpstreamClientStore,
   createUpstreamTokenStore,
 } from './oauth';
-import { createConfigVersionRepository, createNotificationRepository, createOrgSettingsRepository } from './org';
+import {
+  createConfigVersionRepository,
+  createNotificationRepository,
+  createOrgSettingsRepository,
+} from './org';
 import {
   createDistributionEventSink,
   createMarketplaceRepository,
@@ -85,7 +89,11 @@ export type RepositoryDeps = {
   /** A `SecretVault` of `@bastion-mcp/secrets`; enables `repos.keyStore`. */
   secretVault?: SecretCodec;
   /** `importPluginTree` glue of `@bastion-mcp/plugins`; enables `repos.marketplaceStore`. */
-  marketplaceAssemble?: MarketplaceStoreDeps<{ name: string; version: string; policy: ItemPolicy }>['assemble'];
+  marketplaceAssemble?: MarketplaceStoreDeps<{
+    name: string;
+    version: string;
+    policy: ItemPolicy;
+  }>['assemble'];
   /** `computeConfigHash` of `@bastion-mcp/router`; enables `repos.installationRegistry`. */
   configHash?: Parameters<typeof createInstallationRegistry>[1]['configHash'];
 };

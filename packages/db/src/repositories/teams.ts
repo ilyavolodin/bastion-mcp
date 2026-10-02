@@ -6,6 +6,7 @@ import {
   assertIfMatch,
   assertSwapped,
   clampLimit,
+  compact,
   etagOf,
   mutate,
   NotFoundError,
@@ -191,7 +192,11 @@ export const createTeamRepository = (arg: PrismaLike | RepoContext, options?: Re
       filter: { source?: MembershipSource; role?: TeamRole } = {},
     ): Promise<MembershipView[]> {
       const rows = await db.teamMembership.findMany({
-        where: { teamId, ...(filter.source ? { source: filter.source } : {}), ...(filter.role ? { role: filter.role } : {}) },
+        where: {
+          teamId,
+          ...(filter.source ? { source: filter.source } : {}),
+          ...(filter.role ? { role: filter.role } : {}),
+        },
         orderBy: [{ createdAt: 'asc' }, { userId: 'asc' }],
       });
       return rows.map((r) => ({
@@ -204,7 +209,10 @@ export const createTeamRepository = (arg: PrismaLike | RepoContext, options?: Re
     },
 
     async listForUser(userId: string): Promise<MembershipView[]> {
-      const rows = await db.teamMembership.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
+      const rows = await db.teamMembership.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'asc' },
+      });
       return rows.map((r) => ({
         teamId: r.teamId,
         userId: r.userId,
@@ -269,7 +277,13 @@ export const mapsToSchema = z.union([
   z.object({ teamId: z.string().uuid(), teamRole: z.enum(TEAM_ROLES) }).strict(),
   z.object({ createTeam: z.literal(true), teamRole: z.enum(TEAM_ROLES).optional() }).strict(),
 ]);
-export type MapsTo = z.infer<typeof mapsToSchema>;
+export type MapsTo =
+  | { orgRole: (typeof ORG_ROLES)[number] }
+  | { teamId: string; teamRole: TeamRole }
+  | { createTeam: true; teamRole?: TeamRole };
+
+/** Validates a stored or submitted `maps_to` document. */
+export const parseMapsTo = (raw: unknown): MapsTo => compact<MapsTo>(mapsToSchema.parse(raw));
 
 /** The `RoleMappingRule` of `@bastion-mcp/auth` provisioning. */
 export type RoleMappingRuleView = {
@@ -284,7 +298,7 @@ const toRuleView = (row: RoleMappingRule): RoleMappingRuleView => ({
   id: row.id,
   idpConnectionId: row.idpConnectionId,
   groupPattern: row.groupPattern,
-  mapsTo: mapsToSchema.parse(row.mapsTo),
+  mapsTo: parseMapsTo(row.mapsTo),
   priority: row.priority,
 });
 
@@ -324,7 +338,7 @@ export const createRoleMappingRuleRepository = (
       input: RoleMappingRuleInput,
       opts: WriteOptions = {},
     ): Promise<RoleMappingRuleView> {
-      const mapsTo = mapsToSchema.parse(input.mapsTo);
+      const mapsTo = parseMapsTo(input.mapsTo);
       return mutate(ctx, async (tx, unit) => {
         const row = await tx.roleMappingRule.create({
           data: {
@@ -350,7 +364,7 @@ export const createRoleMappingRuleRepository = (
       patch: { groupPattern?: string; mapsTo?: MapsTo; priority?: number },
       opts: IfMatchOptions,
     ): Promise<RoleMappingRuleView> {
-      const mapsTo = patch.mapsTo === undefined ? undefined : mapsToSchema.parse(patch.mapsTo);
+      const mapsTo = patch.mapsTo === undefined ? undefined : parseMapsTo(patch.mapsTo);
       return mutate(ctx, async (tx, unit) => {
         const current = await tx.roleMappingRule.findUnique({ where: { id } });
         if (!current) throw new NotFoundError('role mapping rule', id);

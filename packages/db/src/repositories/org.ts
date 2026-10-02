@@ -7,8 +7,8 @@ import {
   resolveOrgSettings,
 } from '@bastion-mcp/core';
 import { z } from 'zod';
-import type { Notification } from '../generated/client';
 import { getConfigVersion } from '../config-version';
+import type { Notification } from '../generated/client';
 import {
   type AuditContext,
   afterIdDesc,
@@ -44,7 +44,10 @@ export type SetSettingOptions = {
  * `org_settings` (19.2): one row per top-level key, each validated by the `@bastion-mcp/core` zod
  * schema on write and on read. Defaults fill keys that were never written.
  */
-export const createOrgSettingsRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createOrgSettingsRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
 
@@ -91,13 +94,21 @@ export const createOrgSettingsRepository = (arg: PrismaLike | RepoContext, optio
       return mutate(ctx, async (tx, unit) => {
         const existing = await tx.orgSetting.findUnique({ where: { key } });
         if (opts.ifMatch !== undefined && existing) {
-          assertIfMatch({ createdAt: existing.updatedAt, updatedAt: existing.updatedAt }, opts.ifMatch);
+          assertIfMatch(
+            { createdAt: existing.updatedAt, updatedAt: existing.updatedAt },
+            opts.ifMatch,
+          );
         }
         const before = existing ? existing.value : ORG_SETTING_DEFAULTS[key];
         const now = new Date(Math.max(Date.now(), (existing?.updatedAt.getTime() ?? 0) + 1));
         await tx.orgSetting.upsert({
           where: { key },
-          create: { key, value: toJson(parsed.data), updatedAt: now, updatedBy: opts.updatedBy ?? null },
+          create: {
+            key,
+            value: toJson(parsed.data),
+            updatedAt: now,
+            updatedBy: opts.updatedBy ?? null,
+          },
           update: { value: toJson(parsed.data), updatedAt: now, updatedBy: opts.updatedBy ?? null },
         });
         unit.bump('org');
@@ -148,7 +159,10 @@ const toNotification = (row: Notification): NotificationView => ({
   createdAt: row.createdAt,
 });
 
-export const createNotificationRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createNotificationRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const { db } = toContext(arg, options);
   return {
     async create(input: {
@@ -206,7 +220,10 @@ export const createNotificationRepository = (arg: PrismaLike | RepoContext, opti
 
 // --- config_versions (4.3) ---------------------------------------------------------------------------------------------
 
-export const createConfigVersionRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createConfigVersionRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const { db } = toContext(arg, options);
   return {
     get: (scope: string, scopeId?: string) => getConfigVersion(db, scope, scopeId),

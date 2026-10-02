@@ -5,6 +5,7 @@ import {
   type AuditContext,
   assertIfMatch,
   assertSwapped,
+  compact,
   etagOf,
   jsonObjectSchema,
   mutate,
@@ -110,7 +111,7 @@ export const DEFAULT_CLAIM_MAP: ClaimMap = {
 };
 
 /** `IdpConnection` of `auth/oauth/ports.ts` (a superset of the one provisioning uses). */
-export type IdpConnection = {
+export type IdpConnectionRecord = {
   id: string;
   name: string;
   issuer: string;
@@ -126,7 +127,7 @@ export type IdpConnection = {
   enabled: boolean;
 };
 
-const toIdp = (row: IdpConnectionRow): IdpConnection => ({
+const toIdp = (row: IdpConnectionRow): IdpConnectionRecord => ({
   id: row.id,
   name: row.name,
   issuer: row.issuer,
@@ -134,7 +135,10 @@ const toIdp = (row: IdpConnectionRow): IdpConnection => ({
   clientId: row.clientId,
   clientSecretId: row.clientSecretId,
   scopes: row.scopes,
-  claimMap: { ...DEFAULT_CLAIM_MAP, ...claimMapSchema.parse(row.claimMap) },
+  claimMap: {
+    ...DEFAULT_CLAIM_MAP,
+    ...compact<Partial<ClaimMap>>(claimMapSchema.parse(row.claimMap)),
+  },
   emailDomains: row.emailDomains,
   storeRefreshToken: row.storeRefreshToken,
   apiScope: row.apiScope,
@@ -142,7 +146,7 @@ const toIdp = (row: IdpConnectionRow): IdpConnection => ({
   enabled: row.enabled,
 });
 
-export type IdpConnectionInput = Omit<IdpConnection, 'id' | 'claimMap'> & {
+export type IdpConnectionInput = Omit<IdpConnectionRecord, 'id' | 'claimMap'> & {
   id?: string;
   claimMap?: Partial<ClaimMap>;
 };
@@ -154,22 +158,24 @@ export const createIdpConnectionRepository = (
   const ctx = toContext(arg, options);
   const { db } = ctx;
   return {
-    async get(id: string): Promise<IdpConnection | null> {
+    async get(id: string): Promise<IdpConnectionRecord | null> {
       const row = await db.idpConnection.findUnique({ where: { id } });
       return row ? toIdp(row) : null;
     },
-    async getWithEtag(id: string): Promise<{ connection: IdpConnection; etag: string } | null> {
+    async getWithEtag(
+      id: string,
+    ): Promise<{ connection: IdpConnectionRecord; etag: string } | null> {
       const row = await db.idpConnection.findUnique({ where: { id } });
       return row ? { connection: toIdp(row), etag: etagOf(row) } : null;
     },
-    async list(): Promise<IdpConnection[]> {
+    async list(): Promise<IdpConnectionRecord[]> {
       const rows = await db.idpConnection.findMany({ orderBy: { id: 'asc' } });
       return rows.map(toIdp);
     },
     async count(): Promise<number> {
       return db.idpConnection.count();
     },
-    async create(input: IdpConnectionInput, audit?: AuditContext): Promise<IdpConnection> {
+    async create(input: IdpConnectionInput, audit?: AuditContext): Promise<IdpConnectionRecord> {
       const claimMap = claimMapSchema.parse(input.claimMap ?? {});
       return mutate(ctx, async (tx, unit) => {
         const row = await orConflict('identity provider', () =>
@@ -205,7 +211,7 @@ export const createIdpConnectionRepository = (
       id: string,
       patch: Partial<Omit<IdpConnectionInput, 'id'>>,
       opts: { ifMatch: string; audit?: AuditContext },
-    ): Promise<IdpConnection> {
+    ): Promise<IdpConnectionRecord> {
       return mutate(ctx, async (tx, unit) => {
         const current = await tx.idpConnection.findUnique({ where: { id } });
         if (!current) throw new NotFoundError('identity provider', id);
@@ -241,7 +247,9 @@ export const createIdpConnectionRepository = (
         const current = await tx.idpConnection.findUnique({ where: { id } });
         if (!current) throw new NotFoundError('identity provider', id);
         assertIfMatch(current, opts.ifMatch);
-        assertSwapped(await tx.idpConnection.deleteMany({ where: { id, ...versionGuard(current) } }));
+        assertSwapped(
+          await tx.idpConnection.deleteMany({ where: { id, ...versionGuard(current) } }),
+        );
         unit.bump('org');
         unit.audit(opts.audit, {
           action: 'idp.delete',

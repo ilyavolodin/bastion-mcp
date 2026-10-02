@@ -76,7 +76,7 @@ export type ReleaseRecord = {
   releaseTime: string;
 };
 
-export type DistributionEvent = {
+export type DistributionEventRecord = {
   ts: Date;
   principalId: string;
   marketplaceId: string;
@@ -184,7 +184,10 @@ export type CreateMarketplaceInput = {
 };
 
 /** Administration of `marketplaces` and `marketplace_items` (25.4). */
-export const createMarketplaceRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createMarketplaceRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
   return {
@@ -206,7 +209,8 @@ export const createMarketplaceRepository = (arg: PrismaLike | RepoContext, optio
     },
 
     async create(input: CreateMarketplaceInput, audit?: AuditContext): Promise<MarketplaceView> {
-      if (!isValidMarketplaceSlug(input.slug)) throw new ValidationError('invalid marketplace slug');
+      if (!isValidMarketplaceSlug(input.slug))
+        throw new ValidationError('invalid marketplace slug');
       const mirror = input.mirror ? mirrorTargetSchema.parse(input.mirror) : null;
       return mutate(ctx, async (tx, unit) => {
         const row = await orConflict('marketplace', () =>
@@ -236,10 +240,23 @@ export const createMarketplaceRepository = (arg: PrismaLike | RepoContext, optio
 
     async update(
       id: string,
-      patch: Partial<Pick<CreateMarketplaceInput, 'displayName' | 'description' | 'ownerTeamId' | 'audience' | 'desktopInstallation' | 'mirror'>>,
+      patch: Partial<
+        Pick<
+          CreateMarketplaceInput,
+          | 'displayName'
+          | 'description'
+          | 'ownerTeamId'
+          | 'audience'
+          | 'desktopInstallation'
+          | 'mirror'
+        >
+      >,
       opts: { ifMatch: string; audit?: AuditContext },
     ): Promise<MarketplaceView> {
-      const mirror = patch.mirror === undefined || patch.mirror === null ? patch.mirror : mirrorTargetSchema.parse(patch.mirror);
+      const mirror =
+        patch.mirror === undefined || patch.mirror === null
+          ? patch.mirror
+          : mirrorTargetSchema.parse(patch.mirror);
       return mutate(ctx, async (tx, unit) => {
         const current = await tx.marketplace.findUnique({ where: { id } });
         if (!current) throw new NotFoundError('marketplace', id);
@@ -282,7 +299,9 @@ export const createMarketplaceRepository = (arg: PrismaLike | RepoContext, optio
       });
     },
 
-    async listItems(marketplaceId: string): Promise<(MarketplaceItemInput & { position: number })[]> {
+    async listItems(
+      marketplaceId: string,
+    ): Promise<(MarketplaceItemInput & { position: number })[]> {
       const rows = await db.marketplaceItem.findMany({
         where: { marketplaceId },
         orderBy: { position: 'asc' },
@@ -314,7 +333,9 @@ export const createMarketplaceRepository = (arg: PrismaLike | RepoContext, optio
             select: { entryId: true },
           });
           if (v?.entryId !== item.catalogEntryId) {
-            throw new ValidationError('pinned version does not belong to the entry', { entry: item.catalogEntryId });
+            throw new ValidationError('pinned version does not belong to the entry', {
+              entry: item.catalogEntryId,
+            });
           }
         }
         await tx.marketplaceItem.deleteMany({ where: { marketplaceId } });
@@ -333,7 +354,10 @@ export const createMarketplaceRepository = (arg: PrismaLike | RepoContext, optio
           action: 'marketplace.items.replace',
           targetType: 'marketplace',
           targetId: marketplaceId,
-          diff: { before: null, after: { items: items.map((i) => ({ entry: i.catalogEntryId, policy: i.policy })) } },
+          diff: {
+            before: null,
+            after: { items: items.map((i) => ({ entry: i.catalogEntryId, policy: i.policy })) },
+          },
         });
       });
     },
@@ -342,7 +366,11 @@ export const createMarketplaceRepository = (arg: PrismaLike | RepoContext, optio
 
 // --- MarketplaceStore port ---------------------------------------------------------------------------------------------------
 
-export type PluginFileRow = { path: string; content: Uint8Array; mode: (typeof FILE_MODES)[number] };
+export type PluginFileRow = {
+  path: string;
+  content: Uint8Array;
+  mode: (typeof FILE_MODES)[number];
+};
 
 /** What the injected assembler receives to build a release item (manifest parsing lives in `@bastion-mcp/plugins`). */
 export type ReleaseItemSource = {
@@ -351,7 +379,10 @@ export type ReleaseItemSource = {
   policy: ItemPolicy;
   files: PluginFileRow[];
   /** Resolves a skill reference (by entry slug) to its current or pinned version files. */
-  loadSkillFiles(entrySlug: string, versionLabel?: string): Promise<{ slug: string; files: PluginFileRow[] } | null>;
+  loadSkillFiles(
+    entrySlug: string,
+    versionLabel?: string,
+  ): Promise<{ slug: string; files: PluginFileRow[] } | null>;
 };
 
 export type MarketplaceStoreDeps<TItem> = {
@@ -365,7 +396,9 @@ export type MarketplaceStoreDeps<TItem> = {
  * `MarketplaceStore` of `@bastion-mcp/plugins`. The generic `TItem` is the plugins package's `ReleaseItem`; db only
  * loads rows and files, the injected `assemble` parses them.
  */
-export const createMarketplaceStore = <TItem extends { name: string; version: string; policy: ItemPolicy }>(
+export const createMarketplaceStore = <
+  TItem extends { name: string; version: string; policy: ItemPolicy },
+>(
   arg: PrismaLike | RepoContext,
   deps: MarketplaceStoreDeps<TItem>,
   options?: RepoOptions,
@@ -377,7 +410,10 @@ export const createMarketplaceStore = <TItem extends { name: string; version: st
     const view = toMarketplaceView(row);
     let ownerName = deps.defaultOwnerName ? await deps.defaultOwnerName() : 'Bastion';
     if (row.ownerTeamId) {
-      const team = await db.team.findUnique({ where: { id: row.ownerTeamId }, select: { displayName: true } });
+      const team = await db.team.findUnique({
+        where: { id: row.ownerTeamId },
+        select: { displayName: true },
+      });
       if (team) ownerName = team.displayName;
     }
     return {
@@ -410,7 +446,9 @@ export const createMarketplaceStore = <TItem extends { name: string; version: st
     const entry = await db.catalogEntry.findUnique({ where: { slug: entrySlug } });
     if (!entry) return null;
     const version = versionLabel
-      ? await db.catalogVersion.findUnique({ where: { entryId_label: { entryId: entry.id, label: versionLabel } } })
+      ? await db.catalogVersion.findUnique({
+          where: { entryId_label: { entryId: entry.id, label: versionLabel } },
+        })
       : entry.currentVersionId
         ? await db.catalogVersion.findUnique({ where: { id: entry.currentVersionId } })
         : null;
@@ -447,7 +485,9 @@ export const createMarketplaceStore = <TItem extends { name: string; version: st
     },
 
     /** Items now, follow-current and pinned versions resolved and files loaded, in position order. */
-    async resolveItems(marketplaceId: string): Promise<(TItem & { entryId: string; versionId: string })[]> {
+    async resolveItems(
+      marketplaceId: string,
+    ): Promise<(TItem & { entryId: string; versionId: string })[]> {
       const items = await db.marketplaceItem.findMany({
         where: { marketplaceId },
         include: { catalogEntry: { select: { currentVersionId: true, status: true } } },
@@ -457,7 +497,9 @@ export const createMarketplaceStore = <TItem extends { name: string; version: st
       for (const item of items) {
         const versionId = item.pinnedVersionId ?? item.catalogEntry.currentVersionId;
         if (!versionId || item.catalogEntry.status === 'archived') continue;
-        out.push(await assembleFor(item.catalogEntryId, versionId, policySchema.parse(item.policy)));
+        out.push(
+          await assembleFor(item.catalogEntryId, versionId, policySchema.parse(item.policy)),
+        );
       }
       return out;
     },
@@ -474,17 +516,27 @@ export const createMarketplaceStore = <TItem extends { name: string; version: st
       return out;
     },
 
-    async setPromotedRelease(marketplaceId: string, seq: number, audit?: AuditContext): Promise<void> {
+    async setPromotedRelease(
+      marketplaceId: string,
+      seq: number,
+      audit?: AuditContext,
+    ): Promise<void> {
       await mutate(ctx, async (tx, unit) => {
         const release = await tx.marketplaceRelease.count({ where: { marketplaceId, seq } });
         if (release === 0) throw new NotFoundError('release', `${marketplaceId}#${seq}`);
         const before = await tx.marketplace.findUniqueOrThrow({ where: { id: marketplaceId } });
-        await tx.marketplace.update({ where: { id: marketplaceId }, data: { promotedRelease: seq } });
+        await tx.marketplace.update({
+          where: { id: marketplaceId },
+          data: { promotedRelease: seq },
+        });
         unit.audit(audit, {
           action: 'marketplace.promote',
           targetType: 'marketplace',
           targetId: marketplaceId,
-          diff: { before: { promotedRelease: before.promotedRelease }, after: { promotedRelease: seq } },
+          diff: {
+            before: { promotedRelease: before.promotedRelease },
+            after: { promotedRelease: seq },
+          },
         });
       });
     },
@@ -533,11 +585,17 @@ export const createReleaseStore = (arg: PrismaLike | RepoContext, options?: Repo
       return row ? toRecord(row) : undefined;
     },
     async latest(marketplaceId: string): Promise<ReleaseRecord | undefined> {
-      const row = await db.marketplaceRelease.findFirst({ where: { marketplaceId }, orderBy: { seq: 'desc' } });
+      const row = await db.marketplaceRelease.findFirst({
+        where: { marketplaceId },
+        orderBy: { seq: 'desc' },
+      });
       return row ? toRecord(row) : undefined;
     },
     async list(marketplaceId: string): Promise<ReleaseRecord[]> {
-      const rows = await db.marketplaceRelease.findMany({ where: { marketplaceId }, orderBy: { seq: 'asc' } });
+      const rows = await db.marketplaceRelease.findMany({
+        where: { marketplaceId },
+        orderBy: { seq: 'asc' },
+      });
       return rows.map(toRecord);
     },
     async insert(
@@ -592,9 +650,12 @@ export const createReleaseStore = (arg: PrismaLike | RepoContext, options?: Repo
 const channelSchema = z.enum(DISTRIBUTION_CHANNELS);
 
 /** `DistributionEventSink`: inserts into the partitioned `distribution_events`, creating partitions when missing. */
-export const createDistributionEventSink = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createDistributionEventSink = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const { db } = toContext(arg, options);
-  const insert = (events: readonly DistributionEvent[]) =>
+  const insert = (events: readonly DistributionEventRecord[]) =>
     db.distributionEvent.createMany({
       data: events.map((e) => ({
         id: newId(),
@@ -607,7 +668,7 @@ export const createDistributionEventSink = (arg: PrismaLike | RepoContext, optio
         userAgent: e.userAgent,
       })),
     });
-  const record = async (events: readonly DistributionEvent[]): Promise<void> => {
+  const record = async (events: readonly DistributionEventRecord[]): Promise<void> => {
     if (events.length === 0) return;
     try {
       await insert(events);
@@ -618,7 +679,7 @@ export const createDistributionEventSink = (arg: PrismaLike | RepoContext, optio
     }
   };
   return {
-    record: (event: DistributionEvent): Promise<void> => record([event]),
+    record: (event: DistributionEventRecord): Promise<void> => record([event]),
     recordMany: record,
   };
 };
@@ -649,9 +710,15 @@ const toPluginSource = (r: {
   lastCommit: string | null;
   lastSync: unknown;
   createdAt: Date;
-}): PluginSourceView => ({ ...r, lastSync: r.lastSync === null ? null : jsonObjectSchema.parse(r.lastSync) });
+}): PluginSourceView => ({
+  ...r,
+  lastSync: r.lastSync === null ? null : jsonObjectSchema.parse(r.lastSync),
+});
 
-export const createPluginSourceRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createPluginSourceRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
   return {
@@ -663,7 +730,15 @@ export const createPluginSourceRepository = (arg: PrismaLike | RepoContext, opti
       return (await db.pluginSource.findMany({ orderBy: { name: 'asc' } })).map(toPluginSource);
     },
     create(
-      input: { id?: string; name: string; gitUrl: string; ref?: string; path?: string | null; authSecretId?: string | null; tracked?: boolean },
+      input: {
+        id?: string;
+        name: string;
+        gitUrl: string;
+        ref?: string;
+        path?: string | null;
+        authSecretId?: string | null;
+        tracked?: boolean;
+      },
       audit?: AuditContext,
     ): Promise<PluginSourceView> {
       return mutate(ctx, async (tx, unit) => {
@@ -687,7 +762,10 @@ export const createPluginSourceRepository = (arg: PrismaLike | RepoContext, opti
         return toPluginSource(row);
       });
     },
-    async recordSync(id: string, result: { lastCommit: string | null; lastSync: Record<string, unknown> }): Promise<void> {
+    async recordSync(
+      id: string,
+      result: { lastCommit: string | null; lastSync: Record<string, unknown> },
+    ): Promise<void> {
       await db.pluginSource.update({
         where: { id },
         data: { lastCommit: result.lastCommit, lastSync: toJson(result.lastSync) },

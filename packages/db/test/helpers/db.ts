@@ -26,7 +26,9 @@ export const useTestDb = (): TestDbHandle => {
   afterAll(async () => {
     await state.db?.close();
     if (state.admin && state.name) {
-      await state.admin.prisma.$executeRawUnsafe(`DROP DATABASE IF EXISTS ${state.name} WITH (FORCE)`);
+      await state.admin.prisma.$executeRawUnsafe(
+        `DROP DATABASE IF EXISTS ${state.name} WITH (FORCE)`,
+      );
     }
     await state.admin?.close();
   });

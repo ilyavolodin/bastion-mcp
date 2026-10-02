@@ -187,7 +187,9 @@ export const createScimTokenRepository = (arg: PrismaLike | RepoContext, options
     async findByHash(
       tokenSha256: string,
     ): Promise<{ id: string; expiresAt: Date | null; revokedAt: Date | null } | null> {
-      const row = await db.scimToken.findUnique({ where: { tokenSha256: hexToBytes(tokenSha256) } });
+      const row = await db.scimToken.findUnique({
+        where: { tokenSha256: hexToBytes(tokenSha256) },
+      });
       return row ? { id: row.id, expiresAt: row.expiresAt, revokedAt: row.revokedAt } : null;
     },
     create(

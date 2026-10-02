@@ -104,7 +104,10 @@ export const createSecretRepository = (
             action: existing ? 'secret.update' : 'secret.create',
             targetType: 'secret',
             targetId: row.id,
-            diff: { before: null, after: { scope: write.scope, name: write.name, version: row.version } },
+            diff: {
+              before: null,
+              after: { scope: write.scope, name: write.name, version: row.version },
+            },
           });
           return row;
         });
@@ -170,7 +173,11 @@ export const createSecretRepository = (
         orderBy: { id: 'asc' },
         take: limit,
       });
-      return rows.map((r) => ({ id: r.id, wrappedDek: Buffer.from(r.wrappedDek), kekRef: r.kekRef }));
+      return rows.map((r) => ({
+        id: r.id,
+        wrappedDek: Buffer.from(r.wrappedDek),
+        kekRef: r.kekRef,
+      }));
     },
 
     /** Replaces only `wrapped_dek` and `kek_ref`; ciphertext, iv, tag and version stay. */

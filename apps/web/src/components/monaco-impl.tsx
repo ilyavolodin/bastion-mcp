@@ -4,17 +4,17 @@
  * first-paint bundle.
  */
 import Editor, { loader } from '@monaco-editor/react';
-import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
-import 'monaco-editor/esm/vs/editor/contrib/bracketMatching/browser/bracketMatching.js';
-import 'monaco-editor/esm/vs/editor/contrib/clipboard/browser/clipboard.js';
-import 'monaco-editor/esm/vs/editor/contrib/comment/browser/comment.js';
-import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController.js';
-import 'monaco-editor/esm/vs/editor/contrib/folding/browser/folding.js';
-import 'monaco-editor/esm/vs/editor/contrib/hover/browser/hoverContribution.js';
-import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController.js';
-import 'monaco-editor/esm/vs/language/json/monaco.contribution.js';
-import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker.js?worker';
-import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker.js?worker';
+import * as monaco from 'monaco-editor/editor/editor.api';
+import 'monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js';
+import 'monaco-editor/editor/contrib/clipboard/browser/clipboard.js';
+import 'monaco-editor/editor/contrib/comment/browser/comment.js';
+import 'monaco-editor/editor/contrib/find/browser/findController.js';
+import 'monaco-editor/editor/contrib/folding/browser/folding.js';
+import 'monaco-editor/editor/contrib/hover/browser/hoverContribution.js';
+import 'monaco-editor/editor/contrib/suggest/browser/suggestController.js';
+import { jsonDefaults } from 'monaco-editor/language/json/monaco.contribution.js';
+import EditorWorker from 'monaco-editor/editor/editor.worker.js?worker';
+import JsonWorker from 'monaco-editor/language/json/json.worker.js?worker';
 import { useEffect } from 'react';
 import { registerCedar } from './cedar-language';
 import type { CodeEditorProps } from './code-editor';
@@ -59,7 +59,7 @@ export default function MonacoImpl({
 
   useEffect(() => {
     if (language !== 'json') return;
-    monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+    jsonDefaults.setDiagnosticsOptions({
       validate: true,
       allowComments: false,
       schemas: jsonSchema

@@ -62,11 +62,11 @@ export const useRunTest = (entryId: string, versionId: string) =>
     [[...keys.catalog, 'entry', entryId]],
   );
 
-export const useTestResult = (entryId: string, versionId: string | null, poll: boolean) =>
-  useQuery({
+export const useTestResult = (entryId: string, versionId: string | null) =>
+  useQuery<TestResult | null>({
     queryKey: [...keys.catalog, 'test', entryId, versionId],
     enabled: Boolean(versionId),
-    refetchInterval: poll ? 800 : false,
+    refetchInterval: (q) => ((q.state.data as TestResult | null | undefined)?.status === 'running' ? 800 : false),
     queryFn: ({ signal }) =>
       api.get<TestResult | null>(`/catalog/${entryId}/versions/${versionId}/test`, { signal }),
   });

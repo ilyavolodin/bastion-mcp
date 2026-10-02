@@ -174,3 +174,100 @@ describe('17 openapi diff: breaking changes (CI check)', () => {
     expect(r.breaking.map((c) => c.message)).toContain('response property n was removed');
   });
 });
+
+describe('17 openapi diff: more request and response rules', () => {
+  const withBody = (body: unknown, required = true) =>
+    doc('1.0.0', {
+      '/x': {
+        post: op(obj({}), {
+          requestBody: { required, content: { 'application/json': { schema: body } } },
+        }),
+      },
+    });
+  const noBody = doc('1.0.0', { '/x': { post: op(obj({})) } });
+
+  it('17 flags added required, removed and newly required request bodies', () => {
+    expect(diffOpenApi(noBody, withBody(obj({}))).breaking.map((c) => c.message)).toContain(
+      'a request body was added',
+    );
+    expect(diffOpenApi(noBody, withBody(obj({}), false)).breaking).toEqual([]);
+    expect(diffOpenApi(withBody(obj({})), noBody).breaking.map((c) => c.message)).toContain(
+      'the request body was removed',
+    );
+    expect(
+      diffOpenApi(withBody(obj({}), false), withBody(obj({}), true)).breaking.map((c) => c.message),
+    ).toContain('the request body became required');
+  });
+
+  it('17 flags narrowed request types and enums, and optional properties becoming required', () => {
+    const narrowed = diffOpenApi(
+      withBody({ type: ['string', 'null'] }),
+      withBody({ type: 'string' }),
+    );
+    expect(narrowed.breaking.map((c) => c.message)).toContain(
+      'request type no longer accepts null',
+    );
+    const enumNow = diffOpenApi(
+      withBody({ type: 'string' }),
+      withBody({ type: 'string', enum: ['a'] }),
+    );
+    expect(enumNow.breaking.map((c) => c.message)).toContain(
+      'request values are now restricted to an enum',
+    );
+    const enumRemoved = diffOpenApi(withBody({ enum: ['a', 'b'] }), withBody({ enum: ['a'] }));
+    expect(enumRemoved.breaking.length).toBe(1);
+    const req = diffOpenApi(
+      withBody(obj({ a: { type: 'string' } }, [])),
+      withBody(obj({ a: { type: 'string' } }, ['a'])),
+    );
+    expect(req.breaking.map((c) => c.message)).toContain('request property a became required');
+  });
+
+  it('17 flags response properties that are no longer always present and array item changes', () => {
+    const resp = (schema: unknown) => doc('1.0.0', { '/x': { get: op(schema) } });
+    const optional = diffOpenApi(
+      resp(obj({ a: { type: 'string' } })),
+      resp(obj({ a: { type: 'string' } }, [])),
+    );
+    expect(optional.breaking.map((c) => c.message)).toContain(
+      'response property a is no longer always present',
+    );
+    const items = diffOpenApi(
+      resp({ type: 'array', items: obj({ a: { type: 'string' } }) }),
+      resp({ type: 'array', items: obj({}) }),
+    );
+    expect(items.breaking.map((c) => c.message)).toContain('response property a was removed');
+  });
+
+  it('17 handles anyOf alternatives and parameter changes', () => {
+    const resp = (schema: unknown) => doc('1.0.0', { '/x': { get: op(schema) } });
+    const grown = diffOpenApi(
+      resp({ anyOf: [{ type: 'string' }] }),
+      resp({ anyOf: [{ type: 'string' }, { type: 'null' }] }),
+    );
+    expect(grown.breaking.map((c) => c.message)).toContain('response has new alternatives');
+    const shrunk = diffOpenApi(
+      withBody({ anyOf: [{ type: 'string' }, { type: 'null' }] }),
+      withBody({ anyOf: [{ type: 'string' }] }),
+    );
+    expect(shrunk.breaking.map((c) => c.message)).toContain(
+      'request no longer accepts every previous alternative',
+    );
+    const p = (extra: Record<string, unknown>) =>
+      doc('1.0.0', {
+        '/x': {
+          get: op(obj({}), {
+            parameters: [{ in: 'query', name: 'q', schema: { type: 'string' }, ...extra }],
+          }),
+        },
+      });
+    expect(diffOpenApi(p({}), p({ required: true })).breaking.map((c) => c.message)).toContain(
+      'parameter query:q became required',
+    );
+    expect(
+      diffOpenApi(p({}), doc('1.0.0', { '/x': { get: op(obj({})) } })).breaking.map(
+        (c) => c.message,
+      ),
+    ).toContain('parameter query:q was removed');
+  });
+});

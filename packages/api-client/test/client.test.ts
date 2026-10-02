@@ -203,3 +203,26 @@ describe('17.1 api client: pagination iterator', () => {
     expect(out).toEqual([1, 2]);
   });
 });
+
+describe('17 api client: problem parsing', () => {
+  it('17.1 tolerates malformed error lists and non-JSON bodies', async () => {
+    const r = recorder(() =>
+      json(400, {
+        type: 1,
+        title: 'Bad',
+        status: 'x',
+        detail: 5,
+        code: 'c',
+        errors: [{ path: 1 }, { path: '/a', message: 'm' }],
+      }),
+    );
+    const client = createApiClient({ baseUrl: 'https://b.test', fetch: r.fetch });
+    const error = (await client.get('/me').catch((e: unknown) => e)) as ApiProblemError;
+    expect(error.problem.type).toBe('about:blank');
+    expect(error.problem.status).toBe(400);
+    expect(error.fieldErrors).toEqual([{ path: '/a', message: 'm' }]);
+    const text = recorder(() => new Response('not json', { status: 200 }));
+    const ok = await createApiClient({ baseUrl: 'https://b.test', fetch: text.fetch }).get('/me');
+    expect(ok.data).toBeUndefined();
+  });
+});

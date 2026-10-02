@@ -1,5 +1,7 @@
+export * from './audit-log';
 export * from './catalog';
 export * from './installations';
+export * from './instances';
 export * from './oauth';
 export * from './org';
 export * from './plugins';
@@ -11,4 +13,5 @@ export * from './support';
 export * from './teams';
 export * from './telemetry';
 export * from './tokens';
+export * from './unit-of-work';
 export * from './users';

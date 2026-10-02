@@ -7,16 +7,16 @@ import {
   assertIfMatch,
   assertSwapped,
   clampLimit,
+  etagOf,
+  idCursorOf,
+  mutate,
   NotFoundError,
+  nextUpdatedAt,
   orConflict,
   type Paged,
   type PrismaLike,
   type RepoContext,
   type RepoOptions,
-  etagOf,
-  mutate,
-  nextUpdatedAt,
-  idCursorOf,
   toContext,
   toPage,
   versionGuard,
@@ -242,7 +242,10 @@ const pick = (row: object, patch: object): Record<string, unknown> =>
  * Port `LocalAdminRepository` and its `LocalUser` row:
  * `{ id; email; orgRole: OrgRole; status: 'active'|'deactivated'; localPasswordHash: string | null }`.
  */
-export const createLocalAdminRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createLocalAdminRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   return {
     async findByEmail(email: string) {

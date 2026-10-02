@@ -5,7 +5,7 @@ import { extendTailwindMerge } from 'tailwind-merge';
  * The Zest type styles are custom utilities (`text-label`, `text-overline`, ...). Registering them as
  * their own group keeps tailwind-merge from mistaking them for colours and dropping one of the two.
  */
-const twMerge = extendTailwindMerge({
+const twMerge = extendTailwindMerge<'zest-type'>({
   extend: {
     classGroups: {
       'zest-type': [

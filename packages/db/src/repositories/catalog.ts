@@ -36,12 +36,12 @@ import {
   type PrismaLike,
   type RepoContext,
   type RepoOptions,
+  type Tx,
   toBytes,
   toContext,
   toJson,
   toJsonOrNull,
   toPage,
-  type Tx,
   ValidationError,
   versionGuard,
 } from './support';
@@ -274,7 +274,9 @@ export type CatalogListFilter = {
   cursor?: string;
 };
 
-const visibleToWhere = (v: NonNullable<CatalogListFilter['visibleTo']>): Prisma.CatalogEntryWhereInput => ({
+const visibleToWhere = (
+  v: NonNullable<CatalogListFilter['visibleTo']>,
+): Prisma.CatalogEntryWhereInput => ({
   OR: [
     { visibility: { path: ['org'], equals: true } },
     { visibility: { path: ['userIds'], array_contains: [v.userId] } },
@@ -284,7 +286,10 @@ const visibleToWhere = (v: NonNullable<CatalogListFilter['visibleTo']>): Prisma.
 });
 
 /** `catalog_entries` CRUD and search (11.1, 11.2) with the `search` tsvector maintained on every write. */
-export const createCatalogEntryRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createCatalogEntryRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
 
@@ -336,7 +341,10 @@ export const createCatalogEntryRepository = (arg: PrismaLike | RepoContext, opti
       const limit = clampLimit(filter.limit);
       const offset = Number(decodeCursor(filter.cursor)?.[0] ?? 0);
       if (!Number.isInteger(offset) || offset < 0) throw new ValidationError('invalid cursor');
-      const allowed = await db.catalogEntry.findMany({ where: baseWhere(filter), select: { id: true } });
+      const allowed = await db.catalogEntry.findMany({
+        where: baseWhere(filter),
+        select: { id: true },
+      });
       if (allowed.length === 0) return { items: [], nextCursor: null };
       const ids = allowed.map((r) => r.id);
       const ranked = await db.$queryRaw<{ id: string }[]>`
@@ -344,7 +352,9 @@ export const createCatalogEntryRepository = (arg: PrismaLike | RepoContext, opti
         WHERE id = ANY(${ids}::uuid[]) AND search @@ websearch_to_tsquery('simple', ${query})
         ORDER BY ts_rank(search, websearch_to_tsquery('simple', ${query})) DESC, id DESC
         LIMIT ${limit + 1} OFFSET ${offset}`;
-      const rows = await db.catalogEntry.findMany({ where: { id: { in: ranked.map((r) => r.id) } } });
+      const rows = await db.catalogEntry.findMany({
+        where: { id: { in: ranked.map((r) => r.id) } },
+      });
       const byId = new Map(rows.map((r) => [r.id, r]));
       const ordered = ranked.flatMap((r) => {
         const row = byId.get(r.id);
@@ -441,8 +451,11 @@ export const createCatalogEntryRepository = (arg: PrismaLike | RepoContext, opti
         if (!current) throw new NotFoundError('catalog entry', id);
         assertIfMatch(current, opts.ifMatch);
         const used = await tx.installation.count({ where: { catalogEntryId: id } });
-        if (used > 0) throw new ConflictError('catalog entry has installations', { installations: used });
-        assertSwapped(await tx.catalogEntry.deleteMany({ where: { id, ...versionGuard(current) } }));
+        if (used > 0)
+          throw new ConflictError('catalog entry has installations', { installations: used });
+        assertSwapped(
+          await tx.catalogEntry.deleteMany({ where: { id, ...versionGuard(current) } }),
+        );
         unit.bump('catalog', id);
         unit.audit(opts.audit, {
           action: 'catalog.entry.delete',
@@ -482,12 +495,18 @@ const validateSpec = (kind: string, spec: unknown): unknown =>
   kind === 'mcp_server' ? (serverSpecSchema.parse(spec) satisfies ServerSpec) : spec;
 
 /** `catalog_versions` (11.1): drafts are editable, published versions are immutable. */
-export const createCatalogVersionRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createCatalogVersionRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
 
   const entryKind = async (tx: PrismaLike, entryId: string): Promise<string> => {
-    const entry = await tx.catalogEntry.findUnique({ where: { id: entryId }, select: { kind: true } });
+    const entry = await tx.catalogEntry.findUnique({
+      where: { id: entryId },
+      select: { kind: true },
+    });
     if (!entry) throw new NotFoundError('catalog entry', entryId);
     return entry.kind;
   };
@@ -498,15 +517,23 @@ export const createCatalogVersionRepository = (arg: PrismaLike | RepoContext, op
       return row ? toVersionView(row) : null;
     },
     async getByLabel(entryId: string, label: string): Promise<CatalogVersionView | null> {
-      const row = await db.catalogVersion.findUnique({ where: { entryId_label: { entryId, label } } });
+      const row = await db.catalogVersion.findUnique({
+        where: { entryId_label: { entryId, label } },
+      });
       return row ? toVersionView(row) : null;
     },
     async list(entryId: string): Promise<CatalogVersionView[]> {
-      const rows = await db.catalogVersion.findMany({ where: { entryId }, orderBy: { id: 'desc' } });
+      const rows = await db.catalogVersion.findMany({
+        where: { entryId },
+        orderBy: { id: 'desc' },
+      });
       return rows.map(toVersionView);
     },
 
-    async create(input: CreateCatalogVersionInput, audit?: AuditContext): Promise<CatalogVersionView> {
+    async create(
+      input: CreateCatalogVersionInput,
+      audit?: AuditContext,
+    ): Promise<CatalogVersionView> {
       return mutate(ctx, async (tx, unit) => {
         const kind = await entryKind(tx, input.entryId);
         const spec = validateSpec(kind, input.serverSpec);
@@ -551,20 +578,26 @@ export const createCatalogVersionRepository = (arg: PrismaLike | RepoContext, op
         const current = await tx.catalogVersion.findUnique({ where: { id } });
         if (!current) throw new NotFoundError('catalog version', id);
         if (current.status !== 'draft') {
-          throw new ConflictError('published versions are immutable', { id, status: current.status });
+          throw new ConflictError('published versions are immutable', {
+            id,
+            status: current.status,
+          });
         }
         const kind = await entryKind(tx, current.entryId);
         const data: Prisma.CatalogVersionUncheckedUpdateInput = {};
-        if (patch.serverSpec !== undefined) data.serverSpec = toJson(validateSpec(kind, patch.serverSpec));
+        if (patch.serverSpec !== undefined)
+          data.serverSpec = toJson(validateSpec(kind, patch.serverSpec));
         if (patch.overrides !== undefined) data.overrides = toJson(patch.overrides);
         if (patch.guardProfileId !== undefined) data.guardProfileId = patch.guardProfileId;
         if (patch.limits !== undefined) data.limits = toJson(patch.limits);
         if (patch.installForm !== undefined) data.installForm = toJson(patch.installForm);
         if (patch.lockfile !== undefined) data.lockfile = toJsonOrNull(patch.lockfile);
-        if (patch.referenceSnapshotId !== undefined) data.referenceSnapshotId = patch.referenceSnapshotId;
+        if (patch.referenceSnapshotId !== undefined)
+          data.referenceSnapshotId = patch.referenceSnapshotId;
         if (patch.protocolEra !== undefined) data.protocolEra = patch.protocolEra;
         if (patch.changelog !== undefined) data.changelog = patch.changelog;
-        if (patch.runtime !== undefined) data.runtime = toJson(versionRuntimeSchema.parse(patch.runtime));
+        if (patch.runtime !== undefined)
+          data.runtime = toJson(versionRuntimeSchema.parse(patch.runtime));
         const row = await tx.catalogVersion.update({ where: { id }, data });
         unit.bump('catalog', current.entryId);
         unit.audit(audit, {
@@ -588,7 +621,9 @@ export const createCatalogVersionRepository = (arg: PrismaLike | RepoContext, op
         const current = await tx.catalogVersion.findUnique({ where: { id } });
         if (!current) throw new NotFoundError('catalog version', id);
         if (current.status !== 'draft') {
-          throw new ConflictError('only draft versions can be published', { status: current.status });
+          throw new ConflictError('only draft versions can be published', {
+            status: current.status,
+          });
         }
         const res = await tx.catalogVersion.updateMany({
           where: { id, status: 'draft' },
@@ -639,7 +674,10 @@ export const createCatalogVersionRepository = (arg: PrismaLike | RepoContext, op
         if (!current) throw new NotFoundError('catalog version', id);
         const used = await tx.installation.count({ where: { catalogVersionId: id } });
         if (current.status !== 'draft' || used > 0) {
-          throw new ConflictError('only unused draft versions can be deleted', { status: current.status, used });
+          throw new ConflictError('only unused draft versions can be deleted', {
+            status: current.status,
+            used,
+          });
         }
         await tx.catalogVersion.delete({ where: { id } });
         unit.bump('catalog', current.entryId);
@@ -710,7 +748,9 @@ export const createCatalogFileStore = (arg: PrismaLike | RepoContext, options?: 
         });
         if (!version) throw new NotFoundError('catalog version', catalogVersionId);
         if (version.status !== 'draft') {
-          throw new ConflictError('files of a published version are immutable', { catalogVersionId });
+          throw new ConflictError('files of a published version are immutable', {
+            catalogVersionId,
+          });
         }
         await tx.catalogFile.deleteMany({ where: { catalogVersionId } });
         if (rows.length > 0) {

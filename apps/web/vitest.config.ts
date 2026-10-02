@@ -10,7 +10,7 @@ export default defineConfig((env) =>
         environment: 'jsdom',
         globals: false,
         css: false,
-        setupFiles: ['./src/test/setup.ts'],
+        setupFiles: ['./src/test/polyfills.ts', './src/test/setup.ts'],
         include: ['src/**/*.test.{ts,tsx}'],
         testTimeout: 15000,
         coverage: {

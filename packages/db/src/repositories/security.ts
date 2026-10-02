@@ -8,7 +8,13 @@ import {
   RISK_LEVELS,
 } from '@bastion-mcp/core';
 import { z } from 'zod';
-import type { DefinitionPin, DriftReview, GuardProfile, LimitRule, PolicyRule } from '../generated/client';
+import type {
+  DefinitionPin,
+  DriftReview,
+  GuardProfile,
+  LimitRule,
+  PolicyRule,
+} from '../generated/client';
 import { visibilitySchema } from './catalog';
 import { createOrgSettingsRepository } from './org';
 import {
@@ -22,7 +28,6 @@ import {
   etagOf,
   hexToBytes,
   idCursorOf,
-  jsonObjectSchema,
   mutate,
   NotFoundError,
   nextUpdatedAt,
@@ -87,7 +92,10 @@ export type PolicyRuleInput = {
 };
 
 /** `policy_rules` (tool rules of 10.3). Any change bumps the `org` configuration version. */
-export const createPolicyRuleRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createPolicyRuleRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
   return {
@@ -220,7 +228,10 @@ const toCustomPolicy = (r: {
 }): CustomPolicyView => ({ ...r, tests: z.array(z.unknown()).parse(r.tests) });
 
 /** `custom_policies`: Cedar source plus its saved test cases. */
-export const createCustomPolicyRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createCustomPolicyRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
   return {
@@ -236,7 +247,14 @@ export const createCustomPolicyRepository = (arg: PrismaLike | RepoContext, opti
       return (await db.customPolicy.findMany({ orderBy: { name: 'asc' } })).map(toCustomPolicy);
     },
     async create(
-      input: { id?: string; name: string; cedar: string; tests?: unknown[]; enabled?: boolean; createdBy: string },
+      input: {
+        id?: string;
+        name: string;
+        cedar: string;
+        tests?: unknown[];
+        enabled?: boolean;
+        createdBy: string;
+      },
       audit?: AuditContext,
     ): Promise<CustomPolicyView> {
       return mutate(ctx, async (tx, unit) => {
@@ -303,7 +321,9 @@ export const createCustomPolicyRepository = (arg: PrismaLike | RepoContext, opti
         const current = await tx.customPolicy.findUnique({ where: { id } });
         if (!current) throw new NotFoundError('custom policy', id);
         assertIfMatch(current, opts.ifMatch);
-        assertSwapped(await tx.customPolicy.deleteMany({ where: { id, ...versionGuard(current) } }));
+        assertSwapped(
+          await tx.customPolicy.deleteMany({ where: { id, ...versionGuard(current) } }),
+        );
         unit.bump('org');
         unit.audit(opts.audit, {
           action: 'custom_policy.delete',
@@ -366,26 +386,30 @@ export const createPolicyDataSource = (arg: PrismaLike | RepoContext, options?: 
   return {
     async load(signal?: AbortSignal): Promise<PolicyDataRow> {
       signal?.throwIfAborted();
-      const [orgSettings, publishers, teams, entries, installations, accounts, rules, custom] = await Promise.all([
-        settings.get('logs'),
-        db.user.findMany({
-          where: { catalogPublishOrgWide: true, status: 'active' },
-          select: { id: true },
-          orderBy: { id: 'asc' },
-        }),
-        db.team.findMany({ select: { id: true, slug: true }, orderBy: { slug: 'asc' } }),
-        db.catalogEntry.findMany({
-          select: { id: true, ownerTeamId: true, visibility: true, risk: true },
-          orderBy: { id: 'asc' },
-        }),
-        db.installation.findMany({
-          select: { id: true, ownerType: true, ownerId: true, catalogEntryId: true },
-          orderBy: { id: 'asc' },
-        }),
-        db.serviceAccount.findMany({ select: { id: true, teamId: true } }),
-        db.policyRule.findMany({ where: { enabled: true }, orderBy: [{ priority: 'asc' }, { id: 'asc' }] }),
-        db.customPolicy.findMany({ where: { enabled: true }, orderBy: { name: 'asc' } }),
-      ]);
+      const [orgSettings, publishers, teams, entries, installations, accounts, rules, custom] =
+        await Promise.all([
+          settings.get('logs'),
+          db.user.findMany({
+            where: { catalogPublishOrgWide: true, status: 'active' },
+            select: { id: true },
+            orderBy: { id: 'asc' },
+          }),
+          db.team.findMany({ select: { id: true, slug: true }, orderBy: { slug: 'asc' } }),
+          db.catalogEntry.findMany({
+            select: { id: true, ownerTeamId: true, visibility: true, risk: true },
+            orderBy: { id: 'asc' },
+          }),
+          db.installation.findMany({
+            select: { id: true, ownerType: true, ownerId: true, catalogEntryId: true },
+            orderBy: { id: 'asc' },
+          }),
+          db.serviceAccount.findMany({ select: { id: true, teamId: true } }),
+          db.policyRule.findMany({
+            where: { enabled: true },
+            orderBy: [{ priority: 'asc' }, { id: 'asc' }],
+          }),
+          db.customPolicy.findMany({ where: { enabled: true }, orderBy: { name: 'asc' } }),
+        ]);
       signal?.throwIfAborted();
       const entryAttrs = new Map(
         entries.map((e) => [
@@ -402,7 +426,10 @@ export const createPolicyDataSource = (arg: PrismaLike | RepoContext, options?: 
         settings: { logsManagerVisibility: orgSettings.managerVisibility },
         orgWidePublisherIds: publishers.map((p) => p.id),
         teams,
-        catalogEntries: entries.map((e) => ({ id: e.id, ...(entryAttrs.get(e.id) as NonNullable<ReturnType<typeof entryAttrs.get>>) })),
+        catalogEntries: entries.map((e) => ({
+          id: e.id,
+          ...(entryAttrs.get(e.id) as NonNullable<ReturnType<typeof entryAttrs.get>>),
+        })),
         installations: installations.map((i) => {
           const entryId = i.catalogEntryId ?? i.id;
           const attrs = i.catalogEntryId ? entryAttrs.get(i.catalogEntryId) : undefined;
@@ -414,7 +441,9 @@ export const createPolicyDataSource = (arg: PrismaLike | RepoContext, options?: 
             ...(i.ownerType === 'service'
               ? {
                   ownerServiceId: i.ownerId,
-                  ...(serviceTeam.has(i.ownerId) ? { ownerServiceTeamId: serviceTeam.get(i.ownerId) as string } : {}),
+                  ...(serviceTeam.has(i.ownerId)
+                    ? { ownerServiceTeamId: serviceTeam.get(i.ownerId) as string }
+                    : {}),
                 }
               : {}),
             ...(attrs ? { catalogEntry: attrs } : {}),
@@ -459,7 +488,11 @@ const concurrencyParams = z.object({
   max: z.number().int().positive(),
   leaseSeconds: z.number().int().positive().default(900),
 });
-const paramsByKind = { rate: rateParams, quota: quotaParams, concurrency: concurrencyParams } as const;
+const paramsByKind = {
+  rate: rateParams,
+  quota: quotaParams,
+  concurrency: concurrencyParams,
+} as const;
 
 export type LimitRuleView = {
   id: string;
@@ -587,7 +620,9 @@ export const createLimitRuleRepository = (arg: PrismaLike | RepoContext, options
             data: {
               ...rest,
               ...(params === undefined ? {} : { params: toJson(paramsByKind[kind].parse(params)) }),
-              ...(subjectMatch === undefined ? {} : { subjectMatch: toJson(subjectMatchSchema.parse(subjectMatch)) }),
+              ...(subjectMatch === undefined
+                ? {}
+                : { subjectMatch: toJson(subjectMatchSchema.parse(subjectMatch)) }),
               ...(scope === undefined ? {} : { scope: toJson(scopeSchema.parse(scope)) }),
               ...(cost === undefined ? {} : { cost: toJsonOrNull(cost) }),
               updatedAt: nextUpdatedAt(current),
@@ -674,7 +709,10 @@ export type GuardProfileInput = {
 };
 
 /** `guard_profiles` CRUD with a single org default, mirrored into `settings.guards.orgDefaultProfileId`. */
-export const createGuardProfileRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createGuardProfileRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
   return {
@@ -734,8 +772,12 @@ export const createGuardProfileRepository = (arg: PrismaLike | RepoContext, opti
               where: { id, ...versionGuard(current) },
               data: {
                 ...rest,
-                ...(guards === undefined ? {} : { guards: toJson(guardInstancesSchema.parse(guards)) }),
-                ...(settings === undefined ? {} : { settings: toJson(guardSettingsSchema.parse(settings)) }),
+                ...(guards === undefined
+                  ? {}
+                  : { guards: toJson(guardInstancesSchema.parse(guards)) }),
+                ...(settings === undefined
+                  ? {}
+                  : { settings: toJson(guardSettingsSchema.parse(settings)) }),
                 updatedAt: nextUpdatedAt(current),
               },
             }),
@@ -762,7 +804,8 @@ export const createGuardProfileRepository = (arg: PrismaLike | RepoContext, opti
           where: { isOrgDefault: true, ...(id === null ? {} : { NOT: { id } }) },
           data: { isOrgDefault: false },
         });
-        if (id !== null) await tx.guardProfile.update({ where: { id }, data: { isOrgDefault: true } });
+        if (id !== null)
+          await tx.guardProfile.update({ where: { id }, data: { isOrgDefault: true } });
         await createOrgSettingsRepository({ ...ctx, db: tx, unit }).set(
           'guards',
           { orgDefaultProfileId: id },
@@ -781,10 +824,14 @@ export const createGuardProfileRepository = (arg: PrismaLike | RepoContext, opti
         const current = await tx.guardProfile.findUnique({ where: { id } });
         if (!current) throw new NotFoundError('guard profile', id);
         assertIfMatch(current, opts.ifMatch);
-        if (current.isOrgDefault) throw new ConflictError('the org default profile cannot be deleted', { id });
+        if (current.isOrgDefault)
+          throw new ConflictError('the org default profile cannot be deleted', { id });
         const used = await tx.catalogVersion.count({ where: { guardProfileId: id } });
-        if (used > 0) throw new ConflictError('guard profile is used by catalog versions', { used });
-        assertSwapped(await tx.guardProfile.deleteMany({ where: { id, ...versionGuard(current) } }));
+        if (used > 0)
+          throw new ConflictError('guard profile is used by catalog versions', { used });
+        assertSwapped(
+          await tx.guardProfile.deleteMany({ where: { id, ...versionGuard(current) } }),
+        );
         unit.bump('org');
         unit.audit(opts.audit, {
           action: 'guard_profile.delete',
@@ -832,13 +879,19 @@ const toPin = (r: DefinitionPin): PinView => ({
 });
 
 /** `definition_pins`: the pinned hash of every tool, prompt, resource and template of a subject. */
-export const createDefinitionPinRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createDefinitionPinRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
   return {
     async list(subject: PinSubject): Promise<PinView[]> {
       const rows = await db.definitionPin.findMany({
-        where: { catalogVersionId: subjectColumns(subject).catalogVersionId, installationId: subjectColumns(subject).installationId },
+        where: {
+          catalogVersionId: subjectColumns(subject).catalogVersionId,
+          installationId: subjectColumns(subject).installationId,
+        },
         orderBy: [{ itemKind: 'asc' }, { itemKey: 'asc' }],
       });
       return rows.map(toPin);
@@ -852,7 +905,11 @@ export const createDefinitionPinRepository = (arg: PrismaLike | RepoContext, opt
     },
 
     /** Inserts or updates pins by `(subject, kind, key)`; idempotent on the unique expression index. */
-    upsertPins(subject: PinSubject, pins: readonly PinInput[], audit?: AuditContext): Promise<void> {
+    upsertPins(
+      subject: PinSubject,
+      pins: readonly PinInput[],
+      audit?: AuditContext,
+    ): Promise<void> {
       return mutate(ctx, async (tx, unit) => {
         const cols = subjectColumns(subject);
         for (const pin of pins) {
@@ -872,7 +929,8 @@ export const createDefinitionPinRepository = (arg: PrismaLike | RepoContext, opt
           unit.audit(audit, {
             action: 'definition_pin.upsert',
             targetType: 'catalogVersionId' in subject ? 'catalog_version' : 'installation',
-            targetId: 'catalogVersionId' in subject ? subject.catalogVersionId : subject.installationId,
+            targetId:
+              'catalogVersionId' in subject ? subject.catalogVersionId : subject.installationId,
             diff: { before: null, after: { items: pins.map((p) => `${p.itemKind}:${p.itemKey}`) } },
           });
         }
@@ -880,10 +938,19 @@ export const createDefinitionPinRepository = (arg: PrismaLike | RepoContext, opt
     },
 
     /** Drops pins whose item vanished upstream and was approved as removed. */
-    async remove(subject: PinSubject, itemKind: PinInput['itemKind'], itemKey: string): Promise<boolean> {
+    async remove(
+      subject: PinSubject,
+      itemKind: PinInput['itemKind'],
+      itemKey: string,
+    ): Promise<boolean> {
       const cols = subjectColumns(subject);
       const res = await db.definitionPin.deleteMany({
-        where: { catalogVersionId: cols.catalogVersionId, installationId: cols.installationId, itemKind, itemKey },
+        where: {
+          catalogVersionId: cols.catalogVersionId,
+          installationId: cols.installationId,
+          itemKind,
+          itemKey,
+        },
       });
       return res.count > 0;
     },
@@ -925,7 +992,10 @@ const toReview = (r: DriftReview): DriftReviewView => ({
 });
 
 /** `drift_reviews`: the queue of changed or added definitions waiting for an owner (13.6). */
-export const createDriftReviewRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createDriftReviewRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
   return {
@@ -973,7 +1043,13 @@ export const createDriftReviewRepository = (arg: PrismaLike | RepoContext, optio
       return mutate(ctx, async (tx, unit) => {
         const cols = subjectColumns(subject);
         const existing = await tx.driftReview.findFirst({
-          where: { ...cols, itemKind: input.itemKind, itemKey: input.itemKey, newHash: hexToBytes(input.newHash), status: 'open' },
+          where: {
+            ...cols,
+            itemKind: input.itemKind,
+            itemKey: input.itemKey,
+            newHash: hexToBytes(input.newHash),
+            status: 'open',
+          },
         });
         if (existing) return { review: toReview(existing), created: false };
         const row = await tx.driftReview.create({
@@ -989,7 +1065,10 @@ export const createDriftReviewRepository = (arg: PrismaLike | RepoContext, optio
           },
         });
         if (cols.catalogVersionId) {
-          const v = await tx.catalogVersion.findUnique({ where: { id: cols.catalogVersionId }, select: { entryId: true } });
+          const v = await tx.catalogVersion.findUnique({
+            where: { id: cols.catalogVersionId },
+            select: { entryId: true },
+          });
           if (v) unit.bump('catalog', v.entryId);
         }
         if (cols.installationId) unit.bump('installation', cols.installationId);
@@ -1018,7 +1097,11 @@ export const createDriftReviewRepository = (arg: PrismaLike | RepoContext, optio
             reason: decision.reason ?? null,
           },
         });
-        if (res.count === 0) throw new ConflictError('drift review was already decided', { id, status: current.status });
+        if (res.count === 0)
+          throw new ConflictError('drift review was already decided', {
+            id,
+            status: current.status,
+          });
         if (decision.status === 'approved') {
           await tx.$executeRaw`
             INSERT INTO definition_pins
@@ -1031,7 +1114,10 @@ export const createDriftReviewRepository = (arg: PrismaLike | RepoContext, optio
               hash = EXCLUDED.hash, definition = EXCLUDED.definition,
               approved_by = EXCLUDED.approved_by, approved_at = EXCLUDED.approved_at`;
           if (current.catalogVersionId) {
-            const v = await tx.catalogVersion.findUnique({ where: { id: current.catalogVersionId }, select: { entryId: true } });
+            const v = await tx.catalogVersion.findUnique({
+              where: { id: current.catalogVersionId },
+              select: { entryId: true },
+            });
             if (v) unit.bump('catalog', v.entryId);
           }
           if (current.installationId) unit.bump('installation', current.installationId);
@@ -1043,7 +1129,11 @@ export const createDriftReviewRepository = (arg: PrismaLike | RepoContext, optio
           targetId: id,
           diff: {
             before: { status: 'open' },
-            after: { status: decision.status, item: `${current.itemKind}:${current.itemKey}`, reason: decision.reason ?? null },
+            after: {
+              status: decision.status,
+              item: `${current.itemKind}:${current.itemKey}`,
+              reason: decision.reason ?? null,
+            },
           },
         });
         return toReview(row);

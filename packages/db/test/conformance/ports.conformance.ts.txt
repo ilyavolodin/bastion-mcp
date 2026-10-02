@@ -1,0 +1,68 @@
+import type { PrismaClient } from '../src/generated/client';
+import { createRepositories, createRouterRepository, createRegistryServerStore } from '../src/repositories';
+import type { SecretRepository, KeyStore } from '../../secrets/src';
+import type { PrincipalStore, PatRepository, SigningKeySource as IdSigningKeySource } from '../../auth/src/identity/ports';
+import type { ProvisioningRepository } from '../../auth/src/identity/provisioning/plan';
+import type { ScimStore, ScimTokenRepository } from '../../auth/src/identity/scim/types';
+import type { ServiceAccountDirectory } from '../../auth/src/identity/service-accounts/service-accounts';
+import type { LocalAdminRepository } from '../../auth/src/identity/break-glass';
+import type {
+  OidcModelStore, OAuthClientPolicyStore, IdpConnectionStore, IdpTokenStore, UpstreamClientStore, UpstreamTokenStore,
+  PrincipalDirectory, RegistrationSettingsSource, SecretStore, SigningKeySource as OauthSigningKeySource,
+} from '../../auth/src/oauth/ports';
+import type { RegistrySourceStore, RegistryServerStore, InstallRequestStore } from '../../registry/src/ports';
+import type { BlobStore, CatalogFileStore, MarketplaceStore, ReleaseStore, DistributionEventSink } from '../../plugins/src/ports';
+import type { PolicyDataSource, PrincipalDirectory as PolicyPrincipalDirectory } from '../../policy/src/ports';
+import type { InstanceRepository, SnapshotStore, InstallationStatusSink, InstallationRegistry } from '../../mcp-upstream/src/ports';
+import type { CallLogSink } from '../../telemetry/src/call-log';
+import type { EgressAuditSink } from '../../sandbox/src/egress/audit';
+import type { TokenPolicy } from '../../auth/src/identity/ports';
+import type { InstallationInfo, EndpointDefinition } from '../../router/src/types';
+import type { ServerJson } from '../../registry/src/server-json';
+import type { OverridesDocument } from '../../overrides/src/schema';
+
+declare const prisma: PrismaClient;
+declare const vault: never;
+const must = <T>(v: T | undefined): T => v as T;
+const r = createRepositories(prisma, { scimConflictError: (m) => new Error(m), secretVault: vault, configHash: () => 'x' });
+
+export const checks = async () => ({
+  secretRepo: r.secrets satisfies SecretRepository,
+  keyStore: must(r.keyStore) satisfies KeyStore,
+  principalStore: r.principals satisfies PrincipalStore,
+  pat: r.pats satisfies PatRepository,
+  idSigning: must(r.keyStore) satisfies IdSigningKeySource,
+  oauthSigning: must(r.keyStore) satisfies OauthSigningKeySource,
+  provisioning: r.provisioning satisfies ProvisioningRepository,
+  scim: must(r.scim) satisfies ScimStore,
+  scimTokens: r.scimTokens satisfies ScimTokenRepository,
+  sa: r.serviceAccounts satisfies ServiceAccountDirectory,
+  local: r.localAdmins satisfies LocalAdminRepository,
+  oidc: r.oidcModels satisfies OidcModelStore,
+  clientPolicy: r.oauthClientPolicies satisfies OAuthClientPolicyStore,
+  idp: r.idpConnections satisfies IdpConnectionStore,
+  idpTokens: r.idpTokens satisfies IdpTokenStore,
+  upClients: r.upstreamClients satisfies UpstreamClientStore,
+  upTokens: r.upstreamTokens satisfies UpstreamTokenStore,
+  principalDir: r.principals satisfies PrincipalDirectory,
+  policyPrincipalDir: r.principals satisfies PolicyPrincipalDirectory,
+  regSettings: { get: async () => r.orgSettings.clientRegistration() } satisfies RegistrationSettingsSource,
+  tokenPolicy: r.orgSettings satisfies TokenPolicy,
+  regSources: r.registrySources satisfies RegistrySourceStore,
+  regServers: createRegistryServerStore<ServerJson>(prisma, { parseServerJson: (raw) => raw as ServerJson }) satisfies RegistryServerStore,
+  routerInfo: (await createRouterRepository<OverridesDocument>(prisma).listForPrincipal({ id: 'x', type: 'user', teamIds: [] })) satisfies InstallationInfo[],
+  endpointDef: (await r.endpoints.findDefinition('x')) satisfies EndpointDefinition | null,
+  installRequests: r.installRequests satisfies InstallRequestStore,
+  blobs: r.blobs satisfies BlobStore,
+  files: r.catalogFiles satisfies CatalogFileStore,
+  releases: r.releases satisfies ReleaseStore,
+  dist: r.distributionEvents satisfies DistributionEventSink,
+  policyData: r.policyData satisfies PolicyDataSource,
+  instances: r.instances satisfies InstanceRepository,
+  snapshots: r.snapshots satisfies SnapshotStore,
+  status: r.installations satisfies InstallationStatusSink,
+  registry: must(r.installationRegistry) satisfies InstallationRegistry,
+  callLogSink: r.callLog.insertBatch satisfies CallLogSink,
+  egress: r.egressEvents satisfies EgressAuditSink,
+});
+void checks;

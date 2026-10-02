@@ -7,6 +7,7 @@ import {
   bytesToHex,
   ConflictError,
   clampLimit,
+  compact,
   hexToBytes,
   idCursorOf,
   mutate,
@@ -73,8 +74,12 @@ const toInstance = (row: Instance): InstanceRecord => {
     userId: row.userId,
     kind: kindSchema.parse(row.kind),
     replica: row.replica,
-    ...(row.driver && sandboxRef ? { sandbox: { driver: driverSchema.parse(row.driver), ...sandboxRef } } : {}),
-    ...(row.remoteSession === null ? {} : { remoteSession: remoteSessionSchema.parse(row.remoteSession) }),
+    ...(row.driver && sandboxRef
+      ? { sandbox: { driver: driverSchema.parse(row.driver), ...sandboxRef } }
+      : {}),
+    ...(row.remoteSession === null
+      ? {}
+      : { remoteSession: remoteSessionSchema.parse(row.remoteSession) }),
     ...(row.startedAt ? { startedAt: row.startedAt.getTime() } : {}),
     lastUsedAt: (row.lastUsedAt ?? row.createdAt).getTime(),
     failures: failuresSchema.parse(row.failures),
@@ -127,7 +132,9 @@ export const createInstanceRepository = (arg: PrismaLike | RepoContext, options?
           replica: record.replica,
           kind: record.kind,
           driver: record.sandbox?.driver ?? null,
-          sandboxRef: toJsonOrNull(record.sandbox ? { id: record.sandbox.id, address: record.sandbox.address } : null),
+          sandboxRef: toJsonOrNull(
+            record.sandbox ? { id: record.sandbox.id, address: record.sandbox.address } : null,
+          ),
           catalogVersionId: record.catalogVersionId === '' ? null : record.catalogVersionId,
           state: instanceState(record),
           startedAt: record.startedAt === undefined ? null : new Date(record.startedAt),
@@ -149,7 +156,11 @@ export const createInstanceRepository = (arg: PrismaLike | RepoContext, options?
     /** Sandboxes that are starting or running, optionally for one user (per-user limit, 8.6). */
     async listRunning(userId?: string): Promise<InstanceRecord[]> {
       const rows = await db.instance.findMany({
-        where: { kind: 'sandbox', state: { in: ['starting', 'running'] }, ...(userId ? { userId } : {}) },
+        where: {
+          kind: 'sandbox',
+          state: { in: ['starting', 'running'] },
+          ...(userId ? { userId } : {}),
+        },
         orderBy: { id: 'asc' },
       });
       return rows.map(toInstance);
@@ -191,7 +202,11 @@ export type SnapshotItems = {
 };
 
 const arraySchema = z.array(z.unknown());
-const serverInfoSchema = z.object({ name: z.string(), version: z.string(), title: z.string().optional() });
+const serverInfoSchema = z.object({
+  name: z.string(),
+  version: z.string(),
+  title: z.string().optional(),
+});
 
 /** Snapshots kept per `(installation, configHash)` key; older ones are pruned on write. */
 export const SNAPSHOTS_KEPT = 3;
@@ -210,7 +225,13 @@ const toItems = (row: {
   resources: arraySchema.parse(row.resources),
   resourceTemplates: arraySchema.parse(row.resourceTemplates),
   ...(row.instructions === null ? {} : { instructions: row.instructions }),
-  ...(row.serverInfo === null ? {} : { serverInfo: serverInfoSchema.parse(row.serverInfo) }),
+  ...(row.serverInfo === null
+    ? {}
+    : {
+        serverInfo: compact<NonNullable<SnapshotItems['serverInfo']>>(
+          serverInfoSchema.parse(row.serverInfo),
+        ),
+      }),
   ...(row.ttlMs === null ? {} : { ttlMs: row.ttlMs }),
 });
 
@@ -236,7 +257,10 @@ export const createSnapshotStore = (arg: PrismaLike | RepoContext, options?: Rep
         orderBy: { capturedAt: 'desc' },
       });
       if (latest && sameContent(toItems(latest), items)) {
-        await tx.upstreamSnapshot.update({ where: { id: latest.id }, data: { capturedAt: new Date(), ttlMs: items.ttlMs ?? null } });
+        await tx.upstreamSnapshot.update({
+          where: { id: latest.id },
+          data: { capturedAt: new Date(), ttlMs: items.ttlMs ?? null },
+        });
         return latest.id;
       }
       const row = await tx.upstreamSnapshot.create({
@@ -274,7 +298,10 @@ export const createSnapshotStore = (arg: PrismaLike | RepoContext, options?: Rep
       return row ? toItems(row) : null;
     },
     /** The reference snapshot of the catalog version for the same config hash. */
-    async getReference(catalogVersionId: string, configHash: string): Promise<SnapshotItems | null> {
+    async getReference(
+      catalogVersionId: string,
+      configHash: string,
+    ): Promise<SnapshotItems | null> {
       const row = await db.upstreamSnapshot.findFirst({
         where: { catalogVersionId, installationId: null, configHash: hexToBytes(configHash) },
         orderBy: { capturedAt: 'desc' },
@@ -282,10 +309,16 @@ export const createSnapshotStore = (arg: PrismaLike | RepoContext, options?: Rep
       return row ? toItems(row) : null;
     },
     put(installationId: string, configHash: string, items: SnapshotItems): Promise<void> {
-      return store({ installationId, catalogVersionId: null }, configHash, items).then(() => undefined);
+      return store({ installationId, catalogVersionId: null }, configHash, items).then(
+        () => undefined,
+      );
     },
     /** Stores a catalog reference snapshot and returns its id for `catalog_versions.reference_snapshot_id`. */
-    putReference(catalogVersionId: string, configHash: string, items: SnapshotItems): Promise<string> {
+    putReference(
+      catalogVersionId: string,
+      configHash: string,
+      items: SnapshotItems,
+    ): Promise<string> {
       return store({ installationId: null, catalogVersionId }, configHash, items);
     },
     async getById(id: string): Promise<SnapshotItems | null> {
@@ -293,7 +326,10 @@ export const createSnapshotStore = (arg: PrismaLike | RepoContext, options?: Rep
       return row ? toItems(row) : null;
     },
     async hashOf(id: string): Promise<string | null> {
-      const row = await db.upstreamSnapshot.findUnique({ where: { id }, select: { configHash: true } });
+      const row = await db.upstreamSnapshot.findUnique({
+        where: { id },
+        select: { configHash: true },
+      });
       return row ? bytesToHex(row.configHash) : null;
     },
   };
@@ -328,7 +364,10 @@ const toEgressRequest = (r: EgressAccessRequest): EgressAccessRequestView => ({
 });
 
 /** Requests from users for an extra egress host; an admin approves or rejects once (8.8). */
-export const createEgressAccessRequestRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createEgressAccessRequestRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
   return {
@@ -337,7 +376,13 @@ export const createEgressAccessRequestRepository = (arg: PrismaLike | RepoContex
       return row ? toEgressRequest(row) : null;
     },
     async list(
-      filter: { installationId?: string; requesterId?: string; status?: EgressAccessRequestView['status']; limit?: number; cursor?: string } = {},
+      filter: {
+        installationId?: string;
+        requesterId?: string;
+        status?: EgressAccessRequestView['status'];
+        limit?: number;
+        cursor?: string;
+      } = {},
     ): Promise<Paged<EgressAccessRequestView>> {
       const limit = clampLimit(filter.limit);
       const rows = await db.egressAccessRequest.findMany({
@@ -355,12 +400,24 @@ export const createEgressAccessRequestRepository = (arg: PrismaLike | RepoContex
     },
     /** One open request per `(installation, host, port, requester)`; a repeat returns the existing one. */
     create(
-      input: { id?: string; installationId: string; host: string; port: number; requesterId: string },
+      input: {
+        id?: string;
+        installationId: string;
+        host: string;
+        port: number;
+        requesterId: string;
+      },
       audit?: AuditContext,
     ): Promise<{ request: EgressAccessRequestView; created: boolean }> {
       return mutate(ctx, async (tx, unit) => {
         const open = await tx.egressAccessRequest.findFirst({
-          where: { installationId: input.installationId, host: input.host, port: input.port, requesterId: input.requesterId, status: 'open' },
+          where: {
+            installationId: input.installationId,
+            host: input.host,
+            port: input.port,
+            requesterId: input.requesterId,
+            status: 'open',
+          },
         });
         if (open) return { request: toEgressRequest(open), created: false };
         const row = await tx.egressAccessRequest.create({
@@ -392,7 +449,8 @@ export const createEgressAccessRequestRepository = (arg: PrismaLike | RepoContex
           data: { status: decision.status, decidedBy: decision.decidedBy, decidedAt: new Date() },
         });
         if (res.count === 0) {
-          if ((await tx.egressAccessRequest.count({ where: { id } })) === 0) throw new NotFoundError('egress access request', id);
+          if ((await tx.egressAccessRequest.count({ where: { id } })) === 0)
+            throw new NotFoundError('egress access request', id);
           throw new ConflictError('request was already decided', { id });
         }
         const row = await tx.egressAccessRequest.findUniqueOrThrow({ where: { id } });
@@ -401,7 +459,10 @@ export const createEgressAccessRequestRepository = (arg: PrismaLike | RepoContex
           action: `egress_request.${decision.status}`,
           targetType: 'egress_access_request',
           targetId: id,
-          diff: { before: { status: 'open' }, after: { status: decision.status, host: row.host, port: row.port } },
+          diff: {
+            before: { status: 'open' },
+            after: { status: decision.status, host: row.host, port: row.port },
+          },
         });
         return toEgressRequest(row);
       });

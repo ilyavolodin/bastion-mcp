@@ -1,7 +1,7 @@
 import { MEMBERSHIP_SOURCES, ORG_ROLES, TEAM_ROLES, USER_STATUSES } from '@bastion-mcp/core';
 import { z } from 'zod';
 import type { Prisma } from '../generated/client';
-import { mapsToSchema } from './teams';
+import type { AuditContext } from './support';
 import {
   ConflictError,
   isUniqueViolation,
@@ -13,7 +13,7 @@ import {
   toContext,
   type UnitState,
 } from './support';
-import type { AuditContext } from './support';
+import { type MapsTo, parseMapsTo } from './teams';
 
 type OrgRole = (typeof ORG_ROLES)[number];
 type TeamRole = (typeof TEAM_ROLES)[number];
@@ -143,8 +143,12 @@ const applyOne = async (
       ...(changes.email === undefined ? {} : { email: changes.email }),
       ...(changes.scimExternalId === undefined ? {} : { scimExternalId: changes.scimExternalId }),
       ...(changes.orgRole === undefined ? {} : { orgRole: changes.orgRole }),
-      ...(changes.externalSubject === undefined ? {} : { externalSubject: changes.externalSubject }),
-      ...(changes.idpConnectionId === undefined ? {} : { idpConnectionId: changes.idpConnectionId }),
+      ...(changes.externalSubject === undefined
+        ? {}
+        : { externalSubject: changes.externalSubject }),
+      ...(changes.idpConnectionId === undefined
+        ? {}
+        : { idpConnectionId: changes.idpConnectionId }),
       ...(changes.status === undefined ? {} : { status: changes.status }),
       ...(changes.lastLoginAt === undefined ? {} : { lastLoginAt: changes.lastLoginAt }),
     };
@@ -183,7 +187,9 @@ const applyOne = async (
     });
   }
   for (const m of plan.membershipRemovals) {
-    const res = await tx.teamMembership.deleteMany({ where: { teamId: m.teamId, userId: m.userId } });
+    const res = await tx.teamMembership.deleteMany({
+      where: { teamId: m.teamId, userId: m.userId },
+    });
     if (res.count > 0) {
       unit.bump('team', m.teamId);
       unit.bump('user', m.userId);
@@ -258,7 +264,10 @@ export const createPrincipalRepository = (arg: PrismaLike | RepoContext, options
           id: user.id,
           type: 'user',
           orgRole: orgRole.parse(user.orgRole),
-          teams: user.teamMemberships.map((m) => ({ teamId: m.teamId, role: teamRole.parse(m.role) })),
+          teams: user.teamMemberships.map((m) => ({
+            teamId: m.teamId,
+            role: teamRole.parse(m.role),
+          })),
           active: user.status === 'active',
         };
       }
@@ -357,7 +366,7 @@ export type ScimRoleRule = {
   id: string;
   idpConnectionId: string | null;
   groupPattern: string;
-  mapsTo: z.infer<typeof mapsToSchema>;
+  mapsTo: MapsTo;
   priority: number;
 };
 
@@ -596,7 +605,7 @@ export const createScimStore = (
         id: r.id,
         idpConnectionId: r.idpConnectionId,
         groupPattern: r.groupPattern,
-        mapsTo: mapsToSchema.parse(r.mapsTo),
+        mapsTo: parseMapsTo(r.mapsTo),
         priority: r.priority,
       }));
     },

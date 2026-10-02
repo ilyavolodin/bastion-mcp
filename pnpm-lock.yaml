@@ -447,6 +447,9 @@ importers:
       '@modelcontextprotocol/conformance':
         specifier: 0.1.16
         version: 0.1.16
+      '@modelcontextprotocol/sdk':
+        specifier: 1.31.0
+        version: 1.31.0(zod@4.6.5)
       '@opentelemetry/context-async-hooks':
         specifier: 2.11.0
         version: 2.11.0(@opentelemetry/api@1.9.1)

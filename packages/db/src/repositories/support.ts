@@ -182,6 +182,13 @@ export const toJson = (value: unknown): Prisma.InputJsonValue => value as Prisma
 export const toJsonOrNull = (value: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull =>
   value === null || value === undefined ? Prisma.DbNull : (value as Prisma.InputJsonValue);
 
+/**
+ * Drops `undefined` values so a zod-parsed object (`x?: T | undefined`) satisfies a port type declared with
+ * `exactOptionalPropertyTypes` (`x?: T`), which `apps/server` enables.
+ */
+export const compact = <T extends object>(value: object): T =>
+  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
+
 export const jsonObjectSchema = z.record(z.string(), z.unknown());
 export type JsonObject = z.infer<typeof jsonObjectSchema>;
 
@@ -192,7 +199,8 @@ export const toBytes = (data: Uint8Array): Uint8Array<ArrayBuffer> => {
   return out;
 };
 
-export const hexToBytes = (hex: string): Uint8Array<ArrayBuffer> => toBytes(Buffer.from(hex, 'hex'));
+export const hexToBytes = (hex: string): Uint8Array<ArrayBuffer> =>
+  toBytes(Buffer.from(hex, 'hex'));
 
 export const bytesToHex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 
@@ -259,7 +267,8 @@ const isRepoContext = (value: PrismaLike | RepoContext): value is RepoContext =>
 export const toContext = (arg: PrismaLike | RepoContext, options: RepoOptions = {}): RepoContext =>
   isRepoContext(arg) ? { ...options, ...arg } : { ...options, db: arg };
 
-const isClient = (db: PrismaLike): db is PrismaClient => '$transaction' in db;
+/** Interactive-transaction clients still expose `$transaction` at runtime; only the root client has `$connect`. */
+const isClient = (db: PrismaLike): db is PrismaClient => '$connect' in db;
 
 /** Applies bumps in a fixed order (no deadlocks between units) and appends audit events. */
 export const flushUnit = async (tx: Tx, unit: UnitState): Promise<ConfigEvent[]> => {

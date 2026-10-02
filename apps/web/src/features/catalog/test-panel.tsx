@@ -57,7 +57,7 @@ export function TestPanel({
   onBeforeRun?: () => Promise<string | null>;
 }) {
   const run = useRunTest(entryId, versionId ?? '');
-  const result = useTestResult(entryId, versionId, true);
+  const result = useTestResult(entryId, versionId);
   const t = result.data;
   const running = t?.status === 'running' || run.isPending;
   const start = async () => {

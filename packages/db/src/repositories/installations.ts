@@ -20,6 +20,7 @@ import {
   assertSwapped,
   ConflictError,
   clampLimit,
+  compact,
   etagOf,
   idCursorOf,
   jsonObjectSchema,
@@ -145,7 +146,10 @@ const bumpOwner = (
 };
 
 /** `installations` CRUD (11.4) with ETags, audit and config bumps for the installation and its owner. */
-export const createInstallationRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createInstallationRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
 
@@ -154,7 +158,9 @@ export const createInstallationRepository = (arg: PrismaLike | RepoContext, opti
       const row = await db.installation.findUnique({ where: { id } });
       return row ? toInstallationView(row) : null;
     },
-    async getWithEtag(id: string): Promise<{ installation: InstallationView; etag: string } | null> {
+    async getWithEtag(
+      id: string,
+    ): Promise<{ installation: InstallationView; etag: string } | null> {
       const row = await db.installation.findUnique({ where: { id } });
       return row ? { installation: toInstallationView(row), etag: etagOf(row) } : null;
     },
@@ -188,11 +194,14 @@ export const createInstallationRepository = (arg: PrismaLike | RepoContext, opti
     },
 
     async create(input: CreateInstallationInput, audit?: AuditContext): Promise<InstallationView> {
-      if (!isValidSlug(input.slug)) throw new ValidationError('invalid installation slug', { slug: input.slug });
+      if (!isValidSlug(input.slug))
+        throw new ValidationError('invalid installation slug', { slug: input.slug });
       const hasEntry = input.catalogEntryId !== undefined && input.catalogEntryId !== null;
       const hasSpec = input.personalSpec !== undefined && input.personalSpec !== null;
       if (hasEntry === hasSpec) {
-        throw new ValidationError('an installation needs a catalog entry or a personal spec, not both');
+        throw new ValidationError(
+          'an installation needs a catalog entry or a personal spec, not both',
+        );
       }
       const personalSpec = hasSpec ? serverSpecSchema.parse(input.personalSpec) : null;
       return mutate(ctx, async (tx, unit) => {
@@ -229,7 +238,12 @@ export const createInstallationRepository = (arg: PrismaLike | RepoContext, opti
           targetId: row.id,
           diff: {
             before: null,
-            after: { slug: row.slug, ownerType: row.ownerType, ownerId: row.ownerId, origin: row.origin },
+            after: {
+              slug: row.slug,
+              ownerType: row.ownerType,
+              ownerId: row.ownerId,
+              origin: row.origin,
+            },
           },
         });
         return toInstallationView(row);
@@ -280,7 +294,9 @@ export const createInstallationRepository = (arg: PrismaLike | RepoContext, opti
         if (!current) throw new NotFoundError('installation', id);
         assertIfMatch(current, opts.ifMatch);
         await assertNotRequired(tx, current);
-        assertSwapped(await tx.installation.deleteMany({ where: { id, ...versionGuard(current) } }));
+        assertSwapped(
+          await tx.installation.deleteMany({ where: { id, ...versionGuard(current) } }),
+        );
         bumpOwner(unit, current);
         unit.audit(opts.audit, {
           action: 'installation.delete',
@@ -340,7 +356,7 @@ export const createInstallationRepository = (arg: PrismaLike | RepoContext, opti
     async clearError(installationId: string): Promise<void> {
       await mutate(ctx, async (tx, unit) => {
         const row = await tx.installation.findUnique({ where: { id: installationId } });
-        if (!row || row.status !== 'error') return;
+        if (row?.status !== 'error') return;
         await tx.installation.update({
           where: { id: installationId },
           data: { status: 'ready', statusDetail: toJsonOrNull(null) },
@@ -357,10 +373,7 @@ const pickKeys = (row: object, keys: string[]): Record<string, unknown> =>
 const AUTO_PREFIX = 'autoInstall:';
 
 /** A `required` auto-install policy pins its installations: no removal, no hiding (11.5). */
-const assertNotRequired = async (
-  tx: Tx,
-  inst: { id: string; origin: string },
-): Promise<void> => {
+const assertNotRequired = async (tx: Tx, inst: { id: string; origin: string }): Promise<void> => {
   if (!inst.origin.startsWith(AUTO_PREFIX)) return;
   const policy = await tx.autoInstallPolicy.findUnique({
     where: { id: inst.origin.slice(AUTO_PREFIX.length) },
@@ -447,11 +460,16 @@ export const createEndpointRepository = (arg: PrismaLike | RepoContext, options?
   const ctx = toContext(arg, options);
   const { db } = ctx;
 
-  const assertInstallationsExist = async (tx: PrismaLike, ids: readonly string[]): Promise<void> => {
+  const assertInstallationsExist = async (
+    tx: PrismaLike,
+    ids: readonly string[],
+  ): Promise<void> => {
     const unique = [...new Set(ids)];
-    if (unique.length !== ids.length) throw new ValidationError('duplicate installation in endpoint');
+    if (unique.length !== ids.length)
+      throw new ValidationError('duplicate installation in endpoint');
     const found = await tx.installation.count({ where: { id: { in: unique } } });
-    if (found !== unique.length) throw new ValidationError('endpoint references an unknown installation');
+    if (found !== unique.length)
+      throw new ValidationError('endpoint references an unknown installation');
   };
 
   return {
@@ -463,7 +481,11 @@ export const createEndpointRepository = (arg: PrismaLike | RepoContext, options?
       const row = await db.endpoint.findUnique({ where: { id } });
       return row ? { endpoint: toEndpointView(row), etag: etagOf(row) } : null;
     },
-    async getBySlug(ownerType: OwnerType, ownerId: string, slug: string): Promise<EndpointView | null> {
+    async getBySlug(
+      ownerType: OwnerType,
+      ownerId: string,
+      slug: string,
+    ): Promise<EndpointView | null> {
       const row = await db.endpoint.findUnique({
         where: { ownerType_ownerId_slug: { ownerType, ownerId, slug } },
       });
@@ -483,7 +505,8 @@ export const createEndpointRepository = (arg: PrismaLike | RepoContext, options?
     },
 
     async create(input: CreateEndpointInput, audit?: AuditContext): Promise<EndpointView> {
-      if (!isValidSlug(input.slug)) throw new ValidationError('invalid endpoint slug', { slug: input.slug });
+      if (!isValidSlug(input.slug))
+        throw new ValidationError('invalid endpoint slug', { slug: input.slug });
       return mutate(ctx, async (tx, unit) => {
         await assertInstallationsExist(tx, input.installationIds);
         const row = await orConflict('endpoint', () =>
@@ -513,7 +536,9 @@ export const createEndpointRepository = (arg: PrismaLike | RepoContext, options?
 
     update(
       id: string,
-      patch: Partial<Pick<CreateEndpointInput, 'displayName' | 'installationIds' | 'prefixMode' | 'instructions'>>,
+      patch: Partial<
+        Pick<CreateEndpointInput, 'displayName' | 'installationIds' | 'prefixMode' | 'instructions'>
+      >,
       opts: { ifMatch: string; audit?: AuditContext },
     ): Promise<EndpointView> {
       return mutate(ctx, async (tx, unit) => {
@@ -593,7 +618,11 @@ export type InstallationInfoRow<L = Record<string, unknown>> = {
     ownerTeamId?: string;
     ownerServiceId?: string;
     ownerServiceTeamId?: string;
-    catalogEntry?: { ownerTeamId?: string; visibility?: CatalogVisibility; risk: 'low' | 'medium' | 'high' };
+    catalogEntry?: {
+      ownerTeamId?: string;
+      visibility?: CatalogVisibility;
+      risk: 'low' | 'medium' | 'high';
+    };
   };
 };
 
@@ -623,20 +652,24 @@ export const createRouterRepository = <L = Record<string, unknown>>(
   options: RepoOptions & RouterRepositoryOptions<L> = {},
 ) => {
   const { db } = toContext(arg, options);
-  const parse = (options.parseOverrides ?? ((raw: unknown) => jsonObjectSchema.parse(raw) as L)) as (
-    raw: unknown,
-  ) => L;
+  const parse = (options.parseOverrides ??
+    ((raw: unknown) => jsonObjectSchema.parse(raw) as L)) as (raw: unknown) => L;
   const layerOf = (raw: unknown): L | undefined => {
     const obj = jsonObjectSchema.safeParse(raw);
     return obj.success && Object.keys(obj.data).length > 0 ? parse(obj.data) : undefined;
   };
 
   const mapRows = async (
-    rows: Prisma.InstallationGetPayload<{ include: { catalogEntry: true; catalogVersion: true } }>[],
+    rows: Prisma.InstallationGetPayload<{
+      include: { catalogEntry: true; catalogVersion: true };
+    }>[],
     principal: PrincipalRef,
   ): Promise<InstallationInfoRow<L>[]> => {
     const teamIds = [...new Set(rows.filter((r) => r.ownerType === 'team').map((r) => r.ownerId))];
-    const teams = await db.team.findMany({ where: { id: { in: teamIds } }, select: { id: true, slug: true } });
+    const teams = await db.team.findMany({
+      where: { id: { in: teamIds } },
+      select: { id: true, slug: true },
+    });
     const teamSlug = new Map(teams.map((t) => [t.id, t.slug]));
     const serviceIds = rows.filter((r) => r.ownerType === 'service').map((r) => r.ownerId);
     const accounts = await db.serviceAccount.findMany({
@@ -645,7 +678,11 @@ export const createRouterRepository = <L = Record<string, unknown>>(
     });
     const serviceTeam = new Map(accounts.map((a) => [a.id, a.teamId]));
     const tokens = await db.upstreamToken.findMany({
-      where: { principalId: principal.id, installationId: { in: rows.map((r) => r.id) }, status: 'valid' },
+      where: {
+        principalId: principal.id,
+        installationId: { in: rows.map((r) => r.id) },
+        status: 'valid',
+      },
       select: { installationId: true },
     });
     const hasToken = new Set(tokens.map((t) => t.installationId));
@@ -660,7 +697,9 @@ export const createRouterRepository = <L = Record<string, unknown>>(
       select: { installationId: true, tools: true, prompts: true, resources: true },
     });
     const snapshotOf = new Map<string, (typeof snapshots)[number]>();
-    for (const s of snapshots) if (s.installationId && !snapshotOf.has(s.installationId)) snapshotOf.set(s.installationId, s);
+    for (const s of snapshots)
+      if (s.installationId && !snapshotOf.has(s.installationId))
+        snapshotOf.set(s.installationId, s);
     const nonEmpty = (v: unknown): boolean => Array.isArray(v) && v.length > 0;
 
     return rows.map((r): InstallationInfoRow<L> => {
@@ -671,7 +710,9 @@ export const createRouterRepository = <L = Record<string, unknown>>(
             ? {
                 kind: 'service',
                 id: r.ownerId,
-                ...(serviceTeam.has(r.ownerId) ? { teamId: serviceTeam.get(r.ownerId) as string } : {}),
+                ...(serviceTeam.has(r.ownerId)
+                  ? { teamId: serviceTeam.get(r.ownerId) as string }
+                  : {}),
               }
             : { kind: 'user', id: r.ownerId };
       const current = r.catalogEntry?.currentVersionId
@@ -697,7 +738,11 @@ export const createRouterRepository = <L = Record<string, unknown>>(
         layers: { catalog: catalogLayer, installation: installationLayer },
         pinned: r.pinnedVersion,
         capabilities: snap
-          ? { tools: nonEmpty(snap.tools), prompts: nonEmpty(snap.prompts), resources: nonEmpty(snap.resources) }
+          ? {
+              tools: nonEmpty(snap.tools),
+              prompts: nonEmpty(snap.prompts),
+              resources: nonEmpty(snap.resources),
+            }
           : { tools: true, prompts: true, resources: true },
         needsAuth: authMode(spec) === 'oauth' && !hasToken.has(r.id),
         policy: {
@@ -708,7 +753,9 @@ export const createRouterRepository = <L = Record<string, unknown>>(
           ...(r.ownerType === 'service'
             ? {
                 ownerServiceId: r.ownerId,
-                ...(serviceTeam.has(r.ownerId) ? { ownerServiceTeamId: serviceTeam.get(r.ownerId) as string } : {}),
+                ...(serviceTeam.has(r.ownerId)
+                  ? { ownerServiceTeamId: serviceTeam.get(r.ownerId) as string }
+                  : {}),
               }
             : {}),
           ...(entry
@@ -764,13 +811,19 @@ export const createRouterRepository = <L = Record<string, unknown>>(
       return mapRows(rows, principal);
     },
 
-    async getInfo(installationId: string, principal: PrincipalRef): Promise<InstallationInfoRow<L> | null> {
+    async getInfo(
+      installationId: string,
+      principal: PrincipalRef,
+    ): Promise<InstallationInfoRow<L> | null> {
       const row = await db.installation.findUnique({ where: { id: installationId }, include });
-      return row ? (await mapRows([row], principal))[0] ?? null : null;
+      return row ? ((await mapRows([row], principal))[0] ?? null) : null;
     },
 
     /** `/mcp/c/{catalogSlug}` (7.1): the principal's installations of one catalog entry. */
-    async listForCatalogSlug(principal: PrincipalRef, catalogSlug: string): Promise<InstallationInfoRow<L>[]> {
+    async listForCatalogSlug(
+      principal: PrincipalRef,
+      catalogSlug: string,
+    ): Promise<InstallationInfoRow<L>[]> {
       const all = await this.listForPrincipal(principal);
       return all.filter((i) => i.catalogSlug === catalogSlug);
     },
@@ -845,11 +898,16 @@ export const createInstallationRegistry = (
         ownerUserId: inst.ownerType === 'user' ? inst.ownerId : null,
         spec,
         variables,
-        configHash: deps.configHash({ installationId: inst.id, spec, variables, catalogVersionId: versionId }),
+        configHash: deps.configHash({
+          installationId: inst.id,
+          spec,
+          variables,
+          catalogVersionId: versionId,
+        }),
         enableSampling: runtime.enableSampling,
         enableRoots: runtime.enableRoots,
         roots: runtime.roots ?? (spec.type === 'package' ? ['file:///workspace'] : []),
-        extensions: runtime.extensions,
+        extensions: compact<{ allow?: string[]; block?: string[] }>(runtime.extensions),
         replicas: runtime.replicas,
         ...(runtime.listTtlMs === undefined ? {} : { listTtlMs: runtime.listTtlMs }),
       };
@@ -929,7 +987,8 @@ const subjectTypeSchema = z.enum(['user', 'team']);
 const targetWhere = (target: AutoInstallTarget): Prisma.UserWhereInput => {
   if (target.all) return {};
   const or: Prisma.UserWhereInput[] = [];
-  if (target.teamIds?.length) or.push({ teamMemberships: { some: { teamId: { in: target.teamIds } } } });
+  if (target.teamIds?.length)
+    or.push({ teamMemberships: { some: { teamId: { in: target.teamIds } } } });
   if (target.orgRoles?.length) or.push({ orgRole: { in: target.orgRoles } });
   if (target.idpGroups?.length) {
     or.push({ teamMemberships: { some: { team: { idpGroup: { in: target.idpGroups } } } } });
@@ -938,7 +997,10 @@ const targetWhere = (target: AutoInstallTarget): Prisma.UserWhereInput => {
 };
 
 /** `auto_install_policies` and the idempotent `auto_install_applications` ledger (11.5). */
-export const createAutoInstallRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createAutoInstallRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
   return {
@@ -950,7 +1012,9 @@ export const createAutoInstallRepository = (arg: PrismaLike | RepoContext, optio
       const row = await db.autoInstallPolicy.findUnique({ where: { id } });
       return row ? { policy: toPolicyView(row), etag: etagOf(row) } : null;
     },
-    async list(filter: { catalogEntryId?: string; enabled?: boolean } = {}): Promise<AutoInstallPolicyView[]> {
+    async list(
+      filter: { catalogEntryId?: string; enabled?: boolean } = {},
+    ): Promise<AutoInstallPolicyView[]> {
       const rows = await db.autoInstallPolicy.findMany({
         where: {
           ...(filter.catalogEntryId ? { catalogEntryId: filter.catalogEntryId } : {}),
@@ -998,7 +1062,10 @@ export const createAutoInstallRepository = (arg: PrismaLike | RepoContext, optio
           action: 'auto_install.create',
           targetType: 'auto_install_policy',
           targetId: row.id,
-          diff: { before: null, after: { catalogEntryId: row.catalogEntryId, mode: row.mode, target } },
+          diff: {
+            before: null,
+            after: { catalogEntryId: row.catalogEntryId, mode: row.mode, target },
+          },
         });
         return toPolicyView(row);
       });
@@ -1015,7 +1082,8 @@ export const createAutoInstallRepository = (arg: PrismaLike | RepoContext, optio
       }>,
       opts: { ifMatch: string; audit?: AuditContext },
     ): Promise<AutoInstallPolicyView> {
-      const target = patch.target === undefined ? undefined : autoInstallTargetSchema.parse(patch.target);
+      const target =
+        patch.target === undefined ? undefined : autoInstallTargetSchema.parse(patch.target);
       return mutate(ctx, async (tx, unit) => {
         const current = await tx.autoInstallPolicy.findUnique({ where: { id } });
         if (!current) throw new NotFoundError('auto-install policy', id);
@@ -1024,7 +1092,11 @@ export const createAutoInstallRepository = (arg: PrismaLike | RepoContext, optio
         assertSwapped(
           await tx.autoInstallPolicy.updateMany({
             where: { id, ...versionGuard(current) },
-            data: { ...rest, ...(target === undefined ? {} : { target: toJson(target) }), updatedAt: nextUpdatedAt(current) },
+            data: {
+              ...rest,
+              ...(target === undefined ? {} : { target: toJson(target) }),
+              updatedAt: nextUpdatedAt(current),
+            },
           }),
         );
         const row = await tx.autoInstallPolicy.findUniqueOrThrow({ where: { id } });
@@ -1045,7 +1117,9 @@ export const createAutoInstallRepository = (arg: PrismaLike | RepoContext, optio
         const current = await tx.autoInstallPolicy.findUnique({ where: { id } });
         if (!current) throw new NotFoundError('auto-install policy', id);
         assertIfMatch(current, opts.ifMatch);
-        assertSwapped(await tx.autoInstallPolicy.deleteMany({ where: { id, ...versionGuard(current) } }));
+        assertSwapped(
+          await tx.autoInstallPolicy.deleteMany({ where: { id, ...versionGuard(current) } }),
+        );
         unit.bump('org');
         unit.audit(opts.audit, {
           action: 'auto_install.delete',
@@ -1087,7 +1161,11 @@ export const createAutoInstallRepository = (arg: PrismaLike | RepoContext, optio
               },
             },
           });
-          return { applied: false, installationId: existing.installationId, result: existing.result };
+          return {
+            applied: false,
+            installationId: existing.installationId,
+            result: existing.result,
+          };
         }
         const outcome = await run({ ...ctx, db: tx, unit });
         await tx.autoInstallApplication.update({
@@ -1143,7 +1221,11 @@ export const createAutoInstallRepository = (arg: PrismaLike | RepoContext, optio
           ? new Set(
               (
                 await db.autoInstallApplication.findMany({
-                  where: { policyId, subjectType: 'user', subjectId: { in: batch.map((r) => r.id) } },
+                  where: {
+                    policyId,
+                    subjectType: 'user',
+                    subjectId: { in: batch.map((r) => r.id) },
+                  },
                   select: { subjectId: true },
                 })
               ).map((r) => r.subjectId),

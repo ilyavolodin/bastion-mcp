@@ -33,6 +33,7 @@
   "devDependencies": {
     "@bastion-mcp/testkit": "workspace:*",
     "@modelcontextprotocol/conformance": "0.1.16",
+    "@modelcontextprotocol/sdk": "1.31.0",
     "@opentelemetry/context-async-hooks": "2.11.0",
     "@opentelemetry/sdk-trace-base": "2.11.0"
   }

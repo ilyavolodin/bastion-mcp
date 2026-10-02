@@ -86,7 +86,11 @@ describe.skipIf(!dbEnabled())('16.2 token, OAuth, IdP and secret stores', () => 
       { name: 'okta', tokenSha256: sha('scim-1'), createdBy: admin.id },
       audit,
     );
-    expect(await repo.findByHash(sha('scim-1'))).toEqual({ id: t.id, expiresAt: null, revokedAt: null });
+    expect(await repo.findByHash(sha('scim-1'))).toEqual({
+      id: t.id,
+      expiresAt: null,
+      revokedAt: null,
+    });
     expect(await repo.findByHash(sha('nope'))).toBeNull();
     await expect(
       repo.create({ name: 'dup', tokenSha256: sha('scim-1'), createdBy: admin.id }),
@@ -118,7 +122,9 @@ describe.skipIf(!dbEnabled())('16.2 token, OAuth, IdP and secret stores', () => 
       jwks: null,
     };
     await repo.create(account, client, audit);
-    await expect(repo.create({ ...account, id: newId() }, { ...client, clientId: 'x' })).rejects.toMatchObject({
+    await expect(
+      repo.create({ ...account, id: newId() }, { ...client, clientId: 'x' }),
+    ).rejects.toMatchObject({
       httpStatus: 409,
     });
     const found = await repo.findByClientId('sa_deployer');
@@ -127,7 +133,12 @@ describe.skipIf(!dbEnabled())('16.2 token, OAuth, IdP and secret stores', () => 
     expect(await repo.findByClientId('missing')).toBeNull();
     expect((await repo.listByTeam(team.id)).map((a) => a.slug)).toEqual(['deployer']);
     await repo.saveClient(
-      { ...client, authMethod: 'private_key_jwt', secretSha256: null, jwks: [{ kty: 'EC', kid: 'k' }] },
+      {
+        ...client,
+        authMethod: 'private_key_jwt',
+        secretSha256: null,
+        jwks: [{ kty: 'EC', kid: 'k' }],
+      },
       audit,
     );
     expect((await repo.findByClientId('sa_deployer'))?.client).toMatchObject({
@@ -230,7 +241,9 @@ describe.skipIf(!dbEnabled())('16.2 token, OAuth, IdP and secret stores', () => 
     await expect(repo.update(created.id, { name: 'x' }, { ifMatch: etag })).rejects.toMatchObject({
       httpStatus: 412,
     });
-    await expect(repo.update(newId(), {}, { ifMatch: '*' })).rejects.toMatchObject({ httpStatus: 404 });
+    await expect(repo.update(newId(), {}, { ifMatch: '*' })).rejects.toMatchObject({
+      httpStatus: 404,
+    });
     expect(await repo.getWithEtag(newId())).toBeNull();
 
     const user = await seedUser('idp-user@acme.com');
@@ -249,17 +262,36 @@ describe.skipIf(!dbEnabled())('16.2 token, OAuth, IdP and secret stores', () => 
     expect(await tokens.get(user.id, created.id)).toBeNull();
 
     await repo.delete(created.id, {
-      ifMatch: etagOf((await h.db.prisma.idpConnection.findUniqueOrThrow({ where: { id: created.id } }))),
+      ifMatch: etagOf(
+        await h.db.prisma.idpConnection.findUniqueOrThrow({ where: { id: created.id } }),
+      ),
       audit,
     });
-    await expect(repo.delete(created.id, { ifMatch: '*' })).rejects.toMatchObject({ httpStatus: 404 });
+    await expect(repo.delete(created.id, { ifMatch: '*' })).rejects.toMatchObject({
+      httpStatus: 404,
+    });
   });
 
   it('9.6 upstream clients and tokens', async () => {
     const clients = createUpstreamClientStore(h.db.prisma);
-    await clients.put({ issuer: 'https://as.example', registration: 'dcr', clientId: 'c', clientSecretId: null, metadata: { a: 1 } });
-    await clients.put({ issuer: 'https://as.example', registration: 'cimd', clientId: 'c2', clientSecretId: null, metadata: {} });
-    expect(await clients.get('https://as.example')).toMatchObject({ registration: 'cimd', clientId: 'c2' });
+    await clients.put({
+      issuer: 'https://as.example',
+      registration: 'dcr',
+      clientId: 'c',
+      clientSecretId: null,
+      metadata: { a: 1 },
+    });
+    await clients.put({
+      issuer: 'https://as.example',
+      registration: 'cimd',
+      clientId: 'c2',
+      clientSecretId: null,
+      metadata: {},
+    });
+    expect(await clients.get('https://as.example')).toMatchObject({
+      registration: 'cimd',
+      clientId: 'c2',
+    });
     await clients.delete('https://as.example');
     expect(await clients.get('https://as.example')).toBeNull();
 
@@ -268,7 +300,16 @@ describe.skipIf(!dbEnabled())('16.2 token, OAuth, IdP and secret stores', () => 
     const inst = await (async () => {
       const id = newId();
       await h.db.prisma.installation.create({
-        data: { id, ownerType: 'user', ownerId: user.id, slug: 'x', toolPrefix: 'x', displayName: 'X', origin: 'manual', personalSpec: { type: 'remote' } },
+        data: {
+          id,
+          ownerType: 'user',
+          ownerId: user.id,
+          slug: 'x',
+          toolPrefix: 'x',
+          displayName: 'X',
+          origin: 'manual',
+          personalSpec: { type: 'remote' },
+        },
       });
       return id;
     })();
@@ -286,12 +327,18 @@ describe.skipIf(!dbEnabled())('16.2 token, OAuth, IdP and secret stores', () => 
     };
     await store.put(base);
     await store.put({ ...base, scopes: ['a', 'b'] });
-    await store.put({ ...base, principalId: other.id, expiresAt: new Date(Date.now() + 10_000_000) });
+    await store.put({
+      ...base,
+      principalId: other.id,
+      expiresAt: new Date(Date.now() + 10_000_000),
+    });
     expect((await store.get(user.id, inst))?.scopes).toEqual(['a', 'b']);
     expect(await store.get(newId(), inst)).toBeNull();
     expect((await store.listByInstallation(inst)).length).toBe(2);
     expect((await store.listByPrincipal(user.id)).length).toBe(1);
-    expect((await store.listExpiringBefore(new Date(Date.now() + 60_000))).map((r) => r.principalId)).toEqual([user.id]);
+    expect(
+      (await store.listExpiringBefore(new Date(Date.now() + 60_000))).map((r) => r.principalId),
+    ).toEqual([user.id]);
     await store.put({ ...base, status: 'reconnect_required' });
     expect(await store.listExpiringBefore(new Date(Date.now() + 60_000))).toEqual([]);
     await store.delete(user.id, inst);
@@ -401,7 +448,10 @@ describe.skipIf(!dbEnabled())('16.2 token, OAuth, IdP and secret stores', () => 
         retireAfter: new Date(now + 100_000),
       };
       await store.addSigningKey(meta, { kty: 'EC', d: 'secret' });
-      await store.addSigningKey({ ...meta, kid: 'kid-0', purpose: 'upstream-client', activeFrom: new Date(now - 5000) }, { d: 'x' });
+      await store.addSigningKey(
+        { ...meta, kid: 'kid-0', purpose: 'upstream-client', activeFrom: new Date(now - 5000) },
+        { d: 'x' },
+      );
       expect(await store.listSigningKeys('as')).toEqual([meta]);
       expect((await store.listSigningKeys('upstream-client')).map((k) => k.kid)).toEqual(['kid-0']);
       expect(await store.loadSigningPrivateKey('kid-1')).toEqual({ kty: 'EC', d: 'secret' });
@@ -410,8 +460,18 @@ describe.skipIf(!dbEnabled())('16.2 token, OAuth, IdP and secret stores', () => 
       expect(await store.loadSigningPrivateKey('kid-1')).toEqual({ kty: 'EC', d: 'secret' });
 
       const key = randomBytes(32);
-      await store.addStateKey({ kid: 'st_1', key, activeFrom: new Date(now), retireAfter: new Date(now + 2000) });
-      await store.addStateKey({ kid: 'st_0', key: randomBytes(32), activeFrom: new Date(now - 9000), retireAfter: new Date(now + 1000) });
+      await store.addStateKey({
+        kid: 'st_1',
+        key,
+        activeFrom: new Date(now),
+        retireAfter: new Date(now + 2000),
+      });
+      await store.addStateKey({
+        kid: 'st_0',
+        key: randomBytes(32),
+        activeFrom: new Date(now - 9000),
+        retireAfter: new Date(now + 1000),
+      });
       const states = await store.listStateKeys();
       expect(states.map((s) => s.kid)).toEqual(['st_0', 'st_1']);
       expect(states[1]?.key.equals(key)).toBe(true);

@@ -39,22 +39,22 @@ Element.prototype.hasPointerCapture = () => false;
 Element.prototype.releasePointerCapture = () => {};
 window.scrollTo = () => {};
 
-// Node's fetch needs absolute URLs; the SPA always uses relative ones.
-const realFetch = globalThis.fetch.bind(globalThis);
-globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
-  realFetch(
-    typeof input === 'string' && input.startsWith('/')
-      ? new URL(input, window.location.origin).toString()
-      : input,
-    init,
-  )) as typeof fetch;
 
 Object.defineProperty(navigator, 'clipboard', {
   configurable: true,
   value: { writeText: vi.fn().mockResolvedValue(undefined) },
 });
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: 'error' });
+  // Node's fetch needs absolute URLs; the SPA always uses relative ones. Wrap MSW's patched fetch.
+  const patched = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+    patched(
+      typeof input === 'string' && input.startsWith('/') ? new URL(input, window.location.origin).toString() : input,
+      init,
+    )) as typeof fetch;
+});
 afterEach(() => {
   cleanup();
   server.resetHandlers();

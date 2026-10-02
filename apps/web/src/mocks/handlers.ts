@@ -48,13 +48,13 @@ const paginate = <T>(items: T[], url: URL) => {
   const offset = Number(url.searchParams.get('cursor') ?? 0) || 0;
   const slice = items.slice(offset, offset + limit);
   const next = offset + limit < items.length ? String(offset + limit) : null;
-  return HttpResponse.json({ items: slice, nextCursor: next });
+  return HttpResponse.json({ items: slice, nextCursor: next } as never);
 };
 
 const roleIs = (db: MockDb, ...roles: UiRole[]) => roles.includes(db.role);
 const q = (url: URL, name: string) => url.searchParams.get(name) ?? '';
-const etagged = (body: unknown, version: string) =>
-  HttpResponse.json(body, { headers: { ETag: `"${version}"` } });
+const etagged = (body: object, version: string) =>
+  HttpResponse.json(body as never, { headers: { ETag: `"${version}"` } });
 
 const entrySlug = (inst: Installation) => (inst.catalogEntryId ?? '').replace(/^c-/, '');
 
@@ -123,12 +123,15 @@ const callsFor = (db: MockDb, url: URL) => {
   });
 };
 
-const SSE_CLIENTS = new Set<{ send: (m: { event: string; data: string }) => void }>();
+// The typed SSE client only knows the default 'message' event; named events are sent as-is.
+type SseClient = { send: (m: never) => void };
+const SSE_CLIENTS = new Set<SseClient>();
+const sendNamed = (c: SseClient, event: string, data: string) => (c.send as (m: { event: string; data: string }) => void)({ event, data });
 /** Pushes a server event to every open `/events` stream (demo and tests). */
 export const emitMockEvent = (event: string, data: unknown): void => {
   for (const c of [...SSE_CLIENTS]) {
     try {
-      c.send({ event, data: JSON.stringify(data) });
+      sendNamed(c, event, JSON.stringify(data));
     } catch {
       SSE_CLIENTS.delete(c);
     }
@@ -354,9 +357,9 @@ export const handlers = [
       'warn: DATABASE_URL uses a read-write role; consider analytics_ro',
     ];
     let i = 0;
-    client.send({ event: 'log', data: lines[0] ?? '' });
+    sendNamed(client, 'log', lines[0] ?? '');
     const timer = setInterval(() => {
-      client.send({ event: 'log', data: `${new Date().toISOString().slice(11, 19)} ${lines[++i % lines.length]}` });
+      sendNamed(client, 'log', `${new Date().toISOString().slice(11, 19)} ${lines[++i % lines.length]}`);
     }, 2500);
     request.signal.addEventListener('abort', () => clearInterval(timer));
   }),

@@ -17,6 +17,8 @@ import type {
   TEAM_ROLES,
 } from '@bastion-mcp/core/constants';
 
+export type { OrgSettings } from '@bastion-mcp/core/org-settings';
+
 export type Page<T> = { items: T[]; nextCursor: string | null };
 
 export type OrgRole = (typeof ORG_ROLES)[number];

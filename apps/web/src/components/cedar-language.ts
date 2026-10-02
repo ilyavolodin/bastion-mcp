@@ -1,11 +1,5 @@
 /** A small Monarch grammar for Cedar policies (10.2): enough for keywords, strings and comments. */
-type MonacoLike = {
-  languages: {
-    register: (l: { id: string }) => void;
-    setMonarchTokensProvider: (id: string, def: unknown) => void;
-    setLanguageConfiguration: (id: string, cfg: unknown) => void;
-  };
-};
+type MonacoLike = typeof import('monaco-editor/editor/editor.api');
 
 export const CEDAR_KEYWORDS = [
   'permit',
@@ -27,7 +21,7 @@ export const CEDAR_KEYWORDS = [
   'false',
 ];
 
-export const CEDAR_MONARCH = {
+export const CEDAR_MONARCH: import('monaco-editor/editor/editor.api').languages.IMonarchLanguage = {
   keywords: CEDAR_KEYWORDS,
   tokenizer: {
     root: [

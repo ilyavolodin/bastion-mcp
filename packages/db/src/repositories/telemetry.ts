@@ -1,4 +1,4 @@
-import { CALL_OUTCOMES, newId, PRINCIPAL_TYPES } from '@bastion-mcp/core';
+import { type CALL_OUTCOMES, newId, type PRINCIPAL_TYPES } from '@bastion-mcp/core';
 import { NIL_UUID } from '../config-version';
 import { Prisma } from '../generated/client';
 import {
@@ -205,7 +205,10 @@ const TIER_TABLE: Record<StatsTier, string> = {
   hour: 'call_stats_hour',
   day: 'call_stats_day',
 };
-const TIER_SOURCE: Record<Exclude<StatsTier, 'minute'>, StatsTier> = { hour: 'minute', day: 'hour' };
+const TIER_SOURCE: Record<Exclude<StatsTier, 'minute'>, StatsTier> = {
+  hour: 'minute',
+  day: 'hour',
+};
 /** Rows are recomputed this far behind the newest rolled bucket so late call-log rows still land (15.5). */
 const DEFAULT_LOOKBACK_BUCKETS: Record<StatsTier, number> = { minute: 10, hour: 3, day: 2 };
 const MAX_CATCHUP_MS = 7 * 86_400_000;
@@ -322,7 +325,10 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
       if (!first) return null;
       from = floorTo(first, seconds);
     }
-    from = floorTo(from.getTime() < earliest.getTime() && tier === 'minute' ? earliest : from, seconds);
+    from = floorTo(
+      from.getTime() < earliest.getTime() && tier === 'minute' ? earliest : from,
+      seconds,
+    );
     return from.getTime() >= to.getTime() ? null : { from, to };
   };
 
@@ -334,7 +340,11 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
     now: Date = new Date(),
     opts: { lookbackBuckets?: number } = {},
   ): Promise<RollupResult> => {
-    const win = await windowFor('minute', now, opts.lookbackBuckets ?? DEFAULT_LOOKBACK_BUCKETS.minute);
+    const win = await windowFor(
+      'minute',
+      now,
+      opts.lookbackBuckets ?? DEFAULT_LOOKBACK_BUCKETS.minute,
+    );
     if (!win) return { tier: 'minute', from: floorTo(now, 60), to: floorTo(now, 60), buckets: 0 };
     const buckets = await db.$executeRaw`
       WITH src AS (
@@ -449,7 +459,12 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
             filter.itemName ? { itemName: filter.itemName } : {},
             outcomes ? { outcome: { in: outcomes } } : {},
             filter.from || filter.to
-              ? { ts: { ...(filter.from ? { gte: filter.from } : {}), ...(filter.to ? { lt: filter.to } : {}) } }
+              ? {
+                  ts: {
+                    ...(filter.from ? { gte: filter.from } : {}),
+                    ...(filter.to ? { lt: filter.to } : {}),
+                  },
+                }
               : {},
             cursor
               ? { OR: [{ ts: { lt: cursor.ts } }, { ts: cursor.ts, id: { lt: cursor.id } }] }
@@ -480,8 +495,10 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
     },
 
     rollupMinuteJob,
-    rollupHourJob: (now?: Date, opts?: { lookbackBuckets?: number }) => rollupUpJob('hour', now, opts),
-    rollupDayJob: (now?: Date, opts?: { lookbackBuckets?: number }) => rollupUpJob('day', now, opts),
+    rollupHourJob: (now?: Date, opts?: { lookbackBuckets?: number }) =>
+      rollupUpJob('hour', now, opts),
+    rollupDayJob: (now?: Date, opts?: { lookbackBuckets?: number }) =>
+      rollupUpJob('day', now, opts),
 
     /** Minute, then hour, then day: the scheduler's per-minute entry point. */
     async rollupAll(now: Date = new Date()): Promise<RollupResult[]> {
@@ -504,20 +521,46 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
       const table = Prisma.raw(TIER_TABLE[tier]);
       const filters = [
         Prisma.sql`bucket >= ${query.from} AND bucket < ${query.to}`,
-        query.installationId ? Prisma.sql`AND installation_id = ${query.installationId}::uuid` : Prisma.empty,
-        query.catalogEntryId ? Prisma.sql`AND catalog_entry_id = ${query.catalogEntryId}::uuid` : Prisma.empty,
+        query.installationId
+          ? Prisma.sql`AND installation_id = ${query.installationId}::uuid`
+          : Prisma.empty,
+        query.catalogEntryId
+          ? Prisma.sql`AND catalog_entry_id = ${query.catalogEntryId}::uuid`
+          : Prisma.empty,
         query.itemName === undefined ? Prisma.empty : Prisma.sql`AND item_name = ${query.itemName}`,
         query.outcome === undefined ? Prisma.empty : Prisma.sql`AND outcome = ${query.outcome}`,
       ];
       const where = Prisma.join(filters, ' ');
-      const colList = cols.length === 0 ? Prisma.sql`1 AS g` : Prisma.join(cols.map((c) => Prisma.raw(c)), ', ');
-      const groupList = cols.length === 0 ? Prisma.sql`g` : Prisma.join(cols.map((c) => Prisma.raw(c)), ', ');
+      const colList =
+        cols.length === 0
+          ? Prisma.sql`1 AS g`
+          : Prisma.join(
+              cols.map((c) => Prisma.raw(c)),
+              ', ',
+            );
+      const groupList =
+        cols.length === 0
+          ? Prisma.sql`g`
+          : Prisma.join(
+              cols.map((c) => Prisma.raw(c)),
+              ', ',
+            );
       const joinOn =
         cols.length === 0
           ? Prisma.sql`h.g = a.g`
-          : Prisma.join(cols.map((c) => Prisma.sql`h.${Prisma.raw(c)} IS NOT DISTINCT FROM a.${Prisma.raw(c)}`), ' AND ');
+          : Prisma.join(
+              cols.map(
+                (c) => Prisma.sql`h.${Prisma.raw(c)} IS NOT DISTINCT FROM a.${Prisma.raw(c)}`,
+              ),
+              ' AND ',
+            );
       const selectA =
-        cols.length === 0 ? Prisma.empty : Prisma.sql`${Prisma.join(cols.map((c) => Prisma.sql`a.${Prisma.raw(c)}`), ', ')},`;
+        cols.length === 0
+          ? Prisma.empty
+          : Prisma.sql`${Prisma.join(
+              cols.map((c) => Prisma.sql`a.${Prisma.raw(c)}`),
+              ', ',
+            )},`;
       type Raw = Record<string, unknown> & {
         cnt: number;
         err: number;
@@ -555,10 +598,14 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
         };
         if (groups.includes('time')) row.bucket = r.bucket as Date;
         if (groups.includes('installation')) {
-          row.installationId = r.installation_id === NIL_UUID ? null : (r.installation_id as string);
+          row.installationId =
+            r.installation_id === NIL_UUID ? null : (r.installation_id as string);
         }
         if (groups.includes('catalogEntry')) {
-          row.catalogEntryId = r.catalog_entry_id === NIL_UUID ? null : ((r.catalog_entry_id as string | null) ?? null);
+          row.catalogEntryId =
+            r.catalog_entry_id === NIL_UUID
+              ? null
+              : ((r.catalog_entry_id as string | null) ?? null);
         }
         if (groups.includes('item')) row.itemName = r.item_name as string;
         if (groups.includes('outcome')) row.outcome = r.outcome as string;
@@ -571,17 +618,26 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
     async applyRetention(
       now: Date,
       policy: RetentionPolicy,
-    ): Promise<{ statsRows: Record<StatsTier, number>; partitions: Record<PartitionedTable, number> }> {
+    ): Promise<{
+      statsRows: Record<StatsTier, number>;
+      partitions: Record<PartitionedTable, number>;
+    }> {
       const day = 86_400_000;
       const statsRows: Record<StatsTier, number> = { minute: 0, hour: 0, day: 0 };
       statsRows.minute = (
-        await db.callStatsMinute.deleteMany({ where: { bucket: { lt: new Date(now.getTime() - STATS_RETENTION_DAYS.minute * day) } } })
+        await db.callStatsMinute.deleteMany({
+          where: { bucket: { lt: new Date(now.getTime() - STATS_RETENTION_DAYS.minute * day) } },
+        })
       ).count;
       statsRows.hour = (
-        await db.callStatsHour.deleteMany({ where: { bucket: { lt: new Date(now.getTime() - STATS_RETENTION_DAYS.hour * day) } } })
+        await db.callStatsHour.deleteMany({
+          where: { bucket: { lt: new Date(now.getTime() - STATS_RETENTION_DAYS.hour * day) } },
+        })
       ).count;
       statsRows.day = (
-        await db.callStatsDay.deleteMany({ where: { bucket: { lt: new Date(now.getTime() - STATS_RETENTION_DAYS.day * day) } } })
+        await db.callStatsDay.deleteMany({
+          where: { bucket: { lt: new Date(now.getTime() - STATS_RETENTION_DAYS.day * day) } },
+        })
       ).count;
       const cutoff = new Date(now.getTime() - policy.logsRetentionDays * day);
       const partitions = {
@@ -600,7 +656,6 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
     },
   };
 };
-
 
 // --- egress_events (8.8) -------------------------------------------------------------------------------------------------------
 
@@ -636,7 +691,10 @@ export type EgressEventView = {
 };
 
 /** `EgressAuditSink` over `egress_events`, plus the read side of the installation page (denials first). */
-export const createEgressEventRepository = (arg: PrismaLike | RepoContext, options?: RepoOptions) => {
+export const createEgressEventRepository = (
+  arg: PrismaLike | RepoContext,
+  options?: RepoOptions,
+) => {
   const { db } = toContext(arg, options);
   return {
     /** Never throws into the proxy path callers care about: errors propagate so the sink can count them. */
@@ -676,19 +734,33 @@ export const createEgressEventRepository = (arg: PrismaLike | RepoContext, optio
       let instanceIds: string[] | undefined;
       if (filter.installationId) {
         instanceIds = (
-          await db.instance.findMany({ where: { installationId: filter.installationId }, select: { id: true } })
+          await db.instance.findMany({
+            where: { installationId: filter.installationId },
+            select: { id: true },
+          })
         ).map((i) => i.id);
         if (filter.instanceId) instanceIds = instanceIds.filter((i) => i === filter.instanceId);
       }
       const rows = await db.egressEvent.findMany({
         where: {
           AND: [
-            instanceIds ? { instanceId: { in: instanceIds } } : filter.instanceId ? { instanceId: filter.instanceId } : {},
+            instanceIds
+              ? { instanceId: { in: instanceIds } }
+              : filter.instanceId
+                ? { instanceId: filter.instanceId }
+                : {},
             filter.decision ? { decision: filter.decision } : {},
             filter.from || filter.to
-              ? { ts: { ...(filter.from ? { gte: filter.from } : {}), ...(filter.to ? { lt: filter.to } : {}) } }
+              ? {
+                  ts: {
+                    ...(filter.from ? { gte: filter.from } : {}),
+                    ...(filter.to ? { lt: filter.to } : {}),
+                  },
+                }
               : {},
-            cursor ? { OR: [{ ts: { lt: cursor.ts } }, { ts: cursor.ts, id: { lt: cursor.id } }] } : {},
+            cursor
+              ? { OR: [{ ts: { lt: cursor.ts } }, { ts: cursor.ts, id: { lt: cursor.id } }] }
+              : {},
           ],
         },
         orderBy: [{ ts: 'desc' }, { id: 'desc' }],
@@ -703,7 +775,10 @@ export const createEgressEventRepository = (arg: PrismaLike | RepoContext, optio
         }),
       );
       const last = items[items.length - 1];
-      return { items, nextCursor: hasMore && last ? encodeCursor([last.ts.getTime(), last.id]) : null };
+      return {
+        items,
+        nextCursor: hasMore && last ? encodeCursor([last.ts.getTime(), last.id]) : null,
+      };
     },
   };
 };

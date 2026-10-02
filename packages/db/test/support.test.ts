@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Prisma } from '../src/generated/client';
 import {
   afterIdAsc,
   afterIdDesc,
@@ -21,7 +22,6 @@ import {
   toPage,
   UnitState,
 } from '../src/repositories/support';
-import { Prisma } from '../src/generated/client';
 
 const row = (updatedAt: number | null) => ({
   createdAt: new Date(1_000_000),
@@ -42,7 +42,8 @@ describe('17.1 ETag and If-Match', () => {
   ])('accepts %s', (_name, prefix, ok) => {
     const r = row(5_000);
     const tag = etagOf(r);
-    const header = prefix === '*' ? '*' : prefix === 'x, ' ? `"zzz", ${tag}` : `${prefix ?? ''}${tag}`;
+    const header =
+      prefix === '*' ? '*' : prefix === 'x, ' ? `"zzz", ${tag}` : `${prefix ?? ''}${tag}`;
     expect(() => assertIfMatch(r, header)).not.toThrow();
     expect(ok).toBe(true);
   });
@@ -79,7 +80,9 @@ describe('17.1 keyset pagination cursors', () => {
     expect(decodeCursor(undefined)).toBeUndefined();
     expect(decodeCursor('')).toBeUndefined();
     expect(() => decodeCursor('!!!')).toThrow(InvalidCursorError);
-    expect(() => decodeCursor(Buffer.from('{"a":1}').toString('base64url'))).toThrow(InvalidCursorError);
+    expect(() => decodeCursor(Buffer.from('{"a":1}').toString('base64url'))).toThrow(
+      InvalidCursorError,
+    );
   });
 
   it('clamps limits to 1..500 with a default of 50', () => {
@@ -117,11 +120,18 @@ describe('16.1 helpers', () => {
   });
 
   it('detects unique violations', async () => {
-    const unique = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
+    const unique = new Prisma.PrismaClientKnownRequestError('dup', {
+      code: 'P2002',
+      clientVersion: 'x',
+    });
     expect(isUniqueViolation(unique)).toBe(true);
     expect(isUniqueViolation(new Error('x'))).toBe(false);
-    await expect(orConflict('thing', () => Promise.reject(unique))).rejects.toMatchObject({ httpStatus: 409 });
-    await expect(orConflict('thing', () => Promise.reject(new Error('boom')))).rejects.toThrow('boom');
+    await expect(orConflict('thing', () => Promise.reject(unique))).rejects.toMatchObject({
+      httpStatus: 409,
+    });
+    await expect(orConflict('thing', () => Promise.reject(new Error('boom')))).rejects.toThrow(
+      'boom',
+    );
     await expect(orConflict('thing', () => Promise.resolve(5))).resolves.toBe(5);
   });
 

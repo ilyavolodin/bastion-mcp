@@ -27,7 +27,7 @@ export function Stepper({
           const isDone = k < done && k !== currentIndex;
           const isCurrent = k === currentIndex;
           return (
-            <li key={s.id} className="flex min-w-0 flex-1 items-center gap-2 last:flex-none">
+            <li key={s.id} className="flex min-w-fit flex-1 items-center gap-2 last:flex-none">
               <button
                 type="button"
                 onClick={() => onSelect?.(s.id)}

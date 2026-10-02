@@ -1,6 +1,17 @@
-import { bytesToHex, clampLimit, decodeCursor, encodeCursor, InvalidCursorError, type Paged, type PrismaLike, type RepoContext, type RepoOptions, toContext } from './support';
 import { type VerifyResult, verifyAuditChain } from '../audit';
 import type { AuditEvent, Prisma } from '../generated/client';
+import {
+  bytesToHex,
+  clampLimit,
+  decodeCursor,
+  encodeCursor,
+  InvalidCursorError,
+  type Paged,
+  type PrismaLike,
+  type RepoContext,
+  type RepoOptions,
+  toContext,
+} from './support';
 
 /** An `audit_events` row as the API exposes it: hashes as lowercase hex, `seq` as a bigint. */
 export type AuditEventView = {
@@ -80,7 +91,9 @@ export const createAuditLogRepository = (arg: PrismaLike | RepoContext, options?
   const { db } = toContext(arg, options);
   return {
     /** Newest first; the cursor is the `seq` of the last row. */
-    async list(filter: AuditFilter & { limit?: number; cursor?: string } = {}): Promise<Paged<AuditEventView>> {
+    async list(
+      filter: AuditFilter & { limit?: number; cursor?: string } = {},
+    ): Promise<Paged<AuditEventView>> {
       const limit = clampLimit(filter.limit);
       const before = seqCursor(filter.cursor);
       const rows = await db.auditEvent.findMany({
@@ -103,7 +116,10 @@ export const createAuditLogRepository = (arg: PrismaLike | RepoContext, options?
      * Streams matching events oldest first in batches, for the CSV/JSON download (15.6). Rows are read by `seq`
      * keyset, so memory stays bounded and a concurrent writer never makes the stream skip or repeat rows.
      */
-    async *export(filter: AuditFilter = {}, batchSize = EXPORT_BATCH_SIZE): AsyncGenerator<AuditEventView[]> {
+    async *export(
+      filter: AuditFilter = {},
+      batchSize = EXPORT_BATCH_SIZE,
+    ): AsyncGenerator<AuditEventView[]> {
       let after: bigint | undefined;
       for (;;) {
         const rows = await db.auditEvent.findMany({

@@ -53,9 +53,9 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
     });
     expect(await getConfigVersion(h.db.prisma, 'user', u.id)).toBe(2n);
     expect(await verifyAuditChain(h.db.prisma)).toMatchObject({ ok: true });
-    await expect(
-      users.create({ email: 'ADA@acme.com', displayName: 'dup' }),
-    ).rejects.toMatchObject({ httpStatus: 409 });
+    await expect(users.create({ email: 'ADA@acme.com', displayName: 'dup' })).rejects.toMatchObject(
+      { httpStatus: 409 },
+    );
   });
 
   it('17.1 a failed mutation writes neither the audit event nor a config bump', async () => {
@@ -96,14 +96,20 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
     expect(new Set(seen).size).toBe(5);
     expect(third.nextCursor).toBeNull();
     expect((await users.list({ orgRole: 'admin' })).items).toHaveLength(0);
-    expect((await users.list({ status: 'active', orgRole: 'member', q: 'page0' })).items).toHaveLength(1);
+    expect(
+      (await users.list({ status: 'active', orgRole: 'member', q: 'page0' })).items,
+    ).toHaveLength(1);
     await expect(users.list({ cursor: 'garbage!' })).rejects.toMatchObject({ httpStatus: 400 });
     const victim = third.items[0];
     if (!victim) throw new Error('expected a user');
-    await expect(users.delete(victim.id, { ifMatch: '"nope"' })).rejects.toMatchObject({ httpStatus: 412 });
+    await expect(users.delete(victim.id, { ifMatch: '"nope"' })).rejects.toMatchObject({
+      httpStatus: 412,
+    });
     await users.delete(victim.id, { ifMatch: '*', audit });
     expect(await users.get(victim.id)).toBeNull();
-    await expect(users.delete(victim.id, { ifMatch: '*' })).rejects.toMatchObject({ httpStatus: 404 });
+    await expect(users.delete(victim.id, { ifMatch: '*' })).rejects.toMatchObject({
+      httpStatus: 404,
+    });
     expect(await users.count()).toBeGreaterThan(3);
     await users.recordLogin(first.items[0]?.id ?? '', new Date());
     await expect(users.recordLogin(newId(), new Date())).rejects.toMatchObject({ httpStatus: 404 });
@@ -138,7 +144,9 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
     await expect(
       teams.update(t.id, { displayName: 'late' }, { ifMatch: etag }),
     ).rejects.toMatchObject({ httpStatus: 412 });
-    await expect(teams.update(newId(), {}, { ifMatch: '*' })).rejects.toMatchObject({ httpStatus: 404 });
+    await expect(teams.update(newId(), {}, { ifMatch: '*' })).rejects.toMatchObject({
+      httpStatus: 404,
+    });
     await teams.delete(t.id, { ifMatch: (await teams.getWithEtag(t.id))?.etag ?? '', audit });
     expect(await teams.get(t.id)).toBeNull();
     await expect(teams.delete(t.id, { ifMatch: '*' })).rejects.toMatchObject({ httpStatus: 404 });
@@ -164,10 +172,14 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
       { ifMatch: etagOf(row), audit },
     );
     expect(upd.priority).toBe(5);
-    await expect(rules.update(a.id, { priority: 1 }, { ifMatch: etagOf(row) })).rejects.toMatchObject({
+    await expect(
+      rules.update(a.id, { priority: 1 }, { ifMatch: etagOf(row) }),
+    ).rejects.toMatchObject({
       httpStatus: 412,
     });
-    await expect(rules.update(newId(), {}, { ifMatch: '*' })).rejects.toMatchObject({ httpStatus: 404 });
+    await expect(rules.update(newId(), {}, { ifMatch: '*' })).rejects.toMatchObject({
+      httpStatus: 404,
+    });
     const connection = newId();
     expect(await rules.list(connection)).toHaveLength(2);
     await rules.delete(a.id, { ifMatch: '*', audit });
@@ -193,7 +205,9 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
           idpConnectionId: null,
           externalSubject: null,
         }),
-        createTeams: [{ id: teamId, slug: 'jit-team', displayName: 'Jit Team', idpGroup: 'Jit Team' }],
+        createTeams: [
+          { id: teamId, slug: 'jit-team', displayName: 'Jit Team', idpGroup: 'Jit Team' },
+        ],
         membershipUpserts: [{ teamId, userId, role: 'member', source: 'idp' }],
       },
       audit,
@@ -228,7 +242,9 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
 
     // Update: a login stamp is not a configuration change.
     const before = await getConfigVersion(h.db.prisma, 'user', userId);
-    await prov.applyPlan(emptyPlan({ kind: 'update', id: userId, changes: { lastLoginAt: new Date() } }));
+    await prov.applyPlan(
+      emptyPlan({ kind: 'update', id: userId, changes: { lastLoginAt: new Date() } }),
+    );
     expect(await getConfigVersion(h.db.prisma, 'user', userId)).toBe(before);
     await prov.applyPlan(
       {
@@ -242,7 +258,10 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
             scimExternalId: 'x1',
           },
         }),
-        membershipRemovals: [{ teamId, userId }, { teamId: newId(), userId }],
+        membershipRemovals: [
+          { teamId, userId },
+          { teamId: newId(), userId },
+        ],
       },
       audit,
     );
@@ -288,7 +307,11 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
   it('policy PrincipalDirectory.find builds the user principal with team slugs and email domain', async () => {
     const users = createUserRepository(h.db.prisma);
     const teams = createTeamRepository(h.db.prisma);
-    const u = await users.create({ email: 'dir@Corp.example', displayName: 'Dir', orgRole: 'auditor' });
+    const u = await users.create({
+      email: 'dir@Corp.example',
+      displayName: 'Dir',
+      orgRole: 'auditor',
+    });
     const t = await teams.create({ slug: 'dir-team', displayName: 'D' });
     await teams.setMembership({ teamId: t.id, userId: u.id, role: 'manager' });
     expect(await createPrincipalRepository(h.db.prisma).find({ kind: 'user', id: u.id })).toEqual({
@@ -319,7 +342,12 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
     });
     expect(await repo.findByEmail('missing@acme.com')).toBeNull();
     await expect(
-      repo.createLocalAdmin({ id: newId(), email: 'root@acme.com', displayName: 'x', passwordHash: 'h' }),
+      repo.createLocalAdmin({
+        id: newId(),
+        email: 'root@acme.com',
+        displayName: 'x',
+        passwordHash: 'h',
+      }),
     ).rejects.toMatchObject({ httpStatus: 409 });
   });
 
@@ -431,7 +459,10 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
       expect(await store.getUser(ids[0] ?? '')).toMatchObject({ userName: 'ann@scim.test' });
       expect(await store.findUserIdByEmail('ANN@scim.test')).toBe(ids[0]);
       expect(await store.findUserIdByEmail('nobody@scim.test')).toBeNull();
-      expect(await store.getUserState(ids[0] ?? '')).toMatchObject({ isLocal: false, memberships: [] });
+      expect(await store.getUserState(ids[0] ?? '')).toMatchObject({
+        isLocal: false,
+        memberships: [],
+      });
       expect(await store.getUserState(newId())).toBeNull();
       const admins = createLocalAdminRepository(h.db.prisma);
       const adminId = newId();
@@ -459,7 +490,9 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
             idpConnectionId: null,
             externalSubject: null,
           }),
-          createTeams: [{ id: teamId, slug: 'eng', displayName: 'Engineers', idpGroup: 'Engineers' }],
+          createTeams: [
+            { id: teamId, slug: 'eng', displayName: 'Engineers', idpGroup: 'Engineers' },
+          ],
           membershipUpserts: [{ teamId, userId, role: 'member', source: 'scim' }],
         },
       ]);
@@ -482,7 +515,11 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
         (await store.listGroups({ filter: null, startIndex: 1, count: 50 })).items.map((g) => g.id),
       ).toContain(teamId);
       expect(await store.userScimGroups(userId)).toEqual([{ teamId, name: 'Engineers' }]);
-      expect(await store.listTeamRefs()).toContainEqual({ id: teamId, slug: 'eng', idpGroup: 'Engineers' });
+      expect(await store.listTeamRefs()).toContainEqual({
+        id: teamId,
+        slug: 'eng',
+        idpGroup: 'Engineers',
+      });
       await store.renameGroup(teamId, 'Engineering');
       expect(await store.getGroup(teamId)).toMatchObject({ displayName: 'Engineering' });
       expect(await store.userScimGroups(userId)).toEqual([{ teamId, name: 'Engineering' }]);

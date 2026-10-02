@@ -9,7 +9,7 @@ type Patch<T> = { [K in keyof T]?: T[K] | undefined };
  * falls back to defaults) and writes patches back, dropping empty values to keep URLs short.
  */
 export function useSearchState<S extends z.ZodType<Record<string, unknown>>>(schema: S) {
-  const raw = useRouterState({ select: (s) => s.location.search }) as Record<string, unknown>;
+  const raw = useRouterState({ select: (s) => s.location.search }) as unknown as Record<string, unknown>;
   const navigate = useNavigate();
   const value = useMemo(() => {
     const parsed = schema.safeParse(raw);
