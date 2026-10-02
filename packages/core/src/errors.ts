@@ -92,7 +92,11 @@ export class UpstreamAuthRequiredError extends BastionError {
 }
 
 export class SandboxStartFailedError extends BastionError {
-  constructor(message: string, data: { installation: string; phase: string }, cause?: unknown) {
+  constructor(
+    message: string,
+    data: { installation: string; phase: string; detail?: string; stderrTail?: string[] },
+    cause?: unknown,
+  ) {
     super('SANDBOX_START_FAILED', message, {
       httpStatus: 502,
       mcpCode: ERROR_CODES.SANDBOX_START_FAILED,

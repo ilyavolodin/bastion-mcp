@@ -262,6 +262,32 @@ describe('8.3 RunnerClient against a scripted runner', () => {
   });
 });
 
+describe.skipIf(process.platform === 'win32')('8.3 stdio over a Unix socket', () => {
+  it('8.3 opens the WebSocket on the socket path instead of resolving a host called "runner"', async () => {
+    const { mkdtempSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'bastion-ws-'));
+    const socketPath = join(dir, 'runner.sock');
+    const server = http.createServer();
+    const wss = new WebSocketServer({ server, handleProtocols: () => STDIO_SUBPROTOCOL });
+    wss.on('connection', (ws) => ws.send(stderrFrame('hello over a socket')));
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    try {
+      const unix = new HttpRunnerClient({ kind: 'unix', socketPath });
+      const channel = await unix.openStdio();
+      const lines: string[] = [];
+      channel.handlers = { onstderr: (l) => lines.push(l) };
+      await new Promise((r) => setTimeout(r, 100));
+      expect(lines).toEqual(['hello over a socket']);
+      await channel.close();
+    } finally {
+      wss.close();
+      server.close();
+    }
+  });
+});
+
 describe('8.5 probe against the real system', () => {
   it('8.5 reports unavailable with the error text when the bwrap binary does not exist', async () => {
     const result = await probeBwrap(undefined, 'definitely-not-bwrap-binary');

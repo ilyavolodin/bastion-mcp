@@ -250,6 +250,83 @@ const find = (sourceId: string, name: string, version: string) =>
 export const registryHandlers: HttpHandler[] = [
   route.get('/registry-sources', ({ url }) => HttpResponse.json(pageOf(data().sources, url))),
 
+  route.post('/registry-sources', async ({ body }) => {
+    const input = await body();
+    const at = nowIso();
+    const created: Source = {
+      id: nextId('rs'),
+      name: input.name,
+      baseUrl: input.baseUrl,
+      authSecretId: input.authSecretId ?? null,
+      authHeaderName: input.authHeaderName ?? null,
+      trust: input.trust ?? 'community',
+      enabled: input.enabled ?? true,
+      syncIntervalS: input.syncIntervalS ?? 3600,
+      lastUpdatedSince: null,
+      lastSync: null,
+      createdAt: at,
+      updatedAt: at,
+    };
+    data().sources.push(created);
+    return HttpResponse.json(created, { status: 201 });
+  }),
+  route.patch('/registry-sources/{id}', async ({ params, body }) => {
+    const source = data().sources.find((x) => x.id === params.id);
+    if (!source) return notFound('Registry source');
+    Object.assign(source, await body(), { updatedAt: nowIso() });
+    return HttpResponse.json(source);
+  }),
+  route.delete('/registry-sources/{id}', ({ params }) => {
+    const i = data().sources.findIndex((x) => x.id === params.id);
+    if (i < 0) return notFound('Registry source');
+    data().sources.splice(i, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+  route.post('/registry-sources/{id}/sync', ({ params }) => {
+    const source = data().sources.find((x) => x.id === params.id);
+    if (!source) return notFound('Registry source');
+    if (!source.enabled) {
+      return problem(409, 'source_disabled', 'Conflict', 'this registry source is disabled');
+    }
+    const at = nowIso();
+    const stats = {
+      startedAt: at,
+      finishedAt: at,
+      ok: true,
+      full: false,
+      pages: 1,
+      fetched: data().servers.length,
+      upserted: data().servers.length,
+      invalid: 0,
+      deleted: 0,
+      deprecated: 0,
+    };
+    source.lastSync = stats;
+    return HttpResponse.json({ ok: true, stats, deletedNames: [], deprecatedNames: [] });
+  }),
+  route.get('/registry-sources/{id}/policy', ({ params }) =>
+    HttpResponse.json({
+      sourceId: params.id,
+      policy: {
+        allowedNamespaces: ['*'],
+        blockedNamespaces: [],
+        allowedRuntimes: ['remote'],
+        whoMayInstall: 'managers',
+        mode: 'request',
+        requireOsvClean: true,
+        maxRisk: 'low',
+      },
+      updatedAt: null,
+    }),
+  ),
+  route.put('/registry-sources/{id}/policy', async ({ params, body }) =>
+    HttpResponse.json({
+      sourceId: params.id,
+      policy: (await body()) as never,
+      updatedAt: nowIso(),
+    }),
+  ),
+
   route.get('/registry/servers', ({ url }) => {
     if (!hasRegistry()) return forbidden();
     const q = (url.searchParams.get('q') ?? '').toLowerCase();
@@ -261,7 +338,27 @@ export const registryHandlers: HttpHandler[] = [
           (!sourceId || s.sourceId === sourceId) &&
           (!q || `${s.name} ${s.description}`.toLowerCase().includes(q)),
       );
-    return HttpResponse.json(pageOf(items, url));
+    const enabled = new Set(
+      data()
+        .sources.filter((x) => x.enabled)
+        .map((x) => x.id),
+    );
+    return HttpResponse.json(
+      pageOf(
+        items
+          .filter((x) => enabled.has(x.sourceId))
+          .map((x) => {
+            const src = data().sources.find((y) => y.id === x.sourceId);
+            return {
+              ...x,
+              sourceName: src?.name ?? '',
+              trust: src?.trust as 'official',
+              sourceEnabled: true,
+            };
+          }),
+        url,
+      ),
+    );
   }),
   route.get('/registry/servers/{sourceId}/{name}/{version}', ({ params }) => {
     if (!hasRegistry()) return forbidden();
@@ -389,6 +486,28 @@ export const registrySamples: SampleFactory = (db) => {
   const samples: Sample[] = [
     { method: 'get', path: '/registry-sources' },
     { method: 'get', path: '/registry/servers' },
+    {
+      method: 'post',
+      path: '/registry-sources',
+      body: { name: 'Sample', baseUrl: 'https://sample.example.com' },
+    },
+    { method: 'patch', path: '/registry-sources/rs-acme', body: { enabled: true } },
+    { method: 'post', path: '/registry-sources/rs-official/sync', body: { full: false } },
+    { method: 'get', path: '/registry-sources/rs-official/policy' },
+    {
+      method: 'put',
+      path: '/registry-sources/rs-official/policy',
+      body: {
+        allowedNamespaces: ['*'],
+        blockedNamespaces: [],
+        allowedRuntimes: ['remote'],
+        whoMayInstall: 'managers',
+        mode: 'request',
+        requireOsvClean: true,
+        maxRisk: 'low',
+      },
+    },
+    { method: 'delete', path: '/registry-sources/rs-acme' },
     { method: 'get', path: `/registry/servers/${key(ask)}` },
     {
       method: 'post',

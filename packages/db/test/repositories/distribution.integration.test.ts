@@ -188,6 +188,97 @@ describe.skipIf(!dbEnabled())('11.6 registry sources, servers and install reques
     ).rejects.toThrow();
   });
 
+  it('11.6 browse: 600 rows upsert in batches, one page per call, cursor continuity, disabled sources and runtime filter', async () => {
+    const sources = createRegistrySourceStore(h.db.prisma);
+    const servers = createRegistryServerStore(h.db.prisma);
+    const on = source('bulk-on');
+    const off = source('bulk-off', { enabled: false });
+    await sources.save(on);
+    await sources.save(off);
+    const rows = (sourceId: string, n: number, tag: string) =>
+      Array.from({ length: n }, (_, i): RegistryServerRow => {
+        const name = `io.bulk/${tag}-${String(i).padStart(4, '0')}`;
+        const base = server(sourceId, name, '1.0.0', `bulk ${tag} server number ${i}`);
+        return i % 3 === 0
+          ? {
+              ...base,
+              serverJson: {
+                ...base.serverJson,
+                remotes: [{ type: 'streamable-http', url: 'https://x.example/mcp' }],
+              },
+            }
+          : i % 3 === 1
+            ? {
+                ...base,
+                serverJson: {
+                  ...base.serverJson,
+                  packages: [{ registryType: 'npm', identifier: name }],
+                },
+              }
+            : {
+                ...base,
+                serverJson: {
+                  ...base.serverJson,
+                  packages: [{ registryType: 'pypi', identifier: name }],
+                },
+              };
+      });
+    const batch = rows(on.id, 500, 'on');
+    for (let i = 0; i < batch.length; i += 100) await servers.upsert(batch.slice(i, i + 100));
+    // the same batch twice, and a duplicate inside one batch, are idempotent
+    await servers.upsert([...batch.slice(0, 100), batch[0] as RegistryServerRow]);
+    await servers.upsert(rows(off.id, 100, 'off'));
+    expect((await servers.list(on.id)).length).toBe(500);
+
+    // only enabled sources, 24 per page, never the whole table
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const page = await servers.search({ limit: 24, cursor, enabledSourcesOnly: true });
+      expect(page.items.length).toBeLessThanOrEqual(24);
+      seen.push(...page.items.map((r) => r.name));
+      cursor = page.nextCursor;
+      pages += 1;
+    } while (cursor && pages < 100);
+    const bulkSeen = seen.filter((n) => n.startsWith('io.bulk/'));
+    // other tests of this file leave a few rows behind; the 100 rows of the disabled source never appear
+    expect(bulkSeen).toHaveLength(500);
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(bulkSeen.every((n) => n.includes('/on-'))).toBe(true);
+    expect(pages).toBeGreaterThanOrEqual(21);
+    // disabled sources appear when asked for
+    expect((await servers.search({ limit: 200, sourceId: off.id })).items).toHaveLength(100);
+    // runtime filters
+    const remote = await servers.search({
+      limit: 200,
+      enabledSourcesOnly: true,
+      runtime: 'remote',
+    });
+    expect(remote.items.filter((r) => r.name.startsWith('io.bulk/'))).toHaveLength(167);
+    const pypi = await servers.search({ limit: 200, enabledSourcesOnly: true, runtime: 'pypi' });
+    expect(
+      pypi.items.every(
+        (r) =>
+          (r.serverJson as { packages?: { registryType: string }[] }).packages?.[0]
+            ?.registryType === 'pypi',
+      ),
+    ).toBe(true);
+    // search pages by rank and restarts at the first page for a new query
+    const p1 = await servers.search({ q: 'bulk', limit: 24, enabledSourcesOnly: true });
+    expect(p1.items).toHaveLength(24);
+    const p2 = await servers.search({
+      q: 'bulk',
+      limit: 24,
+      enabledSourcesOnly: true,
+      cursor: p1.nextCursor,
+    });
+    expect(p2.items.map((r) => r.name)).not.toEqual(p1.items.map((r) => r.name));
+    expect(
+      (await servers.search({ q: 'number 7', limit: 24, enabledSourcesOnly: true })).items.length,
+    ).toBeGreaterThan(0);
+  });
+
   it('11.7 registry policy per source and install requests with optimistic decisions', async () => {
     const sources = createRegistrySourceStore(h.db.prisma);
     const s = source('policy-src');

@@ -5,6 +5,7 @@ import { useSearchState } from '@/lib/search';
 import { ModelGuardsSection } from './guards-section';
 import { IdpSection } from './idp-section';
 import { LimitsSection } from './limits-section';
+import { RegistrySection } from './registry-section';
 import { KmsSection, OrganizationSection, RetentionSection, SandboxesSection } from './sections';
 import { SystemStatusSection } from './system-status';
 
@@ -14,6 +15,7 @@ export const SECTIONS = [
   ['kms', 'Encryption keys'],
   ['sandboxes', 'Sandboxes'],
   ['guards', 'Model guards'],
+  ['registry', 'Registry'],
   ['limits', 'Limits'],
   ['retention', 'Retention'],
   ['system', 'System status'],
@@ -33,6 +35,7 @@ const BODY: Record<Section, () => React.JSX.Element> = {
   kms: KmsSection,
   sandboxes: SandboxesSection,
   guards: ModelGuardsSection,
+  registry: RegistrySection,
   limits: LimitsSection,
   retention: RetentionSection,
   system: SystemStatusSection,

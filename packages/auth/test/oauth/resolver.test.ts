@@ -174,6 +174,21 @@ describe('9.5 none, orgSecret, userSecret', () => {
     expect(b.credentialHash).not.toBe(a.credentialHash);
   });
 
+  it('11.4 userSecret reads the value the install flow stored as <installationId>.<field>, before the bare field name', async () => {
+    userSecrets.set('user-1:inst-1.TOKEN', { value: 'per-install', version: 2 });
+    userSecrets.set('user-1:TOKEN', { value: 'bare', version: 1 });
+    const spec = remote({
+      mode: 'userSecret',
+      fields: [{ name: 'TOKEN', label: 'API token' }],
+      inject: [{ to: 'header', name: 'Authorization', value: 'Bearer {{secret.TOKEN}}' }],
+    });
+    expect((await resolve(spec)).injections).toEqual([
+      { to: 'header', name: 'Authorization', value: 'Bearer per-install' },
+    ]);
+    userSecrets.delete('user-1:inst-1.TOKEN');
+    expect((await resolve(spec)).injections[0]).toMatchObject({ value: 'Bearer bare' });
+  });
+
   it('9.5 / 6.5 a missing userSecret raises -32015 with a connectUrl', async () => {
     const spec = remote({
       mode: 'userSecret',

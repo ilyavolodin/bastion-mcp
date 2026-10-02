@@ -25,6 +25,16 @@ const API_PREFIXES = [
   '/internal/',
 ];
 
+/**
+ * Console routes that live below an API prefix (`/registry` is the Registry screen, `/registry/v0.1/*` the subregistry;
+ * `/plugins/marketplace/:id` and `/plugins/edit/:id` are screens, the rest of `/plugins/` is the git distribution):
+ * a browser reload of them must get the SPA, not a JSON 404.
+ */
+const isSpaRoute = (path: string): boolean =>
+  path === '/registry' ||
+  path.startsWith('/plugins/marketplace/') ||
+  path.startsWith('/plugins/edit/');
+
 export const resolvePublicDir = (override?: string): string | undefined => {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
@@ -146,7 +156,9 @@ export const registerSpa = async (
   app.setNotFoundHandler(async (req, reply) => {
     const path = req.url.split('?')[0] ?? '/';
     const accepts = String(req.headers.accept ?? '');
-    const isApi = API_PREFIXES.some((p) => path === p.replace(/\/$/, '') || path.startsWith(p));
+    const isApi =
+      !isSpaRoute(path) &&
+      API_PREFIXES.some((p) => path === p.replace(/\/$/, '') || path.startsWith(p));
     if (
       req.method === 'GET' &&
       !isApi &&

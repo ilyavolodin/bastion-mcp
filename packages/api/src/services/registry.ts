@@ -105,23 +105,46 @@ const checkBaseUrl = (deps: ApiDeps, url: string): Promise<string> =>
     ...(deps.registry.resolveHost ? { resolveHost: deps.registry.resolveHost } : {}),
   });
 
+/**
+ * Starts a sync once the surrounding transaction committed, without holding the request: a first walk of the official
+ * registry fetches thousands of entries and must not run inside a transaction or an HTTP call. The port records
+ * `last_sync` itself; the screen polls the source for the result.
+ */
+const syncAfterCommit = (ctx: WriteCtx, source: RegistrySource, full: boolean): void => {
+  ctx.tx.afterCommit(() => {
+    void ctx.deps.registry.sync(source, { full }).catch(() => undefined);
+  });
+};
+
 export const createSource = async (
   ctx: WriteCtx,
   body: Record<string, unknown> & { baseUrl: string },
-) =>
-  registrySources.create(ctx, {
+) => {
+  const row = await registrySources.create(ctx, {
     ...body,
     baseUrl: await checkBaseUrl(ctx.deps, body.baseUrl),
     lastUpdatedSince: null,
     lastSync: null,
   });
+  // A source that starts enabled is mirrored at once, so it is browsable without a manual sync.
+  const created = sourceOf(row as unknown as Row);
+  if (created.enabled) syncAfterCommit(ctx, created, true);
+  return row;
+};
 
 export const updateSource = async (ctx: WriteCtx, id: string, patch: Record<string, unknown>) => {
+  const before = sourceOf(await registrySources.require(ctx, id));
   const next =
     typeof patch.baseUrl === 'string'
       ? { ...patch, baseUrl: await checkBaseUrl(ctx.deps, patch.baseUrl) }
       : patch;
-  return registrySources.update(ctx, id, next);
+  const row = await registrySources.update(ctx, id, next);
+  const after = sourceOf(row as unknown as Row);
+  // Enabling a source (or pointing it at another registry) starts its initial sync.
+  if (after.enabled && (!before.enabled || before.baseUrl !== after.baseUrl)) {
+    syncAfterCommit(ctx, after, true);
+  }
+  return row;
 };
 
 export const deleteSource = async (ctx: WriteCtx, id: string): Promise<void> => {
@@ -132,19 +155,36 @@ export const deleteSource = async (ctx: WriteCtx, id: string): Promise<void> => 
 /** Runs a sync now and records `last_sync` (11.6). */
 export const syncNow = async (ctx: WriteCtx, id: string, full: boolean) => {
   const source = sourceOf(await registrySources.require(ctx, id));
-  const result = await ctx.deps.registry.sync(source, { full });
-  await ctx.tx.store.update('registry_sources', id, {
-    lastSync: result.stats,
-    ...(result.ok ? { lastUpdatedSince: result.stats.finishedAt } : {}),
-  });
+  if (!source.enabled) {
+    throw new ConflictApiError('this registry source is disabled', 'source_disabled');
+  }
+  syncAfterCommit(ctx, source, full);
   await ctx.tx.audit({
     action: 'registry_source.sync',
     targetType: 'registry_source',
     targetId: id,
-    diff: { ok: result.ok, full, upserted: result.stats.upserted, deleted: result.stats.deleted },
+    diff: { queued: true, full },
   });
   ctx.tx.configChanged('registry');
-  return result;
+  const at = new Date().toISOString();
+  return {
+    ok: true,
+    queued: true,
+    stats: {
+      startedAt: at,
+      finishedAt: at,
+      ok: true,
+      full,
+      pages: 0,
+      fetched: 0,
+      upserted: 0,
+      invalid: 0,
+      deleted: 0,
+      deprecated: 0,
+    } satisfies SyncStats,
+    deletedNames: [] as string[],
+    deprecatedNames: [] as string[],
+  };
 };
 
 export const getPolicy = async (ctx: Pick<ReadCtx, 'deps'>, sourceId: string) => {
@@ -191,8 +231,14 @@ const safeMap = (row: RegistryServerRow, prefer?: 'remote' | 'package'): Mapping
   }
 };
 
-export const serverSummary = (row: RegistryServerRow) => ({
+export const serverSummary = (
+  row: RegistryServerRow,
+  source?: { name: string; trust: RegistryTrust; enabled: boolean },
+) => ({
   sourceId: row.sourceId,
+  ...(source
+    ? { sourceName: source.name, trust: source.trust, sourceEnabled: source.enabled }
+    : {}),
   name: row.name,
   version: row.version,
   status: row.status,
@@ -209,6 +255,9 @@ export const searchServers = async (
     q?: string | undefined;
     sourceId?: string | undefined;
     includeDeleted?: boolean | undefined;
+    includeDisabled?: boolean | undefined;
+    latestOnly?: boolean | undefined;
+    runtime?: 'remote' | 'npm' | 'pypi' | undefined;
     limit: number;
     cursor?: string | undefined;
   },
@@ -216,11 +265,20 @@ export const searchServers = async (
   const page = await ctx.deps.registry.servers.search({
     ...(query.q ? { q: query.q } : {}),
     ...(query.sourceId ? { sourceId: query.sourceId } : {}),
+    ...(query.runtime ? { runtime: query.runtime } : {}),
     includeDeleted: query.includeDeleted === true,
+    // Rows of a disabled source cannot be installed: they are listed only when asked for.
+    enabledSourcesOnly: query.includeDisabled !== true,
+    latestOnly: query.latestOnly !== false,
     limit: query.limit,
     cursor: query.cursor,
   });
-  return { items: page.items.map(serverSummary), nextCursor: page.nextCursor ?? null };
+  const sourceRows = await ctx.deps.store.list('registry_sources', { limit: 200 });
+  const sources = new Map(sourceRows.items.map((row) => [row.id, sourceOf(row)]));
+  return {
+    items: page.items.map((row) => serverSummary(row, sources.get(row.sourceId))),
+    nextCursor: page.nextCursor ?? null,
+  };
 };
 
 const findServer = async (
@@ -373,7 +431,7 @@ export const executePlan = async (
       visibility: ce.visibility,
       status: 'draft',
       risk: ce.risk,
-      source: { type: 'registry', ...ce.source, trust },
+      source: { kind: 'registry', ...ce.source, trust },
       ...key,
       currentVersionId: null,
       autoUpgrade: false,

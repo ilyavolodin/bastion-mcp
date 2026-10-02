@@ -416,12 +416,14 @@ export const startTest = async (
   ctx: WriteCtx,
   entryId: string,
   versionId: string,
+  variables?: Record<string, string>,
 ): Promise<VersionTestRun> => {
   await requireVersion(ctx, entryId, versionId, ctx.tx.store);
   const run = await ctx.deps.catalog.tests.start({
     entryId,
     versionId,
     requestedBy: ctx.principal.id,
+    ...(variables && Object.keys(variables).length > 0 ? { variables } : {}),
   });
   await ctx.tx.audit({
     action: 'catalog.version.test',

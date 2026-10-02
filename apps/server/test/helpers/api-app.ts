@@ -129,6 +129,7 @@ export const buildApiHarness = async (
     deactivation: { execute: async () => {} },
     secrets: createSecretsPort(infra.vault),
     identity: createIdentityPorts(infra),
+    account: { changePassword: async () => ({ ok: false, reason: 'invalid_current' }) },
     system: createSystemStatus(infra, {
       driverState: async () => ({ name: 'none', healthy: true }),
     }),

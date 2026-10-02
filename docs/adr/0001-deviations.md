@@ -98,3 +98,35 @@ first 12 hex digits are a millisecond timestamp, so ids created in the same mill
 The probe `bwrap --unshare-user --unshare-net true` of 8.5 cannot succeed: with no binds bwrap starts an empty
 filesystem, so `execvp true` fails even on hosts where bubblewrap works. The probe adds `--ro-bind / /`, which still
 fails when unprivileged user namespaces or network unsharing are unavailable (what the probe is for).
+
+## 9. Password reset for local accounts, server-rendered pages (9.1, 9.2, 9.3, 20.1)
+
+The spec has no password reset and no e-mail delivery in v1. What is implemented, and nothing that needs mail:
+
+- `POST /api/v1/me/password` `{currentPassword, newPassword}` (self route, no Cedar action): verifies the current
+  password, applies the policy of `packages/auth` (12 to 256 characters, different from the current password, so the
+  generated bootstrap password cannot be kept, not the name part of the e-mail, not a run of one character, not a
+  common password), stores a new argon2id hash and revokes every other session and token of the user through the
+  revocation watermark. The caller's own session survives (it is re-stamped to start in the next second, because the
+  watermark compares whole seconds). Five wrong current passwords in 15 minutes answer `429`. The API route writes
+  the `user.password_change` audit event in its transaction.
+- `bastion reset-password --email <e> [--password-stdin]` (20.1): sets or generates a password (printed once), writes
+  `user.password_reset` (actor `system`) and revokes all sessions, tokens and PATs of the user.
+- Local login throttling (9.1, 22.3): per client address ten failures in five minutes and per account (hashed, existing
+  or not) five failures in fifteen minutes, counted in Redis so every replica agrees; a success clears the account
+  counter; blocked attempts answer `429` with `Retry-After` and the same page for unknown accounts. The address is
+  `req.ip`, which behind a proxy that does not overwrite `X-Forwarded-For` can be spoofed: the per-account limit does
+  not depend on it. A consequence of per-account limits is that anyone can lock the break-glass account for 15
+  minutes; `bastion reset-password` is not affected.
+- A session created in the same second as a revocation starts in the next second, so a login right after a password
+  reset is not born revoked.
+- `/auth/login` decides "local login enabled" from ALL IdP connections (9.1: "no IdP connection exists"), also for the
+  form post; before, the page counted enabled connections and the post counted all, which could show a dead form.
+  When local login is off the page says so instead of showing a form.
+- Not implemented: admin-generated single-use reset links for other local users (needs a token store and an org
+  setting; the only local accounts are administrators created with the CLI). Follow-up.
+- Server-rendered pages (login, forgot password, consent, upstream connect, device flow, logout, errors) share one
+  template module (`apps/server/src/http/pages`) built from the Zest tokens, with an external stylesheet, self-hosted
+  Poppins (`/assets/pages.css`, `/assets/fonts/*`) and a strict CSP (`script-src 'self'; style-src 'self'`, no
+  inline script or style). oidc-provider's own pages are replaced through `ProviderPages`.
+

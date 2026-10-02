@@ -89,8 +89,10 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@bastion-mcp/testkit": "workspace:*",
     "@modelcontextprotocol/sdk": "1.31.0",
+    "@playwright/test": "1.63.0",
     "@types/pg": "8.23.1",
     "tsdown": "0.23.0"
   }

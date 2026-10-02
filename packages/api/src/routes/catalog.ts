@@ -22,6 +22,7 @@ import {
   publishBodySchema,
   slugParams,
   storeListQuery,
+  testStartBodySchema,
   versionCreateSchema,
   versionParams,
   versionPatchSchema,
@@ -234,11 +235,19 @@ export const catalogRoutes: RouteDefinition[] = [
     url: '/catalog/{id}/versions/{vid}/test',
     tag: TAG,
     summary: 'Start the automatic test of a version',
-    schema: { params: versionParams, response: versionTestRun },
+    schema: { params: versionParams, body: testStartBodySchema, response: versionTestRun },
     authz: authz.on('catalog.update', entryRes),
     status: 202,
     handler: async (ctx) =>
-      new RouteReply(await startTest(ctx, ctx.params.id, ctx.params.vid), { status: 202 }),
+      new RouteReply(
+        await startTest(
+          ctx,
+          ctx.params.id,
+          ctx.params.vid,
+          (ctx.body as { variables?: Record<string, string> }).variables,
+        ),
+        { status: 202 },
+      ),
   }),
   defineStream({
     url: '/catalog/{id}/versions/{vid}/test',

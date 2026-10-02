@@ -204,6 +204,10 @@ export type RegistrySearchQuery = {
   sourceId?: string;
   latestOnly?: boolean;
   includeDeleted?: boolean;
+  /** Hide rows of disabled sources (the browse screen never lists what cannot be installed). */
+  enabledSourcesOnly?: boolean;
+  /** Only entries that run as a remote server or as an npm or PyPI package. */
+  runtime?: 'remote' | 'npm' | 'pypi';
   limit: number;
   cursor?: string | undefined;
 };
@@ -256,20 +260,27 @@ export const createRegistryServerStore = <
   return {
     async upsert(rows: readonly RegistryServerRow<S>[]): Promise<void> {
       if (rows.length === 0) return;
+      // One statement per call instead of one per row (a registry page is 100 rows); the last duplicate wins.
+      const unique = new Map<string, RegistryServerRow<S>>();
+      for (const row of rows) unique.set(`${row.sourceId} ${row.name} ${row.version}`, row);
+      const list = [...unique.values()];
       await mutate(ctx, async (tx) => {
-        for (const row of rows) {
-          await tx.$executeRaw`
-            INSERT INTO registry_servers
-              (source_id, name, version, server_json, status, is_latest, published_at, meta, search, synced_at)
-            VALUES
-              (${row.sourceId}::uuid, ${row.name}, ${row.version}, ${JSON.stringify(row.serverJson)}::jsonb,
-               ${row.status}, ${row.isLatest}, ${row.publishedAt}, ${JSON.stringify(row.meta)}::jsonb,
-               to_tsvector('simple', ${row.searchDocument}), now())
-            ON CONFLICT (source_id, name, version) DO UPDATE SET
-              server_json = EXCLUDED.server_json, status = EXCLUDED.status, is_latest = EXCLUDED.is_latest,
-              published_at = EXCLUDED.published_at, meta = EXCLUDED.meta, search = EXCLUDED.search,
-              synced_at = now()`;
-        }
+        await tx.$executeRaw`
+          INSERT INTO registry_servers
+            (source_id, name, version, server_json, status, is_latest, published_at, meta, search, synced_at)
+          SELECT t.source_id::uuid, t.name, t.version, t.server_json::jsonb, t.status, t.is_latest,
+                 t.published_at::timestamptz, t.meta::jsonb, to_tsvector('simple', t.doc), now()
+          FROM unnest(
+            ${list.map((r) => r.sourceId)}::text[], ${list.map((r) => r.name)}::text[],
+            ${list.map((r) => r.version)}::text[], ${list.map((r) => JSON.stringify(r.serverJson))}::text[],
+            ${list.map((r) => r.status)}::text[], ${list.map((r) => r.isLatest)}::boolean[],
+            ${list.map((r) => (r.publishedAt ? r.publishedAt.toISOString() : null))}::text[],
+            ${list.map((r) => JSON.stringify(r.meta))}::text[], ${list.map((r) => r.searchDocument)}::text[]
+          ) AS t(source_id, name, version, server_json, status, is_latest, published_at, meta, doc)
+          ON CONFLICT (source_id, name, version) DO UPDATE SET
+            server_json = EXCLUDED.server_json, status = EXCLUDED.status, is_latest = EXCLUDED.is_latest,
+            published_at = EXCLUDED.published_at, meta = EXCLUDED.meta, search = EXCLUDED.search,
+            synced_at = now()`;
       });
     },
 
@@ -292,6 +303,14 @@ export const createRegistryServerStore = <
           : Prisma.sql`AND source_id = ${query.sourceId}::uuid`,
         query.latestOnly === false ? Prisma.empty : Prisma.sql`AND is_latest`,
         query.includeDeleted ? Prisma.empty : Prisma.sql`AND status <> 'deleted'`,
+        query.enabledSourcesOnly
+          ? Prisma.sql`AND source_id IN (SELECT id FROM registry_sources WHERE enabled)`
+          : Prisma.empty,
+        query.runtime === undefined
+          ? Prisma.empty
+          : query.runtime === 'remote'
+            ? Prisma.sql`AND jsonb_array_length(COALESCE(server_json->'remotes', '[]'::jsonb)) > 0`
+            : Prisma.sql`AND COALESCE(server_json->'packages', '[]'::jsonb) @> ${JSON.stringify([{ registryType: query.runtime }])}::jsonb`,
       ];
       const where = Prisma.join(filters, ' ');
       const q = query.q?.trim();

@@ -88,6 +88,12 @@ export type RegistryClientOptions = {
   fetch?: FetchFn;
   timeoutMs?: number;
   userAgent?: string;
+  /**
+   * Extra attempts for a page that timed out, was refused (429) or failed with a 5xx (default 0). The real registry
+   * stalls now and then; a sync of thousands of entries must not die on one slow page.
+   */
+  retries?: number;
+  retryDelayMs?: number;
 };
 
 export type ListServersOptions = {
@@ -123,7 +129,25 @@ export const createRegistryClient = (options: RegistryClientOptions): RegistryCl
   const fetchFn = options.fetch ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
+  const retries = options.retries ?? 0;
+  const retryDelayMs = options.retryDelayMs ?? 750;
+
   const getJson = async (path: string, signal?: AbortSignal): Promise<unknown> => {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await getJsonOnce(path, signal);
+      } catch (error) {
+        const status = (error as { data?: { status?: number } }).data?.status;
+        const transient =
+          error instanceof RegistryUnavailableError &&
+          (status === undefined || status === 429 || status >= 500);
+        if (!transient || attempt >= retries || signal?.aborted) throw error;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * 2 ** attempt));
+      }
+    }
+  };
+
+  const getJsonOnce = async (path: string, signal?: AbortSignal): Promise<unknown> => {
     const headers: Record<string, string> = {
       accept: 'application/json',
       'user-agent': options.userAgent ?? 'bastion-mcp-registry-sync',
@@ -249,7 +273,13 @@ export const createRegistryClient = (options: RegistryClientOptions): RegistryCl
 /** Builds a client for a stored source, resolving its auth header secret through the port. */
 export const createClientForSource = async (
   source: Pick<RegistrySource, 'baseUrl' | 'authSecretId' | 'authHeaderName'>,
-  deps: { secrets: SecretResolver; fetch?: FetchFn; timeoutMs?: number },
+  deps: {
+    secrets: SecretResolver;
+    fetch?: FetchFn;
+    timeoutMs?: number;
+    retries?: number;
+    retryDelayMs?: number;
+  },
 ): Promise<RegistryClient> => {
   let authHeader: RegistryClientOptions['authHeader'];
   if (source.authSecretId) {
@@ -264,5 +294,7 @@ export const createClientForSource = async (
     ...(authHeader ? { authHeader } : {}),
     ...(deps.fetch ? { fetch: deps.fetch } : {}),
     ...(deps.timeoutMs ? { timeoutMs: deps.timeoutMs } : {}),
+    ...(deps.retries ? { retries: deps.retries } : {}),
+    ...(deps.retryDelayMs ? { retryDelayMs: deps.retryDelayMs } : {}),
   });
 };

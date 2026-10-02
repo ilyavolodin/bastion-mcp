@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { api, fetchAll } from '../client';
 import type { Body } from '../schema';
 import {
+  isSyncing,
   type RegistryServerView,
   type RequesterRef,
   toRequestView,
@@ -40,26 +41,106 @@ export const useInstallRequests = (status: 'open' | 'all' = 'open', enabled = tr
   });
 };
 
-/** Registry servers with their source name and whether the caller already asked for them. */
-export const useRegistryServers = (q: string) => {
+/** Servers per page: the browse screen never loads the whole registry (it has thousands of entries). */
+export const REGISTRY_PAGE_SIZE = 24;
+
+export type RegistryFilters = {
+  q?: string;
+  sourceId?: string;
+  runtime?: 'remote' | 'npm' | 'pypi';
+};
+
+/**
+ * One page of registry servers at a time (server-side search, source and runtime filters; the API lists the newest
+ * version of each server of enabled sources only). A changed filter starts again at the first page.
+ */
+export const useRegistryServers = (filters: RegistryFilters) => {
   const sources = useSourceNames();
   const me = useMe();
   const requests = useQuery({
     ...pagedQuery(keys.requests, '/install-requests', { status: 'open' }),
     retry: false,
   });
-  return useQuery({
-    ...pagedQuery(keys.registry, '/registry/servers', q ? { q } : undefined),
-    select: (rows): RegistryServerView[] =>
-      rows.map((s) =>
-        toServerView(s, {
-          sourceNames: sources.data ?? new Map(),
-          openRequests: requests.data ?? [],
-          meId: me.data?.id ?? '',
-        }),
+  return useInfiniteQuery({
+    queryKey: [...keys.registry, 'servers', filters],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) =>
+      api.get('/registry/servers', {
+        signal,
+        query: {
+          limit: REGISTRY_PAGE_SIZE,
+          cursor: pageParam,
+          q: filters.q || null,
+          sourceId: filters.sourceId || null,
+          runtime: filters.runtime ?? null,
+        },
+      }),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    select: (data): { servers: RegistryServerView[]; pages: number } => ({
+      pages: data.pages.length,
+      servers: data.pages.flatMap((page) =>
+        page.items.map((s) =>
+          toServerView(s, {
+            sourceNames: sources.data ?? new Map(),
+            openRequests: requests.data ?? [],
+            meId: me.data?.id ?? '',
+          }),
+        ),
       ),
+    }),
   });
 };
+
+/** Registry sources with their last sync; refreshes while a sync is running. */
+export const useRegistrySources = (enabled = true) =>
+  useQuery({
+    ...pagedQuery([...keys.registry, 'source-list'], '/registry-sources'),
+    enabled,
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((s) => isSyncing(s)) ? 2_000 : false,
+  });
+
+export const useCreateRegistrySource = () =>
+  useApiMutation(
+    (input: Body<'post', '/registry-sources'>) => api.post('/registry-sources', input),
+    [keys.registry],
+  );
+
+export const usePatchRegistrySource = () =>
+  useApiMutation(
+    (input: { id: string; version: string; body: Body<'patch', '/registry-sources/{id}'> }) =>
+      api.patch(`/registry-sources/${input.id}`, input.body, { etag: input.version }),
+    [keys.registry],
+  );
+
+export const useDeleteRegistrySource = () =>
+  useApiMutation(
+    (input: { id: string; version: string }) =>
+      api.delete(`/registry-sources/${input.id}`, { etag: input.version }),
+    [keys.registry],
+  );
+
+/** Starts a sync; the API answers at once and the walk runs in the background (see `isSyncing`). */
+export const useSyncRegistrySource = () =>
+  useApiMutation(
+    (input: { id: string; full?: boolean }) =>
+      api.post(`/registry-sources/${input.id}/sync`, { full: input.full ?? false }),
+    [keys.registry],
+  );
+
+export const useRegistryPolicy = (sourceId: string, enabled = true) =>
+  useQuery({
+    queryKey: [...keys.registry, 'policy', sourceId],
+    enabled,
+    queryFn: ({ signal }) => api.get(`/registry-sources/${sourceId}/policy`, { signal }),
+  });
+
+export const usePutRegistryPolicy = () =>
+  useApiMutation(
+    (input: { sourceId: string; body: Body<'put', '/registry-sources/{id}/policy'> }) =>
+      api.put(`/registry-sources/${input.sourceId}/policy`, input.body),
+    [keys.registry],
+  );
 
 /**
  * Installs a registry server according to the source policy. The answer is `installed` (201) or `needs-request`

@@ -5,6 +5,7 @@ import {
   type RegistrySource,
   type SecretResolver,
   type ServerJson,
+  type SyncResult,
   serverJsonSchema,
   syncSource,
   systemClock,
@@ -33,22 +34,30 @@ export const createRegistryApiPorts = (infra: Infra): ApiDeps['registry'] => {
   const servers = createServerStore(infra);
   const secrets = createRegistrySecretResolver(infra);
   const fetchFn = infra.options.fetch;
+  /** One walk per source at a time (a second click or the scheduler joins the running one). */
+  const running = new Map<string, Promise<SyncResult>>();
   return {
     sources: infra.repos.registrySources,
     servers,
     requests: infra.repos.installRequests,
-    sync: (source: RegistrySource, options) =>
-      syncSource(
+    sync: (source: RegistrySource, options) => {
+      const active = running.get(source.id);
+      if (active) return active;
+      const run = syncSource(
         source,
         {
           serverStore: servers,
           sourceStore: infra.repos.registrySources,
           secrets,
           clock: systemClock,
+          retries: 3,
           ...(fetchFn ? { fetch: fetchFn } : {}),
         },
         { full: options.full === true },
-      ),
+      ).finally(() => running.delete(source.id));
+      running.set(source.id, run);
+      return run;
+    },
     ...(fetchFn ? { fetch: fetchFn } : {}),
   };
 };

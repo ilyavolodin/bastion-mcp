@@ -8,6 +8,7 @@ import type {
 } from '@bastion-mcp/auth';
 import type { Limiter } from '@bastion-mcp/limits';
 import type { PolicyDataSource, PolicyEngine } from '@bastion-mcp/policy';
+import type { AccountPorts } from './account';
 import type {
   BlobPort,
   PackageVersionResolver,
@@ -31,6 +32,7 @@ import type { ResourceStore } from './store';
 import type { SystemStatusPort } from './system';
 import type { Publisher, UnitOfWork } from './uow';
 
+export type * from './account';
 export type * from './catalog';
 export type * from './events';
 export type * from './guards';
@@ -83,6 +85,8 @@ export type ApiDeps = {
   deactivation: DeactivationExecutor;
   secrets: SecretsPort;
   identity: IdentityPorts;
+  /** Credential changes of the signed-in user (password). */
+  account: AccountPorts;
   system: SystemStatusPort;
   catalog: {
     tests: VersionTestPort;

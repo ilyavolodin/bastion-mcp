@@ -86,7 +86,12 @@ RUN apt-get update \
 # the shared libraries Node needs come from the base image.
 COPY --from=runtime-tools /opt/runtime /opt/runtime
 COPY --from=runtime-tools /usr/local/bin/node /opt/runtime/bin/node
-RUN ln -s /usr/bin/git /opt/runtime/bin/git \
+# npm (the runner installs npm packages with it, 8.3): the sandbox PATH is /opt/runtime/bin:/usr/bin, so the npm that
+# ships with the Node image under /usr/local is not visible inside a jail.
+COPY --from=runtime-tools /usr/local/lib/node_modules/npm /opt/runtime/lib/node_modules/npm
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /opt/runtime/bin/npm \
+ && ln -s ../lib/node_modules/npm/bin/npx-cli.js /opt/runtime/bin/npx \
+ && ln -s /usr/bin/git /opt/runtime/bin/git \
  && ln -sf "$(ls -d /opt/runtime/python/cpython-3.13*/bin/python3.13 | head -n1)" /opt/runtime/bin/python3 \
  && ln -sf python3 /opt/runtime/bin/python
 COPY --from=build /src/apps/runner/dist/runner.mjs /opt/bastion/runner.mjs

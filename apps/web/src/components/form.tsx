@@ -4,7 +4,7 @@ import { type FieldValues, type UseFormReturn, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { InstallFieldDef as FieldDef } from '@/api/views/servers';
 import { cn } from '@/lib/cn';
-import { Input } from './ui/input';
+import { Input, Select } from './ui/input';
 import { Label } from './ui/label';
 
 /** Label, control, help and error text wired with ids so screen readers get all of them. */
@@ -96,16 +96,32 @@ export function FieldsInputs<T extends FieldValues = Record<string, string>>({
               ?.message
           }
         >
-          {({ id, describedBy, invalid }) => (
-            <Input
-              id={id}
-              type={f.secret ? 'password' : 'text'}
-              autoComplete={f.secret ? 'new-password' : 'off'}
-              aria-describedby={describedBy}
-              aria-invalid={invalid}
-              {...form.register(f.name as never)}
-            />
-          )}
+          {({ id, describedBy, invalid }) =>
+            f.choices?.length ? (
+              <Select
+                id={id}
+                aria-describedby={describedBy}
+                aria-invalid={invalid}
+                {...form.register(f.name as never)}
+              >
+                <option value="">{f.required ? 'Choose…' : '(none)'}</option>
+                {f.choices.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Input
+                id={id}
+                type={f.secret ? 'password' : 'text'}
+                autoComplete={f.secret ? 'new-password' : 'off'}
+                aria-describedby={describedBy}
+                aria-invalid={invalid}
+                {...form.register(f.name as never)}
+              />
+            )
+          }
         </Field>
       ))}
     </>

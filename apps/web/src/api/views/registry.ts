@@ -87,3 +87,56 @@ export const toRequestView = (
 /** What the policy decided for an install, in words for a toast or a dialog. */
 export const reasonsText = (reasons: readonly string[]): string =>
   reasons.length > 0 ? reasons.join('. ') : 'The registry policy decides.';
+
+/** What `last_sync` of a source holds (`SyncStats` of the registry package; the API types it as unknown). */
+export type SyncInfo = {
+  startedAt: string;
+  finishedAt: string;
+  ok: boolean;
+  full: boolean;
+  pages: number;
+  fetched: number;
+  upserted: number;
+  invalid: number;
+  deleted: number;
+  deprecated: number;
+  error?: string;
+};
+
+export const syncInfo = (source: Pick<RegistrySource, 'lastSync'>): SyncInfo | null => {
+  const raw = source.lastSync;
+  if (typeof raw !== 'object' || raw === null || typeof (raw as SyncInfo).startedAt !== 'string') {
+    return null;
+  }
+  return raw as SyncInfo;
+};
+
+/** Sync requests are remembered here until the source reports a result newer than the click. */
+const requested = new Map<string, number>();
+export const markSyncRequested = (sourceId: string, at = Date.now()): void => {
+  requested.set(sourceId, at);
+};
+
+/** A sync was requested and the source has not reported anything newer yet (it times out after 15 minutes). */
+export const isSyncing = (source: Pick<RegistrySource, 'id' | 'lastSync'>): boolean => {
+  const at = requested.get(source.id);
+  if (at === undefined) return false;
+  if (Date.now() - at > 15 * 60_000) {
+    requested.delete(source.id);
+    return false;
+  }
+  const info = syncInfo(source);
+  const finished = info ? Date.parse(info.finishedAt) : 0;
+  // The stats of a finished walk are written after the clicks; allow for clock skew between server and browser.
+  if (info && finished >= at - 5_000) {
+    requested.delete(source.id);
+    return false;
+  }
+  return true;
+};
+
+export const TRUST_LABEL: Record<string, string> = {
+  official: 'Official',
+  internal: 'Internal',
+  community: 'Community',
+};

@@ -8,6 +8,7 @@ import {
   extractPinnedPackages,
   isExactVersion,
   lockfileFromCapture,
+  lockfileMatchesSpec,
   mayInstallWithoutLockfile,
   parseRequirements,
   sha256Hex,
@@ -91,6 +92,55 @@ describe('8.7 lockfile capture plans', () => {
     expect(lock.sha256).toBe(sha256Hex(SHRINKWRAP));
     expect(verifyLockfileIntegrity(lock)).toBe(true);
     expect(verifyLockfileIntegrity({ ...lock, content: `${SHRINKWRAP} ` })).toBe(false);
+  });
+});
+
+describe('8.7 a stored lockfile must pin the spec it belongs to', () => {
+  it('8.7 npm: matches identifier and version, rejects another version or runtime', () => {
+    const lock = {
+      kind: 'npm-shrinkwrap' as const,
+      content: SHRINKWRAP,
+      sha256: sha256Hex(SHRINKWRAP),
+    };
+    expect(
+      lockfileMatchesSpec(lock, {
+        runtime: 'npm',
+        identifier: '@scope/server-x',
+        version: '1.2.3',
+      }),
+    ).toBe(true);
+    expect(
+      lockfileMatchesSpec(lock, {
+        runtime: 'npm',
+        identifier: '@scope/server-x',
+        version: '1.2.4',
+      }),
+    ).toBe(false);
+    expect(
+      lockfileMatchesSpec(lock, {
+        runtime: 'pypi',
+        identifier: '@scope/server-x',
+        version: '1.2.3',
+      }),
+    ).toBe(false);
+  });
+  it('8.7 pypi: names compare normalised', () => {
+    const content = [
+      'Mcp_Server.Fetch==2026.8.18 \\',
+      `    --hash=sha256:${'a'.repeat(64)}`,
+      '',
+    ].join('\n');
+    const lock = { kind: 'uv-requirements' as const, content, sha256: sha256Hex(content) };
+    expect(
+      lockfileMatchesSpec(lock, {
+        runtime: 'pypi',
+        identifier: 'mcp-server-fetch',
+        version: '2026.8.18',
+      }),
+    ).toBe(true);
+    expect(
+      lockfileMatchesSpec(lock, { runtime: 'pypi', identifier: 'mcp-server-fetch', version: '1' }),
+    ).toBe(false);
   });
 });
 

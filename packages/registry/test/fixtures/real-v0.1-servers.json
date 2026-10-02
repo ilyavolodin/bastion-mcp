@@ -1,0 +1,349 @@
+{
+  "servers": [
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "agency.kesey/pretrip",
+        "description": "Screen regulated-health marketing copy against source-cited rulesets, all 50 states.",
+        "title": "Pre-Trip compliance scanner",
+        "version": "1.0.1",
+        "websiteUrl": "https://scan.kesey.agency/developers/",
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "pretrip-mcp",
+            "version": "1.0.1",
+            "transport": {
+              "type": "stdio"
+            }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-07-26T18:03:21.463557Z",
+          "publishedAt": "2026-07-26T18:03:21.463557Z",
+          "updatedAt": "2026-07-26T18:03:21.463557Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ai.anomalyarmor/armor-mcp",
+        "description": "Data observability tools for engineering teams: alerts, freshness, schema drift, lineage, quality.",
+        "title": "AnomalyArmor",
+        "repository": {
+          "url": "https://github.com/anomalyarmor/agents",
+          "source": "github",
+          "subfolder": "armor-mcp"
+        },
+        "version": "0.6.1",
+        "websiteUrl": "https://www.anomalyarmor.ai",
+        "packages": [
+          {
+            "registryType": "pypi",
+            "identifier": "armor-mcp",
+            "version": "0.6.1",
+            "transport": {
+              "type": "stdio"
+            },
+            "environmentVariables": [
+              {
+                "description": "AnomalyArmor API key (aa_live_*). Generate at https://app.anomalyarmor.ai/settings/api-keys.",
+                "isRequired": true,
+                "isSecret": true,
+                "name": "ARMOR_API_KEY"
+              }
+            ]
+          }
+        ],
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mcp.anomalyarmor.ai/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-04-18T00:51:37.350253Z",
+          "publishedAt": "2026-04-18T00:51:37.350253Z",
+          "updatedAt": "2026-04-18T00:51:37.350253Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ac.inference.sh/mcp",
+        "description": "run any ai model. compose agents, stack knowledge, connect tools. one api, pay per run.",
+        "title": "inference.sh",
+        "version": "2.0.1",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://api.inference.sh/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-07-27T10:44:51.359634Z",
+          "publishedAt": "2026-07-27T10:44:51.359634Z",
+          "updatedAt": "2026-07-27T10:44:51.359634Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+        "name": "ai.aliengiraffe/spotdb",
+        "description": "Ephemeral data sandbox for AI workflows with guardrails and security",
+        "repository": {
+          "url": "https://github.com/aliengiraffe/spotdb",
+          "source": "github"
+        },
+        "version": "0.1.0",
+        "packages": [
+          {
+            "registryType": "oci",
+            "identifier": "docker.io/aliengiraffe/spotdb:0.1.0",
+            "transport": {
+              "type": "stdio"
+            },
+            "environmentVariables": [
+              {
+                "description": "Optional API key for request authentication",
+                "format": "string",
+                "isSecret": true,
+                "name": "X-API-Key"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2025-10-09T17:05:17.793149Z",
+          "publishedAt": "2025-10-09T17:05:17.793149Z",
+          "updatedAt": "2025-10-09T17:05:17.793149Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+        "name": "ai.agentrapay/agentra",
+        "description": "Identity oracle and trust layer for autonomous AI agents. Bidirectional KYA and trust scoring.",
+        "repository": {},
+        "version": "1.0.0",
+        "remotes": [
+          {
+            "type": "sse",
+            "url": "https://api.agentrapay.ai/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-03-22T18:16:07.628131Z",
+          "publishedAt": "2026-03-22T18:16:07.628131Z",
+          "updatedAt": "2026-03-22T18:16:07.628131Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ai.apithreshold/apithreshold",
+        "description": "Quality scoring and progressive gates for AI-generated API tests. Stripe/Twilio profiles. Free tier.",
+        "title": "APIThreshold",
+        "version": "0.1.0",
+        "websiteUrl": "https://apithreshold.ai",
+        "packages": [
+          {
+            "registryType": "oci",
+            "identifier": "ghcr.io/apithreshold/apithreshold:0.1.0",
+            "transport": {
+              "type": "stdio"
+            },
+            "packageArguments": [
+              {
+                "value": "serve",
+                "type": "positional"
+              },
+              {
+                "value": "--transport",
+                "type": "positional"
+              },
+              {
+                "value": "stdio",
+                "type": "positional"
+              }
+            ],
+            "environmentVariables": [
+              {
+                "description": "LLM provider to use: openai or anthropic.",
+                "isRequired": true,
+                "format": "string",
+                "name": "APITHRESHOLD_LLM_PROVIDER"
+              },
+              {
+                "description": "Required when APITHRESHOLD_LLM_PROVIDER=openai.",
+                "format": "string",
+                "isSecret": true,
+                "name": "OPENAI_API_KEY"
+              },
+              {
+                "description": "Required when APITHRESHOLD_LLM_PROVIDER=anthropic.",
+                "format": "string",
+                "isSecret": true,
+                "name": "ANTHROPIC_API_KEY"
+              },
+              {
+                "description": "Optional license JWT. Omit for Free tier.",
+                "format": "string",
+                "isSecret": true,
+                "name": "APITHRESHOLD_LICENSE"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-07-02T22:06:43.451983Z",
+          "publishedAt": "2026-07-02T22:06:43.451983Z",
+          "updatedAt": "2026-07-02T22:06:43.451983Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ai.agenticshelf/graffeo",
+        "description": "Live MCP catalog for Graffeo Coffee Roasting — North Beach SF specialty coffee since 1935.",
+        "title": "Graffeo Coffee Roasting",
+        "version": "1.0.0",
+        "websiteUrl": "https://www.graffeo.com",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://api.agenticshelf.ai/m/graffeo/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "deprecated",
+          "statusChangedAt": "2026-05-07T16:29:51.153646Z",
+          "statusMessage": "Pilot integration in progress; will re-activate when /m/graffeo/mcp is wired up.",
+          "publishedAt": "2026-05-06T16:11:54.5608Z",
+          "updatedAt": "2026-05-07T16:29:51.153646Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ai.adtest/adtest-mcp",
+        "description": "AI-only ad scoring for Claude: score image, video or text ads on 13 dimensions before you spend.",
+        "repository": {
+          "url": "https://github.com/menaker/adtest-mcp",
+          "source": "github"
+        },
+        "version": "1.1.0",
+        "websiteUrl": "https://adtest.ai/",
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "adtest-mcp",
+            "version": "1.1.0",
+            "transport": {
+              "type": "stdio"
+            },
+            "environmentVariables": [
+              {
+                "description": "AdTest.AI developer API key (app.adtest.ai → Developer → Generate key). Each successful analysis costs 1 credit.",
+                "isRequired": true,
+                "format": "string",
+                "isSecret": true,
+                "name": "ADTEST_API_KEY"
+              },
+              {
+                "description": "Optional API base URL override (default https://app.adtest.ai/adtest-api).",
+                "format": "string",
+                "name": "ADTEST_API_BASE"
+              },
+              {
+                "description": "Optional max wait for a job in milliseconds (default 900000 = 15 min).",
+                "format": "number",
+                "name": "ADTEST_POLL_TIMEOUT_MS"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-09-01T21:42:48.138341Z",
+          "publishedAt": "2026-09-01T21:42:48.138341Z",
+          "updatedAt": "2026-09-01T21:42:48.138341Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ae.propick/propick",
+        "description": "Manage your real-estate stock on Propick (Dubai): bulk listing sync, lookups and run reports.",
+        "title": "Propick Integration MCP",
+        "version": "1.0.0",
+        "websiteUrl": "https://propick.ae",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://propick.ae/mcp",
+            "headers": [
+              {
+                "description": "Bearer <integration key> (ppk_live_...) issued in the Propick cabinet when creating an import channel",
+                "isRequired": true,
+                "isSecret": true,
+                "name": "Authorization"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-08-25T11:16:56.879334Z",
+          "publishedAt": "2026-08-25T11:16:56.879334Z",
+          "updatedAt": "2026-08-25T11:16:56.879334Z",
+          "isLatest": true
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "nextCursor": null,
+    "count": 9
+  }
+}

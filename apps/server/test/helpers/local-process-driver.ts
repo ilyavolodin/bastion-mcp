@@ -68,8 +68,24 @@ export class LocalProcessDriver implements SandboxDriver {
           version: req.version,
           proxyUrl: req.egress.proxyUrl,
         });
-        return { command: process.execPath, args: [fakeStdioServerPath] };
+        return { command: process.execPath, args: [fakeStdioServerPath, ...req.args] };
       },
+      // The throwaway-sandbox capture of the catalog test (8.7): a one-package npm lockfile for the requested version.
+      capture: async (req) => ({
+        kind: 'npm-shrinkwrap',
+        content: JSON.stringify({
+          name: 'bastion-capture',
+          lockfileVersion: 3,
+          packages: {
+            '': { name: 'bastion-capture', dependencies: { [req.identifier]: req.version } },
+            [`node_modules/${req.identifier}`]: {
+              version: req.version,
+              resolved: `https://registry.npmjs.org/${req.identifier}/-/${req.identifier}-${req.version}.tgz`,
+              integrity: `sha512-${'A'.repeat(86)}==`,
+            },
+          },
+        }),
+      }),
     };
     const runner = createRunner({ installer, workspaceDir: dir, home: dir, killGraceMs: 500 });
     const { address } = await runner.listen({ kind: 'tcp', host: '127.0.0.1', port: 0 });

@@ -52,9 +52,15 @@ export const registryPolicyView = z.object({
   updatedAt: z.string().nullable(),
 });
 
-export const serverSearchQuery = listQuerySchema
-  .omit({ sort: true })
-  .extend({ sourceId: z.string().min(1).optional(), includeDeleted: z.stringbool().optional() });
+export const serverSearchQuery = listQuerySchema.omit({ sort: true }).extend({
+  sourceId: z.string().min(1).optional(),
+  includeDeleted: z.stringbool().optional(),
+  /** Rows of disabled sources are hidden unless this is true. */
+  includeDisabled: z.stringbool().optional(),
+  /** Newest version of each server only (default true). */
+  latestOnly: z.stringbool().optional(),
+  runtime: z.enum(['remote', 'npm', 'pypi']).optional(),
+});
 
 export const serverParams = z.object({
   sourceId: z.string().min(1),
@@ -65,6 +71,10 @@ export const serverParams = z.object({
 export const registryServerSummary = z
   .looseObject({
     sourceId: z.string(),
+    /** Provenance: the source this row was mirrored from. */
+    sourceName: z.string().optional(),
+    trust: z.enum(['official', 'internal', 'community']).optional(),
+    sourceEnabled: z.boolean().optional(),
     name: z.string(),
     version: z.string(),
     status: z.string(),

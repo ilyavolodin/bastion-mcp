@@ -351,6 +351,38 @@ describe.skipIf(!dbEnabled())('16.2 users, teams, memberships, SCIM and provisio
     ).rejects.toMatchObject({ httpStatus: 409 });
   });
 
+  it('9.1 local admin: set a new password hash, with or without an audit event', async () => {
+    const repo = createLocalAdminRepository(h.db.prisma);
+    const id = newId();
+    await repo.createLocalAdmin({
+      id,
+      email: 'pw@acme.com',
+      displayName: 'Administrator',
+      passwordHash: 'hash-1',
+    });
+    expect(await repo.findById(id)).toMatchObject({ id, localPasswordHash: 'hash-1' });
+    expect(await repo.findById(newId())).toBeNull();
+    await repo.setPasswordHash({
+      userId: id,
+      passwordHash: 'hash-2',
+      audit: { action: 'user.password_reset', actorType: 'system' },
+    });
+    expect((await repo.findById(id))?.localPasswordHash).toBe('hash-2');
+    await repo.setPasswordHash({ userId: id, passwordHash: 'hash-3' });
+    expect((await repo.findById(id))?.localPasswordHash).toBe('hash-3');
+    const events = await h.db.prisma.auditEvent.findMany({
+      where: { targetId: id, action: { startsWith: 'user.password' } },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ action: 'user.password_reset', actorType: 'system' });
+    expect(JSON.stringify(events[0]?.diff)).not.toContain('hash');
+    await expect(
+      repo.setPasswordHash({ userId: newId(), passwordHash: 'x' }),
+    ).rejects.toMatchObject({
+      httpStatus: 404,
+    });
+  });
+
   describe('9.1 SCIM store', () => {
     class Conflict extends Error {}
     const scoped = (right: ScimFilterNode): ScimFilterNode => ({

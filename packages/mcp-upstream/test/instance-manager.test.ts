@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  type PackageSpec,
   RateLimitedError,
   SandboxStartFailedError,
   UpstreamUnavailableError,
@@ -249,6 +250,51 @@ describe('8.6 instance lifecycle', () => {
     shared.driver.failStart = undefined;
     const ok = await w.manager.ensure(args);
     expect(ok.kind).toBe('local');
+  });
+
+  it('8.6 a failure keeps its phase and message on the instance, and a new catalog version starts clean instead of waiting out the backoff', async () => {
+    const now = 20_000_000;
+    const clock = { now: () => now };
+    const w = track(makeWorker(shared, 'w1', { clock }));
+    await w.registry.heartbeat();
+    shared.driver.failStart = 'npm error notarget No matching version found';
+    const args = await ensureArgs(w.manager, installationOf(packageSpec()));
+    await w.manager.ensure(args).catch(() => undefined);
+    const failed = shared.repo.rows.get(args.record.id)?.error;
+    expect(failed?.phase).toBe('installing');
+    expect(failed?.message).toContain('No matching version');
+    // the author fixes the spec: a new version starts at once, no "retrying in ... s"
+    shared.driver.failStart = undefined;
+    const fixed = installationOf(packageSpec(), { catalogVersionId: 'ver-fixed' });
+    const ok = await w.manager.ensure({ ...args, installation: fixed });
+    expect(ok.kind).toBe('local');
+    expect(shared.repo.rows.get(args.record.id)?.error).toBeUndefined();
+  });
+
+  it('8.7 captureLockfile resolves in a throwaway sandbox that is destroyed afterwards, with the installing egress phase', async () => {
+    const spy = spyEgress(shared);
+    const w = track(makeWorker(shared, 'w1', { egress: spy.writer }));
+    const lock = await w.manager.captureLockfile(packageSpec() as PackageSpec, {
+      userId: 'user-1',
+      label: 'x',
+    });
+    expect(lock.kind).toBe('npm-shrinkwrap');
+    expect(lock.sha256).toBe(createHash('sha256').update(lock.content).digest('hex'));
+    expect(shared.driver.startRequests[0]?.captureLockfile).toBe(true);
+    expect(spy.phases).toEqual(['installing']);
+    expect(shared.driver.destroyed).toHaveLength(1);
+  });
+
+  it('8.7 a failed capture destroys the sandbox and reports the resolver output', async () => {
+    const w = track(makeWorker(shared, 'w1'));
+    shared.driver.failStart = 'npm error code ETARGET';
+    await expect(
+      w.manager.captureLockfile(packageSpec() as PackageSpec, { userId: 'user-1', label: 'x' }),
+    ).rejects.toMatchObject({
+      code: 'SANDBOX_START_FAILED',
+      message: expect.stringContaining('ETARGET'),
+    });
+    expect(shared.driver.destroyed).toHaveLength(1);
   });
 
   it('8.6 failures older than 30 minutes no longer count', async () => {

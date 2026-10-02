@@ -90,7 +90,8 @@ const template = z.strictObject({
 });
 
 export const overrideDocumentSchema = z.strictObject({
-  version: z.literal(1),
+  // Like `packages/overrides`: a document without `version` is version 1, so `{}` is the empty document.
+  version: z.literal(1).default(1),
   uriPrefix: z.boolean().optional(),
   instructions: z
     .strictObject({ mode: z.enum(['append', 'replace']), text: z.string() })
@@ -120,6 +121,8 @@ export type OverrideValidation =
 
 export function validateOverrideText(text: string): OverrideValidation {
   let parsed: unknown;
+  // Nothing typed is the empty document, never an error.
+  if (text.trim() === '') return { ok: true, document: emptyOverrides(), issues: [] };
   try {
     parsed = JSON.parse(text);
   } catch (e) {
@@ -176,4 +179,7 @@ export const sectionOf = (kind: 'tool' | 'prompt' | 'resource' | 'template'): Ov
 
 /** JSON Schema of the document for Monaco's inline validation. */
 export const overrideJsonSchema = (): Record<string, unknown> =>
-  z.toJSONSchema(overrideDocumentSchema, { unrepresentable: 'any' }) as Record<string, unknown>;
+  z.toJSONSchema(overrideDocumentSchema, { unrepresentable: 'any', io: 'input' }) as Record<
+    string,
+    unknown
+  >;

@@ -8,7 +8,7 @@
  * - `createUiWorkerClient`: a `ui`-only process goes through the public gateway endpoints as the user (see
  *   `gateway-client.ts` for why the internal RPC cannot do this), so workers run the call exactly as for any client.
  */
-import { BastionError, META_KEYS, redisKeys } from '@bastion-mcp/core';
+import { BastionError, META_KEYS, type PackageSpec, redisKeys } from '@bastion-mcp/core';
 import type { InstallationInfo, UpstreamItems, UpstreamListResult } from '@bastion-mcp/router';
 import type { AuthServices, WorkerServices } from '../contracts';
 import type { Infra } from '../infra';
@@ -31,6 +31,14 @@ export interface UpstreamAccess {
     principalId: string,
     options?: { signal?: AbortSignal; timeoutMs?: number },
   ): Promise<ListOutcome>;
+  /**
+   * The one-off lockfile capture of 8.7 in a throwaway sandbox. Absent where this process cannot run sandboxes
+   * (a `ui`-only process); the TEST flow then skips the step.
+   */
+  captureLockfile?(
+    spec: PackageSpec,
+    context: { userId: string; label: string; signal?: AbortSignal },
+  ): Promise<{ kind: 'npm-shrinkwrap' | 'uv-requirements'; content: string; sha256: string }>;
   /** Stops the installation's instance so the next call starts a new one (8.6). */
   restart(installationId: string): Promise<void>;
   /** The era verdict recorded for the installation (6.4). */
@@ -99,6 +107,7 @@ export const workerAccess = (infra: Infra, worker: WorkerServices): UpstreamAcce
         await sleep(1_000);
       }
     },
+    captureLockfile: (spec, context) => worker.runtime.instances.captureLockfile(spec, context),
     async restart(installationId) {
       const record = await infra.repos.instances.getForInstallation(installationId);
       if (!record) return;

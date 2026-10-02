@@ -1,4 +1,4 @@
-/** Browser login (9.1, 9.2): IdP login and callback, break-glass local login, logout. */
+/** Browser login (9.1, 9.2): IdP login and callback, break-glass local login, forgot-password page, logout. */
 import {
   assertCsrf,
   CSRF_HEADER,
@@ -17,15 +17,18 @@ import {
 import { BastionError, newId } from '@bastion-mcp/core';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  forgotPasswordPage,
+  type PageMessage,
+  loginPage as renderLoginPage,
+} from '../pages/templates';
+import { ACCOUNT_RULE, clearFailures, loginBlockedFor, recordLoginFailure } from './throttle';
+import {
   addCookie,
-  allowAttempt,
   cookiesSecure,
   cookieValue,
   ensureCsrf,
   errorPage,
-  esc,
   formCsrfOk,
-  layout,
   safeReturnTo,
   sendHtml,
   startSession,
@@ -34,8 +37,8 @@ import {
 
 const STATE_COOKIE = 'bastion_login';
 const STATE_COOKIE_MAX_AGE = 600;
-const LOCAL_LOGIN_MAX = 10;
-const LOCAL_LOGIN_WINDOW_S = 300;
+const MAX_EMAIL_LENGTH = 254;
+const BACK_TO_SIGN_IN = { href: '/auth/login', label: 'Back to sign in' };
 
 export type LoginOptions = {
   /** Receives the events of a provisioning plan (user.created, team.member_added...) to run auto-install (11.5). */
@@ -55,6 +58,46 @@ const stateCookie = (value: string, maxAge: number, secure: boolean): string =>
     'SameSite=Lax',
   ].join('; ');
 
+/** What the sign-in page offers (9.1): the enabled IdPs and whether local password login is on. */
+export const loadSignInOptions = async (infra: UiDeps['infra']) => {
+  const all = await infra.repos.idpConnections.list();
+  const connections = all.filter((c) => c.enabled);
+  // 9.1: local login is on while "no IdP connection exists", so even a disabled connection switches it off.
+  const localEnabled = localLoginEnabled({
+    idpConnectionCount: all.length,
+    localLoginFlag: infra.config.localLogin,
+  });
+  return { connections, localEnabled, idpCount: all.length };
+};
+
+/** Renders the sign-in page for the browser login and for the authorization server's login interaction. */
+export const sendLoginPage = async (
+  deps: UiDeps,
+  req: FastifyRequest,
+  reply: FastifyReply,
+  input: {
+    returnTo: string;
+    status?: number;
+    message?: PageMessage;
+    email?: string;
+    forClient?: string;
+  },
+): Promise<FastifyReply> => {
+  const { connections, localEnabled } = await loadSignInOptions(deps.infra);
+  const csrf = ensureCsrf(deps, req, reply);
+  return sendHtml(
+    reply,
+    input.status ?? 200,
+    renderLoginPage({
+      returnTo: input.returnTo,
+      connections: connections.map((c) => ({ id: c.id, name: c.name })),
+      local: { enabled: localEnabled, csrf, email: input.email },
+      message: input.message,
+      forClient: input.forClient,
+    }),
+  );
+};
+
 export const registerLoginRoutes = async (
   app: FastifyInstance,
   deps: UiDeps,
@@ -71,62 +114,37 @@ export const registerLoginRoutes = async (
       (_req, body, done) => done(null, Object.fromEntries(new URLSearchParams(body as string))),
     );
 
-    const loginPage = async (
-      req: FastifyRequest,
-      reply: FastifyReply,
-      returnTo: string,
-      message?: string,
-    ) => {
-      const connections = (await repos.idpConnections.list()).filter((c) => c.enabled);
-      const local = localLoginEnabled({
-        idpConnectionCount: connections.length,
-        localLoginFlag: infra.config.localLogin,
-      });
-      const back = encodeURIComponent(returnTo);
-      const links = connections
-        .map(
-          (c) =>
-            `<a class="button" href="/auth/login?connection=${esc(encodeURIComponent(c.id))}&amp;return_to=${back}">Continue with ${esc(c.name)}</a>`,
-        )
-        .join('');
-      const emailForm =
-        connections.length > 1
-          ? `<form method="get" action="/auth/login"><input type="hidden" name="return_to" value="${esc(returnTo)}"><label>Work email<input type="email" name="email" autocomplete="username"></label><button type="submit">Continue</button></form>`
-          : '';
-      const csrf = ensureCsrf(deps, req, reply);
-      const form = local
-        ? `<form method="post" action="/auth/local"><input type="hidden" name="_csrf" value="${esc(csrf)}"><input type="hidden" name="return_to" value="${esc(returnTo)}"><label>Email<input type="email" name="email" autocomplete="username" required></label><label>Password<input type="password" name="password" autocomplete="current-password" required></label><button class="primary" type="submit">Sign in</button></form>`
-        : '';
-      const note = message ? `<p class="error">${esc(message)}</p>` : '';
-      const empty =
-        connections.length === 0 && !local
-          ? '<p class="muted">No sign-in method is configured.</p>'
-          : '';
-      return sendHtml(
-        reply,
-        message ? 401 : 200,
-        layout('Sign in to Bastion', `${note}${links}${emailForm}${form}${empty}`),
-      );
-    };
-
     // --- /auth/login ---------------------------------------------------------------------------------------
     scope.get<{ Querystring: Query }>('/auth/login', async (req, reply) => {
       const q = req.query;
       const returnTo = safeReturnTo(q.return_to ?? q.returnTo);
-      const connections = (await repos.idpConnections.list()).filter((c) => c.enabled);
+      const { connections, localEnabled } = await loadSignInOptions(infra);
       let connectionId = q.connection;
-      if (!connectionId && q.email) connectionId = routeByEmail(connections, q.email)?.id;
-      if (
-        !connectionId &&
-        connections.length === 1 &&
-        !localLoginEnabled({
-          idpConnectionCount: connections.length,
-          localLoginFlag: infra.config.localLogin,
-        })
-      ) {
+      let unrouted = false;
+      if (!connectionId && q.email) {
+        connectionId = routeByEmail(connections, q.email)?.id;
+        unrouted = connectionId === undefined;
+      }
+      if (!connectionId && connections.length === 1 && !localEnabled) {
         connectionId = connections[0]?.id;
       }
-      if (!connectionId) return loginPage(req, reply, returnTo);
+      if (!connectionId) {
+        return sendLoginPage(
+          deps,
+          req,
+          reply,
+          unrouted
+            ? {
+                returnTo,
+                message: {
+                  kind: 'info',
+                  title: 'No single sign-on found for that email',
+                  body: 'Choose a provider below, or check the address and try again.',
+                },
+              }
+            : { returnTo },
+        );
+      }
       try {
         const started = await auth.idpLogin.startLogin(connectionId, {
           returnTo,
@@ -139,8 +157,24 @@ export const registerLoginRoutes = async (
           { err: error instanceof Error ? error.message : String(error) },
           'idp login start failed',
         );
-        return errorPage(reply, 400, 'This identity provider is not available.');
+        return errorPage(reply, 400, 'This identity provider is not available.', {
+          back: BACK_TO_SIGN_IN,
+        });
       }
+    });
+
+    // --- /auth/forgot (9.1: there is no e-mail delivery in v1) -----------------------------------------------
+    scope.get('/auth/forgot', async (_req, reply) => {
+      const { connections, localEnabled } = await loadSignInOptions(infra);
+      return sendHtml(
+        reply,
+        200,
+        forgotPasswordPage({
+          idpNames: connections.map((c) => c.name),
+          localEnabled,
+          host: new URL(infra.config.publicUrl).host,
+        }),
+      );
     });
 
     // --- /auth/callback/:idpConnectionId ----------------------------------------------------------------
@@ -150,7 +184,11 @@ export const registerLoginRoutes = async (
         const { idpConnectionId } = req.params;
         const state = cookieValue(req, STATE_COOKIE);
         addCookie(reply, stateCookie('', 0, secure));
-        if (!state) return errorPage(reply, 400, 'The sign-in session expired. Try again.');
+        if (!state) {
+          return errorPage(reply, 400, 'The sign-in session expired. Try again.', {
+            back: BACK_TO_SIGN_IN,
+          });
+        }
         const query = req.raw.url?.split('?')[1] ?? '';
         try {
           const result = await auth.idpLogin.completeLogin(idpConnectionId, query, state);
@@ -193,7 +231,9 @@ export const registerLoginRoutes = async (
             .redirect(safeReturnTo(result.returnTo), 302);
         } catch (error) {
           if (error instanceof ProvisioningDeniedError) {
-            return errorPage(reply, 403, `Sign-in was refused: ${error.message}.`);
+            return errorPage(reply, 403, `Sign-in was refused: ${error.message}.`, {
+              back: BACK_TO_SIGN_IN,
+            });
           }
           if (
             error instanceof IdpLoginError ||
@@ -206,6 +246,7 @@ export const registerLoginRoutes = async (
               reply,
               400,
               'Sign-in failed. Try again or contact your administrator.',
+              { back: BACK_TO_SIGN_IN },
             );
           }
           throw error;
@@ -219,31 +260,66 @@ export const registerLoginRoutes = async (
       const returnTo = safeReturnTo(body.return_to);
       const json = req.headers['content-type']?.includes('application/json') === true;
       if (!json && !formCsrfOk(req, body._csrf)) {
-        return errorPage(reply, 403, 'The form expired. Reload the page and try again.');
+        return errorPage(reply, 403, 'The form expired. Reload the page and try again.', {
+          back: BACK_TO_SIGN_IN,
+        });
       }
-      const email = (body.email ?? '').trim().toLowerCase();
-      const ok =
-        (await allowAttempt(infra, `local:ip:${req.ip}`, LOCAL_LOGIN_MAX, LOCAL_LOGIN_WINDOW_S)) &&
-        (await allowAttempt(infra, `local:email:${email}`, LOCAL_LOGIN_MAX, LOCAL_LOGIN_WINDOW_S));
-      if (!ok) {
-        return reply
-          .code(429)
-          .header('retry-after', String(LOCAL_LOGIN_WINDOW_S))
-          .send({ error: 'too_many_attempts' });
+      const email = (typeof body.email === 'string' ? body.email : '')
+        .trim()
+        .toLowerCase()
+        .slice(0, MAX_EMAIL_LENGTH);
+      const password = typeof body.password === 'string' ? body.password : '';
+      // Throttle first. The answer is the same for existing and unknown accounts (22.3: no user enumeration).
+      const wait = await loginBlockedFor(infra, req.ip, email);
+      if (wait > 0) {
+        reply.header('retry-after', String(wait));
+        if (json) return reply.code(429).send({ error: 'too_many_attempts' });
+        const minutes = Math.max(1, Math.ceil(wait / 60));
+        return sendLoginPage(deps, req, reply, {
+          returnTo,
+          status: 429,
+          email,
+          message: {
+            kind: 'error',
+            title: 'Too many sign-in attempts',
+            body: `Wait about ${minutes} minute${minutes === 1 ? '' : 's'} and try again.`,
+          },
+        });
+      }
+      const { localEnabled, idpCount } = await loadSignInOptions(infra);
+      if (!localEnabled) {
+        if (json) return reply.code(403).send({ error: 'local_login_disabled' });
+        return sendLoginPage(deps, req, reply, {
+          returnTo,
+          status: 403,
+          message: {
+            kind: 'error',
+            title: 'Password sign-in is turned off',
+            body: 'Use single sign-on instead.',
+          },
+        });
       }
       const user = await verifyLocalLogin(
         { users: repos.localAdmins },
-        {
-          idpConnectionCount: await repos.idpConnections.count(),
-          localLoginFlag: infra.config.localLogin,
-        },
+        { idpConnectionCount: idpCount, localLoginFlag: infra.config.localLogin },
         email,
-        body.password ?? '',
+        password,
       );
       if (!user) {
+        await recordLoginFailure(infra, req.ip, email);
         if (json) return reply.code(401).send({ error: 'invalid_credentials' });
-        return loginPage(req, reply, returnTo, 'Invalid email or password.');
+        return sendLoginPage(deps, req, reply, {
+          returnTo,
+          status: 401,
+          email,
+          message: {
+            kind: 'error',
+            title: 'Sign-in failed',
+            body: 'The email or password is not correct. Check them and try again.',
+          },
+        });
       }
+      await clearFailures(infra, ACCOUNT_RULE, email);
       await repos.users.recordLogin(user.id, new Date());
       await startSession(deps, reply, user.id);
       if (json) return reply.code(204).send();

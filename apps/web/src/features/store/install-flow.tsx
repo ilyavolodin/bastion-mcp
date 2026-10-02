@@ -32,7 +32,7 @@ const SLUG = /^[a-z0-9-]{2,40}$/;
 
 /** A secret goes to the installation after it exists (`PUT /installations/{id}/secrets/{name}`, 11.4). */
 const putSecret = (id: string, name: string, value: string) =>
-  api.put(`/installations/${id}/secrets/${encodeURIComponent(name)}`, { value });
+  api.put(`/installations/${id}/secrets/${encodeURIComponent(name)}`, { value }, { etag: '*' });
 
 /** Teams the caller may install for: managers of their teams; admins pick any team (`installations.team`). */
 const useInstallTargets = () => {

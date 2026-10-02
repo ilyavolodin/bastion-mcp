@@ -306,7 +306,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail }) {
             />
           ) : null}
           {s.step !== 'files' ? (
-            <TestPanel entryId={entry.id} versionId={version.id} versionLabel={label} canRun />
+            <TestPanel entryId={entry.id} versionId={version.id} canRun />
           ) : null}
         </div>
         <PublishCard

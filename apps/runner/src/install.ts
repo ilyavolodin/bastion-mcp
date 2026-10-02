@@ -100,6 +100,76 @@ export const buildUvPlan = (req: StartRequest, root: string = MCP_ROOT): Install
   };
 };
 
+/** The one-off resolve of 8.7: `npm install --package-lock-only` or `uv pip compile --generate-hashes`. */
+export const buildCapturePlan = (
+  req: StartRequest,
+  root: string = MCP_ROOT,
+): InstallPlan & { kind: CapturedLockfile['kind']; outputFile: string } => {
+  if (req.runtime === 'npm') {
+    return {
+      kind: 'npm-shrinkwrap',
+      outputFile: 'package-lock.json',
+      files: [
+        {
+          path: 'package.json',
+          content: JSON.stringify(
+            {
+              name: 'bastion-mcp-instance',
+              version: '0.0.0',
+              private: true,
+              dependencies: { [req.identifier]: req.version },
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+      commands: [
+        {
+          command: 'npm',
+          args: [
+            'install',
+            '--package-lock-only',
+            '--ignore-scripts',
+            '--omit=dev',
+            '--no-audit',
+            '--no-fund',
+            '--prefix',
+            root,
+          ],
+        },
+      ],
+    };
+  }
+  return {
+    kind: 'uv-requirements',
+    outputFile: 'requirements.txt',
+    files: [
+      {
+        path: 'requirements.in',
+        content: `${req.identifier}==${req.version}
+`,
+      },
+    ],
+    commands: [
+      {
+        command: 'uv',
+        args: [
+          'pip',
+          'compile',
+          '--generate-hashes',
+          '--no-header',
+          '--python-version',
+          '3.13',
+          `${root}/requirements.in`,
+          '-o',
+          `${root}/requirements.txt`,
+        ],
+      },
+    ],
+  };
+};
+
 export const buildInstallPlan = (req: StartRequest, root: string = MCP_ROOT): InstallPlan =>
   req.runtime === 'npm' ? buildNpmPlan(req, root) : buildUvPlan(req, root);
 
@@ -137,8 +207,12 @@ export type InstallContext = {
   onDetail: (detail: string) => void;
 };
 
+export type CapturedLockfile = { kind: 'npm-shrinkwrap' | 'uv-requirements'; content: string };
+
 export interface Installer {
   install(req: StartRequest, ctx: InstallContext): Promise<ResolvedCommand>;
+  /** Resolves the dependency tree of `identifier@version` into a lockfile without installing anything (8.7). */
+  capture?(req: StartRequest, ctx: InstallContext): Promise<CapturedLockfile>;
 }
 
 export type ExecResult = { code: number | null; output: string };
@@ -199,27 +273,40 @@ export const redactSecrets = (text: string, secrets: readonly string[]): string 
 export const createInstaller = (options: { root?: string; exec?: ExecFn } = {}): Installer => {
   const root = options.root ?? MCP_ROOT;
   const exec = options.exec ?? defaultExec;
+  const runPlan = async (plan: InstallPlan, ctx: InstallContext): Promise<void> => {
+    await mkdir(root, { recursive: true });
+    for (const file of plan.files) {
+      await writeFile(path.join(root, file.path), file.content, { mode: 0o600 });
+    }
+    for (const cmd of plan.commands) {
+      ctx.onDetail(`${cmd.command} ${cmd.args[0] ?? ''}`.trim());
+      const result = await exec(cmd.command, cmd.args, {
+        cwd: root,
+        env: ctx.env,
+        signal: ctx.signal,
+      });
+      if (result.code !== 0) {
+        throw new InstallError(
+          `${cmd.command} ${cmd.args[0] ?? ''} failed (exit ${result.code}): ${result.output.slice(-2000)}`,
+        );
+      }
+    }
+  };
   return {
+    async capture(req, ctx) {
+      const plan = buildCapturePlan(req, root);
+      await runPlan(plan, ctx);
+      let content: string;
+      try {
+        content = await readFile(path.join(root, plan.outputFile), 'utf8');
+      } catch {
+        throw new InstallError(`lockfile capture produced no ${plan.outputFile}`);
+      }
+      return { kind: plan.kind, content };
+    },
     async install(req, ctx) {
       if (req.lockfile) assertLockfileIntegrity(req.lockfile);
-      const plan = buildInstallPlan(req, root);
-      await mkdir(root, { recursive: true });
-      for (const file of plan.files) {
-        await writeFile(path.join(root, file.path), file.content, { mode: 0o600 });
-      }
-      for (const cmd of plan.commands) {
-        ctx.onDetail(`${cmd.command} ${cmd.args[0] ?? ''}`.trim());
-        const result = await exec(cmd.command, cmd.args, {
-          cwd: root,
-          env: ctx.env,
-          signal: ctx.signal,
-        });
-        if (result.code !== 0) {
-          throw new InstallError(
-            `${cmd.command} ${cmd.args[0] ?? ''} failed (exit ${result.code}): ${result.output.slice(-2000)}`,
-          );
-        }
-      }
+      await runPlan(buildInstallPlan(req, root), ctx);
       if (req.runtime === 'pypi') {
         return { command: `${root}/.venv/bin/${req.bin ?? req.identifier}`, args: req.args };
       }

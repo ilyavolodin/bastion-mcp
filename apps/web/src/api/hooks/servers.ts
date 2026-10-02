@@ -134,9 +134,12 @@ export const useDisconnectInstallation = (id: string) =>
 export const useSetSecret = (id: string) =>
   useApiMutation(
     (input: { name: string; value: string }) =>
-      api.put(`/installations/${id}/secrets/${encodeURIComponent(input.name)}`, {
-        value: input.value,
-      }),
+      // Setting a secret replaces it: no ETag of the installation is at hand, `*` is "whatever is there".
+      api.put(
+        `/installations/${id}/secrets/${encodeURIComponent(input.name)}`,
+        { value: input.value },
+        { etag: '*' },
+      ),
     [keys.installations, keys.installation(id)],
   );
 

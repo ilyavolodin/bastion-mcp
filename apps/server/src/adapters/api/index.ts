@@ -14,6 +14,7 @@ import type {
 import type { Infra } from '../../infra';
 import { authRedis } from '../redis';
 import { createUpstreamAccess } from '../upstream-access';
+import { createAccountPorts } from './account';
 import { createCatalogApiPorts } from './catalog';
 import { createEventBus, type RedisEventBus } from './events';
 import { createGuardApiPorts } from './guards';
@@ -63,6 +64,7 @@ export const buildApiDeps = async (
     deactivation: auth.deactivation,
     secrets: createSecretsPort(infra.vault),
     identity: createIdentityPorts(infra),
+    account: createAccountPorts(infra, auth),
     system: createSystemStatus(infra, {
       driverState: async () =>
         worker ? worker.driverState() : { name: 'none', healthy: true, detail: 'ui-only replica' },

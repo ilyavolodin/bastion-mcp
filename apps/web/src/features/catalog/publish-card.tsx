@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { PolicyDialog, PreviewSummary } from './auto-install';
 import type { Draft } from './draft';
+import { NewTeamButton } from './team-picker';
 
 type Props = {
   draft: Pick<Draft, 'visibility' | 'risk' | 'autoUpgrade'>;
@@ -34,7 +35,11 @@ export function PublishCard({
 }: Props) {
   const { me, role } = useAuth();
   const teams = useTeamOptions();
-  const selected = (teams.data ?? []).filter((t) => draft.visibility.teamIds.includes(t.id));
+  // A team created a moment ago may not be in the refetched list yet: it still shows, by id, until the list catches up.
+  const selected = draft.visibility.teamIds.map((id) => ({
+    id,
+    name: (teams.data ?? []).find((t) => t.id === id)?.name ?? id,
+  }));
   const orgWide = draft.visibility.org;
   const mayOrgWide = me.capabilities.publishOrgWide || role === 'admin';
   return (
@@ -112,6 +117,25 @@ export function PublishCard({
                 </option>
               ))}
           </Select>
+          {role === 'admin' ? (
+            <NewTeamButton
+              onCreated={(team) =>
+                onChange({
+                  visibility: {
+                    ...draft.visibility,
+                    teamIds: [...new Set([...draft.visibility.teamIds, team.id])],
+                  },
+                })
+              }
+            />
+          ) : null}
+          {selected.length === 0 && (teams.data ?? []).length === 0 ? (
+            <span className="w-full text-caption text-muted">
+              {role === 'admin'
+                ? 'No teams yet: create one to share this with.'
+                : 'No teams yet: ask an Admin to create one.'}
+            </span>
+          ) : null}
         </div>
       ) : null}
       <RoleGate roles={['admin']}>

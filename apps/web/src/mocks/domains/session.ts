@@ -11,6 +11,7 @@ import {
   noContent,
   notFound,
   pageOf,
+  problem,
   route,
   type SampleFactory,
 } from '../http';
@@ -27,6 +28,8 @@ export type SessionData = {
 const HOUR = 3_600_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 const ME = 'u-dana';
+/** The mock user's password, for trying the change-password form in `pnpm dev`. */
+export const MOCK_PASSWORD = 'correct horse battery staple';
 
 export const buildSessionData = (now: number): SessionData => ({
   notifications: [
@@ -115,6 +118,24 @@ export const sessionHandlers: HttpHandler[] = [
     if (displayName) db.me.name = displayName;
     return HttpResponse.json(toMeResponse(db.me));
   }),
+  route.post('/me/password', async ({ body }) => {
+    const { currentPassword, newPassword } = await body();
+    if (currentPassword !== MOCK_PASSWORD) {
+      return problem(400, 'validation_failed', 'The current password is not correct.', undefined, [
+        { path: 'currentPassword', message: 'The current password is not correct.' },
+      ]);
+    }
+    if (newPassword.length < 12) {
+      return problem(
+        400,
+        'validation_failed',
+        'The password must be at least 12 characters.',
+        undefined,
+        [{ path: 'newPassword', message: 'The password must be at least 12 characters.' }],
+      );
+    }
+    return HttpResponse.json({ changed: true as const });
+  }),
   route.get('/me/notifications', ({ url }) => {
     const unread = url.searchParams.get('unread') === 'true';
     const rows = getDb()
@@ -137,6 +158,11 @@ export const sessionHandlers: HttpHandler[] = [
 export const sessionSamples: SampleFactory = (db) => [
   { method: 'get', path: '/me' },
   { method: 'patch', path: '/me', body: { displayName: 'Dana W.' } },
+  {
+    method: 'post',
+    path: '/me/password',
+    body: { currentPassword: MOCK_PASSWORD, newPassword: 'another long passphrase' },
+  },
   { method: 'get', path: '/me/notifications' },
   {
     method: 'post',

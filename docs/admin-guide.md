@@ -314,6 +314,12 @@ base URL, optional auth header secret, sync interval (1 hour), trust level (`off
 Sync is incremental (`updated_since`) with a weekly full re-sync; users browse mirrored data and never trigger live
 registry searches.
 
+Admins manage sources in **Settings -> Registry** (add a source, enable or disable it, Sync now, full re-sync, install
+policy); the Registry screen links there. Enabling a source starts its first sync, which runs in the background (the
+official registry holds tens of thousands of versions, so the first walk takes a few minutes); until it finishes the
+Registry screen lists what is already mirrored. The browse list shows the newest version of each server of **enabled**
+sources only, 24 per page, with the source name and trust level on every card.
+
 Each source has one install policy (11.7):
 
 | Setting | Default | Effect |
@@ -432,6 +438,7 @@ run on invalid configuration, printing every error.
 | `bastion migrate` | Apply database migrations (Prisma `migrate deploy`). Run by the Helm hook and the compose `migrate` service. |
 | `bastion check-config` | Validate the effective configuration (environment plus `BASTION_CONFIG_FILE`) without starting. |
 | `bastion create-admin --email <email>` | Create a local break-glass admin. |
+| `bastion reset-password --email <email>` | Set a new password for a local account: a random one printed once, or yours with `--password-stdin`. Signs the account out everywhere and revokes its tokens. |
 | `bastion rotate-keys --purpose as\|state\|upstream-client` | Rotate one keyring (see [rotating keys](runbooks/rotating-keys.md)). |
 | `bastion export-config` | Write catalog and settings as portable configuration. |
 | `bastion import-config` | Load such a file. |

@@ -11,6 +11,7 @@ import {
 import { planSandboxStart, type SandboxInstanceInfo } from '@bastion-mcp/limits';
 import {
   buildProxyUrl,
+  captureLockfileVia,
   crashCountsAsFailure,
   type InstanceEvent,
   type InstanceStartPhase,
@@ -257,7 +258,20 @@ export class InstanceManager {
 
   private async startOrAttach(args: EnsureArgs): Promise<void> {
     const { record, installation } = args;
-    const fresh = (await this.deps.repo.get(record.id)) ?? record;
+    let fresh = (await this.deps.repo.get(record.id)) ?? record;
+    // A failure belongs to the configuration that produced it: a new catalog version (a fixed spec) starts clean
+    // instead of waiting out the backoff of the old one (8.6).
+    if (
+      fresh.failures.length > 0 &&
+      fresh.runningVersionId !== undefined &&
+      fresh.runningVersionId !== installation.catalogVersionId
+    ) {
+      fresh = { ...fresh, failures: [], error: undefined };
+      await this.deps.repo.save(fresh).catch(() => undefined);
+      if (fresh.installationId) {
+        await this.deps.status.clearError(fresh.installationId).catch(() => undefined);
+      }
+    }
     // Failure backoff: calls fail fast with -32016 until it passes or the user restarts (8.6).
     const decision = retryDecision(fresh.failures, this.clock.now());
     if (!decision.allowed) {
@@ -466,6 +480,62 @@ export class InstanceManager {
         { installation: installation.slug, phase },
         error,
       );
+    }
+  }
+
+  /**
+   * The one-off sandbox of 8.7: resolves the dependency tree of `identifier@version` into a lockfile (`npm install
+   * --package-lock-only`, `uv pip compile --generate-hashes`) with the registry mirrors reachable through the egress
+   * proxy, then destroys the sandbox. Used by the catalog TEST flow; nothing is installed or started.
+   */
+  async captureLockfile(
+    spec: PackageSpec,
+    context: { userId: string | null; label: string; signal?: AbortSignal },
+  ): Promise<{ kind: 'npm-shrinkwrap' | 'uv-requirements'; content: string; sha256: string }> {
+    const instanceId = newId();
+    const signal = context.signal ?? new AbortController().signal;
+    const egressToken = randomBytes(32).toString('hex');
+    let handle: SandboxHandle | undefined;
+    try {
+      handle = await this.deps.driver.create(
+        {
+          instanceId,
+          installationId: null,
+          userId: context.userId,
+          size: spec.size,
+          workspace: { persistent: false, sizeMiB: 256 },
+        },
+        signal,
+      );
+      await this.deps.egress.set(instanceId, {
+        tokenSha256: sha256Hex(egressToken),
+        allow: spec.egress.allow,
+        phase: 'installing',
+      });
+      const lockfile = await captureLockfileVia(
+        handle.runner,
+        {
+          runtime: spec.runtime,
+          identifier: spec.identifier,
+          version: spec.version,
+          ...(this.deps.npmRegistry || this.deps.pypiIndexUrl
+            ? {
+                registry: {
+                  ...(this.deps.npmRegistry ? { npm: this.deps.npmRegistry } : {}),
+                  ...(this.deps.pypiIndexUrl ? { pypi: this.deps.pypiIndexUrl } : {}),
+                },
+              }
+            : {}),
+          egress: { proxyUrl: buildProxyUrl(instanceId, egressToken, this.deps.egressAddress) },
+        },
+        { installation: context.label },
+        undefined,
+        signal,
+      );
+      return { ...lockfile, sha256: sha256Hex(lockfile.content) };
+    } finally {
+      if (handle) await this.deps.driver.destroy(handle.ref).catch(() => undefined);
+      await this.deps.egress.delete(instanceId).catch(() => undefined);
     }
   }
 
@@ -737,7 +807,9 @@ export class InstanceManager {
     const updated: InstanceRecord = {
       ...record,
       failures,
-      ...(marked ? { error: { phase, message, stderrTail, at: now } } : {}),
+      // The latest failure is always kept (the TEST flow and the UI show phase and message); only repeated failures
+      // mark the installation itself as errored.
+      error: { phase, message, stderrTail, at: now },
     };
     await this.deps.repo.save(updated).catch(() => undefined);
     if (marked && record.installationId) {

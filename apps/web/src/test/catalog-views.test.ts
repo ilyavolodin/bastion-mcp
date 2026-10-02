@@ -18,11 +18,21 @@ import {
   draftToSpec,
   EXACT_VERSION,
   emptyDraft,
+  emptyVariable,
+  headerPreset,
   installFormOf,
   isEgressRule,
+  normalizeOverrides,
+  secretNamesOf,
+  secretRefsOf,
+  setRowSecret,
   specToDraft,
+  templateError,
+  type VariableDraft,
   validateDraft,
+  varRefsOf,
 } from '@/features/catalog/draft';
+import { failureReason, testNeeds } from '@/features/catalog/test-panel';
 import { fromBase64, toBase64 } from '@/lib/base64';
 import { buildCatalogData } from '@/mocks/domains/catalog';
 
@@ -133,6 +143,20 @@ describe('catalog draft (11.3, 11.4)', () => {
     patch(d);
     return d;
   };
+  const remote = (patch: (d: Draft) => void = () => {}): Draft =>
+    valid((d) => {
+      d.spec.type = 'remote';
+      d.spec.url = 'https://mcp.example.com/mcp';
+      patch(d);
+    });
+  const variable = (name: string, patch: Partial<VariableDraft> = {}): VariableDraft => ({
+    ...emptyVariable(),
+    name,
+    ...patch,
+  });
+  /** Issues the real `serverSpecSchema` of `packages/core` finds (it is not browser-safe, so the check is by shape). */
+  const injectsOf = (spec: unknown): unknown[] =>
+    ((spec as { auth?: { inject?: unknown[] } }).auth?.inject ?? []) as unknown[];
 
   it('mirrors the API constraints: exact versions, egress rules and names', () => {
     expect(['3.2.0', '2025.4.1', '1.0.0-rc.1'].every((v) => EXACT_VERSION.test(v))).toBe(true);
@@ -155,23 +179,29 @@ describe('catalog draft (11.3, 11.4)', () => {
     const steps = validateDraft(
       valid((d) => {
         d.spec.version = '^1.0.0';
-        d.spec.variables = [
-          { name: 'bad name', label: '', required: true, secret: true, default: '' },
-        ];
-        d.spec.authMode = 'orgSecret';
+        d.spec.variables = [variable('bad name')];
+        d.spec.envVars = [{ name: 'TOKEN', value: '{{secret.TOKEN}}', secret: true }];
         d.spec.egress = ['not a host'];
       }),
     ).map((i) => i.step);
-    expect(steps).toEqual([
-      'source',
-      'configuration',
-      'authentication',
-      'authentication',
-      'network',
+    expect(steps).toEqual(['source', 'configuration', 'authentication', 'network']);
+  });
+
+  it('11.3 an override document that does not parse blocks saving and names the step', () => {
+    const d = valid((x) => {
+      x.overridesError = 'version: must be 1';
+    });
+    expect(validateDraft(d)).toEqual([
+      { step: 'overrides', message: 'The override document is not valid: version: must be 1' },
     ]);
-    expect(
-      validateDraft(valid((d) => (d.spec.authMode = 'userSecret'))).map((i) => i.message),
-    ).toEqual(['A personal API key needs at least one secret variable']);
+  });
+
+  it('12.2 a version stored with {} overrides opens as the empty document', () => {
+    expect(normalizeOverrides({})).toEqual({ version: 1 });
+    expect(normalizeOverrides(undefined)).toEqual({ version: 1 });
+    expect(normalizeOverrides(null)).toEqual({ version: 1 });
+    const doc = { version: 1, tools: { x: { hidden: true } } };
+    expect(normalizeOverrides(doc)).toBe(doc);
   });
 
   it('11.4 round-trips a stored spec through the editor without losing fields it does not own', () => {
@@ -188,53 +218,249 @@ describe('catalog draft (11.3, 11.4)', () => {
         { name: 'REGION', value: '{{var.REGION}}', isRequired: true, description: 'Region' },
         { name: 'DB', value: '{{secret.DB}}' },
       ],
+      packageArguments: [{ type: 'named', name: '--mode', value: 'ro', description: 'Mode' }],
       auth: {
         mode: 'orgSecret',
         inject: [{ to: 'env', name: 'DB', value: '{{secret.DB}}' }],
       },
     };
-    const draft = specToDraft(stored);
+    const draft = specToDraft(stored, {
+      variables: [{ name: 'REGION', label: 'Region', required: true }],
+      secrets: [],
+    });
     expect(draft).toMatchObject({
       type: 'package',
       runtime: 'pypi',
       identifier: 'mcp-server-fetch',
       authMode: 'orgSecret',
-      orgSecretName: 'DB',
-      variables: [{ name: 'REGION', label: 'Region', required: true, secret: false }],
+      variables: [{ name: 'REGION', label: 'Region', required: true }],
+      envVars: [
+        { name: 'REGION', value: '{{var.REGION}}', secret: false },
+        { name: 'DB', value: '{{secret.DB}}', secret: true },
+      ],
+      args: [{ kind: 'named', name: '--mode', value: 'ro', secret: false }],
     });
+    expect(secretNamesOf(draft)).toEqual(['DB']);
     expect(draftToSpec(draft)).toEqual({
       ...stored,
       environmentVariables: [
-        { name: 'DB', value: '{{secret.DB}}' },
         { name: 'REGION', value: '{{var.REGION}}', isRequired: true, description: 'Region' },
       ],
+      auth: { mode: 'orgSecret', inject: [{ to: 'env', name: 'DB', value: '{{secret.DB}}' }] },
     });
   });
 
-  it('11.4 derives the install form: plain variables, and secrets only for a personal API key', () => {
+  it('9.5 a version stored with an identity-provider mode keeps its auth block untouched', () => {
+    const auth = {
+      mode: 'enterpriseManaged',
+      idpConnectionId: '0198a1c2-0000-7000-8000-000000000001',
+    };
+    const draft = specToDraft({
+      type: 'remote',
+      transport: 'streamable-http',
+      url: 'https://x.example.com/mcp',
+      auth,
+    });
+    expect(draft.authMode).toBe('other');
+    expect(draftToSpec(draft)).toMatchObject({ auth });
+    expect(validateDraft({ ...remote(), spec: { ...draft } })).toEqual([]);
+  });
+
+  it('11.4 derives the install form: variables with choices, and secrets only for a personal secret', () => {
     const d = valid((x) => {
       x.spec.variables = [
-        { name: 'REGION', label: 'Region', required: false, secret: false, default: 'eu' },
-        { name: 'TOKEN', label: '', required: true, secret: true, default: '' },
+        variable('REGION', {
+          label: 'Region',
+          required: false,
+          default: 'eu',
+          choices: 'eu, us',
+          description: 'Where it runs',
+        }),
+      ];
+      x.spec.envVars = [
+        { name: 'REGION', value: '{{var.REGION}}', secret: false },
+        { name: 'MY_TOKEN', value: '{{secret.TOKEN}}', secret: true },
       ];
       x.spec.authMode = 'userSecret';
+      x.spec.secretLabels = { TOKEN: 'API token' };
     });
     expect(installFormOf(d.spec)).toEqual({
-      variables: [{ name: 'REGION', label: 'Region', required: false, default: 'eu' }],
-      secrets: [{ name: 'TOKEN', label: 'TOKEN' }],
+      variables: [
+        {
+          name: 'REGION',
+          label: 'Region',
+          description: 'Where it runs',
+          required: false,
+          default: 'eu',
+          choices: ['eu', 'us'],
+        },
+      ],
+      secrets: [{ name: 'TOKEN', label: 'API token' }],
     });
     expect(draftToSpec(d.spec)).toMatchObject({
-      auth: { mode: 'userSecret', fields: [{ name: 'TOKEN', label: 'TOKEN' }] },
+      type: 'package',
+      environmentVariables: [{ name: 'REGION', value: '{{var.REGION}}' }],
+      auth: {
+        mode: 'userSecret',
+        fields: [{ name: 'TOKEN', label: 'API token' }],
+        inject: [{ to: 'env', name: 'MY_TOKEN', value: '{{secret.TOKEN}}' }],
+      },
     });
+    expect(validateDraft(d)).toEqual([]);
+  });
+
+  it('9.5 a shared secret is an org secret injected as an environment variable and an argument', () => {
+    const d = valid((x) => {
+      x.spec.authMode = 'orgSecret';
+      x.spec.envVars = [
+        { name: 'API_KEY', value: '{{secret.KEY}}', secret: true },
+        { name: 'MODE', value: 'readonly', secret: false },
+      ];
+      x.spec.args = [
+        { kind: 'positional', name: '', value: 'serve', secret: false },
+        { kind: 'named', name: '--token', value: '{{secret.KEY}}', secret: true },
+      ];
+    });
+    const spec = draftToSpec(d.spec);
+    expect(spec).toMatchObject({
+      environmentVariables: [{ name: 'MODE', value: 'readonly' }],
+      packageArguments: [{ type: 'positional', value: 'serve' }],
+    });
+    expect(injectsOf(spec)).toEqual([
+      { to: 'env', name: 'API_KEY', value: '{{secret.KEY}}' },
+      { to: 'arg', flag: '--token', value: '{{secret.KEY}}' },
+    ]);
+    expect(installFormOf(d.spec).secrets).toEqual([]);
+    expect(validateDraft(d)).toEqual([]);
+  });
+
+  it('9.5 a Bearer token header of a remote server is a shared secret injected as Authorization', () => {
+    const d = remote((x) => {
+      x.spec.authMode = 'orgSecret';
+      x.spec.headers = [headerPreset('bearer', x.spec)];
+    });
+    expect(d.spec.headers).toEqual([
+      { name: 'Authorization', value: 'Bearer {{secret.TOKEN}}', secret: true },
+    ]);
+    expect(draftToSpec(d.spec)).toEqual({
+      type: 'remote',
+      transport: 'streamable-http',
+      url: 'https://mcp.example.com/mcp',
+      variables: {},
+      auth: {
+        mode: 'orgSecret',
+        inject: [{ to: 'header', name: 'Authorization', value: 'Bearer {{secret.TOKEN}}' }],
+      },
+    });
+    expect(validateDraft(d)).toEqual([]);
+    expect(secretNamesOf(d.spec)).toEqual(['TOKEN']);
+  });
+
+  it('9.5 a personal API key header asks each installer for the secret and keeps plain headers apart', () => {
+    const d = remote((x) => {
+      x.spec.authMode = 'userSecret';
+      x.spec.secretLabels = { API_KEY: 'Your key' };
+      x.spec.headers = [
+        headerPreset('apiKey', x.spec),
+        { name: 'X-Tenant', value: '{{var.TENANT}}', secret: false },
+      ];
+      x.spec.variables = [variable('TENANT')];
+    });
+    expect(draftToSpec(d.spec)).toMatchObject({
+      headers: [{ name: 'X-Tenant', value: '{{var.TENANT}}' }],
+      auth: {
+        mode: 'userSecret',
+        fields: [{ name: 'API_KEY', label: 'Your key' }],
+        inject: [{ to: 'header', name: 'X-API-Key', value: '{{secret.API_KEY}}' }],
+      },
+    });
+    expect(installFormOf(d.spec).secrets).toEqual([{ name: 'API_KEY', label: 'Your key' }]);
+    expect(validateDraft(d)).toEqual([]);
+    // Loading it back gives the same rows.
+    const back = specToDraft(draftToSpec(d.spec), installFormOf(d.spec));
+    expect(back.headers).toEqual([
+      { name: 'X-Tenant', value: '{{var.TENANT}}', secret: false, raw: {} },
+      { name: 'X-API-Key', value: '{{secret.API_KEY}}', secret: true },
+    ]);
+    expect(back.secretLabels).toEqual({ API_KEY: 'Your key' });
+  });
+
+  it('9.5 header presets keep secret names unique and the Secret switch fills or clears the template', () => {
+    const d = remote((x) => {
+      x.spec.authMode = 'orgSecret';
+      x.spec.headers = [headerPreset('bearer', x.spec)];
+    });
+    expect(headerPreset('bearer', d.spec).value).toBe('Bearer {{secret.TOKEN_2}}');
+    expect(headerPreset('custom', d.spec)).toEqual({ name: '', value: '', secret: false });
+    const row = { name: 'X-Auth', value: '', secret: false };
+    const on = setRowSecret(row, true, []);
+    expect(on).toEqual({ name: 'X-Auth', value: '{{secret.API_KEY}}', secret: true });
+    expect(setRowSecret(on, false, [])).toEqual({ ...row, value: '' });
+    expect(setRowSecret({ ...row, value: 'plain' }, false, [])).toMatchObject({ value: 'plain' });
+  });
+
+  it('9.5 reports credential mistakes on the Authentication step', () => {
+    const msgs = (patch: (d: Draft) => void) => validateDraft(remote(patch)).map((i) => i.message);
+    expect(
+      msgs((d) => {
+        d.spec.headers = [{ name: 'Authorization', value: 'Bearer {{secret.T}}', secret: true }];
+      }),
+    ).toEqual([
+      'Secrets need an author-set or per-person source: choose Shared secret or Personal secret',
+    ]);
+    expect(msgs((d) => (d.spec.authMode = 'orgSecret'))).toEqual([
+      'Add a header that carries the secret, for example a Bearer token',
+    ]);
+    expect(
+      msgs((d) => {
+        d.spec.authMode = 'orgSecret';
+        d.spec.headers = [{ name: 'Authorization', value: 'Bearer {{secret.T}}', secret: false }];
+      }),
+    ).toContain('"Authorization" uses a secret: switch Secret on for it');
+    expect(
+      msgs((d) => {
+        d.spec.authMode = 'orgSecret';
+        d.spec.headers = [{ name: 'Authorization', value: 'Bearer abc', secret: true }];
+      }),
+    ).toContain('"Authorization" is marked secret: its value needs {{secret.NAME}}');
+    expect(
+      msgs((d) => {
+        d.spec.headers = [
+          { name: 'bad name', value: 'x', secret: false },
+          { name: 'X-A', value: '', secret: false },
+          { name: 'x-a', value: '{{var.NOPE}}', secret: false },
+        ];
+      }),
+    ).toEqual([
+      '"bad name" is not a valid header name',
+      'Header X-A needs a value',
+      'Header x-a is declared twice',
+      'Header x-a uses {{var.NOPE}}, which is not a variable',
+    ]);
+    expect(
+      validateDraft(
+        valid((d) => {
+          d.spec.args = [{ kind: 'named', name: '', value: '', secret: false }];
+        }),
+      ).map((i) => i.message),
+    ).toEqual(['A named argument needs a flag', 'An argument needs a value']);
+    expect(
+      validateDraft(
+        valid((d) => {
+          d.spec.envVars = [{ name: '1BAD', value: '{{nope.X}}', secret: false }];
+        }),
+      ).map((i) => i.message),
+    ).toEqual([
+      '"1BAD" is not a valid environment variable name',
+      'Environment variable 1BAD: unknown template namespace "nope" in {{nope.X}}',
+    ]);
   });
 
   it('11.1 a remote spec declares its variables as a record and injects OAuth as a bearer header', () => {
     const d = valid((x) => {
       x.spec.type = 'remote';
       x.spec.url = 'https://mcp.example.com/{{var.TENANT}}';
-      x.spec.variables = [
-        { name: 'TENANT', label: 'Tenant', required: true, secret: false, default: '' },
-      ];
+      x.spec.variables = [variable('TENANT', { label: 'Tenant' })];
       x.spec.authMode = 'oauth';
       x.spec.oauthScopes = ['read'];
     });
@@ -250,6 +476,80 @@ describe('catalog draft (11.3, 11.4)', () => {
         inject: [{ to: 'header', name: 'Authorization', value: 'Bearer {{oauth.accessToken}}' }],
       },
     });
+    expect(validateDraft(d)).toEqual([]);
+    // The implied header is not a row when the spec is loaded again.
+    expect(specToDraft(draftToSpec(d.spec)).headers).toEqual([]);
+  });
+
+  it('11.1 an OAuth package says where the token goes', () => {
+    const d = valid((x) => {
+      x.spec.authMode = 'oauth';
+    });
+    expect(validateDraft(d).map((i) => i.message)).toEqual([
+      'Say where the access token goes: add a secret environment variable',
+    ]);
+    d.spec.envVars = [{ name: 'TOKEN', value: '{{oauth.accessToken}}', secret: true }];
+    expect(validateDraft(d)).toEqual([]);
+    expect(injectsOf(draftToSpec(d.spec))).toEqual([
+      { to: 'env', name: 'TOKEN', value: '{{oauth.accessToken}}' },
+    ]);
+  });
+
+  it('8.1 value templates are checked like the server does and variables must be declared', () => {
+    expect(templateError('Bearer {{secret.TOKEN}}')).toBeUndefined();
+    expect(templateError('{{var.A}}-{{user.email}}')).toBeUndefined();
+    expect(templateError('{{secret.1x}}')).toMatch(/invalid reference/);
+    expect(secretRefsOf('{{secret.A}} {{secret.B}} {{var.C}}')).toEqual(['A', 'B']);
+    expect(varRefsOf('{{secret.A}} {{var.C}}')).toEqual(['C']);
+  });
+});
+
+describe('test panel logic (11.3)', () => {
+  const run = (steps: { id: string; status: string; detail?: string }[]) =>
+    ({
+      id: 'r',
+      versionId: 'v',
+      status: 'failed',
+      steps,
+      startedAt: '',
+      finishedAt: null,
+    }) as never;
+
+  it('names the first failed step and its first line as the reason', () => {
+    expect(failureReason(undefined)).toBeUndefined();
+    expect(failureReason(run([{ id: 'prepare', status: 'passed' }]))).toBeUndefined();
+    expect(
+      failureReason(
+        run([
+          { id: 'prepare', status: 'passed' },
+          {
+            id: 'connect',
+            status: 'failed',
+            detail: 'could not list the server (x)\nstderr:\nboom',
+          },
+        ]),
+      ),
+    ).toBe('Connect to the server: could not list the server (x)');
+  });
+
+  it('asks the author for what a test cannot guess: required variables without default and own secrets', () => {
+    const d = emptyDraft();
+    d.spec.variables = [
+      { ...emptyVariable(), name: 'DB', label: 'Database' },
+      { ...emptyVariable(), name: 'REGION', default: 'eu' },
+      { ...emptyVariable(), name: 'OPT', required: false },
+    ];
+    d.spec.envVars = [{ name: 'T', value: '{{secret.KEY}}', secret: true }];
+    d.spec.authMode = 'userSecret';
+    d.spec.secretLabels = { KEY: 'Your key' };
+    expect(testNeeds(d.spec)).toEqual({
+      variables: [{ name: 'DB', label: 'Database' }],
+      mySecrets: [{ name: 'KEY', label: 'Your key' }],
+      orgSecrets: [],
+    });
+    d.spec.authMode = 'orgSecret';
+    expect(testNeeds(d.spec).orgSecrets).toEqual(['KEY']);
+    expect(testNeeds(undefined)).toEqual({ variables: [], mySecrets: [], orgSecrets: [] });
   });
 });
 

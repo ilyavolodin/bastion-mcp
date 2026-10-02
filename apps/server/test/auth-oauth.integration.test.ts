@@ -109,8 +109,8 @@ describe.skipIf(!haveDocker())('9.3 embedded authorization server and token veri
     // MUST: the consent page shows the client name, the redirect host and the scopes
     expect(consentHtml).toContain('Test MCP client');
     expect(consentHtml).toContain('127.0.0.1:8765');
-    expect(consentHtml).toContain('<code>mcp</code>');
-    expect(consentHtml).toContain('<strong>127.0.0.1:8765</strong>');
+    expect(consentHtml).toMatch(/<code[^>]*>mcp<\/code>/);
+    expect(consentHtml).toMatch(/<strong[^>]*>127\.0\.0\.1:8765<\/strong>/);
     expect(tokens.token_type).toBe('Bearer');
     expect(tokens.refresh_token).toBeTruthy();
     const principal = await h.auth.verifier.verify(

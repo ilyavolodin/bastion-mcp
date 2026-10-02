@@ -26,17 +26,23 @@ describe('Catalog editor (11.3, 18.3)', () => {
     const { user } = await renderRoute('/catalog/c-postgres?step=test');
     expect(await screen.findByText('Passed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Publish v3.2.0' })).toBeEnabled();
-    // Editing the entry makes the version untested until saved and re-run.
+    // Renaming the entry does not touch the tested version: Publish stays available.
     await user.click(screen.getByRole('button', { name: /Source/ }));
     const name = await screen.findByLabelText(/Display name/);
     await user.type(name, '!');
+    expect(screen.getByRole('button', { name: /Publish v/ })).toBeEnabled();
+    // Editing the version itself makes it untested until it is saved and the test is run again.
+    const pkg = screen.getByLabelText('Package');
+    await user.type(pkg, '-next');
     expect(screen.getByRole('button', { name: /Publish v/ })).toBeDisabled();
-    expect(screen.getByText(/Save and test this version/)).toBeInTheDocument();
+    expect(screen.getByText(/You changed this version since its last test/)).toBeInTheDocument();
   });
 
   it('11.3 a new entry cannot publish and asks to save the draft to test it', async () => {
     await renderRoute('/catalog/new?step=test');
-    expect(await screen.findByText(/Save the draft to run its test/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Save the draft and run its test to publish it/),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Publish v/ })).toBeDisabled();
   });
 

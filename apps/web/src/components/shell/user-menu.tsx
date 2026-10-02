@@ -1,5 +1,6 @@
 import * as Primitive from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronsUpDown, LogOut, Moon } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
+import { Check, ChevronsUpDown, KeyRound, LogOut, Moon } from 'lucide-react';
 import { CSRF_COOKIE, CSRF_HEADER, readCookie } from '@/api/client';
 import { useAuth } from '@/auth/auth';
 import { Avatar } from '@/components/primitives';
@@ -30,6 +31,7 @@ export async function signOut(): Promise<void> {
 /** Sidebar footer chip that opens the user menu: theme toggle and sign out (18.1). */
 export function UserMenu({ collapsed }: { collapsed?: boolean }) {
   const { me, role, theme, setTheme } = useAuth();
+  const navigate = useNavigate();
   const label = roleLabel(role, me);
   return (
     <DropdownMenu>
@@ -72,6 +74,10 @@ export function UserMenu({ collapsed }: { collapsed?: boolean }) {
             <Check className="size-4 text-tangerine-ink" aria-hidden="true" />
           </Primitive.ItemIndicator>
         </Primitive.CheckboxItem>
+        <DropdownMenuItem onSelect={() => void navigate({ to: '/account' })}>
+          <KeyRound className="size-4" aria-hidden="true" />
+          Account and password
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void signOut()}>
           <LogOut className="size-4" aria-hidden="true" />
           Sign out

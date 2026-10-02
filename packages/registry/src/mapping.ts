@@ -178,7 +178,7 @@ const mapArguments = (
     if (isPositional) positionalIndex += 1;
     const description = arg.description;
     const base = {
-      type: arg.type,
+      type: named ? ('named' as const) : ('positional' as const),
       ...(named && arg.name ? { name: arg.name } : {}),
       ...(description ? { description } : {}),
       ...(arg.isRequired !== undefined ? { isRequired: arg.isRequired } : {}),
@@ -232,6 +232,7 @@ const mapEnvironment = (
 ): EnvSpec[] => {
   const out: EnvSpec[] = [];
   for (const ev of vars) {
+    if (ev.name === '') continue; // the real registry has entries with a nameless variable
     const meta = {
       ...(ev.description ? { description: ev.description } : {}),
       ...(ev.isRequired !== undefined ? { isRequired: ev.isRequired } : {}),
@@ -299,6 +300,7 @@ const mapRemote = (remote: ServerJsonRemote, c: Collector): unknown => {
   if (hasSecretRef(url)) c.warnings.push('a secret is embedded in the remote URL');
 
   for (const h of remote.headers ?? []) {
+    if (h.name === '') continue; // the real registry has entries with a nameless header
     const field = sanitizeVariableName(h.name);
     const hasValue = h.value !== undefined && h.value !== '';
     const templated = hasValue && hasPlaceholder(h.value);

@@ -14,6 +14,15 @@ export const usersCases: AuthzCase[] = [
   },
   {
     rule: 'self',
+    route: 'POST /me/password',
+    request: () => ({
+      method: 'POST',
+      url: '/me/password',
+      body: { currentPassword: 'old password 1', newPassword: 'a much better passphrase' },
+    }),
+  },
+  {
+    rule: 'self',
     route: 'GET /me/notifications',
     request: () => ({ method: 'GET', url: '/me/notifications' }),
   },

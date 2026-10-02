@@ -28,6 +28,7 @@ import { type PreparedClient, type PreRegisterInput, prepareClient } from './cli
 import { type IdJagVerifier, registerJwtBearerGrant } from './id-jag-grant';
 import { createInteractionApi, type InteractionApi } from './interaction';
 import { loadAsJwks } from './keys';
+import { type ProviderPages, providerPageSources } from './provider-pages';
 import { runtime } from './provider-types';
 import {
   defaultClientIp,
@@ -63,6 +64,8 @@ export type AuthorizationServerDeps = {
   onServerError?: (error: Error) => void;
   /** Advertise the Enterprise-Managed Authorization extension in AS metadata (9.4). */
   enterpriseManaged?: boolean;
+  /** Renderers for the pages oidc-provider serves itself (device flow, logout, errors). */
+  pages?: ProviderPages;
 };
 
 export type AuthorizationServer = {
@@ -95,13 +98,15 @@ export const createAuthorizationServer = async (
 
   const build = async (): Promise<Provider> => {
     const jwks = await loadAsJwks(deps.signingKeys, clock.now());
+    const sources = deps.pages ? providerPageSources(deps.pages) : undefined;
     const features = {
       devInteractions: { enabled: false },
       userinfo: { enabled: false },
       introspection: { enabled: false },
       revocation: { enabled: true },
       clientCredentials: { enabled: true },
-      deviceFlow: { enabled: true },
+      deviceFlow: { enabled: true, ...(sources?.deviceFlow ?? {}) },
+      ...(sources ? { rpInitiatedLogout: { enabled: true, ...sources.rpInitiatedLogout } } : {}),
       registration: { enabled: true, initialAccessToken: false },
       registrationManagement: { enabled: false },
       resourceIndicators: {
@@ -168,6 +173,9 @@ export const createAuthorizationServer = async (
         },
       ],
       features: features as unknown as Configuration['features'],
+      ...(sources
+        ? ({ renderError: sources.renderError } as unknown as Partial<Configuration>)
+        : {}),
       ttl: {
         AccessToken: (_ctx, token) => token.resourceServer?.accessTokenTTL ?? ACCESS_TOKEN_TTL_S,
         ClientCredentials: (_ctx, token) =>

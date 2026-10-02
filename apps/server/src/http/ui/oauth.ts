@@ -3,15 +3,15 @@
  * plus its login and consent pages (`/oauth/interaction/:uid`). The AS is a Node request listener: bodies reach it
  * untouched (pass-through content-type parser) and the response is written by it after `reply.hijack()`.
  */
-import { localLoginEnabled } from '@bastion-mcp/auth';
 import type { FastifyInstance } from 'fastify';
+import { consentPage } from '../pages/templates';
+import { sendLoginPage } from './login';
 import {
   ensureCsrf,
   errorPage,
-  esc,
   formCsrfOk,
   hijack,
-  layout,
+  PAGE_CSP,
   sendHtml,
   sessionPrincipal,
   type UiDeps,
@@ -56,6 +56,8 @@ export const registerAuthorizationServer = async (app: FastifyInstance, deps: Ui
             .send();
         }
       }
+      // Pages rendered by the provider (device flow, errors) get the strict page CSP, not the SPA's.
+      reply.header('content-security-policy', PAGE_CSP);
       hijack(reply);
       await auth.authorizationServer.listener(req.raw, reply.raw);
     };
@@ -69,7 +71,7 @@ type FormBody = Record<string, string | undefined>;
 
 /** Login and consent pages of the AS interactions (9.3). */
 export const registerInteractionPages = async (app: FastifyInstance, deps: UiDeps) => {
-  const { auth, infra } = deps;
+  const { auth } = deps;
   const interactions = auth.authorizationServer.interactions;
 
   await app.register(async (scope) => {
@@ -88,6 +90,7 @@ export const registerInteractionPages = async (app: FastifyInstance, deps: UiDep
           reply,
           400,
           'This sign-in request has expired. Start again from your client.',
+          { title: 'Request expired', back: { href: '/', label: 'Back to Bastion' } },
         );
       }
       if (view.kind === 'login') {
@@ -97,42 +100,23 @@ export const registerInteractionPages = async (app: FastifyInstance, deps: UiDep
           await interactions.completeLogin(req.raw, reply.raw, { userId: principal.id });
           return;
         }
-        const connections = (await infra.repos.idpConnections.list()).filter((c) => c.enabled);
-        const local = localLoginEnabled({
-          idpConnectionCount: connections.length,
-          localLoginFlag: infra.config.localLogin,
+        return sendLoginPage(deps, req, reply, {
+          returnTo: `/oauth/interaction/${view.uid}`,
+          forClient: view.clientId,
         });
-        const back = encodeURIComponent(`/oauth/interaction/${view.uid}`);
-        const links = connections
-          .map(
-            (c) =>
-              `<a class="button" href="/auth/login?connection=${esc(encodeURIComponent(c.id))}&amp;return_to=${back}">Continue with ${esc(c.name)}</a>`,
-          )
-          .join('');
-        const csrf = ensureCsrf(deps, req, reply);
-        const form = local
-          ? `<form method="post" action="/auth/local"><input type="hidden" name="_csrf" value="${esc(csrf)}"><input type="hidden" name="return_to" value="/oauth/interaction/${esc(view.uid)}"><label>Email<input type="email" name="email" autocomplete="username" required></label><label>Password<input type="password" name="password" autocomplete="current-password" required></label><button class="primary" type="submit">Sign in</button></form>`
-          : '';
-        return sendHtml(
-          reply,
-          200,
-          layout(
-            'Sign in',
-            `<p class="muted">Sign in to continue to <code>${esc(view.clientId)}</code>.</p>${links}${form}`,
-          ),
-        );
       }
       const c = view.consent;
-      const csrf = ensureCsrf(deps, req, reply);
-      const scopes = c.scopes.map((s) => `<li><code>${esc(s)}</code></li>`).join('');
-      const logo = c.logoUri ? `<img src="${esc(c.logoUri)}" alt="" width="48" height="48">` : '';
       return sendHtml(
         reply,
         200,
-        layout(
-          'Authorize access',
-          `${logo}<p><strong>${esc(c.clientName)}</strong> wants to access your Bastion account.</p><p class="muted">After you decide you will be sent to <strong>${esc(c.redirectUriHost)}</strong>.</p><p>It is asking for:</p><ul>${scopes}</ul><form method="post" action="/oauth/interaction/${esc(view.uid)}/consent"><input type="hidden" name="_csrf" value="${esc(csrf)}"><div class="row"><button class="primary" type="submit" name="decision" value="approve">Approve</button><button type="submit" name="decision" value="deny">Deny</button></div></form>`,
-        ),
+        consentPage({
+          uid: view.uid,
+          csrf: ensureCsrf(deps, req, reply),
+          clientName: c.clientName,
+          logoUri: c.logoUri,
+          redirectHost: c.redirectUriHost,
+          scopes: c.scopes,
+        }),
       );
     });
 

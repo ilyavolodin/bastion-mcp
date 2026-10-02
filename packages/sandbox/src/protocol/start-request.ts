@@ -22,6 +22,11 @@ export const startRequestSchema = z.object({
       sha256: z.string().regex(/^[0-9a-f]{64}$/),
     })
     .optional(),
+  /**
+   * One-off lockfile capture (8.7): resolve the dependency tree with `npm install --package-lock-only` or
+   * `uv pip compile --generate-hashes`, answer with the lockfile in the `ready` event and start nothing.
+   */
+  captureLockfile: z.boolean().default(false),
   allowInstallScripts: z.boolean().default(false),
   args: z.array(z.string()).default([]),
   env: z.record(envName, z.string()).default({}),
@@ -37,6 +42,10 @@ export const startEventSchema = z.object({
   phase: z.enum(START_PHASES),
   detail: z.string(),
   elapsedMs: z.number().nonnegative(),
+  /** Only on the `ready` event of a `captureLockfile` start. */
+  lockfile: z
+    .object({ kind: z.enum(['npm-shrinkwrap', 'uv-requirements']), content: z.string() })
+    .optional(),
 });
 export type StartEvent = z.infer<typeof startEventSchema>;
 

@@ -162,7 +162,8 @@ describe.skipIf(!haveDocker())('9.1 / 9.2 browser login', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
       });
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: 'local_login_disabled' });
     });
 
     it('9.1 a callback without the state cookie is refused', async () => {

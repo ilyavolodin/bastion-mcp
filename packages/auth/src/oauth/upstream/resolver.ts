@@ -116,11 +116,19 @@ export class UpstreamCredentialResolver {
         const values: Record<string, string> = {};
         const versions: Record<string, number> = {};
         for (const field of auth.fields) {
-          const found = await this.deps.secrets.resolve({
-            scope: 'user',
-            ownerId: principal.id,
-            name: field.name,
-          });
+          // The install flow stores a person's value as `<installationId>.<field>` (11.4); a value saved under the
+          // bare field name is the person's default for every installation (the author's own test values).
+          const found =
+            (await this.deps.secrets.resolve({
+              scope: 'user',
+              ownerId: principal.id,
+              name: `${installation.id}.${field.name}`,
+            })) ??
+            (await this.deps.secrets.resolve({
+              scope: 'user',
+              ownerId: principal.id,
+              name: field.name,
+            }));
           if (!found)
             throw this.needsAuth(installation, `"${field.label}" is not set for this server`);
           values[field.name] = found.value;

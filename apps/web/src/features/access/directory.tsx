@@ -227,12 +227,15 @@ function TeamCard({ team }: { team: TeamView }) {
   );
 }
 
-function NewTeamDialog({
+/** Creates a team (`POST /teams`, Admin). `onCreated` lets another screen select the new team right away. */
+export function NewTeamDialog({
   open,
   onOpenChange,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  onCreated?: (team: { id: string; name: string }) => void;
 }) {
   const create = useCreateTeam();
   const [displayName, setDisplayName] = React.useState('');
@@ -255,12 +258,13 @@ function NewTeamDialog({
             if (!parsed.success) return form.set(fieldErrors(parsed.error));
             form.clear();
             create.mutate(teamToBody(parsed.data), {
-              onSuccess: () => {
+              onSuccess: (team) => {
                 onOpenChange(false);
                 setDisplayName('');
                 setIdpGroup('');
                 url.reset();
                 toast.success('Team created');
+                onCreated?.({ id: team.id, name: team.displayName });
               },
               onError: form.fromServer,
             });

@@ -118,6 +118,18 @@ describe('override document (12.2)', () => {
     expect(validateOverrideText('{"version":2}').ok).toBe(false);
     expect(validateOverrideText('{nope').ok).toBe(false);
   });
+  it('12.2 the empty document is valid however it is written: {}, {"version":1} or nothing', () => {
+    for (const text of ['{}', '{"version":1}', '{ }', '', '   ', '\n']) {
+      const r = validateOverrideText(text);
+      expect(r.ok, JSON.stringify(text)).toBe(true);
+      expect(r.document).toEqual({ version: 1 });
+    }
+    // It is the same document `parseOverrides` of packages/overrides accepts: `version` defaults to 1.
+    expect(validateOverrideText('{"tools":{"a":{"hidden":true}}}').document).toEqual({
+      version: 1,
+      tools: { a: { hidden: true } },
+    });
+  });
   it('setToolField writes and clears fields, dropping empty entries', () => {
     let doc = setToolField(emptyOverrides(), 'x', 'hidden', true);
     expect(doc.tools).toEqual({ x: { hidden: true } });

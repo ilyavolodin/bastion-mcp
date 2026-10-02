@@ -63,6 +63,9 @@ export type RegistrySearchQuery = {
   latestOnly?: boolean;
   /** `deleted` rows are hidden unless asked for (11.6). */
   includeDeleted?: boolean;
+  /** Hide rows of disabled sources. */
+  enabledSourcesOnly?: boolean;
+  runtime?: 'remote' | 'npm' | 'pypi';
   limit: number;
   cursor?: string | undefined;
 };

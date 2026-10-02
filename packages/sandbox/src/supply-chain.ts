@@ -224,6 +224,31 @@ export const assertAllRequirementsHashed = (content: string): void => {
   }
 };
 
+/**
+ * True when the lockfile pins exactly `identifier@version` of the spec: a lockfile captured for another version (the
+ * author edited the draft since) must be captured again, never reused (8.7).
+ */
+export const lockfileMatchesSpec = (
+  lockfile: Lockfile,
+  spec: Pick<PackageSpec, 'runtime' | 'identifier' | 'version'>,
+): boolean => {
+  try {
+    if (lockfile.kind === 'npm-shrinkwrap') {
+      if (spec.runtime !== 'npm') return false;
+      return extractNpmPackages(lockfile.content).some(
+        (p) => p.name === spec.identifier && p.version === spec.version,
+      );
+    }
+    if (spec.runtime !== 'pypi') return false;
+    const wanted = spec.identifier.toLowerCase().replace(/[_.]+/g, '-');
+    return extractPypiPackages(lockfile.content).some(
+      (p) => p.name === wanted && p.version === spec.version,
+    );
+  } catch {
+    return false;
+  }
+};
+
 export type LockfileCheck = {
   packages: OsvPackage[];
   /** Packages with `MAL-` advisories; empty when the OSV check is disabled or clean. */

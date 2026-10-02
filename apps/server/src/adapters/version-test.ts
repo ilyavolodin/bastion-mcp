@@ -4,8 +4,9 @@
  * For an MCP server version the run
  *  1. prepares a hidden test installation for the author, pinned to the version (so the real upstream layer, with its
  *     credential resolution, egress rules and instance management, runs the test exactly as production would);
- *  2. checks the lockfile (package servers; capturing one needs sandbox command support the runner API does not offer,
- *     so a version without a lockfile skips this step, see the report of this work);
+ *  2. checks the lockfile of package servers, or captures one in a throwaway sandbox (8.7: the runner resolves the
+ *     dependency tree with `npm install --package-lock-only` or `uv pip compile --generate-hashes`) and stores it on
+ *     the draft version;
  *  3. connects as the author and lists tools, prompts, resources and templates live;
  *  4. stores them as the version's reference snapshot (`reference_snapshot_id`, search document), pins every definition
  *     (13.6) and records the protocol era;
@@ -32,7 +33,7 @@ import {
 } from '@bastion-mcp/plugins';
 import { runOsvGate } from '@bastion-mcp/registry';
 import type { UpstreamItems } from '@bastion-mcp/router';
-import { assertLockfileIntegrity } from '@bastion-mcp/sandbox';
+import { assertLockfileIntegrity, checkLockfile, lockfileMatchesSpec } from '@bastion-mcp/sandbox';
 import type { GuardService } from '../contracts';
 import type { Infra } from '../infra';
 import { assembleReleaseItem, semverOf } from './plugin-content';
@@ -77,15 +78,30 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
     versionId: string,
     authorId: string,
     form: Record<string, unknown>,
+    given: Record<string, string> = {},
   ): Promise<string> => {
     const slug = `test-${versionId.replaceAll('-', '').slice(0, 10)}`;
-    const existing = await infra.repos.installations.getByOwnerSlug('user', authorId, slug);
-    if (existing) return existing.id;
     const variables: Record<string, string> = {};
     const declared = Array.isArray(form.variables) ? form.variables : [];
     for (const v of declared as { name?: unknown; default?: unknown }[]) {
       if (typeof v.name === 'string' && typeof v.default === 'string')
         variables[v.name] = v.default;
+    }
+    // Values the author typed for the test win over defaults (the test installation is the author's own).
+    Object.assign(variables, given);
+    const existing = await infra.repos.installations.getByOwnerSlug('user', authorId, slug);
+    if (existing) {
+      if (Object.keys(given).length > 0) {
+        const current = await infra.repos.installations.getWithEtag(existing.id);
+        if (current) {
+          await infra.repos.installations.update(
+            existing.id,
+            { variables: { ...(current.installation.variables ?? {}), ...given } },
+            { ifMatch: current.etag },
+          );
+        }
+      }
+      return existing.id;
     }
     const created = await infra.repos.installations.create({
       ownerType: 'user',
@@ -111,6 +127,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
       spec: ServerSpec;
       form: Record<string, unknown>;
       draft: boolean;
+      variables?: Record<string, string>;
     },
     step: (
       id: string,
@@ -123,7 +140,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
     let lockfile: unknown = null;
 
     const prepared = await step('prepare', async () => {
-      installationId = await testInstallation(entry, versionId, authorId, ctx.form);
+      installationId = await testInstallation(entry, versionId, authorId, ctx.form, ctx.variables);
       await prisma.definitionPin.deleteMany({ where: { catalogVersionId: versionId } });
       return { status: 'passed', detail: 'test installation ready' };
     });
@@ -134,17 +151,47 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
         return { status: 'skipped', detail: 'remote servers have no lockfile' };
       if (spec.lockfile) {
         assertLockfileIntegrity(spec.lockfile);
-        lockfile = spec.lockfile;
-        return { status: 'passed', detail: `${spec.lockfile.kind} verified` };
+        if (lockfileMatchesSpec(spec.lockfile, spec)) {
+          lockfile = spec.lockfile;
+          return { status: 'passed', detail: `${spec.lockfile.kind} verified` };
+        }
+        if (!ctx.draft) {
+          return {
+            status: 'failed',
+            detail: `the stored lockfile does not pin ${spec.identifier}@${spec.version}`,
+          };
+        }
+        // A draft whose package or version changed since the capture: resolve again below.
+      }
+      if (!deps.access.captureLockfile) {
+        return {
+          status: 'skipped',
+          detail:
+            'no lockfile: this process runs no sandboxes, so the dependency tree was not resolved (8.7); the install resolves it at start',
+        };
+      }
+      const captured = await deps.access.captureLockfile(spec, {
+        userId: authorId,
+        label: entry.slug,
+      });
+      const check = await checkLockfile(captured, { osvCheck: false });
+      lockfile = captured;
+      if (ctx.draft) {
+        await infra.repos.catalogVersions.update(versionId, {
+          serverSpec: { ...spec, lockfile: captured },
+          lockfile: captured,
+        });
       }
       return {
-        status: 'skipped',
-        detail:
-          'no lockfile: capturing one needs a one-off sandbox command that the runner API does not provide (8.7)',
+        status: 'passed',
+        detail: `resolved ${check.packages.length} pinned packages (${captured.kind}, sha256 ${captured.sha256.slice(0, 12)}...)${ctx.draft ? ', stored on the version' : ''}`,
       };
     });
 
     const connected = await step('connect', async () => {
+      // A new run starts clean: an earlier failure (a fixed spec, a restored network) must not leave the hidden
+      // installation in failure backoff (8.6).
+      await deps.access.restart(installationId).catch(() => undefined);
       const out = await deps.access.listFresh(installationId, authorId, { timeoutMs: 150_000 });
       if (out.status === 'ok') {
         state.items = out.items;
@@ -152,10 +199,15 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
       }
       const record = await infra.repos.instances.getForInstallation(installationId);
       const stderr = record ? await readStderrTail(infra, record.id, 20).catch(() => []) : [];
-      return {
-        status: 'failed',
-        detail: `could not list the server (${out.code})${stderr.length ? `\nstderr:\n${stderr.join('\n')}` : ''}`,
-      };
+      const failure = record?.error;
+      const lines = [`could not list the server (${out.code})`];
+      if (failure) {
+        lines.push(`failed in phase "${failure.phase}": ${failure.message}`);
+        if (stderr.length === 0 && failure.stderrTail.length > 0)
+          stderr.push(...failure.stderrTail);
+      }
+      if (stderr.length > 0) lines.push('stderr:', ...stderr);
+      return { status: 'failed', detail: lines.join('\n').slice(0, 8000) };
     });
     if (!connected || !state.items) return;
     const listed = state.items;
@@ -374,7 +426,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
   };
 
   return {
-    async start({ entryId, versionId, requestedBy }) {
+    async start({ entryId, versionId, requestedBy, variables }) {
       const entry = await prisma.catalogEntry.findUnique({ where: { id: entryId } });
       const version = await prisma.catalogVersion.findUnique({ where: { id: versionId } });
       if (!entry || !version || version.entryId !== entryId)
@@ -451,6 +503,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
                   spec: parsed.data,
                   form: (version.installForm ?? {}) as Record<string, unknown>,
                   draft,
+                  ...(variables ? { variables } : {}),
                 },
                 step,
               );

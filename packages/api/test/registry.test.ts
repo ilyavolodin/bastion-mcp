@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { makeRegistry, maliciousOsv, syncCalls } from './helpers/fakes/registry';
+import type { RegistryServerRow } from '@bastion-mcp/registry';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryServerStore, makeRegistry, maliciousOsv, syncCalls } from './helpers/fakes/registry';
 import { buildTestApi, type TestApi } from './helpers/harness';
+import { registryServerRows } from './helpers/registry-fixtures';
 
 let api: TestApi | undefined;
 afterEach(async () => {
@@ -75,10 +77,9 @@ describe('11.6 registry sources', () => {
       body: { full: true },
     });
     expect(res.status).toBe(200);
-    expect(rec(res.body).deletedNames).toEqual(['io.github.acme/gone']);
-    expect(syncCalls).toEqual([{ id: 'src-official', full: true }]);
-    const row = await api.store.get('registry_sources', 'src-official');
-    expect(rec(row?.lastSync).upserted).toBe(3);
+    // The walk runs after the response is decided, never inside the request transaction.
+    expect(rec(res.body).queued).toBe(true);
+    await vi.waitFor(() => expect(syncCalls).toEqual([{ id: 'src-official', full: true }]));
     expect(api.uow.audits.at(-1)?.action).toBe('registry_source.sync');
   });
 
@@ -147,6 +148,80 @@ describe('11.6 browsing the mirrored registry', () => {
     });
     const missing = await api.call('member', 'GET', `/registry/servers/src-official/${name}/9.9.9`);
     expect(missing.status).toBe(404);
+  });
+});
+
+describe('11.6 paging, filters and provenance of the browse list', () => {
+  const bulk = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      ...(registryServerRows()[0] as RegistryServerRow),
+      name: `io.github.bulk/server-${String(i).padStart(3, '0')}`,
+      version: '1.0.0',
+      searchDocument: `bulk server ${i}`,
+    }));
+
+  it('11.6 returns one page per request and continues with the cursor', async () => {
+    const servers = new MemoryServerStore(bulk(60));
+    api = await buildTestApi({ overrides: { registry: makeRegistry({ servers }) } });
+    const first = await api.call('member', 'GET', '/registry/servers', { query: { limit: '24' } });
+    expect(items(first.body)).toHaveLength(24);
+    const cursor = String(rec(first.body).nextCursor);
+    const second = await api.call('member', 'GET', '/registry/servers', {
+      query: { limit: '24', cursor },
+    });
+    expect(items(second.body)).toHaveLength(24);
+    const third = await api.call('member', 'GET', '/registry/servers', {
+      query: { limit: '24', cursor: String(rec(second.body).nextCursor) },
+    });
+    expect(items(third.body)).toHaveLength(12);
+    expect(rec(third.body).nextCursor).toBeNull();
+    const names = [first, second, third].flatMap((r) => items(r.body).map((i) => i.name));
+    expect(new Set(names).size).toBe(60);
+  });
+
+  it('11.6 asks the store for latest versions of enabled sources only, with the runtime filter', async () => {
+    const servers = new MemoryServerStore(bulk(3));
+    api = await buildTestApi({ overrides: { registry: makeRegistry({ servers }) } });
+    await api.call('member', 'GET', '/registry/servers', { query: { runtime: 'npm' } });
+    await api.call('member', 'GET', '/registry/servers', {
+      query: { latestOnly: 'false', includeDisabled: 'true' },
+    });
+    expect(servers.searches[0]).toMatchObject({
+      latestOnly: true,
+      enabledSourcesOnly: true,
+      runtime: 'npm',
+    });
+    expect(servers.searches[1]).toMatchObject({ latestOnly: false, enabledSourcesOnly: false });
+  });
+
+  it('11.6 every result carries its source name, trust level and state', async () => {
+    api = await buildTestApi();
+    const res = await api.call('member', 'GET', '/registry/servers');
+    for (const row of items(res.body)) {
+      expect(row).toMatchObject({ sourceId: 'src-official', trust: expect.any(String) });
+      expect(typeof row.sourceName).toBe('string');
+      expect(typeof row.sourceEnabled).toBe('boolean');
+    }
+  });
+
+  it('11.6 enabling a source starts its initial sync; a disabled source cannot be synced', async () => {
+    api = await buildTestApi();
+    syncCalls.length = 0;
+    const created = await api.call('admin', 'POST', '/registry-sources', {
+      body: { name: 'Off', baseUrl: 'https://off.example.com', enabled: false },
+    });
+    expect(created.status).toBe(201);
+    expect(syncCalls).toHaveLength(0);
+    const id = String(rec(created.body).id);
+    const refused = await api.call('admin', 'POST', `/registry-sources/${id}/sync`, { body: {} });
+    expect(refused.status).toBe(409);
+    expect(rec(refused.body).code).toBe('source_disabled');
+    const enabled = await api.call('admin', 'PATCH', `/registry-sources/${id}`, {
+      headers: { 'if-match': '*' },
+      body: { enabled: true },
+    });
+    expect(enabled.status).toBe(200);
+    await vi.waitFor(() => expect(syncCalls).toEqual([{ id, full: true }]));
   });
 });
 

@@ -56,6 +56,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
     routes: [
       'GET /me',
       'PATCH /me',
+      'POST /me/password',
       'GET /me/notifications',
       'POST /me/notifications/{id}/read',
       'GET /me/quotas',

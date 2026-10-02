@@ -42,6 +42,7 @@ import {
   rotateKeyring,
 } from '@bastion-mcp/secrets';
 import type { AuthServices } from '../contracts';
+import { bastionProviderPages } from '../http/pages/provider-pages';
 import type { Infra } from '../infra';
 import { authRedis } from './redis';
 
@@ -195,6 +196,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
     clientSecretKeyring: stateKeyring,
     cookieKeys: deriveCookieKeys(config.internalSecret, config.internalSecretPrevious),
     onServerError: (error) => logger.error({ err: error.message }, 'authorization server error'),
+    pages: bastionProviderPages,
   });
 
   const refreshKeys = async (): Promise<void> => {

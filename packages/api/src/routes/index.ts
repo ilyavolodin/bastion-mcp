@@ -1,4 +1,5 @@
 import type { RouteDefinition } from '../framework/route';
+import { accountRoutes } from './account';
 import { catalogRoutes } from './catalog';
 import { eventsRoutes } from './events';
 import { guardsRoutes } from './guards';
@@ -17,6 +18,7 @@ import { usersRoutes } from './users';
 /** Every route of 17.2, grouped by area. */
 export const ALL_ROUTES: readonly RouteDefinition[] = [
   ...selfRoutes,
+  ...accountRoutes,
   ...usersRoutes,
   ...identityRoutes,
   ...catalogRoutes,

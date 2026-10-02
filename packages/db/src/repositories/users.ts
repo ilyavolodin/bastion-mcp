@@ -259,6 +259,44 @@ export const createLocalAdminRepository = (
         localPasswordHash: row.localPasswordHash,
       };
     },
+    async findById(id: string) {
+      const row = await ctx.db.user.findUnique({ where: { id } });
+      if (!row) return null;
+      return {
+        id: row.id,
+        email: row.email,
+        orgRole: orgRoleSchema.parse(row.orgRole),
+        status: statusSchema.parse(row.status),
+        localPasswordHash: row.localPasswordHash,
+      };
+    },
+    /** Stores a new argon2id hash and the audit event of the change in one transaction (`LocalPasswordRepository`). */
+    setPasswordHash(input: {
+      userId: string;
+      passwordHash: string;
+      audit?: { action: string; actorType: 'user' | 'system'; actorId?: string | null };
+    }): Promise<void> {
+      return mutate(ctx, async (tx, unit) => {
+        const current = await tx.user.findUnique({ where: { id: input.userId } });
+        if (!current) throw new NotFoundError('user', input.userId);
+        await tx.user.update({
+          where: { id: input.userId },
+          data: { localPasswordHash: input.passwordHash, updatedAt: nextUpdatedAt(current) },
+        });
+        unit.bump('user', input.userId);
+        if (input.audit) {
+          unit.audit(
+            { actorType: input.audit.actorType, actorId: input.audit.actorId ?? null },
+            {
+              action: input.audit.action,
+              targetType: 'user',
+              targetId: input.userId,
+              diff: { changed: ['localPasswordHash'] },
+            },
+          );
+        }
+      });
+    },
     createLocalAdmin(input: {
       id: string;
       email: string;

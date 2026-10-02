@@ -89,6 +89,8 @@ export type SyncDeps = {
   clock: Clock;
   fetch?: FetchFn;
   timeoutMs?: number;
+  retries?: number;
+  retryDelayMs?: number;
   /** Test seam: bypasses client construction. */
   client?: RegistryClient;
 };

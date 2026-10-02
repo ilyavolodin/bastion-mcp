@@ -41,10 +41,15 @@ export class SessionService {
     const id = Buffer.from(this.random(32)).toString('base64url');
     const csrfToken = Buffer.from(this.random(32)).toString('base64url');
     const now = this.clock.now();
+    // The watermark compares whole seconds: a session created in the second of a revocation (a login right after a
+    // password reset) starts in the next one instead of being born revoked.
+    const watermark = await this.deps.revocations.getWatermark(input.principalId);
+    const createdAt =
+      watermark !== null && Math.floor(now / 1000) <= watermark ? (watermark + 1) * 1000 : now;
     const key = redisKeys.uiSession(id);
     await this.deps.redis.hset(key, {
       principalId: input.principalId,
-      createdAt: String(now),
+      createdAt: String(createdAt),
       lastSeenAt: String(now),
     });
     await this.deps.redis.expire(key, TTL.uiSession);
@@ -80,6 +85,24 @@ export class SessionService {
       authMethod: 'session',
       scopes: [SCOPES.apiRead, SCOPES.apiWrite],
     });
+  }
+
+  /**
+   * Revokes every session of the principal (and its access tokens) through the watermark (9.1) and publishes the
+   * event. `keep` names the session that stays valid (the one that just changed the password): it is re-stamped
+   * to start in the next second, because the watermark compares whole seconds.
+   */
+  async revokeAll(principalId: string, options: { keep?: string } = {}): Promise<void> {
+    const nowS = Math.floor(this.clock.now() / 1000);
+    await this.deps.revocations.setWatermark(principalId, nowS);
+    if (options.keep && SESSION_ID_PATTERN.test(options.keep)) {
+      const key = redisKeys.uiSession(options.keep);
+      const fields = await this.deps.redis.hgetall(key);
+      if (fields.principalId === principalId) {
+        await this.deps.redis.hset(key, { createdAt: String((nowS + 1) * 1000) });
+      }
+    }
+    await this.deps.revocations.publish({ kind: 'principal', principalId, at: nowS });
   }
 
   async destroy(id: string): Promise<void> {

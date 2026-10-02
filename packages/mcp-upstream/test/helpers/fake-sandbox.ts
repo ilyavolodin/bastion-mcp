@@ -138,6 +138,15 @@ class FakeRunner implements RunnerClient {
       yield { phase: 'failed', detail: this.driver.failStart, elapsedMs: 2 };
       return;
     }
+    if (request.captureLockfile) {
+      yield {
+        phase: 'ready',
+        detail: 'lockfile captured',
+        elapsedMs: 3,
+        lockfile: { kind: 'npm-shrinkwrap', content: '{"lockfileVersion":3}' },
+      };
+      return;
+    }
     yield { phase: 'starting', detail: 'spawn', elapsedMs: 3 };
     this.sandbox.spawn();
     yield { phase: 'ready', detail: 'ok', elapsedMs: 4 };

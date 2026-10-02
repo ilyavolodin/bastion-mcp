@@ -20,6 +20,7 @@ const syncDeps = (ctx: TaskContext) => {
       },
     },
     clock: { now: ctx.now },
+    retries: 3,
     ...(ctx.deps.fetch ? { fetch: ctx.deps.fetch } : {}),
   };
 };

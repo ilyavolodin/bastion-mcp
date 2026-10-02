@@ -9,16 +9,8 @@ import {
 } from '@bastion-mcp/auth';
 import type { FastifyInstance } from 'fastify';
 import { createInstallationLookup } from '../../adapters/auth';
-import {
-  ensureCsrf,
-  errorPage,
-  esc,
-  formCsrfOk,
-  layout,
-  sendHtml,
-  sessionPrincipal,
-  type UiDeps,
-} from './util';
+import { connectPage } from '../pages/templates';
+import { ensureCsrf, errorPage, formCsrfOk, sendHtml, sessionPrincipal, type UiDeps } from './util';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -81,18 +73,16 @@ export const registerConnectRoutes = async (app: FastifyInstance, deps: UiDeps) 
       }
       try {
         const model = await auth.broker.connectPage(installation);
-        const csrf = ensureCsrf(deps, req, reply);
         return sendHtml(
           reply,
           200,
-          layout(
-            `Connect ${model.installationName}`,
-            `<p>Bastion will send you to <strong>${esc(model.authorizationServerHost)}</strong> to sign in to <strong>${esc(model.installationName)}</strong> with your own account.</p>${
-              model.scopes.length > 0
-                ? `<p>Requested access:</p><ul>${model.scopes.map((s) => `<li><code>${esc(s)}</code></li>`).join('')}</ul>`
-                : ''
-            }<form method="post" action="/connect/${esc(installationId)}"><input type="hidden" name="_csrf" value="${esc(csrf)}"><button class="primary" type="submit">Continue to ${esc(model.authorizationServerHost)}</button></form>`,
-          ),
+          connectPage({
+            installationId,
+            installationName: model.installationName,
+            authorizationServerHost: model.authorizationServerHost,
+            scopes: model.scopes,
+            csrf: ensureCsrf(deps, req, reply),
+          }),
         );
       } catch (error) {
         logger.warn(

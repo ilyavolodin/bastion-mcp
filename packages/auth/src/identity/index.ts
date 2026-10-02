@@ -1,5 +1,6 @@
 export * from './break-glass';
 export * from './errors';
+export * from './local-password';
 export * from './pat';
 export * from './ports';
 export * from './principal';

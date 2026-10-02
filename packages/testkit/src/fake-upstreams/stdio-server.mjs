@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // A stdio JSON-RPC fake MCP server (legacy era, newline-delimited) usable by the sandbox runner (8.3) and
-// by tests. Tools: echo, whoami, ask (elicitation/create), ask2 (two parallel elicitations), slow, crash.
+// by tests. Tools: echo, whoami, ask (elicitation/create), ask2 (two parallel elicitations), slow, crash, getenv, argv.
 import readline from 'node:readline';
 
 const rl = readline.createInterface({ input: process.stdin });
@@ -26,6 +26,8 @@ const tools = [
   { name: 'ask2', inputSchema: { type: 'object' } },
   { name: 'slow', inputSchema: { type: 'object' } },
   { name: 'crash', inputSchema: { type: 'object' } },
+  { name: 'getenv', inputSchema: { type: 'object' } },
+  { name: 'argv', inputSchema: { type: 'object' } },
 ];
 
 const callTool = async (params) => {
@@ -54,6 +56,11 @@ const callTool = async (params) => {
     case 'slow':
       await new Promise((r) => setTimeout(r, Number(args.ms ?? 100)));
       return text('done');
+    case 'getenv':
+      // The environment variable the gateway put into the sandboxed process (8.3): tests assert what arrived.
+      return text(process.env[String(args.name ?? '')] ?? '');
+    case 'argv':
+      return text(JSON.stringify(process.argv.slice(2)));
     case 'crash':
       process.stderr.write('about to crash\n');
       process.exit(3);

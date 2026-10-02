@@ -18,6 +18,8 @@ export interface VersionTestPort {
     entryId: string;
     versionId: string;
     requestedBy: string;
+    /** Values for variables without a default, set on the test installation before the run. */
+    variables?: Record<string, string>;
   }): Promise<VersionTestRun>;
   latest(versionId: string): Promise<VersionTestRun | null>;
 }

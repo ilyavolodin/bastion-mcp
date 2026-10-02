@@ -19,7 +19,16 @@ export class MemoryServerStore implements RegistryServerStore {
       (r) => r.sourceId === sourceId && (!options?.name || r.name === options.name),
     );
   }
-  async search(query: { q?: string; sourceId?: string; includeDeleted?: boolean; limit: number }) {
+  readonly searches: Record<string, unknown>[] = [];
+  /** Offset cursors; `searches` records what the API asked for. */
+  async search(query: {
+    q?: string;
+    sourceId?: string;
+    includeDeleted?: boolean;
+    limit: number;
+    cursor?: string | undefined;
+  }) {
+    this.searches.push({ ...query });
     const q = query.q?.toLowerCase();
     const items = this.rows.filter(
       (r) =>
@@ -27,7 +36,11 @@ export class MemoryServerStore implements RegistryServerStore {
         (query.includeDeleted || r.status !== 'deleted') &&
         (!q || r.searchDocument.includes(q)),
     );
-    return { items: items.slice(0, query.limit) };
+    const offset = Number(query.cursor ?? 0);
+    const page = items.slice(offset, offset + query.limit);
+    return offset + query.limit < items.length
+      ? { items: page, nextCursor: String(offset + query.limit) }
+      : { items: page };
   }
 }
 

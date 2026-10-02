@@ -46,6 +46,17 @@ export type CatalogData = {
   approvals: Record<string, { approvedBy: string; approvedAt: string; note: string | null }>;
   /** When the test of a version was started (the mock finishes it a moment later). */
   testStarts: Record<string, number>;
+  /** Secrets by `scope/owner/name`: names only, like the real API (values are never kept or returned). */
+  secrets: Record<
+    string,
+    {
+      scope: 'org' | 'team' | 'user';
+      ownerId: string | null;
+      name: string;
+      version: number;
+      updatedAt: string;
+    }
+  >;
 };
 
 const HOUR = 3_600_000;
@@ -326,9 +337,7 @@ const baseSpecFor = (
           ...(s.pkg
             ? { auth: { mode: 'none' } }
             : {
-                environmentVariables: [
-                  { name: 'DATABASE_URL', value: '{{secret.DATABASE_URL}}', isRequired: true },
-                ],
+                // The secret reaches the process through `auth.inject`: a plain `{{secret.*}}` value cannot resolve.
                 auth: {
                   mode: 'orgSecret',
                   inject: [{ to: 'env', name: 'DATABASE_URL', value: '{{secret.DATABASE_URL}}' }],
@@ -543,7 +552,7 @@ export const buildCatalogData = (now: number): CatalogData => {
       updatedAt: iso(now - 10 * DAY),
     },
   ];
-  return { entries, versions, autoInstall, files, approvals, testStarts: {} };
+  return { entries, versions, autoInstall, files, approvals, testStarts: {}, secrets: {} };
 };
 
 // --- helpers ------------------------------------------------------------------------------------------------------
@@ -558,6 +567,22 @@ const versionOf = (entryId: string, versionId: string) =>
 
 const validation = (errors: { path: string; message: string }[]) =>
   problem(422, 'validation_failed', 'Some fields need attention', undefined, errors);
+
+const putSecret = (scope: 'org' | 'user', ownerId: string | null, name: string) => {
+  const key = `${scope}/${ownerId ?? ''}/${name}`;
+  const previous = data().secrets[key];
+  const row = { scope, ownerId, name, version: (previous?.version ?? 0) + 1, updatedAt: now() };
+  data().secrets[key] = row;
+  return {
+    id: key,
+    scope,
+    ownerId,
+    name,
+    version: row.version,
+    createdAt: previous?.updatedAt ?? row.updatedAt,
+    updatedAt: row.updatedAt,
+  };
+};
 
 /** Files of a plugin or skill version (25.2): who must approve, and the diff against the last approved version. */
 const approvalOf = (v: Version): Schemas['CatalogVersionDetail']['approval'] => {
@@ -720,6 +745,45 @@ export const catalogHandlers: HttpHandler[] = [
     return e
       ? HttpResponse.json(e, { headers: etagHeaders(e.updatedAt) })
       : notFound('Catalog entry');
+  }),
+
+  route.delete('/catalog/{id}', ({ params }) => {
+    if (!isRole('admin', 'manager')) return forbidden();
+    const e = entryOf(params.id);
+    if (!e) return notFound('Catalog entry');
+    data().entries = data().entries.filter((x) => x.id !== e.id);
+    data().versions = data().versions.filter((v) => v.entryId !== e.id);
+    return noContent();
+  }),
+
+  // Secrets of the editor (9.5, 22.3): the shared secret of a server is written by an Admin; values are never kept.
+  route.get('/secrets', ({ query }) => {
+    if (query.scope === 'org' && !isRole('admin')) return forbidden();
+    const items = Object.values(data().secrets)
+      .filter((x) => x.scope === query.scope)
+      .map((x) => ({
+        id: `${x.scope}/${x.ownerId ?? ''}/${x.name}`,
+        scope: x.scope,
+        ownerId: x.ownerId,
+        name: x.name,
+        version: x.version,
+        createdAt: x.updatedAt,
+        updatedAt: x.updatedAt,
+      }));
+    return HttpResponse.json({ items });
+  }),
+
+  route.put('/secrets/org/{ownerId}/{name}', async ({ params, body }) => {
+    if (!isRole('admin')) return forbidden();
+    const { value } = await body();
+    if (!value) return validation([{ path: '/value', message: 'Required' }]);
+    return HttpResponse.json(putSecret('org', null, params.name));
+  }),
+
+  route.put('/secrets/user/{ownerId}/{name}', async ({ params, body }) => {
+    const { value } = await body();
+    if (!value) return validation([{ path: '/value', message: 'Required' }]);
+    return HttpResponse.json(putSecret('user', params.ownerId, params.name));
   }),
 
   route.patch('/catalog/{id}', async ({ params, body }) => {
@@ -1136,6 +1200,10 @@ export const catalogSamples: SampleFactory = (db) => {
     { method: 'get', path: v },
     { method: 'patch', path: v, body: { label: '3.2.1', serverSpec: SPEC_SAMPLE } },
     { method: 'post', path: `${v}/test` },
+    { method: 'post', path: `${v}/test`, body: { variables: { REGION: 'eu' } } },
+    { method: 'put', path: '/secrets/org/org/API_TOKEN', body: { value: 'shared-token' } },
+    { method: 'put', path: '/secrets/user/u-me/API_TOKEN', body: { value: 'my-token' } },
+    { method: 'get', path: '/secrets?scope=org' },
     {
       method: 'post',
       path: `${v}/publish`,
@@ -1179,6 +1247,7 @@ export const catalogSamples: SampleFactory = (db) => {
       body: { target: { all: true }, mode: 'default', scope: 'user', applyToExisting: true },
     },
     { method: 'delete', path: '/auto-install-policies/ap-1' },
+    { method: 'delete', path: '/catalog/c-zendesk' },
   ];
   return samples;
 };

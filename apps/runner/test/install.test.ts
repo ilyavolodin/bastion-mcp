@@ -269,3 +269,60 @@ describe('8.3 installer execution', () => {
     ).rejects.toThrow(/not found/);
   });
 });
+
+describe('8.7 lockfile capture in the runner', () => {
+  const ctx = { signal: new AbortController().signal, env: {}, onDetail: () => {} };
+
+  it('8.7 npm capture runs npm install --package-lock-only and returns package-lock.json as a shrinkwrap', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'runner-capture-'));
+    const calls: string[][] = [];
+    const installer = createInstaller({
+      root,
+      exec: async (command, args) => {
+        calls.push([command, ...args]);
+        await writeFile(path.join(root, 'package-lock.json'), '{"lockfileVersion":3}');
+        return { code: 0, output: '' };
+      },
+    });
+    const captured = await installer.capture?.(parse(), ctx);
+    expect(captured).toEqual({ kind: 'npm-shrinkwrap', content: '{"lockfileVersion":3}' });
+    expect(calls[0]).toEqual(
+      expect.arrayContaining(['npm', 'install', '--package-lock-only', '--ignore-scripts']),
+    );
+    expect(await readFile(path.join(root, 'package.json'), 'utf8')).toContain('@scope/server-x');
+  });
+
+  it('8.7 pypi capture runs uv pip compile --generate-hashes on requirements.in', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'runner-capture-'));
+    const calls: string[][] = [];
+    const installer = createInstaller({
+      root,
+      exec: async (command, args) => {
+        calls.push([command, ...args]);
+        await writeFile(
+          path.join(root, 'requirements.txt'),
+          ['x==1 \\', '    --hash=sha256:aa', ''].join('\n'),
+        );
+        return { code: 0, output: '' };
+      },
+    });
+    const captured = await installer.capture?.(
+      parse({ runtime: 'pypi', identifier: 'mcp-server-fetch', version: '2026.8.18' }),
+      ctx,
+    );
+    expect(captured?.kind).toBe('uv-requirements');
+    expect(calls[0]).toEqual(expect.arrayContaining(['uv', 'pip', 'compile', '--generate-hashes']));
+    expect(await readFile(path.join(root, 'requirements.in'), 'utf8')).toBe(
+      'mcp-server-fetch==2026.8.18\n',
+    );
+  });
+
+  it('8.7 a failing resolve reports the tail of the package manager output', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'runner-capture-'));
+    const installer = createInstaller({
+      root,
+      exec: async () => ({ code: 1, output: 'npm error code ETARGET\nnpm error notarget' }),
+    });
+    await expect(installer.capture?.(parse(), ctx)).rejects.toThrow(/ETARGET/);
+  });
+});

@@ -13,6 +13,7 @@ export {
 export type { ConsentView } from './as/consent';
 export type { IdJagVerifier } from './as/id-jag-grant';
 export type { InteractionApi, InteractionView } from './as/interaction';
+export type { ProviderPages } from './as/provider-pages';
 export {
   admitRegistration,
   classifyRedirectUri,

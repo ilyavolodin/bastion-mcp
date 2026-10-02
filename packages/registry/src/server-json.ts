@@ -29,7 +29,8 @@ export type ServerJsonVariable = z.infer<typeof variableSchema>;
 const variablesSchema = z.record(z.string(), variableSchema);
 
 const keyValueSchema = z.looseObject({
-  name: z.string().min(1),
+  // The real registry holds entries with an empty header or variable name; they are mirrored, and mapping ignores them.
+  name: z.string(),
   description: z.string().optional(),
   isRequired: z.boolean().optional(),
   isSecret: z.boolean().optional(),
@@ -42,7 +43,8 @@ const keyValueSchema = z.looseObject({
 export type ServerJsonKeyValue = z.infer<typeof keyValueSchema>;
 
 const argumentSchema = z.looseObject({
-  type: z.enum(['positional', 'named']),
+  // Unknown argument kinds are kept (the mirror stores what the registry says); mapping handles the two it knows.
+  type: z.string(),
   name: z.string().optional(),
   valueHint: z.string().optional(),
   description: z.string().optional(),
@@ -65,10 +67,12 @@ const transportSchema = z.looseObject({
 });
 
 const packageSchema = z.looseObject({
-  registryType: z.enum(REGISTRY_TYPES),
+  // `maven`, `cargo`, ... exist in the real registry: they are listed, shown as unsupported and never installed.
+  registryType: z.string().min(1),
   registryBaseUrl: z.string().optional(),
   identifier: z.string().min(1),
-  version: z.string().min(1),
+  /** Absent for OCI (the tag is part of the identifier) and some `mcpb` packages. */
+  version: z.string().min(1).optional(),
   fileSha256: z.string().optional(),
   runtimeHint: z.string().optional(),
   transport: transportSchema,
@@ -95,7 +99,8 @@ export const serverJsonSchema = z.looseObject({
   websiteUrl: z.string().optional(),
   repository: z
     .looseObject({
-      url: z.string(),
+      // The real registry serves `repository: {}` for entries without a repository.
+      url: z.string().optional(),
       source: z.string().optional(),
       id: z.string().optional(),
       subfolder: z.string().optional(),

@@ -392,6 +392,8 @@ export type InstallFieldDef = {
   required: boolean;
   secret: boolean;
   default?: string;
+  /** A fixed list of allowed values: the form shows a picker instead of a text box. */
+  choices?: string[];
 };
 
 export type StoreEntryDetailView = StoreEntryView &
@@ -412,6 +414,7 @@ const variableField = (v: FormVariable): InstallFieldDef => ({
   required: v.required ?? false,
   secret: false,
   ...(v.default !== undefined ? { default: v.default } : {}),
+  ...(v.choices?.length ? { choices: v.choices } : {}),
 });
 
 const secretField = (s: FormSecret): InstallFieldDef => ({

@@ -182,6 +182,7 @@ export const buildTestApi = async (options: HarnessOptions = {}): Promise<TestAp
     secrets,
     system: notConfigured('system'),
     identity: notConfigured('identity'),
+    account: { changePassword: async () => ({ ok: false, reason: 'invalid_current' }) },
     catalog: notConfigured('catalog'),
     installations: notConfigured('installations'),
     registry: notConfigured('registry'),

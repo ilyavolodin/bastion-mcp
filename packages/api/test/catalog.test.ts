@@ -244,6 +244,29 @@ describe('11.2 automatic test', () => {
     expect(api.uow.audits.at(-1)).toMatchObject({ action: 'catalog.version.test' });
   });
 
+  it('11.3 the author may give values for variables without a default, which reach the test run', async () => {
+    api = await buildTestApi();
+    const res = await api.call(
+      'managerOwn',
+      'POST',
+      '/catalog/entry-team-a/versions/ver-team-a/test',
+      { body: { variables: { DATABASE_URL: 'postgres://db/test' } } },
+    );
+    expect(res.status).toBe(202);
+    const tests = api.deps.catalog.tests as FakeVersionTests;
+    expect(tests.started.at(-1)).toMatchObject({
+      versionId: 'ver-team-a',
+      variables: { DATABASE_URL: 'postgres://db/test' },
+    });
+    const refused = await api.call(
+      'managerOwn',
+      'POST',
+      '/catalog/entry-team-a/versions/ver-team-a/test',
+      { body: { variables: { X: 1 } } },
+    );
+    expect(refused.status).toBe(400);
+  });
+
   it('18.1 streams the latest run and progress until the run finishes', async () => {
     api = await buildTestApi();
     await api.call('admin', 'POST', '/catalog/entry-team-a/versions/ver-team-a/test');

@@ -174,22 +174,40 @@ export const createRunner = (options: RunnerOptions): Runner => {
     res.on('close', () => {
       if (!res.writableEnded) abort.abort();
     });
-    const event = (phase: StartPhase, detail: string): void => {
-      const body: StartEvent = { phase, detail, elapsedMs: now() - startedAt };
+    const event = (
+      phase: StartPhase,
+      detail: string,
+      lockfile?: NonNullable<StartEvent['lockfile']>,
+    ): void => {
+      const body: StartEvent = {
+        phase,
+        detail,
+        elapsedMs: now() - startedAt,
+        ...(lockfile ? { lockfile } : {}),
+      };
       if (!res.writableEnded) res.write(`${JSON.stringify(body)}\n`);
     };
     const secrets = [parsed.egress.proxyUrl, ...Object.values(parsed.env)];
     try {
       event('installing', `${parsed.runtime} ${parsed.identifier}@${parsed.version}`);
-      const resolved = await options.installer.install(parsed, {
+      const installContext = {
         signal: abort.signal,
         env: buildInstallEnv(parsed, {
           path,
           home,
           ...(options.installPassthrough ? { passthrough: options.installPassthrough } : {}),
         }),
-        onDetail: (detail) => event('installing', redactSecrets(detail, secrets)),
-      });
+        onDetail: (detail: string) => event('installing', redactSecrets(detail, secrets)),
+      };
+      if (parsed.captureLockfile) {
+        if (!options.installer.capture) throw new Error('this runner cannot capture lockfiles');
+        const lockfile = await options.installer.capture(parsed, installContext);
+        if (abort.signal.aborted) throw new Error('start aborted');
+        apply('stopped');
+        event('ready', 'lockfile captured', lockfile);
+        return;
+      }
+      const resolved = await options.installer.install(parsed, installContext);
       if (abort.signal.aborted) throw new Error('start aborted');
       event('starting', resolved.command);
       const proc = new ServerProcess(

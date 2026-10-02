@@ -5,6 +5,7 @@ import { Redis } from 'ioredis';
 import pg from 'pg';
 import { bootstrapAdminUser } from '../boot/bootstrap-admin';
 import { migrate, migrationStatus } from '../boot/migrate';
+import { resetPassword } from '../boot/reset-password';
 import { loadServerConfig } from '../config';
 import { createInfra, type Infra } from '../infra';
 import { KEY_PURPOSES, publishKeyChange, rotateKeys } from '../scheduler/tasks/keys';
@@ -25,6 +26,7 @@ export const COMMANDS = [
   'migrate',
   'check-config',
   'create-admin',
+  'reset-password',
   'rotate-keys',
   'export-config',
   'import-config',
@@ -63,6 +65,8 @@ Commands:
   migrate                    Apply pending database migrations
   check-config               Validate the environment and connectivity (Postgres, Redis, KMS, migrations)
   create-admin --email <e>   Create a local admin (generated password printed once; --password-stdin to supply one)
+  reset-password --email <e> Set a new password for a local account (generated and printed once; --password-stdin
+                             to supply one). Signs the account out everywhere and revokes its tokens
   rotate-keys --purpose <p>  Rotate keys: as | state | upstream-client (--force creates a new key even if none is due)
   export-config [--out f]    Export catalog, policies, settings, guard profiles, limit rules, registry sources,
                              marketplaces as JSON (secrets are never exported)
@@ -233,6 +237,34 @@ export const execute = async (argv: readonly string[], env: Env, io: Io): Promis
             return 1;
           }
           if (password !== undefined) io.out(`admin ${result.email} created`);
+          return 0;
+        });
+      }
+      case 'reset-password': {
+        const email = flagString(parsed, 'email');
+        if (!email) {
+          io.err('reset-password requires --email <address>');
+          return 2;
+        }
+        const password = parsed.flags.has('password-stdin') ? (await io.stdin()).trim() : undefined;
+        return await withInfra(env, async (infra) => {
+          const result = await resetPassword(infra, { email, password });
+          if (!result.ok) {
+            io.err(
+              result.reason === 'policy'
+                ? result.message
+                : result.reason === 'not_found'
+                  ? `no account with the email ${email}`
+                  : `${email} signs in through an identity provider and has no local password`,
+            );
+            return 1;
+          }
+          io.out(
+            result.generatedPassword === undefined
+              ? `password of ${result.email} reset`
+              : `password of ${result.email} reset; new password (shown once): ${result.generatedPassword}`,
+          );
+          io.out('all sessions and tokens of this user were revoked');
           return 0;
         });
       }

@@ -104,6 +104,16 @@ export const publishBodySchema = optionalBody(
   }),
 );
 
+/**
+ * `POST /catalog/{id}/versions/{vid}/test`: values for the variables that have no default, so a test of a server that
+ * needs them (a database URL, a region) can start. They live on the hidden test installation only (11.3).
+ */
+export const testStartBodySchema = optionalBody(
+  z.object({
+    variables: z.record(z.string().min(1).max(128), z.string().max(4096)).optional(),
+  }),
+);
+
 export const approveBodySchema = optionalBody(
   z.object({
     note: z.string().max(2000).optional(),

@@ -30,9 +30,19 @@ export class MemoryBlobs implements BlobPort {
 }
 
 export class FakeVersionTests implements VersionTestPort {
-  readonly started: Array<{ entryId: string; versionId: string; requestedBy: string }> = [];
+  readonly started: Array<{
+    entryId: string;
+    versionId: string;
+    requestedBy: string;
+    variables?: Record<string, string>;
+  }> = [];
   readonly runs = new Map<string, VersionTestRun>();
-  async start(input: { entryId: string; versionId: string; requestedBy: string }) {
+  async start(input: {
+    entryId: string;
+    versionId: string;
+    requestedBy: string;
+    variables?: Record<string, string>;
+  }) {
     this.started.push(input);
     const run: VersionTestRun = {
       id: `run-${this.started.length}`,

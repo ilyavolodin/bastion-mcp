@@ -87,6 +87,7 @@ export const routeTree = root.addChildren([
     'RegistryPage',
   ),
   screen('/access', 'access', () => import('@/features/access/access-page'), 'AccessPage'),
+  screen('/account', 'home', () => import('@/features/account/account-page'), 'AccountPage'),
   screen(
     '/settings',
     'settings',

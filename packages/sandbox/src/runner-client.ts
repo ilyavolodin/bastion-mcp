@@ -238,14 +238,15 @@ export class HttpRunnerClient implements RunnerClient {
   openStdio(signal?: AbortSignal): Promise<StdioChannel> {
     return new Promise((resolve, reject) => {
       const { target } = this;
-      const base =
+      // `ws` ignores a `socketPath` option for ws:// URLs (it resolves the host name instead: "ENOTFOUND runner");
+      // the IPC form of the URL is the supported way to reach a Unix socket.
+      const url =
         target.kind === 'unix'
-          ? 'ws://runner'
-          : `ws://${target.host.includes(':') ? `[${target.host}]` : target.host}:${target.port}`;
-      const ws = new WebSocket(`${base}/v1/stdio`, [STDIO_SUBPROTOCOL], {
+          ? `ws+unix://${target.socketPath}:/v1/stdio`
+          : `ws://${target.host.includes(':') ? `[${target.host}]` : target.host}:${target.port}/v1/stdio`;
+      const ws = new WebSocket(url, [STDIO_SUBPROTOCOL], {
         headers: this.headers(),
         handshakeTimeout: this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-        ...(target.kind === 'unix' ? { socketPath: target.socketPath } : {}),
         ...(signal ? { signal } : {}),
       });
       let dropped = 0;
@@ -290,5 +291,42 @@ export const startAndWait = async (
   throw new SandboxStartFailedError(`runner stream ended after phase ${last?.phase ?? 'none'}`, {
     installation: context.installation,
     phase: last?.phase ?? 'connecting',
+  });
+};
+
+/**
+ * Runs a `captureLockfile` start (8.7): the runner resolves the dependency tree, answers with the lockfile in its
+ * `ready` event and starts nothing. Throws `SandboxStartFailedError` on a `failed` event or a stream without one.
+ */
+export const captureLockfileVia = async (
+  runner: RunnerClient,
+  request: StartRequestInput,
+  context: { installation: string },
+  onEvent: (event: StartEvent) => void = () => {},
+  signal?: AbortSignal,
+): Promise<{ kind: 'npm-shrinkwrap' | 'uv-requirements'; content: string }> => {
+  let last: StartEvent | undefined;
+  for await (const event of runner.start({ ...request, captureLockfile: true }, signal)) {
+    last = event;
+    onEvent(event);
+    if (event.phase === 'failed') {
+      throw new SandboxStartFailedError(event.detail, {
+        installation: context.installation,
+        phase: 'installing',
+      });
+    }
+    if (event.phase === 'ready') {
+      if (!event.lockfile) {
+        throw new SandboxStartFailedError('the runner answered without a lockfile', {
+          installation: context.installation,
+          phase: 'installing',
+        });
+      }
+      return event.lockfile;
+    }
+  }
+  throw new SandboxStartFailedError(`runner stream ended after phase ${last?.phase ?? 'none'}`, {
+    installation: context.installation,
+    phase: last?.phase ?? 'installing',
   });
 };
