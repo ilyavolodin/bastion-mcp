@@ -57,6 +57,10 @@ const shoot = async (
     await page.setViewportSize({ width: v.width, height: v.height });
     await page.emulateMedia({ colorScheme: v.scheme, reducedMotion: 'reduce' });
     await page.evaluate(() => document.fonts.ready);
+    // Let the browser restyle for the new scheme and viewport before looking at colors (axe reads computed styles).
+    await page.evaluate(
+      () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+    );
     await page.screenshot({
       path: join(OUT, `${name}-${v.scheme}-${v.width}.png`),
       fullPage: true,
