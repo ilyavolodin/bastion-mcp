@@ -92,3 +92,9 @@ first 12 hex digits are a millisecond timestamp, so ids created in the same mill
 - A policy rule, a limit rule, a role-mapping rule and a service account are created with the fields the API
   requires (`name`, `priority`, `slug`, `authMethod`, `idpConnectionId`, ...); service-account credentials are shown
   once; install-request rejections and drift rejections ask for the required `reason`.
+
+## 8. Bubblewrap startup probe binds the root (8.5)
+
+The probe `bwrap --unshare-user --unshare-net true` of 8.5 cannot succeed: with no binds bwrap starts an empty
+filesystem, so `execvp true` fails even on hosts where bubblewrap works. The probe adds `--ro-bind / /`, which still
+fails when unprivileged user namespaces or network unsharing are unavailable (what the probe is for).

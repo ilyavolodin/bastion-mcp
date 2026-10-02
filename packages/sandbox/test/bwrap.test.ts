@@ -444,7 +444,10 @@ describe('8.5 startup probe', () => {
       return { code: 0, stderr: '' };
     });
     expect(result).toEqual({ status: 'available' });
-    expect(calls).toEqual([['bwrap', '--unshare-user', '--unshare-net', 'true']]);
+    // 8.5: the probe must be able to exec `true`, so the root is bound read-only (an empty jail has nothing to run).
+    expect(calls).toEqual([
+      ['bwrap', '--unshare-user', '--unshare-net', '--ro-bind', '/', '/', 'true'],
+    ]);
   });
   it('8.5 reports unavailable with the error text otherwise', async () => {
     expect(

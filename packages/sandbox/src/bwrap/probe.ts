@@ -1,6 +1,9 @@
 import { execFile } from 'node:child_process';
 
-/** Startup probe of 8.5: `bwrap --unshare-user --unshare-net true`. */
+/**
+ * Startup probe of 8.5: `bwrap --unshare-user --unshare-net true`. The root is bound read-only so `true` exists in
+ * the jail: with no binds bwrap starts an empty filesystem and `execvp true` fails even where bubblewrap works.
+ */
 
 export type ProbeResult = { status: 'available' } | { status: 'unavailable'; error: string };
 
@@ -9,7 +12,14 @@ export type ExecProbe = (
   args: string[],
 ) => Promise<{ code: number | null; stderr: string; error?: string }>;
 
-export const PROBE_ARGS = ['--unshare-user', '--unshare-net', 'true'] as const;
+export const PROBE_ARGS = [
+  '--unshare-user',
+  '--unshare-net',
+  '--ro-bind',
+  '/',
+  '/',
+  'true',
+] as const;
 
 export const execProbe: ExecProbe = (command, args) =>
   new Promise((resolve) => {
