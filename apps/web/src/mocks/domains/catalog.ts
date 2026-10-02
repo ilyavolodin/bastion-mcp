@@ -751,6 +751,20 @@ export const catalogHandlers: HttpHandler[] = [
     if (!isRole('admin', 'manager')) return forbidden();
     const e = entryOf(params.id);
     if (!e) return notFound('Catalog entry');
+    // Real installations block a delete (hidden `origin: 'test'` ones do not count and go with the entry).
+    const servers = getDb().data.servers;
+    const real = servers.installations.filter(
+      (i) => i.catalogEntryId === e.id && i.origin !== 'test',
+    );
+    if (real.length > 0) {
+      return problem(
+        409,
+        'entry_in_use',
+        'Conflict',
+        `${real.length} installation${real.length === 1 ? ' uses' : 's use'} this entry, so it cannot be deleted. Deprecate it to hide it from the Store, or remove the installations first.`,
+      );
+    }
+    servers.installations = servers.installations.filter((i) => i.catalogEntryId !== e.id);
     data().entries = data().entries.filter((x) => x.id !== e.id);
     data().versions = data().versions.filter((v) => v.entryId !== e.id);
     return noContent();
@@ -796,6 +810,17 @@ export const catalogHandlers: HttpHandler[] = [
     if (patch.displayName !== undefined && !patch.displayName.trim())
       return validation([{ path: '/displayName', message: 'Required' }]);
     const { status, visibility, ...rest } = patch;
+    if (
+      (status === 'deprecated' && e.status !== 'published') ||
+      (status === 'archived' && e.status !== 'published' && e.status !== 'deprecated')
+    ) {
+      return problem(
+        409,
+        'invalid_status',
+        'Conflict',
+        `a ${e.status} entry cannot be ${status}; only published or deprecated entries can change status`,
+      );
+    }
     Object.assign(e, rest, status ? { status } : {}, {
       ...(visibility
         ? {
@@ -1247,7 +1272,7 @@ export const catalogSamples: SampleFactory = (db) => {
       body: { target: { all: true }, mode: 'default', scope: 'user', applyToExisting: true },
     },
     { method: 'delete', path: '/auto-install-policies/ap-1' },
-    { method: 'delete', path: '/catalog/c-zendesk' },
+    { method: 'delete', path: '/catalog/c-hubspot' },
   ];
   return samples;
 };

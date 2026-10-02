@@ -41,6 +41,8 @@ export interface UpstreamAccess {
   ): Promise<{ kind: 'npm-shrinkwrap' | 'uv-requirements'; content: string; sha256: string }>;
   /** Stops the installation's instance so the next call starts a new one (8.6). */
   restart(installationId: string): Promise<void>;
+  /** Stops the installation's instance and frees its lease, before the installation is deleted. */
+  stop(installationId: string): Promise<void>;
   /** The era verdict recorded for the installation (6.4). */
   era(installationId: string): Promise<'modern' | 'legacy' | undefined>;
 }
@@ -113,6 +115,12 @@ export const workerAccess = (infra: Infra, worker: WorkerServices): UpstreamAcce
       if (!record) return;
       await worker.runtime.instances.restart(record.id).catch(() => undefined);
       await worker.runtime.instances.stopAnywhere(record.id).catch(() => undefined);
+    },
+    async stop(installationId) {
+      const record = await infra.repos.instances.getForInstallation(installationId);
+      if (!record) return;
+      await worker.runtime.instances.stopAnywhere(record.id).catch(() => undefined);
+      await infra.redis.del(redisKeys.lease(record.id)).catch(() => undefined);
     },
     era: (installationId) => readEra(infra, installationId),
   };
@@ -223,6 +231,10 @@ export const createUiWorkerClient = (
       const record = await infra.repos.instances.getForInstallation(installationId);
       if (!record) return;
       await infra.redis.del(redisKeys.lease(record.id));
+    },
+    async stop(installationId) {
+      const record = await infra.repos.instances.getForInstallation(installationId);
+      if (record) await infra.redis.del(redisKeys.lease(record.id));
     },
     era: (installationId) => readEra(infra, installationId),
   };

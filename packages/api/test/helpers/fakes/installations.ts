@@ -5,6 +5,7 @@ import type { FakeCtx } from '../harness';
 export const makeFakeInstallations = () => {
   const calls = {
     restart: [] as string[],
+    stop: [] as string[],
     connect: [] as Array<{ installationId: string; principalId: string; returnTo?: string }>,
     disconnect: [] as Array<{ installationId: string; principalId: string }>,
     tried: [] as Array<{ installationId: string; principalId: string; request: TryRequest }>,
@@ -68,6 +69,9 @@ export const makeFakeInstallations = () => {
     runtime: {
       async restart(id) {
         calls.restart.push(id);
+      },
+      async stop(id) {
+        calls.stop.push(id);
       },
       async logTail(_id, tail) {
         return logLines.slice(-tail);

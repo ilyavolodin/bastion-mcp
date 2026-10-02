@@ -2,9 +2,9 @@
  * Declarative mapping of API collections onto Prisma models (16.2, docs/port-matrix.md). Collections that are not a
  * plain table (settings, service account clients, OAuth grants, installation secrets) live in `custom.ts`.
  */
-import { type Collection, ValidationApiError } from '@bastion-mcp/api';
+import { type Collection, ConflictApiError, ValidationApiError } from '@bastion-mcp/api';
 import { NIL_UUID, reindexCatalogSearch, type Tx } from '@bastion-mcp/db';
-import type { CollectionSpec, DbRow, StoreContext } from './collection';
+import type { CollectionSpec, Db, DbRow, StoreContext } from './collection';
 import { isUuid } from './meta';
 
 const str = (v: unknown): string => String(v);
@@ -38,6 +38,28 @@ const resolveSecretRef = async (
 };
 
 const GUARD_SETTING_KEYS = ['maxScanBytes', 'onOversize', 'onDrift', 'riskEscalation'] as const;
+
+/**
+ * Rows keyed by an installation or a catalog version without a cascading foreign key (`upstream_snapshots` set the
+ * key to null, `drift_reviews` have no key at all): they would be orphaned by a delete, so the delete removes them.
+ */
+const dropDerivedData = async (
+  db: Db,
+  by: { installationId: string } | { catalogVersionId: string | string[] },
+): Promise<void> => {
+  const where =
+    'installationId' in by
+      ? { installationId: by.installationId }
+      : {
+          catalogVersionId: Array.isArray(by.catalogVersionId)
+            ? { in: by.catalogVersionId }
+            : by.catalogVersionId,
+        };
+  const prisma = db as Tx;
+  await prisma.upstreamSnapshot.deleteMany({ where });
+  await prisma.driftReview.deleteMany({ where });
+  await prisma.definitionPin.deleteMany({ where });
+};
 
 export const SPECS: Record<string, CollectionSpec> = {};
 const add = (spec: CollectionSpec): void => {
@@ -126,6 +148,19 @@ add({
   afterWrite: async (ctx, row) => {
     await reindexCatalogSearch(ctx.db as Tx, str(row.id));
   },
+  // Versions are removed one by one by the service (their snapshots and drift reviews go with them, see
+  // `dropDerivedData`); files, approvals, pins and auto-install policies cascade in the database. A marketplace item
+  // restricts the delete, so it is refused with guidance rather than surfacing a foreign-key error.
+  beforeRemove: async (ctx, row) => {
+    const prisma = ctx.db as Tx;
+    const items = await prisma.marketplaceItem.count({ where: { catalogEntryId: str(row.id) } });
+    if (items > 0) {
+      throw new ConflictApiError(
+        `this entry is part of ${items} marketplace${items === 1 ? '' : 's'}. Remove it from the marketplace first, or deprecate it to hide it from the Store.`,
+        'entry_in_use',
+      );
+    }
+  },
 });
 add({
   collection: 'catalog_versions',
@@ -133,6 +168,7 @@ add({
   order: [{ createdAt: 'asc' }, { id: 'asc' }],
   search: ['label'],
   bump: (r) => ['catalog', str(r.entryId)],
+  beforeRemove: (ctx, row) => dropDerivedData(ctx.db, { catalogVersionId: str(row.id) }),
 });
 add({
   collection: 'catalog_files',
@@ -156,6 +192,7 @@ add({
   model: 'Installation',
   search: ['slug', 'displayName'],
   bump: (r) => ['installation', str(r.id)],
+  beforeRemove: (ctx, row) => dropDerivedData(ctx.db, { installationId: str(row.id) }),
 });
 add({
   collection: 'endpoints',

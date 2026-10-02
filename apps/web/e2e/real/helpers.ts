@@ -66,6 +66,7 @@ export const apiCall = async (
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
+  headers: Record<string, string> = {},
 ): Promise<{ status: number; body: unknown }> => {
   const response = await page.request.fetch(`/api/v1${path}`, {
     method,
@@ -73,6 +74,7 @@ export const apiCall = async (
       accept: 'application/json',
       'x-bastion-csrf': await csrfOf(page),
       'idempotency-key': Math.random().toString(36).slice(2),
+      ...headers,
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
     },
     ...(body === undefined ? {} : { data: JSON.stringify(body) }),

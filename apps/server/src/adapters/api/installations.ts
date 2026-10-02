@@ -274,6 +274,9 @@ export const createInstallationApiPorts = (
         await access.restart(installationId);
         await infra.repos.installations.clearError(installationId).catch(() => undefined);
       },
+      async stop(installationId) {
+        await access.stop(installationId);
+      },
       async logTail(installationId, tail) {
         const record = await infra.repos.instances.getForInstallation(installationId);
         return record ? readStderrTail(infra, record.id, tail) : [];

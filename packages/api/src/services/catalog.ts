@@ -113,16 +113,89 @@ export const createEntry = (ctx: WriteCtx, body: Record<string, unknown>) =>
     createdBy: ctx.principal.id,
   });
 
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * Deletes an entry with its versions, files and approvals (11.1). Hidden test installations (`origin: 'test'`, left
+ * behind by the TEST flow, 11.3) do not count: they are stopped and removed with the entry. Real installations block
+ * the delete with guidance: deprecate the entry to hide it, or remove the installations first.
+ */
 export const deleteEntry = async (ctx: WriteCtx, id: string): Promise<void> => {
   const installs = await ctx.tx.store.find('installations', { catalogEntryId: id });
-  if (installs.length > 0) {
-    throw new ConflictApiError('the entry has installations; remove them first', 'entry_in_use');
+  const real = installs.filter((i) => i.origin !== 'test');
+  if (real.length > 0) {
+    throw new ConflictApiError(
+      `${plural(real.length, 'installation')} use${real.length === 1 ? 's' : ''} this entry, so it cannot be deleted. ` +
+        'Deprecate it to hide it from the Store, or remove the installations first.',
+      'entry_in_use',
+      { installations: real.length },
+    );
   }
+  for (const install of installs) await dropTestInstallation(ctx, install);
   for (const version of await ctx.tx.store.find('catalog_versions', { entryId: id })) {
     await dropVersionData(ctx, version.id);
     await ctx.tx.store.remove('catalog_versions', version.id);
   }
   await entries.remove(ctx, id);
+};
+
+/** Stops the test instance and drops its secrets, then the row (prefs, instance rows and tokens cascade). */
+const dropTestInstallation = async (ctx: WriteCtx, install: Row): Promise<void> => {
+  await ctx.deps.installations.runtime.stop(install.id);
+  const refs = install.secretRefs;
+  if (typeof refs === 'object' && refs !== null) {
+    for (const ref of Object.values(refs as Record<string, unknown>)) {
+      const r = ref as { scope?: unknown; name?: unknown } | null;
+      if ((r?.scope === 'user' || r?.scope === 'team') && typeof r.name === 'string') {
+        const ownerId = typeof install.ownerId === 'string' ? install.ownerId : null;
+        await ctx.deps.secrets
+          .delete({ scope: r.scope, ownerId, name: r.name })
+          .catch(() => undefined);
+      }
+    }
+  }
+  await ctx.tx.store.remove('installations', install.id);
+};
+
+const STATUS_FROM: Record<'deprecated' | 'archived', string[]> = {
+  deprecated: ['published'],
+  archived: ['published', 'deprecated'],
+};
+
+/**
+ * `PATCH /catalog/{id}`. A status change is a lifecycle step (11.1): a published entry is deprecated (hidden from the
+ * Store, existing installations keep working) and a published or deprecated one is archived. Drafts are deleted
+ * instead, and nothing returns to `published` except publishing a version.
+ */
+export const updateEntry = async (
+  ctx: WriteCtx,
+  id: string,
+  body: Record<string, unknown>,
+): Promise<Row> => {
+  const status = body.status;
+  if (status === 'deprecated' || status === 'archived') {
+    const current = await ctx.tx.store.get('catalog_entries', id);
+    if (!current) throw new NotFoundApiError('catalog entry');
+    if (!STATUS_FROM[status].includes(String(current.status))) {
+      throw new ConflictApiError(
+        `a ${String(current.status)} entry cannot be ${status}; ${
+          current.status === 'draft'
+            ? 'delete the draft instead'
+            : 'only published or deprecated entries can change status'
+        }`,
+        'invalid_status',
+      );
+    }
+    const row = await entries.update(ctx, id, body);
+    await ctx.tx.audit({
+      action: `catalog.entry.${status === 'deprecated' ? 'deprecate' : 'archive'}`,
+      targetType: 'catalog_entry',
+      targetId: id,
+      diff: { from: current.status, to: status },
+    });
+    return row;
+  }
+  return entries.update(ctx, id, body);
 };
 
 const dropVersionData = async (ctx: WriteCtx, versionId: string): Promise<void> => {

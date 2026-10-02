@@ -18,24 +18,46 @@ export type AutoInstallTarget = NonNullable<Body<'post', '/auto-install-policies
 export type ServerSpecBody = NonNullable<Body<'post', '/catalog/{id}/versions'>['serverSpec']>;
 export type InstallFormBody = NonNullable<Body<'post', '/catalog/{id}/versions'>['installForm']>;
 
+/** Where the newest draft version of an entry stands with its automatic test (11.3). */
+export type DraftTest = 'passed' | 'failed' | 'running' | 'untested';
+
 export type CatalogEntryView = CatalogEntry & {
   letter: string;
   color: string;
   ownerTeamName: string | null;
   /** Label of the current published version, when the versions were loaded. */
   currentVersion: string | null;
+  /** The newest draft version, when the entry has one (a draft entry always does once saved). */
+  draftVersionId: string | null;
+  draftLabel: string | null;
+  draftTest: DraftTest | null;
+  /** Installations other than hidden test installations; `null` when they could not be counted. */
+  installations: number | null;
 };
 
 export const toEntryView = (
   entry: CatalogEntry,
-  ctx: { teamNames: ReadonlyMap<string, string>; versions?: readonly CatalogVersion[] | undefined },
-): CatalogEntryView => ({
-  ...entry,
-  letter: letterOf(entry.displayName),
-  color: tintOf(entry.slug),
-  ownerTeamName: entry.ownerTeamId ? (ctx.teamNames.get(entry.ownerTeamId) ?? null) : null,
-  currentVersion: ctx.versions?.find((v) => v.id === entry.currentVersionId)?.label ?? null,
-});
+  ctx: {
+    teamNames: ReadonlyMap<string, string>;
+    versions?: readonly CatalogVersion[] | undefined;
+    installations?: number | null | undefined;
+  },
+): CatalogEntryView => {
+  const draft = ctx.versions ? editableVersion(ctx.versions) : undefined;
+  const draftVersion = draft?.status === 'draft' ? draft : undefined;
+  const status = draftVersion?.testResult?.status;
+  return {
+    ...entry,
+    letter: letterOf(entry.displayName),
+    color: tintOf(entry.slug),
+    ownerTeamName: entry.ownerTeamId ? (ctx.teamNames.get(entry.ownerTeamId) ?? null) : null,
+    currentVersion: ctx.versions?.find((v) => v.id === entry.currentVersionId)?.label ?? null,
+    draftVersionId: draftVersion?.id ?? null,
+    draftLabel: draftVersion?.label ?? null,
+    draftTest: draftVersion ? (status ?? 'untested') : null,
+    installations: ctx.installations ?? null,
+  };
+};
 
 /** The version the editor works on: the newest draft, else the newest version. */
 export const editableVersion = (

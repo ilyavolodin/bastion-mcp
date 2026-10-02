@@ -86,6 +86,8 @@ export type CollectionSpec = {
   /** API filter fields that are not columns. */
   virtualWhere?: Record<string, (value: unknown) => Where>;
   afterWrite?: (ctx: StoreContext, row: DbRow) => Promise<void>;
+  /** Runs in the same transaction before a row is deleted: removes data no foreign key cascades to (or refuses). */
+  beforeRemove?: (ctx: StoreContext, row: DbRow) => Promise<void>;
   /** Columns omitted from API rows when null (the API schema treats them as absent, not null). */
   omitNull?: string[];
   /** Column values for inserts that do not carry them (the API leaves some NOT NULL audit columns to the caller). */
@@ -451,6 +453,7 @@ export const createCollection = (ctx: StoreContext, spec: CollectionSpec): Colle
       if (!where) return false;
       const existing = await readOne(where);
       if (!existing) return false;
+      await spec.beforeRemove?.(ctx, existing);
       const res = await withWrite(() => delegate.deleteMany({ where }));
       if (res.count > 0) await bump(existing);
       return res.count > 0;

@@ -44,6 +44,8 @@ export type EgressEntry = {
 
 export interface InstallationRuntimePort {
   restart(installationId: string): Promise<void>;
+  /** Stops the installation's instance and releases its lease; used before the installation row is deleted. */
+  stop(installationId: string): Promise<void>;
   /** Last `tail` lines of stderr, oldest first. */
   logTail(installationId: string, tail: number): Promise<string[]>;
   egress(installationId: string, limit: number): Promise<EgressEntry[]>;

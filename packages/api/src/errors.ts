@@ -37,8 +37,8 @@ export class ValidationApiError extends ApiError {
 }
 
 export class ConflictApiError extends ApiError {
-  constructor(message: string, code = 'conflict') {
-    super(code, message, 409);
+  constructor(message: string, code = 'conflict', data: Record<string, unknown> = {}) {
+    super(code, message, 409, { data });
   }
 }
 

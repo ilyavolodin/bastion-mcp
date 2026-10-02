@@ -2,7 +2,6 @@ import { Link } from '@tanstack/react-router';
 import { Layers, Plus } from 'lucide-react';
 import { z } from 'zod';
 import { useCatalog } from '@/api/hooks';
-import type { CatalogStatus } from '@/api/schema';
 import type { CatalogEntryView } from '@/api/views/catalog';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -13,21 +12,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatRelative } from '@/lib/format';
 import { useSearchState } from '@/lib/search';
 import { AutoInstallPanel } from './auto-install';
+import {
+  DraftPrimaryAction,
+  DraftStatusLine,
+  EntryActionsMenu,
+  editorPath,
+  STATUS,
+  useCanManageEntry,
+} from './entry-actions';
 
 const searchSchema = z.object({
   tab: z.enum(['entries', 'policies']).catch('entries').default('entries'),
   kind: z.enum(['all', 'mcp_server', 'plugins']).catch('all').default('all'),
 });
 
-const STATUS: Record<CatalogStatus, { tone: 'ok' | 'warn' | 'neutral' | 'bad'; label: string }> = {
-  published: { tone: 'ok', label: 'Published' },
-  draft: { tone: 'warn', label: 'Draft' },
-  deprecated: { tone: 'neutral', label: 'Deprecated' },
-  archived: { tone: 'bad', label: 'Archived' },
-};
-
-export const editorPath = (e: Pick<CatalogEntryView, 'id' | 'kind'>) =>
-  e.kind === 'mcp_server' ? `/catalog/${e.id}` : `/plugins/edit/${e.id}`;
+export { editorPath };
 
 function EntryRow({ e }: { e: CatalogEntryView }) {
   const s = STATUS[e.status];
@@ -42,6 +41,7 @@ function EntryRow({ e }: { e: CatalogEntryView }) {
           {e.displayName}
         </Link>
         <div className="truncate text-caption text-muted">{e.description || '—'}</div>
+        <DraftStatusLine entry={e} />
       </div>
       <Tag>{e.kind === 'mcp_server' ? 'Server' : e.kind === 'plugin' ? 'Plugin' : 'Skill'}</Tag>
       <Tag tone={s.tone}>{s.label}</Tag>
@@ -55,7 +55,20 @@ function EntryRow({ e }: { e: CatalogEntryView }) {
       <span className="w-28 text-right text-caption text-muted max-lg:hidden">
         {e.ownerTeamName ?? 'Org'} · {formatRelative(e.updatedAt)}
       </span>
+      <RowActions entry={e} />
     </li>
+  );
+}
+
+/** Publish or Test it for a draft, then the actions menu: nothing at all for roles that may not manage it. */
+function RowActions({ entry }: { entry: CatalogEntryView }) {
+  const allowed = useCanManageEntry(entry);
+  if (!allowed) return null;
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <DraftPrimaryAction entry={entry} />
+      <EntryActionsMenu entry={entry} />
+    </div>
   );
 }
 

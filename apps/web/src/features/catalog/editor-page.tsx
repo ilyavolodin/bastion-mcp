@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { CircleCheck, CircleX } from 'lucide-react';
+import { CircleCheck, CircleX, Trash2 } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -11,6 +11,7 @@ import {
   useCreateCatalogEntry,
   usePublish,
   useSaveDraft,
+  useTeamOptions,
 } from '@/api/hooks';
 import { bumpLabel, editableVersion, isPassing } from '@/api/views/catalog';
 import { useAuth } from '@/auth/auth';
@@ -37,6 +38,7 @@ import {
   SecurityStep,
   SourceStep,
 } from './editor-steps';
+import { DeleteEntryDialog, STATUS, useCanManageEntry } from './entry-actions';
 import { AutoInstallCard, PublishCard } from './publish-card';
 import { failureReason, TestPanel } from './test-panel';
 
@@ -128,6 +130,8 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
   const versionDirty = versionKey(draft) !== savedKey;
   const testRun = current.data?.testResult ?? undefined;
   const passing = !versionDirty && Boolean(draftVersion) && isPassing(testRun);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const mayDelete = useCanManageEntry(entry ?? { ownerTeamId: null });
 
   const save = async (options: { run?: boolean } = {}): Promise<string | null> => {
     const issues = validateDraft(draft);
@@ -205,26 +209,59 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
         back={{ to: '/catalog', label: 'Catalog' }}
         title={draft.displayName || 'New entry'}
         badge={
-          <Tag tone={entry?.status === 'published' ? 'ok' : 'warn'}>
-            {entry?.status === 'published' ? 'Published' : 'Draft'}
+          <Tag tone={STATUS[entry?.status ?? 'draft'].tone}>
+            {STATUS[entry?.status ?? 'draft'].label}
           </Tag>
         }
         actions={
-          <Button
-            variant="outline"
-            disabled={saving || (!dirty && Boolean(entry))}
-            onClick={() => void save()}
-          >
-            {saving ? 'Saving…' : 'Save draft'}
-          </Button>
+          <>
+            {entry && mayDelete ? (
+              <Button
+                variant="outline"
+                className="text-coral-ink"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                {entry.status === 'draft' ? 'Delete draft' : 'Delete entry'}
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              disabled={saving || (!dirty && Boolean(entry))}
+              onClick={() => void save()}
+            >
+              {saving ? 'Saving…' : 'Save draft'}
+            </Button>
+          </>
         }
       />
+      {entry ? (
+        <DeleteEntryDialog
+          entry={entry}
+          open={confirmDelete}
+          onOpenChange={setConfirmDelete}
+          onDeleted={() => void navigate({ to: '/catalog' })}
+        />
+      ) : null}
       <Stepper
         steps={[...STEPS]}
         current={s.step}
         onSelect={(id) => setS({ step: id as StepId })}
         label="Catalog steps"
+        {...(passing ? { readyId: 'publish' } : {})}
       />
+      {passing && s.step !== 'publish' ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-3 rounded-lg bg-mint-soft px-4 py-3 text-[13px] font-medium text-mint-ink"
+        >
+          <CircleCheck className="size-4 shrink-0" aria-hidden="true" />
+          <span className="flex-1">This version passed its test: it is ready to publish.</span>
+          <Button size="xs" onClick={() => setS({ step: 'publish' })}>
+            Go to Publish
+          </Button>
+        </div>
+      ) : null}
       {saveError ? <ProblemAlert error={saveError} /> : null}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
@@ -274,6 +311,10 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
               reason={failureReason(testRun)}
               finishedAt={testRun?.finishedAt ?? null}
               onGoTest={() => setS({ step: 'test' })}
+              onPublish={() => void onPublish()}
+              publishing={publish.isPending || saving}
+              disabledReason={disabledReason}
+              checking={Boolean(draftVersion) && current.isPending}
             />
           ) : null}
           <div className="flex justify-between">
@@ -311,7 +352,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
   );
 }
 
-/** The Publish step: what is about to go out, and whether the test allows it (11.3). */
+/** The Publish step: what is about to go out, and the one big button, or the exact reason it is off (11.3). */
 function PublishSummary({
   draft,
   label,
@@ -322,6 +363,10 @@ function PublishSummary({
   reason,
   finishedAt,
   onGoTest,
+  onPublish,
+  publishing,
+  disabledReason,
+  checking,
 }: {
   draft: Draft;
   label: string;
@@ -332,9 +377,21 @@ function PublishSummary({
   reason: string | undefined;
   finishedAt: string | null;
   onGoTest: () => void;
+  onPublish: () => void;
+  publishing: boolean;
+  disabledReason: string;
+  /** The version's test result is still loading: say nothing about it yet. */
+  checking: boolean;
 }) {
   const s = draft.spec;
+  const teams = useTeamOptions();
   const source = s.type === 'remote' ? s.url : `${s.runtime}: ${s.identifier}@${s.version}`;
+  const v = draft.visibility;
+  const who = v.org
+    ? 'Everyone in the organization'
+    : v.teamIds.length
+      ? v.teamIds.map((id) => (teams.data ?? []).find((t) => t.id === id)?.name ?? id).join(', ')
+      : 'Nobody yet: choose teams on the right';
   return (
     <Card aria-label="Ready to publish" className="gap-3.5">
       <CardHeader title="Ready to publish" />
@@ -345,6 +402,10 @@ function PublishSummary({
         <dd className="m-0 font-medium">{label}</dd>
         <dt className="text-muted">Source</dt>
         <dd className="m-0 break-all font-mono">{source}</dd>
+        <dt className="text-muted">Who gets it</dt>
+        <dd className="m-0 font-medium">{who}</dd>
+        <dt className="text-muted">Risk</dt>
+        <dd className="m-0 font-medium capitalize">{draft.risk}</dd>
       </dl>
       {passing ? (
         <p
@@ -355,6 +416,10 @@ function PublishSummary({
           This exact version passed its test
           {finishedAt ? ` (${new Date(finishedAt).toLocaleString()})` : ''}. Choose who gets it and
           publish.
+        </p>
+      ) : checking ? (
+        <p role="status" className="m-0 text-[13px] text-muted">
+          Checking the test result of this version…
         </p>
       ) : (
         <div role="status" className="flex flex-col items-start gap-2">
@@ -370,11 +435,17 @@ function PublishSummary({
                     ? 'The test is still running.'
                     : 'This version has not been tested.'}
           </p>
-          <Button variant="outline" size="sm" onClick={onGoTest}>
-            Go to the test
-          </Button>
+          <p className="m-0 text-[13px] text-muted">{disabledReason}</p>
         </div>
       )}
+      <Button size="lg" className="w-full" disabled={!passing || publishing} onClick={onPublish}>
+        {publishing ? 'Publishing…' : `Publish v${label} to the Store`}
+      </Button>
+      {!passing && !checking ? (
+        <Button variant="outline" size="sm" className="self-start" onClick={onGoTest}>
+          Go to the Test step
+        </Button>
+      ) : null}
     </Card>
   );
 }

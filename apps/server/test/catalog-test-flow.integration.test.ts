@@ -238,6 +238,7 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
       .items as Row[];
     const id = rows[0]?.id as string;
     await expect(ports.runtime.restart(id)).resolves.toBeUndefined();
+    await expect(ports.runtime.stop(id)).resolves.toBeUndefined();
     expect(await ports.runtime.logTail(id, 10)).toEqual([]);
     expect(await ports.runtime.egress(id, 10)).toEqual([]);
   });

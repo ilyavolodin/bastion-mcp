@@ -2,6 +2,7 @@ import { sha256Hex } from '@bastion-mcp/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ApiDeps } from '../src/ports';
 import type { FakeImports, FakeVersionTests } from './helpers/fakes/catalog';
+import { makeFakeInstallations } from './helpers/fakes/installations';
 import { buildTestApi, type TestApi } from './helpers/harness';
 import { REMOTE_SPEC, SEED_FILES } from './helpers/seeds/catalog';
 
@@ -137,6 +138,129 @@ describe('11.1 catalog entries', () => {
       0,
     );
     expect((await api.call('admin', 'GET', '/catalog/entry-plugin')).status).toBe(404);
+  });
+});
+
+describe('11.1 deleting and retiring entries', () => {
+  const del = (t: TestApi, actor: 'admin' | 'managerOwn', id: string) =>
+    t.call(actor, 'DELETE', `/catalog/${id}`, { headers: { 'if-match': '*' } });
+
+  it('11.1 deletes a draft that was never tested', async () => {
+    api = await buildTestApi();
+    const res = await del(api, 'managerOwn', 'entry-plugin');
+    expect(res.status).toBe(204);
+    expect(await api.store.get('catalog_entries', 'entry-plugin')).toBeNull();
+    expect(api.uow.audits.at(-1)).toMatchObject({ action: 'catalog.entry.delete' });
+  });
+
+  it('11.3 deletes a tested draft: its hidden test installation does not count and is stopped and removed', async () => {
+    const fake = makeFakeInstallations();
+    api = await buildTestApi({ overrides: { installations: fake.deps } });
+    await api.store.seed('installations', {
+      id: 'inst-test-1',
+      catalogEntryId: 'entry-team-b',
+      catalogVersionId: 'ver-team-b-draft',
+      ownerType: 'user',
+      ownerId: 'user-manager-b',
+      origin: 'test',
+      enabled: false,
+      secretRefs: { API_KEY: { scope: 'user', name: 'inst-test-1.API_KEY', version: 1 } },
+    });
+    await api.secrets.put({
+      scope: 'user',
+      ownerId: 'user-manager-b',
+      name: 'inst-test-1.API_KEY',
+      value: 'x',
+    });
+    // the seeded team-b installation is real: drop it so only the test installation is left
+    await api.store.remove('installations', 'inst-team-b');
+    const res = await del(api, 'admin', 'entry-team-b');
+    expect(res.status).toBe(204);
+    expect(fake.calls.stop).toEqual(['inst-test-1']);
+    expect(await api.store.get('installations', 'inst-test-1')).toBeNull();
+    expect(await api.secrets.list({ scope: 'user', ownerId: 'user-manager-b' })).toHaveLength(0);
+    expect(await api.store.find('catalog_versions', { entryId: 'entry-team-b' })).toHaveLength(0);
+    expect(await api.store.get('catalog_entries', 'entry-team-b')).toBeNull();
+  });
+
+  it('11.1 deletes a published entry without installations', async () => {
+    api = await buildTestApi();
+    await api.store.remove('installations', 'inst-team-a');
+    const res = await del(api, 'managerOwn', 'entry-team-a');
+    expect(res.status).toBe(204);
+    expect(await api.store.find('catalog_versions', { entryId: 'entry-team-a' })).toHaveLength(0);
+  });
+
+  it('11.1 refuses to delete an entry real installations use, with counts and guidance, and keeps test installations', async () => {
+    const fake = makeFakeInstallations();
+    api = await buildTestApi({ overrides: { installations: fake.deps } });
+    await api.store.seed('installations', {
+      id: 'inst-test-2',
+      catalogEntryId: 'entry-org',
+      ownerType: 'user',
+      ownerId: 'user-manager-b',
+      origin: 'test',
+    });
+    const res = await del(api, 'admin', 'entry-org');
+    expect(res.status).toBe(409);
+    expect(rec(res.body).code).toBe('entry_in_use');
+    const text = JSON.stringify(res.body);
+    expect(text).toMatch(/3 installations use this entry/);
+    expect(text).toMatch(
+      /Deprecate it to hide it from the Store, or remove the installations first/,
+    );
+    expect(fake.calls.stop).toEqual([]);
+    expect(await api.store.get('installations', 'inst-test-2')).not.toBeNull();
+    expect(await api.store.get('catalog_entries', 'entry-org')).not.toBeNull();
+  });
+
+  it('10.1 a manager deletes entries of their own team only; members and auditors cannot', async () => {
+    api = await buildTestApi();
+    expect((await del(api, 'managerOwn', 'entry-team-b')).status).toBe(403);
+    expect((await del(api, 'managerOwn', 'entry-org')).status).toBe(403);
+    expect(
+      (
+        await api.call('member', 'DELETE', '/catalog/entry-plugin', {
+          headers: { 'if-match': '*' },
+        })
+      ).status,
+    ).toBe(403);
+    expect((await del(api, 'managerOwn', 'entry-plugin')).status).toBe(204);
+  });
+
+  it('11.1 deprecates and archives a published entry with audit events; the Store hides both', async () => {
+    api = await buildTestApi();
+    const listed = async () =>
+      items((await api?.call('member', 'GET', '/store'))?.body).map((e) => e.id);
+    expect(await listed()).toContain('entry-team-a');
+    const dep = await api.call('managerOwn', 'PATCH', '/catalog/entry-team-a', {
+      headers: { 'if-match': '*' },
+      body: { status: 'deprecated' },
+    });
+    expect(dep.status).toBe(200);
+    expect(dep.body).toMatchObject({ status: 'deprecated' });
+    expect(api.uow.audits.map((a) => a.action)).toContain('catalog.entry.deprecate');
+    expect(await listed()).not.toContain('entry-team-a');
+    expect((await api.call('member', 'GET', '/store/team-a-server')).status).toBe(404);
+    // archiving is allowed while real installations exist (inst-team-a): it only marks the entry
+    const arch = await api.call('managerOwn', 'PATCH', '/catalog/entry-team-a', {
+      headers: { 'if-match': '*' },
+      body: { status: 'archived' },
+    });
+    expect(arch.status).toBe(200);
+    expect(arch.body).toMatchObject({ status: 'archived' });
+    expect(api.uow.audits.map((a) => a.action)).toContain('catalog.entry.archive');
+    expect(await listed()).not.toContain('entry-team-a');
+  });
+
+  it('11.1 a draft cannot be deprecated or archived, and nothing returns to published by PATCH', async () => {
+    api = await buildTestApi();
+    const res = await api.call('admin', 'PATCH', '/catalog/entry-plugin', {
+      headers: { 'if-match': '*' },
+      body: { status: 'archived' },
+    });
+    expect(res.status).toBe(409);
+    expect(rec(res.body).code).toBe('invalid_status');
   });
 });
 

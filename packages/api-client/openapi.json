@@ -11850,7 +11850,7 @@
         }
       },
       "patch": {
-        "summary": "Update a catalog entry",
+        "summary": "Update a catalog entry, or deprecate or archive a published one",
         "tags": [
           "Catalog"
         ],
@@ -12047,7 +12047,7 @@
         }
       },
       "delete": {
-        "summary": "Delete a catalog entry without installations",
+        "summary": "Delete a catalog entry (409 while real installations use it)",
         "tags": [
           "Catalog"
         ],

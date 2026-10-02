@@ -32,6 +32,25 @@ const teamNames = async (signal?: AbortSignal): Promise<Map<string, string>> =>
 /** Entries listed with their version labels need one `GET /catalog/{id}/versions` each: this many at most. */
 const VERSION_FAN_OUT = 30;
 
+/**
+ * How many real installations each entry has: the hidden test installations of the TEST flow (`origin: 'test'`) do
+ * not count. `null` when the list could not be read; the API still refuses a delete that would orphan them.
+ */
+const realInstallationCounts = async (
+  signal?: AbortSignal,
+): Promise<Map<string, number> | null> => {
+  try {
+    const counts = new Map<string, number>();
+    for (const i of await fetchAll('/installations', {}, 20, signal)) {
+      if (i.origin === 'test' || !i.catalogEntryId) continue;
+      counts.set(i.catalogEntryId, (counts.get(i.catalogEntryId) ?? 0) + 1);
+    }
+    return counts;
+  } catch {
+    return null;
+  }
+};
+
 // --- entries ----------------------------------------------------------------------------------------------------
 
 /** Catalog entries with owner team and current version label (derived from the versions, bounded fan-out). */
@@ -39,14 +58,15 @@ export const useCatalog = (params: { kind?: CatalogKind; q?: string } = {}) =>
   useQuery({
     queryKey: [...keys.catalog, 'list', params],
     queryFn: async ({ signal }): Promise<CatalogEntryView[]> => {
-      const [rows, names] = await Promise.all([
+      const [rows, names, installs] = await Promise.all([
         fetchAll('/catalog', params, 20, signal),
         teamNames(signal),
+        realInstallationCounts(signal),
       ]);
       const withVersions = new Map<string, CatalogVersion[]>();
       await Promise.all(
         rows
-          .filter((e) => e.currentVersionId)
+          .filter((e) => e.currentVersionId || e.status === 'draft')
           .slice(0, VERSION_FAN_OUT)
           .map(async (e) => {
             const page = await api.get(`/catalog/${e.id}/versions`, {
@@ -57,7 +77,11 @@ export const useCatalog = (params: { kind?: CatalogKind; q?: string } = {}) =>
           }),
       );
       return rows.map((e) =>
-        toEntryView(e, { teamNames: names, versions: withVersions.get(e.id) }),
+        toEntryView(e, {
+          teamNames: names,
+          versions: withVersions.get(e.id),
+          installations: installs ? (installs.get(e.id) ?? 0) : null,
+        }),
       );
     },
   });
@@ -255,6 +279,44 @@ export const usePublish = (entryId: string, versionId: string) =>
     (body?: Body<'post', '/catalog/{id}/versions/{vid}/publish'>) =>
       api.post(`/catalog/${entryId}/versions/${versionId}/publish`, body),
     [keys.catalog, keys.store, keys.approvals],
+  );
+
+/** Publishes a tested draft from anywhere (the catalog list row); the editor uses `usePublish`. */
+export const usePublishEntry = (onPublished?: () => void) =>
+  useApiMutation(
+    (input: {
+      entryId: string;
+      versionId: string;
+      visibility: NonNullable<
+        NonNullable<Body<'post', '/catalog/{id}/versions/{vid}/publish'>>['visibility']
+      >;
+    }) =>
+      api.post(`/catalog/${input.entryId}/versions/${input.versionId}/publish`, {
+        visibility: input.visibility,
+      }),
+    [keys.catalog, keys.store, keys.approvals],
+    { onSuccess: () => onPublished?.() },
+  );
+
+/**
+ * Deletes an entry (11.1). Hidden test installations go with it; real installations make the API answer 409
+ * `entry_in_use` with what to do instead.
+ */
+export const useDeleteCatalogEntry = (onDeleted?: () => void) =>
+  useApiMutation(
+    (id: string) => api.delete(`/catalog/${id}`, { etag: '*' }),
+    // Only the lists: the deleted entry's own queries must not refetch (they would 404 under the open editor).
+    [[...keys.catalog, 'list'], keys.store, keys.installations, keys.autoInstall],
+    { onSuccess: () => onDeleted?.() },
+  );
+
+/** Deprecates (hidden from the Store) or archives a published entry (11.1). */
+export const useSetEntryStatus = (onDone?: () => void) =>
+  useApiMutation(
+    (input: { id: string; status: 'deprecated' | 'archived' }) =>
+      api.patch(`/catalog/${input.id}`, { status: input.status }, { etag: '*' }),
+    [keys.catalog, keys.store],
+    { onSuccess: () => onDone?.() },
   );
 
 export const useApproveExecutable = () =>

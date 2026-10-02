@@ -13,7 +13,9 @@ import {
 // version, and a failing or running test never traps the author: the reason is shown and every step stays reachable.
 
 const publishButton = (page: Page) =>
-  page.getByRole('region', { name: 'Publish' }).getByRole('button', { name: /^Publish v/ });
+  page
+    .getByRole('region', { name: 'Publish', exact: true })
+    .getByRole('button', { name: /^Publish v/ });
 
 test('a new unsaved entry is saved and tested in one flow, then Publish is available', async ({
   page,

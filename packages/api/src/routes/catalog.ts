@@ -68,6 +68,7 @@ import {
   putFile,
   startTest,
   syncPluginSource,
+  updateEntry,
   updateVersion,
 } from '../services/catalog';
 import {
@@ -167,17 +168,17 @@ export const catalogRoutes: RouteDefinition[] = [
     method: 'PATCH',
     url: '/catalog/{id}',
     tag: TAG,
-    summary: 'Update a catalog entry',
+    summary: 'Update a catalog entry, or deprecate or archive a published one',
     schema: { params: idParams, body: entryPatchSchema, response: asRow(catalogEntryRow) },
     authz: authz.on('catalog.update', entryRes),
     version: versionOf('catalog_entries'),
-    handler: (ctx) => entries.update(ctx, ctx.params.id, ctx.body),
+    handler: (ctx) => updateEntry(ctx, ctx.params.id, ctx.body),
   }),
   defineMutation({
     method: 'DELETE',
     url: '/catalog/{id}',
     tag: TAG,
-    summary: 'Delete a catalog entry without installations',
+    summary: 'Delete a catalog entry (409 while real installations use it)',
     schema: { params: idParams, response: z.null() },
     authz: authz.on('catalog.delete', entryRes),
     status: 204,
