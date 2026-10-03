@@ -30,6 +30,7 @@ model IdpConnection {
   storeRefreshToken     Boolean           @default(false) @map("store_refresh_token")
   apiScope              String?           @map("api_scope")
   enterpriseManagedAuth Boolean           @default(false) @map("enterprise_managed_auth")
+  redirectToRoot        Boolean           @default(false) @map("redirect_to_root")
   enabled               Boolean           @default(true)
   createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime?         @updatedAt @map("updated_at") @db.Timestamptz(6)

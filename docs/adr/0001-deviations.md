@@ -130,3 +130,11 @@ The spec has no password reset and no e-mail delivery in v1. What is implemented
   Poppins (`/assets/pages.css`, `/assets/fonts/*`) and a strict CSP (`script-src 'self'; style-src 'self'`, no
   inline script or style). oidc-provider's own pages are replaced through `ProviderPages`.
 
+## 10. Root redirect for IdPs that register only the site origin (9.1)
+
+Synology SSO Server rejects a redirect URI with a path, and compares the requested one with the registered origin
+exactly, so `/auth/callback/{id}` cannot be registered. `idp_connections.redirect_to_root` (migration 0004, API field
+`redirectToRoot`, default false) makes the sign-in return to `/`. A `GET /` with `state` and `code` or `error` is then
+completed as the callback: the state cookie of such a connection is `{connection id}~{state token}` on `Path=/` (the
+default keeps `Path=/auth/callback`), which is how the connection is found. The spec does not describe this.
+

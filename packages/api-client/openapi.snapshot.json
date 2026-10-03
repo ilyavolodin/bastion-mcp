@@ -1245,6 +1245,9 @@
           "enterpriseManagedAuth": {
             "type": "boolean"
           },
+          "redirectToRoot": {
+            "type": "boolean"
+          },
           "enabled": {
             "type": "boolean"
           },
@@ -1265,6 +1268,7 @@
           "storeRefreshToken",
           "apiScope",
           "enterpriseManagedAuth",
+          "redirectToRoot",
           "enabled",
           "createdAt"
         ],
@@ -1628,6 +1632,9 @@
                   ]
                 },
                 "detail": {
+                  "type": "string"
+                },
+                "connectUrl": {
                   "type": "string"
                 }
               },
@@ -5669,6 +5676,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -6410,6 +6418,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -6848,6 +6857,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -7440,6 +7450,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -7996,6 +8007,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8104,6 +8116,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -8235,6 +8248,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8351,6 +8365,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -8850,6 +8865,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8958,6 +8974,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -9340,6 +9357,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9448,6 +9466,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -9870,6 +9889,10 @@
                     "default": false,
                     "type": "boolean"
                   },
+                  "redirectToRoot": {
+                    "default": false,
+                    "type": "boolean"
+                  },
                   "enabled": {
                     "default": true,
                     "type": "boolean"
@@ -10128,6 +10151,9 @@
                   "enterpriseManagedAuth": {
                     "type": "boolean"
                   },
+                  "redirectToRoot": {
+                    "type": "boolean"
+                  },
                   "enabled": {
                     "type": "boolean"
                   }
@@ -10156,6 +10182,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -10264,6 +10291,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -10711,6 +10739,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -11056,6 +11085,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -11971,6 +12001,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -12079,6 +12110,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -15913,6 +15945,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -16845,6 +16878,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -16971,6 +17005,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -17382,6 +17417,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -17490,6 +17526,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -19925,6 +19962,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -20033,6 +20071,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -21132,6 +21171,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -21263,6 +21303,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -21780,6 +21821,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -21888,6 +21930,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -22481,6 +22524,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -22785,6 +22829,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -23853,6 +23898,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -23961,6 +24007,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -24645,6 +24692,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -24753,6 +24801,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -25252,6 +25301,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -27100,6 +27150,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -27208,6 +27259,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -29197,6 +29249,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -29305,6 +29358,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -32014,6 +32068,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -32122,6 +32177,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -32517,6 +32573,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -33321,6 +33378,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -33429,6 +33487,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -33869,6 +33928,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -34031,6 +34091,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -34165,6 +34226,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -34327,6 +34389,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -34461,6 +34524,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -34623,6 +34687,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -36874,6 +36939,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -38160,6 +38226,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -38268,6 +38335,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -38417,6 +38485,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -38533,6 +38602,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "204": {
             "description": "Default Response"
@@ -39042,6 +39112,7 @@
             "session": []
           }
         ],
+        "x-requires-if-match": true,
         "responses": {
           "200": {
             "description": "Default Response",

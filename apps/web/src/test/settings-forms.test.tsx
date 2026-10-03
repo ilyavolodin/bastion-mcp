@@ -91,6 +91,7 @@ describe('Settings forms send what the API accepts (19.2)', () => {
       storeRefreshToken: false,
       apiScope: null,
       enterpriseManagedAuth: false,
+      redirectToRoot: false,
       enabled: true,
     });
     await waitFor(() => expect(getDb().data.settings.idpConnections).toHaveLength(2));
@@ -118,6 +119,39 @@ describe('Settings forms send what the API accepts (19.2)', () => {
     const base = getDb().me.org.baseUrl.replace(/\/$/, '');
     expect(field.closest('div')).toHaveTextContent(`${base}/auth/callback/idp-1`);
     expect(screen.getByRole('button', { name: /Copy Redirect URI of Okta/ })).toBeVisible();
+  });
+
+  it('9.1 a connection for an IdP that accepts only the site address shows that address as its redirect URI', async () => {
+    await renderRoute('/settings?section=idp', {
+      prepare: (db) => {
+        const row = db.data.settings.idpConnections[0];
+        if (!row) throw new Error('fixture missing');
+        row.redirectToRoot = true;
+      },
+    });
+    const field = await screen.findByText('Redirect URI of Okta', { exact: false });
+    const base = getDb().me.org.baseUrl.replace(/\/$/, '');
+    const text = field.closest('div')?.textContent ?? '';
+    expect(text).toContain(base);
+    expect(text).not.toContain('/auth/callback');
+  });
+
+  it('9.1 the redirect-to-site-address switch is sent with the connection', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/settings?section=idp');
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(
+      within(dialog).getByRole('switch', { name: 'Redirect to the site address only' }),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Save connection' }));
+    const body = (await expectSent(capture, 'patch', '/idp-connections/idp-1')) as Record<
+      string,
+      unknown
+    >;
+    expect(body.redirectToRoot).toBe(true);
+    await waitFor(() => expect(getDb().data.settings.idpConnections[0]?.redirectToRoot).toBe(true));
+    capture.stop();
   });
 
   it('9.4 editing a connection leaves the client secret out unless a new one is typed', async () => {

@@ -29,6 +29,7 @@ const addConnection = async (
     storeRefreshToken: false,
     apiScope: null,
     enterpriseManagedAuth: false,
+    redirectToRoot: false,
     enabled: input.enabled ?? true,
   });
 };

@@ -27,6 +27,7 @@ export const COLUMN_DEFAULTS: Partial<Record<Collection, Record<string, unknown>
     storeRefreshToken: false,
     apiScope: null,
     enterpriseManagedAuth: false,
+    redirectToRoot: false,
     enabled: true,
   },
   scim_tokens: { expiresAt: null, revokedAt: null },

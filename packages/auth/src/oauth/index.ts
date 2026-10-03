@@ -143,6 +143,7 @@ export {
   buildProtectedResourceMetadata,
   connectUrl,
   idpCallbackUrl,
+  idpRedirectUri,
   isAllowedResource,
   issuerFor,
   mcpResource,

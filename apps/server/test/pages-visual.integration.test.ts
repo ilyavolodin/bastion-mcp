@@ -337,6 +337,7 @@ describe.skipIf(!haveDocker() || !browserTestsAvailable())(
           storeRefreshToken: false,
           apiScope: null,
           enterpriseManagedAuth: false,
+          redirectToRoot: false,
           enabled: true,
         });
         await page.goto('https://bastion.test/auth/login');
@@ -375,6 +376,7 @@ describe.skipIf(!haveDocker() || !browserTestsAvailable())(
           storeRefreshToken: false,
           apiScope: null,
           enterpriseManagedAuth: false,
+          redirectToRoot: false,
           enabled: true,
         });
         const context = await rig.context();

@@ -1245,6 +1245,9 @@
           "enterpriseManagedAuth": {
             "type": "boolean"
           },
+          "redirectToRoot": {
+            "type": "boolean"
+          },
           "enabled": {
             "type": "boolean"
           },
@@ -1265,6 +1268,7 @@
           "storeRefreshToken",
           "apiScope",
           "enterpriseManagedAuth",
+          "redirectToRoot",
           "enabled",
           "createdAt"
         ],
@@ -9885,6 +9889,10 @@
                     "default": false,
                     "type": "boolean"
                   },
+                  "redirectToRoot": {
+                    "default": false,
+                    "type": "boolean"
+                  },
                   "enabled": {
                     "default": true,
                     "type": "boolean"
@@ -10141,6 +10149,9 @@
                     ]
                   },
                   "enterpriseManagedAuth": {
+                    "type": "boolean"
+                  },
+                  "redirectToRoot": {
                     "type": "boolean"
                   },
                   "enabled": {

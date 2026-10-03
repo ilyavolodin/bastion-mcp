@@ -110,6 +110,8 @@ export type HarnessOptions = {
   admin?: boolean;
   /** Register the fake IdP as the only connection and map `bastion-admins` to admin (default false). */
   idpConnection?: boolean;
+  /** The IdP connection registers only the site origin: the sign-in returns to `/` (9.1). */
+  idpRedirectToRoot?: boolean;
 };
 
 export const startUiHarness = async (options: HarnessOptions = {}): Promise<UiHarness> => {
@@ -145,6 +147,7 @@ export const startUiHarness = async (options: HarnessOptions = {}): Promise<UiHa
       storeRefreshToken: false,
       apiScope: null,
       enterpriseManagedAuth: false,
+      redirectToRoot: options.idpRedirectToRoot === true,
       enabled: true,
     });
     await infra.repos.roleMappingRules.create({

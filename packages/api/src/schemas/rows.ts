@@ -139,6 +139,7 @@ export const idpConnectionRow = row('IdpConnection', {
   storeRefreshToken: z.boolean(),
   apiScope: z.string().nullable(),
   enterpriseManagedAuth: z.boolean(),
+  redirectToRoot: z.boolean(),
   enabled: z.boolean(),
   createdAt: iso,
 });

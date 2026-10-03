@@ -33,6 +33,7 @@ const connectionFor = (fake: FakeIdp, overrides: Partial<IdpConnection> = {}): I
   storeRefreshToken: false,
   apiScope: null,
   enterpriseManagedAuth: false,
+  redirectToRoot: false,
   enabled: true,
   ...overrides,
 });
@@ -84,6 +85,30 @@ describe('9.1 OIDC login', () => {
     expect(url.searchParams.get('state')).toBeTruthy();
     expect(url.searchParams.get('nonce')).toBeTruthy();
     expect(url.searchParams.get('code_challenge')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
+  it('9.1 a root-redirect connection sends the site origin as redirect URI, at the authorization and at the token request', async () => {
+    const connection = connectionFor(idp, { redirectToRoot: true });
+    const { login } = setup(connection);
+    const start = await login.startLogin(connection.id, { returnTo: '/dashboard' });
+    expect(start).toMatchObject({ connectionId: connection.id, redirectToRoot: true });
+    expect(new URL(start.authorizationUrl).searchParams.get('redirect_uri')).toBe(
+      'https://bastion.test/',
+    );
+    // The IdP sends the person back to `/?code=...&state=...`; the code exchange repeats the same redirect URI.
+    const query = await idp.authorize(start.authorizationUrl);
+    const result = await login.completeLogin(connection.id, query, start.stateToken);
+    expect(result.profile.email).toBe('ada@acme.example');
+    expect(result.returnTo).toBe('/dashboard');
+    const exchange = idp.requests.find((r) => r.path === '/token');
+    expect(exchange?.params.redirect_uri).toBe('https://bastion.test/');
+  });
+
+  it('9.1 a path connection still redirects to /auth/callback/{id}', async () => {
+    const connection = connectionFor(idp);
+    const { login } = setup(connection);
+    const start = await login.startLogin(connection.id);
+    expect(start.redirectToRoot).toBe(false);
   });
 
   it('9.1 completes the callback, maps claims and returns the IdP tokens', async () => {

@@ -223,6 +223,7 @@ describe.skipIf(!dbEnabled())('16.2 token, OAuth, IdP and secret stores', () => 
         storeRefreshToken: false,
         apiScope: null,
         enterpriseManagedAuth: false,
+        redirectToRoot: false,
         enabled: true,
       },
       audit,

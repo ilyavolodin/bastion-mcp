@@ -50,6 +50,7 @@ const idpSchema = (creating: boolean) =>
     apiScope: z.string(),
     storeRefreshToken: z.boolean(),
     enterpriseManagedAuth: z.boolean(),
+    redirectToRoot: z.boolean(),
     enabled: z.boolean(),
   });
 
@@ -116,7 +117,7 @@ function IdpDialog({ editing, onClose }: { editing: IdpConnection | 'new'; onClo
     </Field>
   );
   const flag = (
-    name: 'storeRefreshToken' | 'enterpriseManagedAuth' | 'enabled',
+    name: 'storeRefreshToken' | 'enterpriseManagedAuth' | 'redirectToRoot' | 'enabled',
     label: string,
     help: string,
   ) => (
@@ -200,6 +201,11 @@ function IdpDialog({ editing, onClose }: { editing: IdpConnection | 'new'; onClo
         'enterpriseManagedAuth',
         'Enterprise-managed authorization',
         'Use this IdP to authorize upstream servers',
+      )}
+      {flag(
+        'redirectToRoot',
+        'Redirect to the site address only',
+        'For an IdP that accepts nothing but the site address as redirect URI, such as Synology SSO Server',
       )}
       {creating ? (
         <p className="m-0 text-caption text-muted">
@@ -289,7 +295,7 @@ export function IdpSection() {
                     tone="sunken"
                     mono
                     label={`Redirect URI of ${c.name}`}
-                    value={idpRedirectUri(me.org.baseUrl, c.id)}
+                    value={idpRedirectUri(me.org.baseUrl, c)}
                   />
                 </div>
                 {results[c.id] ? <TestResult result={results[c.id] as IdpTestResult} /> : null}

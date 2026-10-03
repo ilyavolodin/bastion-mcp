@@ -32,6 +32,7 @@ export const seedIdp = async (infra: Infra, idp: FakeIdp): Promise<string> => {
     storeRefreshToken: false,
     apiScope: null,
     enterpriseManagedAuth: false,
+    redirectToRoot: false,
     enabled: true,
   });
   await infra.repos.roleMappingRules.create({

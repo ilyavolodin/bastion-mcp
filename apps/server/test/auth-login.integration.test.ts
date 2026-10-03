@@ -174,4 +174,53 @@ describe.skipIf(!haveDocker())('9.1 / 9.2 browser login', () => {
       expect(res.status).toBe(400);
     });
   });
+
+  describe('OIDC login with an IdP that accepts only the site origin (Synology SSO Server)', () => {
+    let h: UiHarness;
+    beforeAll(async () => {
+      h = await startUiHarness({ idpConnection: true, idpRedirectToRoot: true });
+    });
+    afterAll(async () => {
+      await h.close();
+    });
+
+    it('9.1 the IdP is sent the bare site origin and the sign-in completes at /', async () => {
+      const b = h.browser();
+      const start = await b.request(`${PUBLIC_ORIGIN}/auth/login?return_to=/servers`);
+      expect(start.status).toBe(302);
+      const authorize = new URL(start.headers.get('location') ?? '');
+      expect(authorize.searchParams.get('redirect_uri')).toBe(`${PUBLIC_ORIGIN}/`);
+      // The state cookie of this connection is sent to `/`, where the IdP returns.
+      expect(start.headers.getSetCookie().join('\n')).toMatch(
+        /bastion_login=[^;]+~[^;]+; Path=\/;/,
+      );
+
+      const { response, url } = await b.follow(
+        `${PUBLIC_ORIGIN}/auth/login?return_to=/servers`,
+        undefined,
+        (u) => new URL(u).pathname === '/servers',
+      );
+      expect(url).toBe(`${PUBLIC_ORIGIN}/servers`);
+      expect(response.status).toBe(302);
+      const principal = await h.auth.sessions.authenticate(b.cookie(SESSION_COOKIE) ?? '');
+      expect(principal?.orgRole).toBe('admin');
+      expect((await h.infra.repos.users.findByEmail('ada@acme.example'))?.status).toBe('active');
+    });
+
+    it('9.1 a return to / with a code but no login state is refused, and the state cookie is single use', async () => {
+      const b = h.browser();
+      const res = await b.request(`${PUBLIC_ORIGIN}/?code=x&state=y`);
+      expect(res.status).toBe(400);
+      // Without the pair of parameters the root is not a callback at all (the SPA gets it).
+      expect((await b.request(`${PUBLIC_ORIGIN}/?utm=1`)).status).toBe(404);
+
+      const first = h.browser();
+      const start = await first.request(`${PUBLIC_ORIGIN}/auth/login`);
+      const query = await h.idp.authorize(start.headers.get('location') ?? '');
+      const done = await first.request(`${PUBLIC_ORIGIN}/?${query}`);
+      expect(done.status).toBe(302);
+      const replay = await first.request(`${PUBLIC_ORIGIN}/?${query}`);
+      expect(replay.status).toBe(400);
+    });
+  });
 });

@@ -72,6 +72,7 @@ beforeEach(async () => {
     storeRefreshToken: true,
     apiScope: 'api://bastion/user_impersonation',
     enterpriseManagedAuth: true,
+    redirectToRoot: false,
     enabled: true,
   };
   x.secrets.byId.set('idp-secret', idp.clientSecret);

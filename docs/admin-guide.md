@@ -258,6 +258,13 @@ login page routes by email domain. First login provisions the user (JIT); group 
 every login and every SCIM update. Copy the redirect URI the connection form shows into the IdP; it lives under
 `https://<host>/auth/`.
 
+**IdPs that accept only the site address as redirect URI.** Synology SSO Server refuses a redirect URI with a path
+(`/auth/callback/<id>`): its application registration takes just `http(s)://host[:port]`. Turn on **Redirect to the
+site address only** on the connection. Bastion then sends the bare site address (the Redirect URI the connection
+shows is that address), the IdP returns to `/?code=...&state=...`, and Bastion completes the sign-in there. Only
+a request to `/` that carries `code` or `error` together with `state` is treated as a callback, and only when the
+sign-in state cookie of that connection (HttpOnly, ten minutes, single use) is present.
+
 **Locked out after adding an IdP?** The local password login switches off as soon as one connection exists (even a
 disabled one). Set `BASTION_LOCAL_LOGIN=true` (Docker Compose: in `deploy/docker/.env`, then `docker compose up -d
 bastion`), sign in with the local admin, fix the connection, and turn it off again. If you forgot the local password:

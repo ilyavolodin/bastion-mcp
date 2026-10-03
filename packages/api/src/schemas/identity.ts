@@ -51,6 +51,8 @@ export const idpCreateSchema = z.object({
   storeRefreshToken: z.boolean().default(false),
   apiScope: z.string().nullable().default(null),
   enterpriseManagedAuth: z.boolean().default(false),
+  /** The IdP accepts only the site origin as redirect URI: the sign-in returns to `/` (9.1). */
+  redirectToRoot: z.boolean().default(false),
   enabled: z.boolean().default(true),
 });
 
@@ -74,6 +76,7 @@ export const idpPatchSchema = z
     storeRefreshToken: z.boolean(),
     apiScope: z.string().nullable(),
     enterpriseManagedAuth: z.boolean(),
+    redirectToRoot: z.boolean(),
     enabled: z.boolean(),
   })
   .partial()

@@ -35,6 +35,15 @@ export const upstreamClientMetadataUrl = (host: string): string =>
 export const upstreamJwksUrl = (host: string): string => `${originOf(host)}/oauth/upstream/jwks`;
 export const idpCallbackUrl = (host: string, connectionId: string): string =>
   `${originOf(host)}/auth/callback/${connectionId}`;
+/**
+ * The redirect URI of an IdP connection (9.1): `/auth/callback/{id}`, or the bare site origin for an IdP that registers
+ * nothing but the origin (Synology SSO Server). The origin form ends in `/`, which is what `new URL` makes of it.
+ */
+export const idpRedirectUri = (
+  host: string,
+  connection: { id: string; redirectToRoot: boolean },
+): string =>
+  connection.redirectToRoot ? `${originOf(host)}/` : idpCallbackUrl(host, connection.id);
 
 /** Protected Resource Metadata for any exact path variant of /mcp (9.3, RFC 9728). */
 export const buildProtectedResourceMetadata = (input: {

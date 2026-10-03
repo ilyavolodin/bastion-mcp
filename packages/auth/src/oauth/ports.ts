@@ -88,6 +88,8 @@ export type IdpConnection = {
   storeRefreshToken: boolean;
   apiScope: string | null;
   enterpriseManagedAuth: boolean;
+  /** The IdP only accepts the site origin as redirect URI: sign-in returns to `/` (9.1). */
+  redirectToRoot: boolean;
   enabled: boolean;
 };
 export interface IdpConnectionStore {

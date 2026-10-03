@@ -124,6 +124,8 @@ export type IdpConnectionRecord = {
   storeRefreshToken: boolean;
   apiScope: string | null;
   enterpriseManagedAuth: boolean;
+  /** The IdP only accepts the site origin as redirect URI: sign-in returns to `/` (9.1). */
+  redirectToRoot: boolean;
   enabled: boolean;
 };
 
@@ -143,6 +145,7 @@ const toIdp = (row: IdpConnectionRow): IdpConnectionRecord => ({
   storeRefreshToken: row.storeRefreshToken,
   apiScope: row.apiScope,
   enterpriseManagedAuth: row.enterpriseManagedAuth,
+  redirectToRoot: row.redirectToRoot,
   enabled: row.enabled,
 });
 
@@ -193,6 +196,7 @@ export const createIdpConnectionRepository = (
               storeRefreshToken: input.storeRefreshToken,
               apiScope: input.apiScope,
               enterpriseManagedAuth: input.enterpriseManagedAuth,
+              redirectToRoot: input.redirectToRoot,
               enabled: input.enabled,
             },
           }),

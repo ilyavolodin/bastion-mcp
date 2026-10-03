@@ -199,6 +199,7 @@ export type IdpFormValues = {
   apiScope: string;
   storeRefreshToken: boolean;
   enterpriseManagedAuth: boolean;
+  redirectToRoot: boolean;
   enabled: boolean;
 };
 
@@ -217,6 +218,7 @@ export const emptyIdpForm = (): IdpFormValues => ({
   apiScope: '',
   storeRefreshToken: false,
   enterpriseManagedAuth: false,
+  redirectToRoot: false,
   enabled: true,
 });
 
@@ -235,6 +237,7 @@ export const idpToForm = (c: IdpConnection): IdpFormValues => ({
   apiScope: c.apiScope ?? '',
   storeRefreshToken: c.storeRefreshToken,
   enterpriseManagedAuth: c.enterpriseManagedAuth,
+  redirectToRoot: c.redirectToRoot,
   enabled: c.enabled,
 });
 
@@ -254,12 +257,21 @@ const idpFields = (v: IdpFormValues) => ({
   storeRefreshToken: v.storeRefreshToken,
   apiScope: v.apiScope.trim() || null,
   enterpriseManagedAuth: v.enterpriseManagedAuth,
+  redirectToRoot: v.redirectToRoot,
   enabled: v.enabled,
 });
 
-/** The address the IdP sends people back to after sign-in, which the IdP's own application registration must list (9.1). */
-export const idpRedirectUri = (baseUrl: string, connectionId: string): string =>
-  `${baseUrl.replace(/\/$/, '')}/auth/callback/${connectionId}`;
+/**
+ * The address the IdP sends people back to after sign-in, which the IdP's own application registration must list (9.1):
+ * `/auth/callback/{id}`, or the bare site address for an IdP that registers nothing but the origin.
+ */
+export const idpRedirectUri = (
+  baseUrl: string,
+  connection: { id: string; redirectToRoot: boolean },
+): string => {
+  const base = baseUrl.replace(/\/$/, '');
+  return connection.redirectToRoot ? base : `${base}/auth/callback/${connection.id}`;
+};
 
 /** `POST /idp-connections`: the client secret is required and write-only. */
 export const idpCreateBody = (v: IdpFormValues): Body<'post', '/idp-connections'> => ({

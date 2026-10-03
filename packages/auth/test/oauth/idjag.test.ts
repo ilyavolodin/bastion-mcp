@@ -24,6 +24,7 @@ const connection = (overrides: Partial<IdpConnection> = {}): IdpConnection => ({
   storeRefreshToken: false,
   apiScope: null,
   enterpriseManagedAuth: true,
+  redirectToRoot: false,
   enabled: true,
   ...overrides,
 });

@@ -48,10 +48,19 @@ export type LoginOptions = {
 type Query = Record<string, string | undefined>;
 type FormBody = Record<string, string | undefined>;
 
-const stateCookie = (value: string, maxAge: number, secure: boolean): string =>
+const STATE_PATH = '/auth/callback';
+/** The state cookie of a root-redirect connection is `{connection id}~{state token}`, sent to every path. */
+const STATE_ID_SEPARATOR = '~';
+
+const stateCookie = (
+  value: string,
+  maxAge: number,
+  secure: boolean,
+  path: string = STATE_PATH,
+): string =>
   [
     `${STATE_COOKIE}=${value}`,
-    'Path=/auth/callback',
+    `Path=${path}`,
     `Max-Age=${maxAge}`,
     'HttpOnly',
     ...(secure ? ['Secure'] : []),
@@ -107,6 +116,98 @@ export const registerLoginRoutes = async (
   const { repos, logger } = infra;
   const secure = cookiesSecure(infra);
 
+  /** Completes an IdP sign-in: the IdP returned to `/auth/callback/{id}` or, for a root-redirect connection, to `/`. */
+  const finishLogin = async (
+    req: FastifyRequest,
+    reply: FastifyReply,
+    idpConnectionId: string,
+    state: string | undefined,
+    cookiePath: string,
+  ) => {
+    addCookie(reply, stateCookie('', 0, secure, cookiePath));
+    if (!state) {
+      return errorPage(reply, 400, 'The sign-in session expired. Try again.', {
+        back: BACK_TO_SIGN_IN,
+      });
+    }
+    const query = req.raw.url?.split('?')[1] ?? '';
+    try {
+      const result = await auth.idpLogin.completeLogin(idpConnectionId, query, state);
+      const { connection, profile, tokens } = result;
+      const existingId = await repos.scim?.findUserIdByEmail(profile.email);
+      const existing = existingId ? await repos.scim?.getUserState(existingId) : null;
+      const plan = planLogin({
+        connection,
+        claims: {
+          sub: profile.sub,
+          email: profile.email,
+          displayName: profile.name,
+          groups: profile.groups,
+        },
+        existingUser: existing ?? null,
+        rules: (await repos.scim?.listRules(connection.id)) ?? [],
+        teams: (await repos.scim?.listTeamRefs()) ?? [],
+        now: new Date(),
+        newId: () => newId(),
+      });
+      await repos.provisioning.applyPlan(plan, { actorType: 'system' });
+      const userId = plan.user.id;
+      if (plan.user.kind === 'create') await repos.users.recordLogin(userId, new Date());
+      if (connection.storeRefreshToken || tokens.refreshToken) {
+        await auth.idpTokens.save(userId, connection.id, tokens);
+      }
+      if (options.onProvisioned && plan.events.length > 0) {
+        try {
+          await options.onProvisioned(plan.events);
+        } catch (error) {
+          logger.warn(
+            { err: error instanceof Error ? error.message : String(error) },
+            'provisioning hook failed',
+          );
+        }
+      }
+      await startSession(deps, reply, userId);
+      return reply.header('cache-control', 'no-store').redirect(safeReturnTo(result.returnTo), 302);
+    } catch (error) {
+      if (error instanceof ProvisioningDeniedError) {
+        return errorPage(reply, 403, `Sign-in was refused: ${error.message}.`, {
+          back: BACK_TO_SIGN_IN,
+        });
+      }
+      if (
+        error instanceof IdpLoginError ||
+        error instanceof IdpClaimError ||
+        error instanceof OAuthProtocolError ||
+        error instanceof BastionError
+      ) {
+        logger.warn({ err: error.message }, 'idp login failed');
+        return errorPage(reply, 400, 'Sign-in failed. Try again or contact your administrator.', {
+          back: BACK_TO_SIGN_IN,
+        });
+      }
+      throw error;
+    }
+  };
+
+  // An IdP that registers only the site origin (Synology SSO Server) returns to `/?code=...&state=...`. The login state
+  // cookie of such a connection is sent to every path and names its connection; nothing else is taken for a callback.
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.method !== 'GET') return;
+    const url = req.raw.url ?? '';
+    const q = url.indexOf('?');
+    if (q < 0 || url.slice(0, q) !== '/') return;
+    const params = new URLSearchParams(url.slice(q + 1));
+    if (!params.has('state') || !(params.has('code') || params.has('error'))) return;
+    const raw = cookieValue(req, STATE_COOKIE);
+    const sep = raw?.indexOf(STATE_ID_SEPARATOR) ?? -1;
+    if (!raw || sep < 0) {
+      return errorPage(reply, 400, 'The sign-in session expired. Try again.', {
+        back: BACK_TO_SIGN_IN,
+      });
+    }
+    return finishLogin(req, reply, raw.slice(0, sep), raw.slice(sep + 1), '/');
+  });
+
   await app.register(async (scope) => {
     scope.addContentTypeParser(
       'application/x-www-form-urlencoded',
@@ -150,7 +251,17 @@ export const registerLoginRoutes = async (
           returnTo,
           ...(q.email ? { loginHint: q.email } : {}),
         });
-        addCookie(reply, stateCookie(started.stateToken, STATE_COOKIE_MAX_AGE, secure));
+        addCookie(
+          reply,
+          started.redirectToRoot
+            ? stateCookie(
+                `${started.connectionId}${STATE_ID_SEPARATOR}${started.stateToken}`,
+                STATE_COOKIE_MAX_AGE,
+                secure,
+                '/',
+              )
+            : stateCookie(started.stateToken, STATE_COOKIE_MAX_AGE, secure),
+        );
         return reply.header('cache-control', 'no-store').redirect(started.authorizationUrl, 302);
       } catch (error) {
         logger.warn(
@@ -180,78 +291,14 @@ export const registerLoginRoutes = async (
     // --- /auth/callback/:idpConnectionId ----------------------------------------------------------------
     scope.get<{ Params: { idpConnectionId: string } }>(
       '/auth/callback/:idpConnectionId',
-      async (req, reply) => {
-        const { idpConnectionId } = req.params;
-        const state = cookieValue(req, STATE_COOKIE);
-        addCookie(reply, stateCookie('', 0, secure));
-        if (!state) {
-          return errorPage(reply, 400, 'The sign-in session expired. Try again.', {
-            back: BACK_TO_SIGN_IN,
-          });
-        }
-        const query = req.raw.url?.split('?')[1] ?? '';
-        try {
-          const result = await auth.idpLogin.completeLogin(idpConnectionId, query, state);
-          const { connection, profile, tokens } = result;
-          const existingId = await repos.scim?.findUserIdByEmail(profile.email);
-          const existing = existingId ? await repos.scim?.getUserState(existingId) : null;
-          const plan = planLogin({
-            connection,
-            claims: {
-              sub: profile.sub,
-              email: profile.email,
-              displayName: profile.name,
-              groups: profile.groups,
-            },
-            existingUser: existing ?? null,
-            rules: (await repos.scim?.listRules(connection.id)) ?? [],
-            teams: (await repos.scim?.listTeamRefs()) ?? [],
-            now: new Date(),
-            newId: () => newId(),
-          });
-          await repos.provisioning.applyPlan(plan, { actorType: 'system' });
-          const userId = plan.user.id;
-          if (plan.user.kind === 'create') await repos.users.recordLogin(userId, new Date());
-          if (connection.storeRefreshToken || tokens.refreshToken) {
-            await auth.idpTokens.save(userId, connection.id, tokens);
-          }
-          if (options.onProvisioned && plan.events.length > 0) {
-            try {
-              await options.onProvisioned(plan.events);
-            } catch (error) {
-              logger.warn(
-                { err: error instanceof Error ? error.message : String(error) },
-                'provisioning hook failed',
-              );
-            }
-          }
-          await startSession(deps, reply, userId);
-          return reply
-            .header('cache-control', 'no-store')
-            .redirect(safeReturnTo(result.returnTo), 302);
-        } catch (error) {
-          if (error instanceof ProvisioningDeniedError) {
-            return errorPage(reply, 403, `Sign-in was refused: ${error.message}.`, {
-              back: BACK_TO_SIGN_IN,
-            });
-          }
-          if (
-            error instanceof IdpLoginError ||
-            error instanceof IdpClaimError ||
-            error instanceof OAuthProtocolError ||
-            error instanceof BastionError
-          ) {
-            logger.warn({ err: error.message }, 'idp login failed');
-            return errorPage(
-              reply,
-              400,
-              'Sign-in failed. Try again or contact your administrator.',
-              { back: BACK_TO_SIGN_IN },
-            );
-          }
-          throw error;
-        }
-      },
+      (req, reply) =>
+        finishLogin(
+          req,
+          reply,
+          req.params.idpConnectionId,
+          cookieValue(req, STATE_COOKIE),
+          STATE_PATH,
+        ),
     );
 
     // --- /auth/local (break-glass, 9.1) -----------------------------------------------------------------

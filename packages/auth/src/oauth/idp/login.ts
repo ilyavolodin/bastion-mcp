@@ -17,7 +17,7 @@ import {
   type SecretStore,
   systemClock,
 } from '../ports';
-import { idpCallbackUrl } from '../urls';
+import { idpRedirectUri } from '../urls';
 import { IdpClaimError, loginScopes, mapClaims, type NormalizedProfile } from './profile';
 
 const STATE_PREFIX = 'bls1.';
@@ -62,7 +62,13 @@ const loginState = z.object({
   x: z.number(),
 });
 
-export type LoginStart = { authorizationUrl: string; stateToken: string };
+export type LoginStart = {
+  authorizationUrl: string;
+  stateToken: string;
+  connectionId: string;
+  /** The IdP sends the person back to `/` (not `/auth/callback/{id}`): the state cookie must be sent there too. */
+  redirectToRoot: boolean;
+};
 export type LoginResult = {
   profile: NormalizedProfile;
   connection: IdpConnection;
@@ -151,7 +157,7 @@ export class IdpLogin extends IdpClients {
     const state = client.randomState();
     const nonce = client.randomNonce();
     const url = client.buildAuthorizationUrl(config, {
-      redirect_uri: idpCallbackUrl(this.deps.host, connection.id),
+      redirect_uri: idpRedirectUri(this.deps.host, connection),
       scope: loginScopes(connection).join(' '),
       code_challenge: await client.calculatePKCECodeChallenge(verifier),
       code_challenge_method: 'S256',
@@ -172,7 +178,12 @@ export class IdpLogin extends IdpClients {
       this.deps.stateKeyring,
       { prefix: STATE_PREFIX, aad: connection.id },
     );
-    return { authorizationUrl: url.href, stateToken };
+    return {
+      authorizationUrl: url.href,
+      stateToken,
+      connectionId: connection.id,
+      redirectToRoot: connection.redirectToRoot,
+    };
   }
 
   /** `query` is the raw query string of the callback request; `stateToken` the cookie from `startLogin`. */
@@ -208,7 +219,7 @@ export class IdpLogin extends IdpClients {
     } catch (e) {
       throw new IdpLoginError(e instanceof Error ? e.message : 'issuer check failed', 'idp');
     }
-    const callback = new URL(idpCallbackUrl(this.deps.host, connection.id));
+    const callback = new URL(idpRedirectUri(this.deps.host, connection));
     callback.search = params.toString();
     let response: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers;
     try {
