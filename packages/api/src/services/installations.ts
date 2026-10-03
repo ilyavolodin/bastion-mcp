@@ -1,4 +1,4 @@
-import { slugify } from '@bastion-mcp/core';
+import { slugify, UI_CLIENT_ID } from '@bastion-mcp/core';
 import { type OverridesDocument, parseOverrides } from '@bastion-mcp/overrides';
 import type { PrincipalData } from '@bastion-mcp/policy';
 import {
@@ -147,18 +147,16 @@ export const createInstallation = async (ctx: WriteCtx, body: CreateBody): Promi
     if (!entry) throw new NotFoundApiError('catalog entry');
     const versionId = body.catalogVersionId ?? str(entry.currentVersionId);
     if (!versionId) {
-      throw new ConflictApiError(
-        'the catalog entry has no published version',
-        'no_published_version',
-      );
+      throw new ConflictApiError('the catalog entry has no published version', {
+        code: 'no_published_version',
+      });
     }
     version = await tx.store.get('catalog_versions', versionId);
     if (!version || version.entryId !== entry.id) throw new NotFoundApiError('catalog version');
     if (version.status !== 'published') {
-      throw new ConflictApiError(
-        'only published versions can be installed',
-        'version_not_published',
-      );
+      throw new ConflictApiError('only published versions can be installed', {
+        code: 'version_not_published',
+      });
     }
   } else {
     const mode = personalInstallsSetting.parse(
@@ -188,7 +186,9 @@ export const createInstallation = async (ctx: WriteCtx, body: CreateBody): Promi
       slug: baseSlug,
     });
     if (clash.length > 0)
-      throw new ConflictApiError('a team installation with this slug exists', 'slug_collision');
+      throw new ConflictApiError('a team installation with this slug exists', {
+        code: 'slug_collision',
+      });
   } else {
     assertInstallationSlugAvailable(
       baseSlug,
@@ -255,10 +255,9 @@ export const updateInstallation = async (
       throw new NotFoundApiError('catalog version');
     }
     if (version.status !== 'published') {
-      throw new ConflictApiError(
-        'only published versions can be installed',
-        'version_not_published',
-      );
+      throw new ConflictApiError('only published versions can be installed', {
+        code: 'version_not_published',
+      });
     }
   }
   return installations.update(ctx, id, changes);
@@ -451,7 +450,7 @@ export const compileInstallation = async (
     source,
     policy: await ctx.deps.policy.engine(),
     requestContext: {
-      clientId: 'bastion-ui',
+      clientId: UI_CLIENT_ID,
       clientName: 'Bastion UI',
       ip: '127.0.0.1',
       authMethod: ctx.principal.authMethod,

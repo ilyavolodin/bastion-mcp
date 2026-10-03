@@ -1,18 +1,19 @@
 import { ORG_ROLES, TEAM_ROLES, USER_STATUSES } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
+import { nameSchema } from './common';
 
 const atLeastOne = (v: object) => Object.keys(v).length > 0;
 
 export const userCreateSchema = z.object({
   email: z.string().email().max(320),
-  displayName: z.string().trim().min(1).max(200),
+  displayName: nameSchema,
   orgRole: z.enum(ORG_ROLES).default('member'),
 });
 
 export const userPatchSchema = z
   .object({
-    displayName: z.string().trim().min(1).max(200),
+    displayName: nameSchema,
     orgRole: z.enum(ORG_ROLES),
     catalogPublishOrgWide: z.boolean(),
   })
@@ -26,14 +27,14 @@ export const userListQuery = listQuerySchema.extend({
 
 export const teamCreateSchema = z.object({
   slug: z.string().min(1).max(63),
-  displayName: z.string().trim().min(1).max(200),
+  displayName: nameSchema,
   idpGroup: z.string().min(1).max(256).nullable().optional(),
 });
 
 export const teamPatchSchema = z
   .object({
     slug: z.string().min(1).max(63),
-    displayName: z.string().trim().min(1).max(200),
+    displayName: nameSchema,
     idpGroup: z.string().min(1).max(256).nullable(),
   })
   .partial()

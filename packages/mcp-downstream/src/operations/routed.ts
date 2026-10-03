@@ -3,6 +3,7 @@
  * mapping (by the caller), request guards, upstream, response guards, limits feedback. MRTR rounds (6.5) are handled
  * here: answers Bastion can give itself loop upstream, everything else goes back to the adapter as `input_required`.
  */
+
 import {
   ERROR_CODES,
   GuardBlockedError,
@@ -16,11 +17,11 @@ import {
 } from '@bastion-mcp/core';
 import { extractStringLeaves, type ItemRef, type TextSegment } from '@bastion-mcp/guards';
 import type { OperationContext } from '@bastion-mcp/limits';
-import { clientSupports, type InputRequestMap } from '@bastion-mcp/mcp-upstream';
+import { clientSupports, type InputRequestMap, SPAN_ATTRS } from '@bastion-mcp/mcp-upstream';
 import type { ResourceData } from '@bastion-mcp/policy';
 import type { InstallationInfo } from '@bastion-mcp/router';
 import { SPAN_NAMES } from '@bastion-mcp/telemetry';
-import { context, trace } from '@opentelemetry/api';
+import { trace } from '@opentelemetry/api';
 import { fullyLocal, partitionInputRequests } from '../bridge/partition';
 import { byteSize, type CallRecord } from '../observability/call-log';
 import { InvalidParamsError } from '../rpc';
@@ -140,6 +141,33 @@ const confirmInputRequests = (reason: string): InputRequestMap => ({
   },
 });
 
+/**
+ * `bastion.limits.rejections` labels. A concurrency rejection is a `RateLimitedError` whose `data.kind` is `'concurrency'`.
+ */
+export const limitsRejectionLabels = (
+  error: RateLimitedError | QuotaExceededError,
+): { rule: string; kind: 'quota' | 'concurrency' | 'rate' } => ({
+  rule: String(error.data.limit ?? error.data.quota ?? 'unknown'),
+  kind:
+    error instanceof QuotaExceededError
+      ? 'quota'
+      : error.data.kind === 'concurrency'
+        ? 'concurrency'
+        : 'rate',
+});
+
+export type ConfirmDecision = 'proceed' | 'block' | 'ask';
+
+/** What a guard `confirm` verdict means for this call (13.2): already approved, the client cannot ask, or ask. */
+export const decideConfirm = (
+  confirm: unknown,
+  approved: boolean,
+  clientCanElicit: boolean,
+): ConfirmDecision => {
+  if (!confirm || approved) return 'proceed';
+  return clientCanElicit ? 'ask' : 'block';
+};
+
 const approvedByUser = (responses: Record<string, unknown> | undefined): boolean => {
   const answer = responses?.[CONFIRM_KEY];
   if (!isRecord(answer) || answer.action !== 'accept') return false;
@@ -187,17 +215,17 @@ export const runRouted = async (
   record.catalogVersionId = installation.catalogVersionId;
   record.itemName = spec.downstreamName;
   record.upstreamName = spec.upstreamName;
-  attr('bastion.installation.id', installation.id);
-  attr('bastion.installation.slug', installation.slug);
-  attr('bastion.catalog.entry', catalogEntryName(installation));
-  attr('bastion.catalog.version', installation.catalogVersionId);
+  attr(SPAN_ATTRS.installationId, installation.id);
+  attr(SPAN_ATTRS.installationSlug, installation.slug);
+  attr(SPAN_ATTRS.catalogEntry, catalogEntryName(installation));
+  attr(SPAN_ATTRS.catalogVersion, installation.catalogVersionId);
 
   // 1. Cedar (4.4)
   const profile = deps.profiles ? await deps.profiles.profile(ctx.principal) : {};
   const decision = await withSpan(
     deps,
     SPAN_NAMES.policy,
-    { 'bastion.policy.action': spec.policy.action },
+    { [SPAN_ATTRS.policyAction]: spec.policy.action },
     async (span) => {
       const result = deps.policy.current().authorize({
         principal: deps.toPolicyPrincipal(ctx.principal, profile),
@@ -206,12 +234,12 @@ export const runRouted = async (
         context: policyContextOf(ctx, deps.clock.now()),
         ...(spec.policy.call === undefined ? {} : { call: spec.policy.call }),
       });
-      span.setAttribute('bastion.policy.decision', result.decision);
+      span.setAttribute(SPAN_ATTRS.policyDecision, result.decision);
       return result;
     },
   );
   record.policyReasons = decision.reasons;
-  attr('bastion.policy.decision', decision.decision);
+  attr(SPAN_ATTRS.policyDecision, decision.decision);
   if (decision.decision === 'deny') {
     throw new PolicyDeniedError(
       `You are not allowed to ${spec.method === 'tools/call' ? 'call' : 'use'} ${spec.downstreamName}.`,
@@ -231,15 +259,7 @@ export const runRouted = async (
       );
     } catch (error) {
       if (error instanceof RateLimitedError || error instanceof QuotaExceededError) {
-        deps.metrics.limitsRejections.add(1, {
-          rule: String(error.data.limit ?? error.data.quota ?? 'unknown'),
-          kind:
-            error instanceof QuotaExceededError
-              ? 'quota'
-              : error.message.startsWith('Concurrency')
-                ? 'concurrency'
-                : 'rate',
-        });
+        deps.metrics.limitsRejections.add(1, limitsRejectionLabels(error));
       }
       throw error;
     }
@@ -324,9 +344,14 @@ const afterAdmission = async (
   }
 
   // `confirm` (13.2): approval through a form elicitation, blocked when the client cannot elicit or declines.
-  if (guardRun.confirm && !confirmApproved) {
+  const confirmDecision = decideConfirm(
+    guardRun.confirm,
+    confirmApproved,
+    clientSupports(ctx.clientCapabilities, 'elicitation', { mode: 'form' }),
+  );
+  if (guardRun.confirm && confirmDecision !== 'proceed') {
     const reason = guardRun.confirm.reason;
-    if (!clientSupports(ctx.clientCapabilities, 'elicitation', { mode: 'form' })) {
+    if (confirmDecision === 'block') {
       throw new GuardBlockedError(
         `${spec.downstreamName} needs your approval (${reason}) but your client cannot ask for it.`,
         { guard: guardRun.confirm.guard, ruleId: 'confirm' },
@@ -478,5 +503,3 @@ const finishComplete = async (
   if (spec.method === 'tools/call' && result.isError === true) record.outcome = 'tool_error';
   return { kind: 'complete', result };
 };
-
-export { context };

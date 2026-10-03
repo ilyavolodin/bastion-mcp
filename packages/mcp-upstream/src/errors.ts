@@ -93,6 +93,10 @@ const httpStatusOf = (error: unknown): number | undefined => {
   return undefined;
 };
 
+/** The JSON-RPC error code space (-32768..-32000) that reserved and implementation-defined codes live in. */
+const JSONRPC_ERROR_MAX = -32000;
+const JSONRPC_ERROR_MIN = -32768;
+
 /**
  * Maps whatever the SDK or the transport threw into a `BastionError` (6.9):
  * upstream JSON-RPC errors pass through, timeouts become `-32017`, missing credentials `-32015`, and everything
@@ -146,7 +150,7 @@ export const mapUpstreamError = async (
   }
   if (typeof error === 'object' && error !== null && 'code' in error && 'message' in error) {
     const code = (error as { code: unknown }).code;
-    if (typeof code === 'number' && code <= -32000 && code >= -32768) {
+    if (typeof code === 'number' && code <= JSONRPC_ERROR_MAX && code >= JSONRPC_ERROR_MIN) {
       return new UpstreamRpcError(code, String((error as { message: unknown }).message));
     }
   }

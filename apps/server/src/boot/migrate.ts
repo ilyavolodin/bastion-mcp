@@ -5,10 +5,11 @@
  * so either tool can continue where the other stopped. Migrations are applied in name order, each in its own
  * transaction, under a session advisory lock so concurrent starts do not race.
  */
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { newId } from '@bastion-mcp/core';
 import pg from 'pg';
 
 const LOCK_KEY = 7_201_777;
@@ -116,7 +117,7 @@ export const migrate = async (
         );
       }
       log(`applying ${m.name}`);
-      const id = randomUUID();
+      const id = newId();
       await client.query('BEGIN');
       try {
         await client.query(

@@ -1,9 +1,10 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
+import { HEADERS, sha256Hex } from '@bastion-mcp/core';
 import { CsrfError } from '../errors';
 
 export const SESSION_COOKIE = 'bastion_sid';
 export const CSRF_COOKIE = 'bastion_csrf';
-export const CSRF_HEADER = 'x-bastion-csrf';
+export const CSRF_HEADER = HEADERS.csrf;
 
 type CookieOptions = { secure?: boolean };
 
@@ -55,7 +56,7 @@ export const parseCookies = (header: string | undefined): Record<string, string>
   return out;
 };
 
-const digest = (v: string): Buffer => createHash('sha256').update(v).digest();
+const digest = (v: string): Buffer => Buffer.from(sha256Hex(v), 'hex');
 
 /** 9.2 double submit: header equals cookie, compared in constant time (digests hide the length). */
 export const checkCsrf = (

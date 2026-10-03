@@ -1,6 +1,8 @@
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
-import { api, fetchAll } from '../client';
+import { FAN_OUT, mapInBatches } from '../batch';
+import { api, fetchAll, LOOKUP_PAGES } from '../client';
 import type { Body } from '../schema';
+import { STALE_LOOKUP_MS } from '../timing';
 import {
   type CapabilityKind,
   type CapabilityView,
@@ -16,12 +18,8 @@ import {
   toStoreEntryView,
 } from '../views/servers';
 import { keys, useApiMutation } from './base';
+import { fetchTeams, orEmpty } from './lookups';
 import { useMe } from './session';
-
-const FAN_OUT = 6;
-
-/** A lookup that may fail for a role without access: the screens then fall back to ids. */
-const orEmpty = async <T>(load: Promise<T[]>): Promise<T[]> => load.catch(() => []);
 
 // --- Installations ------------------------------------------------------------------------------
 
@@ -35,10 +33,10 @@ export const useInstallations = () => {
     queryKey: [...keys.installations, me.data?.id ?? ''],
     enabled: me.isSuccess,
     queryFn: async ({ signal }): Promise<InstallationView[]> => {
-      const rows = await fetchAll('/installations', undefined, 20, signal);
+      const rows = await fetchAll('/installations', undefined, undefined, signal);
       const [teams, users] = await Promise.all([
-        orEmpty(fetchAll('/teams', undefined, 5, signal)),
-        orEmpty(fetchAll('/users', undefined, 5, signal)),
+        orEmpty(fetchTeams(signal)),
+        orEmpty(fetchAll('/users', undefined, LOOKUP_PAGES, signal)),
       ]);
       const names = new Map<string, string>([
         ...users.map((u) => [u.id, u.displayName] as const),
@@ -49,14 +47,10 @@ export const useInstallations = () => {
         ...new Set(rows.flatMap((r) => (r.catalogEntryId ? [r.catalogEntryId] : []))),
       ];
       const currentOf = new Map<string, string | null>();
-      for (let i = 0; i < entryIds.length; i += FAN_OUT) {
-        await Promise.all(
-          entryIds.slice(i, i + FAN_OUT).map(async (id) => {
-            const entry = await api.get(`/catalog/${id}`, { signal }).catch(() => null);
-            currentOf.set(id, entry?.currentVersionId ?? null);
-          }),
-        );
-      }
+      await mapInBatches(entryIds, FAN_OUT, async (id) => {
+        const entry = await api.get(`/catalog/${id}`, { signal }).catch(() => null);
+        currentOf.set(id, entry?.currentVersionId ?? null);
+      });
       const versions = new Map<string, { running: string | null; latest: string | null }>();
       for (const r of rows) {
         if (!r.catalogEntryId) continue;
@@ -78,19 +72,15 @@ export const useInstallations = () => {
       ];
       const versionLabels = new Map<string, string>();
       const specs = new Map<string, ReturnType<typeof specInfo>>();
-      for (let i = 0; i < wanted.length; i += FAN_OUT) {
-        await Promise.all(
-          wanted.slice(i, i + FAN_OUT).map(async ([versionId, entryId]) => {
-            const v = await api
-              .get(`/catalog/${entryId}/versions/${versionId}`, { signal })
-              .catch(() => null);
-            if (v) {
-              versionLabels.set(v.id, v.label);
-              specs.set(v.id, specInfo(v.serverSpec));
-            }
-          }),
-        );
-      }
+      await mapInBatches(wanted, FAN_OUT, async ([versionId, entryId]) => {
+        const v = await api
+          .get(`/catalog/${entryId}/versions/${versionId}`, { signal })
+          .catch(() => null);
+        if (v) {
+          versionLabels.set(v.id, v.label);
+          specs.set(v.id, specInfo(v.serverSpec));
+        }
+      });
       const lookups = { names, meId: me.data?.id ?? '', versionLabels, specs, versions };
       return rows.map((r) => toInstallationView(r, lookups));
     },
@@ -211,7 +201,7 @@ export const useToolCounts = (ids: readonly string[]): Map<string, number> => {
   const results = useQueries({
     queries: ids.map((id) => ({
       queryKey: [...keys.installation(id), 'tool-count'],
-      staleTime: 60_000,
+      staleTime: STALE_LOOKUP_MS,
       retry: false,
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         api.get(`/installations/${id}/tools`, { signal }).then((r) => r.items.length),
@@ -298,7 +288,7 @@ export const useEndpoints = () => {
     queryKey: [...keys.endpoints, me.data?.org.baseUrl ?? ''],
     enabled: me.isSuccess,
     queryFn: async ({ signal }): Promise<EndpointView[]> =>
-      (await fetchAll('/endpoints', undefined, 20, signal)).map((e) =>
+      (await fetchAll('/endpoints', undefined, undefined, signal)).map((e) =>
         toEndpointView(e, me.data?.org.baseUrl ?? ''),
       ),
   });
@@ -345,7 +335,7 @@ export const useClientConfig = (endpointId: string | undefined, client: ClientKi
 /** The ids of the catalog entries the caller already installed. */
 const installedEntryIds = async (signal: AbortSignal): Promise<Set<string>> =>
   new Set(
-    (await orEmpty(fetchAll('/installations', undefined, 5, signal)))
+    (await orEmpty(fetchAll('/installations', undefined, LOOKUP_PAGES, signal)))
       .map((i) => i.catalogEntryId)
       .filter((id): id is string => id !== null),
   );
@@ -357,7 +347,7 @@ export const useStore = (q: string) =>
     queryFn: async ({ signal }) => {
       const [rows, installed] = await Promise.all([
         // Skills and plugins reach AI tools through marketplaces, not installations: the store lists servers.
-        fetchAll('/store', { kind: 'mcp_server', ...(q ? { q } : {}) }, 20, signal),
+        fetchAll('/store', { kind: 'mcp_server', ...(q ? { q } : {}) }, undefined, signal),
         installedEntryIds(signal),
       ]);
       return rows.map((r) => toStoreEntryView(r, installed));

@@ -1,6 +1,11 @@
-import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
-import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
+import {
+  authz,
+  defineDelete,
+  defineMutation,
+  defineRoute,
+  type RouteDefinition,
+} from '../framework/route';
 import { idParams } from '../schemas/common';
 import {
   guardProfileCreateSchema,
@@ -62,19 +67,14 @@ export const guardsRoutes: RouteDefinition[] = [
     version: versionOf('guard_profiles'),
     handler: (ctx) => updateProfile(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/guard-profiles/{id}',
     tag: TAG,
     summary: 'Delete a guard profile',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('guards.write', org),
-    status: 204,
     version: versionOf('guard_profiles'),
-    handler: async (ctx) => {
-      await guardProfiles.remove(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => guardProfiles.remove(ctx, ctx.params.id),
   }),
   defineRoute({
     method: 'POST',

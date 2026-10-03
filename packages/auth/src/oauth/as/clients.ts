@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { AUTH_METHODS } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { CREDENTIAL_CLIENT_ID } from '../constants';
 import { defaultApplicationType, findDisallowedRedirectUris } from './registration';
@@ -18,7 +19,7 @@ const preRegisterSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('service'),
     name: z.string().min(1).max(200),
-    authMethod: z.enum(['client_secret_basic', 'private_key_jwt']),
+    authMethod: z.enum(AUTH_METHODS),
     jwks: z.object({ keys: z.array(z.record(z.string(), z.unknown())).min(1) }).optional(),
     clientId: z.string().min(1).optional(),
     scope: z.string().optional(),
@@ -42,9 +43,17 @@ export class ClientRegistrationError extends Error {
   }
 }
 
-export const prepareClient = (rawInput: PreRegisterInput): PreparedClient => {
+/** Sources of the generated client id and secret; tests inject deterministic ones. */
+export type ClientRandomness = { clientId?: () => string; clientSecret?: () => string };
+
+const SECRET_BYTES = 48;
+
+export const prepareClient = (
+  rawInput: PreRegisterInput,
+  random: ClientRandomness = {},
+): PreparedClient => {
   const input = preRegisterSchema.parse(rawInput);
-  const clientId = input.clientId ?? randomUUID();
+  const clientId = input.clientId ?? (random.clientId ?? randomUUID)();
   if (clientId === CREDENTIAL_CLIENT_ID) throw new ClientRegistrationError('reserved client id');
   if (input.kind === 'public') {
     if (findDisallowedRedirectUris(input.redirectUris).length > 0) {
@@ -72,7 +81,9 @@ export const prepareClient = (rawInput: PreRegisterInput): PreparedClient => {
     throw new ClientRegistrationError('private_key_jwt clients need jwks');
   }
   const secret =
-    input.authMethod === 'client_secret_basic' ? randomBytes(48).toString('base64url') : null;
+    input.authMethod === 'client_secret_basic'
+      ? (random.clientSecret ?? (() => randomBytes(SECRET_BYTES).toString('base64url')))()
+      : null;
   return {
     clientId,
     clientSecret: secret,

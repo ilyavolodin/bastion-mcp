@@ -5,13 +5,21 @@
  */
 import { randomBytes } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
-import { PROTOCOL_VERSIONS, REDIS_CHANNELS, redisKeys, TTL } from '@bastion-mcp/core';
+import {
+  CONTINUABLE_METHODS,
+  isRecord,
+  JSONRPC_CODES,
+  REDIS_CHANNELS,
+  redisKeys,
+  TTL,
+} from '@bastion-mcp/core';
 import { clientCapabilitiesSchema } from '@bastion-mcp/mcp-upstream';
 import { type BastionMetrics, extractTraceContext } from '@bastion-mcp/telemetry';
 import { InitializeRequestParamsSchema, JSONRPCMessageSchema } from '@modelcontextprotocol/core';
-import { type SpanContext, trace } from '@opentelemetry/api';
+import { trace } from '@opentelemetry/api';
 import { z } from 'zod';
 import { driveLegacyInput } from '../../bridge/legacy';
+import { negotiateLegacyVersion } from '../../operations/basic';
 import {
   type Clock,
   type DownstreamRedis,
@@ -21,7 +29,7 @@ import {
   systemClock,
   type WorkerDirectory,
 } from '../../ports';
-import { InvalidRequestError, toRpcErrorBody } from '../../rpc';
+import { InvalidRequestError, TRANSPORT_CODES, toRpcErrorBody } from '../../rpc';
 import type { ClientCaps, JsonObject, OpContext } from '../../types';
 import type {
   Exchange,
@@ -31,6 +39,14 @@ import type {
   NotifyKind,
   OpRunner,
 } from '../contracts';
+import {
+  baseOpContext,
+  first,
+  isLegacyVersion,
+  KEEPALIVE_MS,
+  ROOT_SPAN_CONTEXT,
+  sendResponse,
+} from '../shared';
 import { LegacySessionStore, newSessionId, type SessionRecord } from './sessions';
 import { SseStream } from './stream';
 
@@ -46,26 +62,19 @@ export type LegacyAdapterDeps = {
   metrics?: Pick<BastionMetrics, 'streamsActive' | 'mcpServerSessionDuration'> | undefined;
   logger?: Logger | undefined;
   clock?: Clock | undefined;
-  /** SSE comment interval on idle streams; default 25 s. */
+  /** SSE comment interval on idle streams; default `KEEPALIVE_MS`. */
   keepAliveMs?: number | undefined;
   sessionIdGenerator?: (() => string) | undefined;
   /** How long a server-to-client request waits for the client's answer; default 10 minutes. */
   pendingResponseTimeoutMs?: number | undefined;
 };
 
-const SSE_METHODS: ReadonlySet<string> = new Set(['tools/call', 'resources/read', 'prompts/get']);
 const ALLOW = 'GET, POST, DELETE';
 const NOTIFICATION_OF_KIND: Record<Exclude<NotifyKind, 'resource_updated'>, string> = {
   tools_list_changed: 'notifications/tools/list_changed',
   prompts_list_changed: 'notifications/prompts/list_changed',
   resources_list_changed: 'notifications/resources/list_changed',
 };
-
-const isRecord = (v: unknown): v is JsonObject =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
-
-const first = (v: string | string[] | undefined): string | undefined =>
-  Array.isArray(v) ? v[0] : v;
 
 const channelMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('close') }),
@@ -84,37 +93,9 @@ const rpcFailure = (id: unknown, error: unknown): JsonObject => ({
   error: toRpcErrorBody(error),
 });
 
-const sendJson = (
-  res: ServerResponse,
-  status: number,
-  body: unknown,
-  headers: Record<string, string> = {},
-): void => {
-  if (res.headersSent) {
-    res.end();
-    return;
-  }
-  const text = JSON.stringify(body);
-  res.writeHead(status, {
-    'content-type': 'application/json',
-    'content-length': Buffer.byteLength(text),
-    ...headers,
-  });
-  res.end(text);
-};
-
-const sendStatus = (
-  res: ServerResponse,
-  status: number,
-  headers: Record<string, string> = {},
-): void => {
-  if (res.headersSent) {
-    res.end();
-    return;
-  }
-  res.writeHead(status, headers);
-  res.end();
-};
+const sendJson = sendResponse;
+const sendStatus = (res: ServerResponse, status: number, headers: Record<string, string> = {}) =>
+  sendResponse(res, status, undefined, headers);
 
 class LegacyHandler implements LegacyAdapter {
   private readonly store: LegacySessionStore;
@@ -232,7 +213,7 @@ class LegacyHandler implements LegacyAdapter {
       sendJson(ex.res, 404, {
         jsonrpc: '2.0',
         id: null,
-        error: { code: -32001, message: 'Session not found' },
+        error: { code: TRANSPORT_CODES.sessionNotFound, message: 'Session not found' },
       });
       return null;
     }
@@ -242,7 +223,7 @@ class LegacyHandler implements LegacyAdapter {
   private versionOf(ex: Exchange, session: SessionRecord): string | null {
     const header = first(ex.req.headers['mcp-protocol-version']);
     if (header === undefined) return session.protocolVersion;
-    return (PROTOCOL_VERSIONS.legacy as readonly string[]).includes(header) ? header : null;
+    return isLegacyVersion(header) ? header : null;
   }
 
   private contextFor(
@@ -258,16 +239,9 @@ class LegacyHandler implements LegacyAdapter {
     },
   ): OpContext {
     const { rc } = ex;
-    const parent: SpanContext = trace.getSpanContext(
-      extractTraceContext(base.meta, ex.req.headers),
-    ) ?? {
-      traceId: '0'.repeat(32),
-      spanId: '0'.repeat(16),
-      traceFlags: 0,
-    };
-    return {
-      principal: rc.principal,
-      endpoint: rc.resolved.endpoint,
+    const parent =
+      trace.getSpanContext(extractTraceContext(base.meta, ex.req.headers)) ?? ROOT_SPAN_CONTEXT;
+    return baseOpContext(rc, {
       era: 'legacy',
       protocolVersion: base.protocolVersion,
       clientCapabilities: base.caps,
@@ -276,15 +250,10 @@ class LegacyHandler implements LegacyAdapter {
       trace: parent,
       signal: base.signal,
       emit: base.emit,
-      resolved: rc.resolved,
       requestId: base.requestId,
       sessionId: base.session?.id,
-      origin: rc.origin,
-      ip: rc.ip,
-      authMethod: rc.principal.authMethod,
       requestMeta: base.meta,
-      path: rc.path,
-    };
+    });
   }
 
   // --- POST ------------------------------------------------------------------------------------------------------------
@@ -336,10 +305,7 @@ class LegacyHandler implements LegacyAdapter {
       sendJson(ex.res, 200, rpcFailure(body.id, invalid('Invalid initialize parameters')));
       return;
     }
-    const requested = params.data.protocolVersion;
-    const protocolVersion = (PROTOCOL_VERSIONS.legacy as readonly string[]).includes(requested)
-      ? requested
-      : (PROTOCOL_VERSIONS.legacy[0] as string);
+    const protocolVersion = negotiateLegacyVersion(params.data.protocolVersion);
     const caps = toClientCaps(params.data.capabilities);
     const controller = new AbortController();
     ex.res.on('close', () => {
@@ -489,7 +455,7 @@ class LegacyHandler implements LegacyAdapter {
     });
     const accept = first(ex.req.headers.accept) ?? '';
     const sse =
-      SSE_METHODS.has(method) && accept.includes('text/event-stream')
+      CONTINUABLE_METHODS.has(method) && accept.includes('text/event-stream')
         ? new SseStream(res)
         : undefined;
     if (sse) this.track('response', sse);
@@ -646,7 +612,7 @@ class LegacyHandler implements LegacyAdapter {
     );
     const keepAlive = setInterval(
       () => stream.comment('keepalive'),
-      this.deps.keepAliveMs ?? 25_000,
+      this.deps.keepAliveMs ?? KEEPALIVE_MS,
     );
     keepAlive.unref?.();
     stream.onClose(() => {
@@ -700,14 +666,17 @@ const toClientCaps = (raw: unknown): ClientCaps => {
 
 const invalid = (message: string): InvalidRequestError => new InvalidRequestError(message);
 
-const errorCode = (e: JsonObject): number => (typeof e.code === 'number' ? e.code : -32603);
+const errorCode = (e: JsonObject): number =>
+  typeof e.code === 'number' ? e.code : JSONRPC_CODES.INTERNAL_ERROR;
 const errorMessage = (e: JsonObject): string =>
   typeof e.message === 'string' ? e.message : 'client error';
 
 const timeoutAnswer = (method: string): unknown =>
   method === 'elicitation/create'
     ? { action: 'cancel' }
-    : { error: { code: -32603, message: 'the client did not answer in time' } };
+    : {
+        error: { code: JSONRPC_CODES.INTERNAL_ERROR, message: 'the client did not answer in time' },
+      };
 
 const parseChannel = (raw: string): z.infer<typeof channelMessage> | undefined => {
   try {

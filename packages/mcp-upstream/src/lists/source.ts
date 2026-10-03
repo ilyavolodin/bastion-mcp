@@ -1,6 +1,8 @@
 import {
   BastionError,
+  JSONRPC_CODES,
   MAX_LIST_ITEMS_PER_INSTALLATION,
+  MS,
   TIMEOUTS_MS,
   UpstreamUnavailableError,
 } from '@bastion-mcp/core';
@@ -16,6 +18,7 @@ import {
   type UpstreamItems,
   type UpstreamListResult,
 } from '@bastion-mcp/router';
+import { inputRequiredPayload } from '../input-required/helpers';
 import {
   AuthRequiredError,
   type CallPrincipal,
@@ -26,6 +29,7 @@ import {
   type Logger,
   noopLogger,
   type PinChecker,
+  type PinCheckResult,
   type ResolvedCredential,
   type ResolvedInstallation,
   type SnapshotItems,
@@ -35,7 +39,8 @@ import {
 } from '../ports';
 import type { SessionInfo, UpstreamService } from '../service/service';
 import type { JsonObject, UpstreamCallContext, UpstreamOutcome } from '../types';
-import { type CachedList, LIST_METHODS, ListCache, type ListMethod, ReadCache } from './cache';
+import { type CachedList, ListCache, ReadCache } from './cache';
+import { LIST_ITEM_KEY, LIST_METHODS, type ListMethod, minDefined } from './kinds';
 
 /**
  * Upstream lists (6.7, 7.5): implements the router's `UpstreamItemSource` and `UpstreamCaller`. Lists are cached per
@@ -46,23 +51,7 @@ import { type CachedList, LIST_METHODS, ListCache, type ListMethod, ReadCache } 
 
 const MAX_PAGES = 1_000;
 /** A live list younger than this makes the post-start re-list redundant. */
-const RECENT_LIST_MS = 5_000;
-
-const KEY_OF: Record<
-  ListMethod,
-  keyof Pick<UpstreamItems, 'tools' | 'prompts' | 'resources' | 'resourceTemplates'>
-> = {
-  'tools/list': 'tools',
-  'prompts/list': 'prompts',
-  'resources/list': 'resources',
-  'resources/templates/list': 'resourceTemplates',
-};
-const RESULT_KEY: Record<ListMethod, string> = {
-  'tools/list': 'tools',
-  'prompts/list': 'prompts',
-  'resources/list': 'resources',
-  'resources/templates/list': 'resourceTemplates',
-};
+const RECENT_LIST_MS = 5 * MS.SECOND;
 
 export type ListsDeps = {
   service: UpstreamService;
@@ -99,9 +88,7 @@ export const readAllPages = async (
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const result = await fetchPage(cursor);
     const batch = Array.isArray(result[resultKey]) ? (result[resultKey] as unknown[]) : [];
-    if (typeof result.ttlMs === 'number') {
-      ttlMs = ttlMs === undefined ? result.ttlMs : Math.min(ttlMs, result.ttlMs);
-    }
+    ttlMs = minDefined([ttlMs, typeof result.ttlMs === 'number' ? result.ttlMs : undefined]);
     items.push(...batch);
     if (items.length >= cap)
       return {
@@ -137,6 +124,70 @@ export const degradedFrom = (
   return error instanceof BastionError && error.message
     ? { status: 'degraded', code, detail: error.message.slice(0, MAX_DETAIL) }
     : { status: 'degraded', code };
+};
+
+/** Builds `UpstreamItems` from the four cached lists; the TTL is the shortest any of them gave. Pure. */
+export const assembleItems = (
+  entries: ReadonlyArray<readonly [ListMethod, CachedList]>,
+  instructions: string | undefined,
+  serverInfo: CachedList['serverInfo'],
+): UpstreamItems => {
+  const items: UpstreamItems = { tools: [], prompts: [], resources: [], resourceTemplates: [] };
+  for (const [method, value] of entries) {
+    (items[LIST_ITEM_KEY[method]] as unknown[]) = value.items;
+  }
+  items.instructions = instructions;
+  items.serverInfo = serverInfo
+    ? {
+        name: serverInfo.name,
+        version: serverInfo.version,
+        ...(serverInfo.title === undefined ? {} : { title: serverInfo.title }),
+      }
+    : undefined;
+  items.ttlMs = minDefined(entries.map(([, value]) => value.ttlMs));
+  return items;
+};
+
+/** The `list_changed` kinds a snapshot diff calls for: templates count as resources. Pure. */
+export const changedKinds = (diff: {
+  tool: boolean;
+  prompt: boolean;
+  resource: boolean;
+  resourceTemplate: boolean;
+}): ListKind[] => {
+  const kinds: ListKind[] = [];
+  if (diff.tool) kinds.push('tools');
+  if (diff.prompt) kinds.push('prompts');
+  if (diff.resource || diff.resourceTemplate) kinds.push('resources');
+  return kinds;
+};
+
+/**
+ * What a pin verdict does to a fresh tool list (13.6): `block` fails the listing, `hideChanged` drops the tools whose
+ * definition drifted, `warn` keeps everything. `drifted` is set when only a warning is due. Pure.
+ */
+export const applyPinVerdict = (
+  items: UpstreamItems,
+  verdict: PinCheckResult,
+): { items: UpstreamItems; drifted?: string[] } => {
+  if (verdict.ok) return { items };
+  if (verdict.action === 'block') {
+    throw new BastionError(
+      'PIN_DRIFT_BLOCKED',
+      'tool definitions changed and the installation is blocked',
+      { httpStatus: 403 },
+    );
+  }
+  if (verdict.action === 'hideChanged') {
+    const hidden = new Set(verdict.changed);
+    return {
+      items: {
+        ...items,
+        tools: items.tools.filter((tool) => !hidden.has((tool as { name: string }).name)),
+      },
+    };
+  }
+  return { items, drifted: verdict.changed };
 };
 
 const toItems = (snapshot: SnapshotItems): UpstreamItems => ({
@@ -348,35 +399,11 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
     // Caching is all-or-nothing per installation: any missing method means a live read.
     if (entries.some(([, value]) => value === null)) return null;
     const first = entries[0]?.[1];
-    return this.assemble(
+    return assembleItems(
       entries.map(([method, value]) => [method, value as CachedList]),
       first?.instructions,
       first?.serverInfo,
     );
-  }
-
-  private assemble(
-    entries: ReadonlyArray<readonly [ListMethod, CachedList]>,
-    instructions: string | undefined,
-    serverInfo: CachedList['serverInfo'],
-  ): UpstreamItems {
-    const items: UpstreamItems = { tools: [], prompts: [], resources: [], resourceTemplates: [] };
-    let ttl: number | undefined;
-    for (const [method, value] of entries) {
-      (items[KEY_OF[method]] as unknown[]) = value.items;
-      if (value.ttlMs !== undefined)
-        ttl = ttl === undefined ? value.ttlMs : Math.min(ttl, value.ttlMs);
-    }
-    items.instructions = instructions;
-    items.serverInfo = serverInfo
-      ? {
-          name: serverInfo.name,
-          version: serverInfo.version,
-          ...(serverInfo.title === undefined ? {} : { title: serverInfo.title }),
-        }
-      : undefined;
-    items.ttlMs = ttl;
-    return items;
   }
 
   // --- live listing --------------------------------------------------------------------------------------------------------
@@ -433,10 +460,10 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
           });
           if (outcome.kind !== 'complete') throw new Error(`${method} cannot need input`);
           return outcome.result as JsonObject;
-        }, RESULT_KEY[method]);
+        }, LIST_ITEM_KEY[method]);
       } catch (error) {
         // An upstream that does not implement a list (-32601) simply has none of that kind.
-        if (error instanceof BastionError && error.mcpCode === -32601) {
+        if (error instanceof BastionError && error.mcpCode === JSONRPC_CODES.METHOD_NOT_FOUND) {
           // Prompts and resources are optional. A server that does not know `tools/list` is almost always not an
           // MCP endpoint at that URL, and "no tools" would hide that.
           if (method !== 'tools/list') return undefined;
@@ -456,7 +483,7 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
       read('resources/list'),
       read('resources/templates/list'),
     ]);
-    const meta = await this.deps.service.upstreamMeta(installation, principal, credential);
+    const meta = await this.deps.service.upstreamMeta(installation, credential);
     const items: UpstreamItems = {
       tools: (tools?.items ?? []) as UpstreamItems['tools'],
       prompts: (prompts?.items ?? []) as UpstreamItems['prompts'],
@@ -464,21 +491,25 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
       resourceTemplates: (templates?.items ?? []) as UpstreamItems['resourceTemplates'],
       instructions: meta.instructions,
       serverInfo: meta.serverInfo,
-      ttlMs: minTtl([tools, prompts, resources, templates]),
+      ttlMs: minDefined([tools, prompts, resources, templates].map((p) => p?.ttlMs)),
     };
-    for (const [method, paged] of [
-      ['tools/list', tools],
-      ['prompts/list', prompts],
-      ['resources/list', resources],
-      ['resources/templates/list', templates],
-    ] as const) {
-      await this.cache.put(installation.installationId, credential.credentialHash, method, {
-        items: paged?.items ?? [],
-        ttlMs: paged?.ttlMs,
-        instructions: items.instructions,
-        serverInfo: items.serverInfo,
-      });
-    }
+    await Promise.all(
+      (
+        [
+          ['tools/list', tools],
+          ['prompts/list', prompts],
+          ['resources/list', resources],
+          ['resources/templates/list', templates],
+        ] as const
+      ).map(([method, paged]) =>
+        this.cache.put(installation.installationId, credential.credentialHash, method, {
+          items: paged?.items ?? [],
+          ttlMs: paged?.ttlMs,
+          instructions: items.instructions,
+          serverInfo: items.serverInfo,
+        }),
+      ),
+    );
     await this.storeSnapshot(installation, items, principal.userId, options.notify);
     return items;
   }
@@ -490,28 +521,14 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
   ): Promise<UpstreamItems> {
     if (!this.deps.pins) return items;
     const verdict = await this.deps.pins.check(installation.installationId, items.tools);
-    if (verdict.ok) return items;
-    if (verdict.action === 'block') {
-      throw new BastionError(
-        'PIN_DRIFT_BLOCKED',
-        'tool definitions changed and the installation is blocked',
-        {
-          httpStatus: 403,
-        },
-      );
+    const applied = applyPinVerdict(items, verdict);
+    if (applied.drifted) {
+      this.logger.warn('tool definitions drifted from their pins', {
+        installation: installation.slug,
+        changed: applied.drifted,
+      });
     }
-    if (verdict.action === 'hideChanged') {
-      const hidden = new Set(verdict.changed);
-      return {
-        ...items,
-        tools: items.tools.filter((tool) => !hidden.has((tool as { name: string }).name)),
-      };
-    }
-    this.logger.warn('tool definitions drifted from their pins', {
-      installation: installation.slug,
-      changed: verdict.changed,
-    });
-    return items;
+    return applied.items;
   }
 
   private async storeSnapshot(
@@ -537,11 +554,7 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
       if (!notify || !previous) return;
       const diff = diffSnapshots(toItems(previous), items);
       if (!diff.changed) return;
-      const kinds: ListKind[] = [];
-      if (diff.tool) kinds.push('tools');
-      if (diff.prompt) kinds.push('prompts');
-      if (diff.resource || diff.resourceTemplate) kinds.push('resources');
-      await this.deps.changed?.listChanged(installation, kinds, principalId);
+      await this.deps.changed?.listChanged(installation, changedKinds(diff), principalId);
     } catch (error) {
       this.logger.warn('could not store the list snapshot', { error: String(error) });
     }
@@ -584,11 +597,6 @@ export class UpstreamLists implements UpstreamItemSource, UpstreamCaller {
   }
 }
 
-const minTtl = (parts: ReadonlyArray<PagedResult | undefined>): number | undefined => {
-  const values = parts.flatMap((p) => (p?.ttlMs === undefined ? [] : [p.ttlMs]));
-  return values.length === 0 ? undefined : Math.min(...values);
-};
-
 const toRequest = (op: Operation): { method: string; params: JsonObject } => {
   switch (op.method) {
     case 'tools/call':
@@ -611,10 +619,6 @@ const outcomeResult = (outcome: UpstreamOutcome): unknown => {
     case 'task':
       return outcome.task;
     case 'input_required':
-      return {
-        resultType: 'input_required',
-        ...(outcome.inputRequests ? { inputRequests: outcome.inputRequests } : {}),
-        requestState: outcome.requestState,
-      };
+      return { resultType: 'input_required', ...inputRequiredPayload(outcome) };
   }
 };

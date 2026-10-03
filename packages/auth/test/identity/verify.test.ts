@@ -414,3 +414,17 @@ describe('9.3 personal access tokens', () => {
     expect((await fail(v.verify(`Bearer ${token}`, `${MCP}/e/b`))).httpStatus).toBe(403);
   });
 });
+
+describe('9.3 deactivated principals', () => {
+  it('9.3 a deactivated principal gets invalid_token (401) even with the wrong scope', async () => {
+    const s = setup();
+    s.principals.records.set('user-1', memberRecord('user-1', { active: false }));
+    const jwt = await signAccessToken(s.k.pair, s.clock, { scope: 'plugins:read' });
+    const e = await fail(s.verifier.verify(`Bearer ${jwt}`, MCP));
+    expect(e.httpStatus).toBe(401);
+    expect(e.wwwAuthenticate).toContain('error="invalid_token"');
+    const token = await addPat(s, { scopes: ['plugins:read'] });
+    const p = await fail(s.verifier.verify(`Bearer ${token}`, MCP));
+    expect(p.httpStatus).toBe(401);
+  });
+});

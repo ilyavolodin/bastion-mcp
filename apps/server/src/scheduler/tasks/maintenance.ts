@@ -1,6 +1,5 @@
+import { MS } from '@bastion-mcp/core';
 import type { TaskFn } from '../types';
-
-const HOUR_MS = 3_600_000;
 
 /**
  * 9.6 daily sweep: refreshes every upstream token that would expire before the next run (plus margin), so users who
@@ -9,7 +8,7 @@ const HOUR_MS = 3_600_000;
  */
 export const upstreamTokenSweep: TaskFn = async ({ infra, deps, now }) => {
   if (!deps.refreshUpstreamToken) return { skipped: 'no refresh callback' };
-  const before = new Date(now().getTime() + 26 * HOUR_MS);
+  const before = new Date(now().getTime() + 26 * MS.HOUR);
   const rows = await infra.repos.upstreamTokens.listExpiringBefore(before);
   let refreshed = 0;
   let failed = 0;

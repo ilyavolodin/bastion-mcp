@@ -1,4 +1,4 @@
-import type { FetchFn } from '@bastion-mcp/core';
+import { systemClock as coreSystemClock, dateClock, type FetchFn } from '@bastion-mcp/core';
 import type { RegistryEntry, ServerJson, ServerStatus } from './server-json';
 
 /**
@@ -121,6 +121,6 @@ export type SecretResolver = {
 
 export type Clock = { now(): Date };
 
-export const systemClock: Clock = { now: () => new Date() };
+export const systemClock: Clock = dateClock(coreSystemClock);
 
 export type { RegistryEntry };

@@ -1,8 +1,34 @@
 import { readFileSync } from 'node:fs';
-import { hostname } from 'node:os';
 import { type BastionConfig, ConfigError, loadConfig, parseConfigFile } from '@bastion-mcp/core';
+import { DEFAULT_SERVER_VERSION, defaultWorkerId } from './resource-env';
 
-export const SERVER_VERSION = process.env.BASTION_VERSION ?? '0.1.0';
+type EnvSource = Record<string, string | undefined>;
+
+export { DEFAULT_SERVER_VERSION, defaultWorkerId };
+
+/** The version this process reports to upstreams and in the worker registry (`BASTION_VERSION` or the default). */
+export const serverVersion = (config: Pick<BastionConfig, 'version'>): string =>
+  config.version ?? DEFAULT_SERVER_VERSION;
+
+/**
+ * Process-level settings read from the environment that are not part of `BastionConfig`: where the sandbox runner
+ * and its runtime live, the host sandboxes use to reach the egress proxy, and the static asset directory.
+ */
+export type ServerEnv = {
+  egressHost: string | undefined;
+  runnerPath: string;
+  runtimeDir: string;
+  publicDir: string | undefined;
+};
+
+export const readServerEnv = (env: EnvSource): ServerEnv => ({
+  egressHost: env.BASTION_EGRESS_HOST || undefined,
+  runnerPath: env.BASTION_RUNNER_PATH || '/opt/bastion/runner.mjs',
+  runtimeDir: env.BASTION_RUNTIME_DIR || '/opt/runtime',
+  publicDir: env.BASTION_PUBLIC_DIR || undefined,
+});
+
+export const isProduction = (env: EnvSource): boolean => env.NODE_ENV === 'production';
 
 /** `BASTION_CONFIG_FILE` (optional) merged under the environment (19.1). Throws `ConfigError` with every issue. */
 export const loadServerConfig = (env: Record<string, string | undefined>): BastionConfig => {
@@ -25,9 +51,6 @@ export const loadConfigOrExit = (env: Record<string, string | undefined>): Basti
     process.exit(1);
   }
 };
-
-export const defaultWorkerId = (env: Record<string, string | undefined>): string =>
-  env.BASTION_WORKER_ID ?? `${hostname()}-${process.pid}`;
 
 export const publicHost = (config: BastionConfig): string => new URL(config.publicUrl).host;
 

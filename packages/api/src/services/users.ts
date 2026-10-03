@@ -57,7 +57,7 @@ const assertAnotherAdmin = async (ctx: WriteCtx, userId: string): Promise<void> 
   if (!admins.some((a) => a.id !== userId)) {
     throw new ConflictApiError(
       'this is the last active administrator: make somebody else an administrator first',
-      'last_admin',
+      { code: 'last_admin' },
     );
   }
 };
@@ -96,7 +96,9 @@ export const deactivateUser = async (ctx: WriteCtx, id: string): Promise<Row> =>
     return user;
   }
   if (id === ctx.principal.id) {
-    throw new ConflictApiError('you cannot deactivate your own account', 'cannot_deactivate_self');
+    throw new ConflictApiError('you cannot deactivate your own account', {
+      code: 'cannot_deactivate_self',
+    });
   }
   if (user.orgRole === 'admin') await assertAnotherAdmin(ctx, id);
   const row = await ctx.tx.store.update('users', id, { status: 'deactivated' });

@@ -1,7 +1,7 @@
-import net from 'node:net';
 import { AuthenticationError, buildPrincipal } from '@bastion-mcp/auth';
 import { loadConfig } from '@bastion-mcp/core';
 import type { SandboxDriver } from '@bastion-mcp/sandbox';
+import { freePort } from '@bastion-mcp/testkit';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createGuardService } from '../../src/adapters/guards';
@@ -12,15 +12,7 @@ import { createInfra, type Infra } from '../../src/infra';
 import { createWorker } from '../../src/roles/worker';
 import type { TestEnv } from './env';
 
-export const freePort = (): Promise<number> =>
-  new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, '127.0.0.1', () => {
-      const port = (server.address() as net.AddressInfo).port;
-      server.close(() => resolve(port));
-    });
-    server.on('error', reject);
-  });
+export { freePort };
 
 const KEYRING = { activeKid: 'k1', keys: new Map([['k1', Buffer.alloc(32, 9)]]) };
 

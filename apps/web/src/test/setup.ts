@@ -1,14 +1,14 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, configure } from '@testing-library/react';
 import { toHaveNoViolations } from 'jest-axe';
-import { http } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
 import { clearEtags } from '@/api/client';
 import { resetDb } from '@/mocks/db';
-import { problem } from '@/mocks/http';
+import { changeAnswered, versionWaived } from '@/mocks/http';
 import { server } from '@/mocks/server';
-import { getDb } from '@/mocks/state';
+import { clearSseClients } from '@/mocks/state';
 import { findOperation, type HttpMethod, requiresIfMatch } from './contract';
+import { ifMatchPolicy } from './if-match';
 
 expect.extend(toHaveNoViolations);
 configure({ asyncUtilTimeout: 8000 });
@@ -67,39 +67,40 @@ beforeAll(() => {
     ]);
   }) as typeof fetch;
 });
-// The real API answers 428 to a change of a stored row that names no version (17.1). The mock does too, for exactly
-// the operations the OpenAPI document marks `x-requires-if-match`, so a screen that forgets the header fails a test.
+// The real API answers 428 to a change of a stored row that names no version (17.1). A screen that forgets the header
+// must fail its test: for exactly the operations the OpenAPI document marks `x-requires-if-match`, a change sent
+// without `If-Match` is recorded, and counted as a mistake when the mock answers 428 (the screen may swallow it in a
+// toast) or accepts it. A handler that creates its row (a new team member) waives the precondition itself.
 const missingIfMatch: string[] = [];
+const pending = new Map<string, string>();
+const onStart = ({ request, requestId }: { request: Request; requestId: string }) => {
+  const method = request.method.toLowerCase() as HttpMethod;
+  if (!['put', 'patch', 'delete'].includes(method) || request.headers.get('if-match')) return;
+  const pathname = new URL(request.url).pathname;
+  const op = findOperation(method, pathname);
+  if (op && requiresIfMatch(op)) pending.set(requestId, `${request.method} ${pathname}`);
+};
+const onResponse = ({ response, requestId }: { response: Response; requestId: string }) => {
+  const label = pending.get(requestId);
+  if (label === undefined) return;
+  pending.delete(requestId);
+  // Only what a handler of the mock answered counts: a test may answer the call itself.
+  if (!changeAnswered(requestId)) return;
+  if ((response.status < 400 && !versionWaived(requestId)) || response.status === 428) {
+    missingIfMatch.push(label);
+  }
+};
+beforeAll(() => {
+  server.events.on('request:start', onStart);
+  server.events.on('response:mocked', onResponse);
+});
 beforeEach(() => {
+  ifMatchPolicy.tolerate = false;
   missingIfMatch.length = 0;
-  server.use(
-    http.all('*/api/v1/*', ({ request }) => {
-      const method = request.method.toLowerCase() as HttpMethod;
-      if (!['put', 'patch', 'delete'].includes(method) || request.headers.get('if-match')) return;
-      const pathname = new URL(request.url).pathname;
-      const op = findOperation(method, pathname);
-      // Adding a person to a team creates the membership: there is no version to name yet (17.1).
-      const member = /\/teams\/([^/]+)\/members\/([^/]+)$/.exec(pathname);
-      const newMember =
-        method === 'put' &&
-        member !== null &&
-        !getDb()
-          .data.access.teams.find((t) => t.id === member[1])
-          ?.members.some((m) => m.userId === member[2]);
-      if (op && requiresIfMatch(op) && !newMember) {
-        // The screen may swallow the 428 (a toast, a form error): the test fails on it anyway, in afterEach.
-        missingIfMatch.push(`${request.method} ${new URL(request.url).pathname}`);
-        return problem(
-          428,
-          'precondition_required',
-          'An If-Match header with the resource ETag is required',
-        );
-      }
-    }),
-  );
+  pending.clear();
 });
 afterEach(() => {
-  if (missingIfMatch.length > 0) {
+  if (missingIfMatch.length > 0 && !ifMatchPolicy.tolerate) {
     throw new Error(
       `these changes were sent without If-Match (17.1): ${missingIfMatch.join(', ')}`,
     );
@@ -112,11 +113,16 @@ afterEach(() => {
     el.removeAttribute('aria-hidden');
   server.resetHandlers();
   resetDb();
+  clearSseClients();
   clearEtags();
   sessionStorage.clear();
   localStorage.clear();
   document.documentElement.dataset.theme = 'light';
   document.cookie = 'bastion_csrf=test-csrf; path=/';
 });
-afterAll(() => server.close());
+afterAll(() => {
+  server.events.removeListener('request:start', onStart);
+  server.events.removeListener('response:mocked', onResponse);
+  server.close();
+});
 document.cookie = 'bastion_csrf=test-csrf; path=/';

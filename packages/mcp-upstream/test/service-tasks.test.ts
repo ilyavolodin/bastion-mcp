@@ -211,9 +211,7 @@ describe('6.4 upstream context sent with every operation', () => {
       params: {},
       ctx: ctxOf(),
     });
-    expect(
-      service.upstreamMeta(a, { userId: 'user-1' }, { injections: [], credentialHash: 'cred-1' }),
-    ).toMatchObject({
+    expect(service.upstreamMeta(a, { injections: [], credentialHash: 'cred-1' })).toMatchObject({
       instructions: 'be nice',
       serverInfo: { name: 'fake' },
     });

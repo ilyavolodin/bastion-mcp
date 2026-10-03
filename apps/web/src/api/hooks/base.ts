@@ -17,7 +17,7 @@ export const pagedQuery = <P extends ApiPath<'get'>>(
   query?: LooseQuery<QueryOf<'get', P>>,
 ) => ({
   queryKey: [...key, query ?? {}] as QueryKey,
-  queryFn: ({ signal }: { signal: AbortSignal }) => fetchAll(path, query, 20, signal),
+  queryFn: ({ signal }: { signal: AbortSignal }) => fetchAll(path, query, undefined, signal),
 });
 
 /** A mutation that invalidates the given query-key prefixes once it succeeds. */
@@ -51,6 +51,8 @@ export const keys = {
   catalog: ['catalog'] as const,
   autoInstall: ['auto-install'] as const,
   registry: ['registry'] as const,
+  /** Not under `registry`: invalidating the registry lists must not forget which syncs were asked for. */
+  syncRequests: ['registry-sync-requests'] as const,
   requests: ['install-requests'] as const,
   users: ['users'] as const,
   grants: ['oauth-grants'] as const,

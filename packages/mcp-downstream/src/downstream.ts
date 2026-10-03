@@ -4,7 +4,7 @@
  */
 
 import type { Keyring } from '@bastion-mcp/core';
-import { newId } from '@bastion-mcp/core';
+import { newId, TIMEOUTS_MS } from '@bastion-mcp/core';
 import type { GuardPipeline } from '@bastion-mcp/guards';
 import { FloodLimiter, type Limiter } from '@bastion-mcp/limits';
 import { InflightTracker, type InstallationRegistry } from '@bastion-mcp/mcp-upstream';
@@ -295,7 +295,7 @@ export const createDownstream = (deps: DownstreamDeps): Downstream => {
     async shutdown(options = {}) {
       draining = true;
       // In-flight operations finish first (up to the grace period); long-lived streams do not count (21.2).
-      await inflight.drain(options.graceMs ?? 25_000);
+      await inflight.drain(options.graceMs ?? TIMEOUTS_MS.graceful);
       await listen.shutdown();
       await legacy.shutdown();
       await modern.close();

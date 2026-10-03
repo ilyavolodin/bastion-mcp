@@ -2,7 +2,13 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { CHUNK_SIZES } from '../extract';
-import { type Guard, GuardError, type GuardInput } from '../types';
+import {
+  DEFAULT_JUDGE_TIMEOUT_MS,
+  type Guard,
+  GuardError,
+  type GuardInput,
+  MAX_GUARD_TIMEOUT_MS,
+} from '../types';
 import {
   type ChunkVerdict,
   type ModelGuardDeps,
@@ -29,7 +35,12 @@ export const judgeConfigSchema = z.object({
   model: z.string().min(1),
   /** Org secret holding the bearer token; omit for endpoints without auth. */
   apiKeySecret: z.string().min(1).optional(),
-  timeoutMs: z.number().int().positive().max(60_000).default(3000),
+  timeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .max(MAX_GUARD_TIMEOUT_MS)
+    .default(DEFAULT_JUDGE_TIMEOUT_MS),
 });
 export type JudgeConfig = z.infer<typeof judgeConfigSchema>;
 
@@ -70,14 +81,20 @@ export const buildJudgeMessages = (
   { role: 'user', content: `<<<DATA ${token}>>>\n${text}\n<<<END ${token}>>>` },
 ];
 
-const newToken = (text: string): string => {
-  let token = randomBytes(8).toString('hex');
-  while (text.includes(token)) token = randomBytes(8).toString('hex');
+const defaultNonce = (): string => randomBytes(8).toString('hex');
+
+/** A boundary token that does not occur in `text`, so the content cannot close its own markers. */
+const newToken = (text: string, nonce: () => string): string => {
+  let token = nonce();
+  while (text.includes(token)) token = nonce();
   return token;
 };
 
 export const createLlmJudgeGuard = (
-  deps: ModelGuardDeps & { systemPrompt?: string },
+  deps: ModelGuardDeps & {
+    systemPrompt?: string /** Source of the 16-hex boundary token; inject for tests. */;
+    nonce?: () => string;
+  },
 ): Guard<JudgeConfig> => {
   let prompt = deps.systemPrompt;
   const judge = async (
@@ -97,7 +114,7 @@ export const createLlmJudgeGuard = (
       headers,
       body: {
         model: config.model,
-        messages: buildJudgeMessages(prompt, text, newToken(text)),
+        messages: buildJudgeMessages(prompt, text, newToken(text, deps.nonce ?? defaultNonce)),
         response_format: JUDGE_RESPONSE_FORMAT,
         temperature: 0,
         max_tokens: 200,

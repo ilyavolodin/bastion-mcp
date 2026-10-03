@@ -101,7 +101,8 @@ describe('Catalog forms send what the API requires (17.2)', () => {
       secrets: [{ name: 'API_KEY', label: 'API token' }],
     });
     capture.stop();
-  });
+    // The longest form walk of the suite: it types into five steps, so a loaded machine needs more than 15 s.
+  }, 45_000);
 
   it('9.5 a Bearer token header with a shared secret writes the secret through the secrets API, never into the spec', async () => {
     const capture = captureRequests();

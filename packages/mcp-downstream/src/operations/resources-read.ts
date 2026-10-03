@@ -1,18 +1,17 @@
 /** `resources/read` (6.3, 7.4): URI index routing, prefix stripping, Bastion-hosted `skill://` resources. */
+import { MS } from '@bastion-mcp/core';
 import { extractResourceContents, extractUriSegments } from '@bastion-mcp/guards';
 import { addedResourceContents, addedTemplateContents } from '@bastion-mcp/overrides';
 import { ResourceNotFoundError, resolveResourceUriWithSeen } from '@bastion-mcp/router';
-import { trace } from '@opentelemetry/api';
-import { CallRecord } from '../observability/call-log';
 import { InvalidParamsError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
-import { recordOperationOutcome } from './outcome';
+import { runRoutedOperation } from './outcome';
 import { runRouted } from './routed';
 import { installationDataOf, retryParts } from './support';
 
 const SKILL_SCHEME = 'skill://';
-const DEFAULT_READ_TTL_MS = 60_000;
+const DEFAULT_READ_TTL_MS = MS.MINUTE;
 
 export const createResourcesRead = (deps: OperationDeps): Operation => ({
   method: 'resources/read',
@@ -38,9 +37,7 @@ export const createResourcesRead = (deps: OperationDeps): Operation => ({
     if (!installation) throw new ResourceNotFoundError(uri);
     const upstreamUri = target.target.upstreamUri;
     const hosted = target.target.hosted;
-    const record = new CallRecord('resources/read', deps.clock.now());
-    const span = trace.getActiveSpan()?.spanContext() ?? ctx.trace;
-    try {
+    return runRoutedOperation(deps, ctx, 'resources/read', installation, async (record) => {
       const outcome = await runRouted(
         deps,
         ctx,
@@ -77,24 +74,17 @@ export const createResourcesRead = (deps: OperationDeps): Operation => ({
         retry,
         record,
       );
-      if (outcome.kind === 'complete') {
-        const result = outcome.result;
-        // Bastion always answers private; the TTL is the upstream's when it gave one (6.7).
-        return {
-          kind: 'complete',
-          result: {
-            ...result,
-            ttlMs: typeof result.ttlMs === 'number' ? result.ttlMs : DEFAULT_READ_TTL_MS,
-            cacheScope: 'private',
-          },
-        };
-      }
-      return outcome;
-    } catch (error) {
-      record.fail(error);
-      throw error;
-    } finally {
-      recordOperationOutcome(deps, ctx, record, span, installation, 'resources/read');
-    }
+      if (outcome.kind !== 'complete') return outcome;
+      const result = outcome.result;
+      // Bastion always answers private; the TTL is the upstream's when it gave one (6.7).
+      return {
+        kind: 'complete',
+        result: {
+          ...result,
+          ttlMs: typeof result.ttlMs === 'number' ? result.ttlMs : DEFAULT_READ_TTL_MS,
+          cacheScope: 'private',
+        },
+      };
+    });
   },
 });

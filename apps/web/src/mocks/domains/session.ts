@@ -6,6 +6,8 @@
 import type { HttpHandler } from 'msw';
 import type { Res, Schemas } from '@/api/schema';
 import {
+  checkVersion,
+  etagHeaders,
   HttpResponse,
   latency,
   noContent,
@@ -16,7 +18,21 @@ import {
   type SampleFactory,
 } from '../http';
 import { toMeResponse } from '../me-response';
+import { ME_ID, SEED_IDS } from '../seed';
 import { getDb, setRole } from '../state';
+import { HOUR, iso, nowIso } from '../util';
+import { SEEDED_LIMITS } from './settings';
+
+const ME = ME_ID;
+
+/** `remaining` follows from the limit and what is consumed. */
+const used = (limit: number, consumed: number) => ({
+  limit,
+  consumed,
+  remaining: limit - consumed,
+});
+/** Sandbox minutes have no limit rule in the settings seed: the quota stands alone. */
+const SANDBOX_MINUTES = 240;
 
 type Quota = Res<'get', '/me/quotas'>['items'][number];
 
@@ -27,9 +43,6 @@ export type SessionData = {
   grants: Schemas['OAuthGrant'][];
 };
 
-const HOUR = 3_600_000;
-const iso = (ms: number) => new Date(ms).toISOString();
-const ME = 'u-dana';
 /** The mock user's password, for trying the change-password form in `pnpm dev`. */
 export const MOCK_PASSWORD = 'correct horse battery staple';
 
@@ -42,7 +55,7 @@ export const buildSessionData = (now: number): SessionData => ({
       title: 'GitHub isn’t connected yet',
       data: {
         message: 'Its tools stay out of your AI tools until you sign in.',
-        installationId: 'i-github',
+        installationId: SEED_IDS.installation.github,
       },
       readAt: null,
       createdAt: iso(now - 20 * 60_000),
@@ -75,9 +88,7 @@ export const buildSessionData = (now: number): SessionData => ({
       name: 'Tool calls',
       kind: 'quota',
       subjectId: ME,
-      limit: 5000,
-      consumed: 1240,
-      remaining: 3760,
+      ...used(SEEDED_LIMITS.callsPerDay, 1240),
       resetsAt: iso(now + 8 * HOUR),
     },
     {
@@ -85,9 +96,7 @@ export const buildSessionData = (now: number): SessionData => ({
       name: 'Sandbox minutes',
       kind: 'quota',
       subjectId: ME,
-      limit: 240,
-      consumed: 144,
-      remaining: 96,
+      ...used(SANDBOX_MINUTES, 144),
       resetsAt: iso(now + 8 * HOUR),
     },
     {
@@ -95,9 +104,7 @@ export const buildSessionData = (now: number): SessionData => ({
       name: 'Concurrent calls',
       kind: 'concurrency',
       subjectId: ME,
-      limit: 8,
-      consumed: 2,
-      remaining: 6,
+      ...used(SEEDED_LIMITS.concurrentCalls, 2),
       resetsAt: null,
     },
   ],
@@ -124,13 +131,23 @@ export const sessionHandlers: HttpHandler[] = [
     const stored = storedRole();
     if (stored === 'admin' || stored === 'manager' || stored === 'member' || stored === 'auditor')
       setRole(stored);
-    return HttpResponse.json(toMeResponse(getDb().me));
-  }),
-  route.patch('/me', async ({ body }) => {
-    const { displayName } = await body();
     const db = getDb();
-    if (displayName) db.me.name = displayName;
-    return HttpResponse.json(toMeResponse(db.me));
+    return HttpResponse.json(toMeResponse(db.me, db.meUpdatedAt), {
+      headers: etagHeaders(db.meUpdatedAt),
+    });
+  }),
+  route.patch('/me', async ({ request, body }) => {
+    const db = getDb();
+    const stale = checkVersion(request, { updatedAt: db.meUpdatedAt });
+    if (stale) return stale;
+    const { displayName } = await body();
+    if (displayName) {
+      db.me.name = displayName;
+      db.meUpdatedAt = nowIso();
+    }
+    return HttpResponse.json(toMeResponse(db.me, db.meUpdatedAt), {
+      headers: etagHeaders(db.meUpdatedAt),
+    });
   }),
   route.post('/me/password', async ({ body }) => {
     const { currentPassword, newPassword } = await body();
@@ -161,7 +178,7 @@ export const sessionHandlers: HttpHandler[] = [
     const n = getDb().data.session.notifications.find((x) => x.id === params.id);
     if (!n) return notFound('Notification');
     if (!n.readAt) {
-      n.readAt = new Date().toISOString();
+      n.readAt = nowIso();
       n.updatedAt = n.readAt;
     }
     return HttpResponse.json(n);

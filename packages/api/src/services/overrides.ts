@@ -92,10 +92,9 @@ export const putCatalogOverrides = async (
 ) => {
   const version = await requireVersion(ctx.tx.store, entryId, versionId);
   if (version.status === 'published') {
-    throw new ConflictApiError(
-      'published versions are frozen; create a new version',
-      'version_frozen',
-    );
+    throw new ConflictApiError('published versions are frozen; create a new version', {
+      code: 'version_frozen',
+    });
   }
   const doc = parseDoc(input);
   const row = await ctx.tx.store.update('catalog_versions', versionId, { overrides: doc });
@@ -118,7 +117,9 @@ const currentVersionOf = async (store: ReadCtx['deps']['store'], entryId: string
   if (!entry) throw new NotFoundApiError('catalog entry');
   const versionId = typeof entry.currentVersionId === 'string' ? entry.currentVersionId : null;
   if (!versionId) {
-    throw new ConflictApiError('the entry has no published version yet', 'no_published_version');
+    throw new ConflictApiError('the entry has no published version yet', {
+      code: 'no_published_version',
+    });
   }
   return requireVersion(store, entryId, versionId);
 };
@@ -223,10 +224,9 @@ export const preview = async (
         ctx.signal,
       );
       if (out.status !== 'ok') {
-        throw new ConflictApiError(
-          `upstream definitions are not available (${out.code})`,
-          'upstream_unavailable',
-        );
+        throw new ConflictApiError(`upstream definitions are not available (${out.code})`, {
+          code: 'upstream_unavailable',
+        });
       }
       upstream = {
         ...(out.items.instructions === undefined ? {} : { instructions: out.items.instructions }),

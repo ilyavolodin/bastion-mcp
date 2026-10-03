@@ -1,5 +1,6 @@
 import { Logger, makeWorkerUtils, type Runner, run, type WorkerUtils } from 'graphile-worker';
 import type { Infra } from '../infra';
+import { SCHEDULER_KEEPALIVE_MS, SCHEDULER_LEADER_RETRY_MS, SCHEDULER_POLL_MS } from '../timing';
 import { LeaderElection } from './leader';
 import { CRON, isTaskName, TASKS, type TaskName } from './tasks';
 import type { EnqueueOptions, SchedulerDeps, TaskContext } from './types';
@@ -32,7 +33,7 @@ const noopGraphileLogger = new Logger(() => () => undefined);
  * idempotent (see `tasks/`), so an overlap during a handover is harmless.
  */
 export const createScheduler = (infra: Infra, deps: SchedulerDeps = {}): Scheduler => {
-  const now = deps.now ?? (() => new Date());
+  const now = deps.now ?? (() => new Date(infra.clock.now()));
   const connectionString = infra.config.databaseUrl;
   let runner: Runner | undefined;
   let utils: Promise<WorkerUtils> | undefined;
@@ -60,11 +61,10 @@ export const createScheduler = (infra: Infra, deps: SchedulerDeps = {}): Schedul
   const taskList = Object.fromEntries(
     Object.entries(TASKS).map(([name, fn]) => [
       name,
-      async (payload: unknown) => {
-        const started = Date.now();
-        const result = await (fn as (c: TaskContext, p: unknown) => Promise<unknown>)(ctx, payload);
-        infra.logger.debug({ task: name, ms: Date.now() - started }, 'scheduler task done');
-        return result;
+      async (payload: unknown): Promise<void> => {
+        const started = infra.clock.now();
+        await (fn as (c: TaskContext, p: unknown) => Promise<unknown>)(ctx, payload);
+        infra.logger.debug({ task: name, ms: infra.clock.now() - started }, 'scheduler task done');
       },
     ]),
   );
@@ -74,8 +74,8 @@ export const createScheduler = (infra: Infra, deps: SchedulerDeps = {}): Schedul
 
   const election = new LeaderElection({
     connectionString,
-    retryMs: deps.timing?.leaderRetryMs ?? 5000,
-    keepaliveMs: deps.timing?.keepaliveMs ?? 2000,
+    retryMs: deps.timing?.leaderRetryMs ?? SCHEDULER_LEADER_RETRY_MS,
+    keepaliveMs: deps.timing?.keepaliveMs ?? SCHEDULER_KEEPALIVE_MS,
     log: (message, fields) => infra.logger.info(fields ?? {}, message),
     async onGained() {
       await getUtils();
@@ -83,9 +83,9 @@ export const createScheduler = (infra: Infra, deps: SchedulerDeps = {}): Schedul
         connectionString,
         concurrency: 2,
         noHandleSignals: true,
-        pollInterval: deps.timing?.pollIntervalMs ?? 1000,
+        pollInterval: deps.timing?.pollIntervalMs ?? SCHEDULER_POLL_MS,
         logger: noopGraphileLogger,
-        taskList: taskList as never,
+        taskList,
         ...(crontab ? { crontab } : {}),
       });
       runner.promise.catch((error: unknown) =>

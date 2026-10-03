@@ -1,11 +1,11 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { api, fetchAll } from '../client';
+import { STALE_LOOKUP_MS } from '../timing';
 import {
   BUCKET_MS,
   bucketFor,
   type CallFilters,
   type CallSeries,
-  type CallViewer,
   callsQuery,
   type DriftDecision,
   driftViews,
@@ -22,29 +22,24 @@ import {
   totalsByGroup,
 } from '../views/observability';
 import { keys, useApiMutation } from './base';
-import { useMe } from './session';
-
-/** The caller as the call log's authorization sees them, once `GET /me` has answered. */
-const useViewer = (): CallViewer | undefined => {
-  const me = useMe().data;
-  return me ? { id: me.id, orgRole: me.orgRole, teams: me.teams } : undefined;
-};
+import { fetchTeamNames, orEmpty, orNoNames } from './lookups';
+import { useViewer } from './session';
 
 /** Names of people, teams and installations, read through the typed lists (generated fields only). */
 export const useNames = (enabled = true) =>
   useQuery({
     queryKey: [...keys.stats, 'names'],
     enabled,
-    staleTime: 60_000,
+    staleTime: STALE_LOOKUP_MS,
     queryFn: async ({ signal }) => {
       const [users, teams, installations] = await Promise.all([
-        fetchAll('/users', undefined, 20, signal).catch(() => []),
-        fetchAll('/teams', undefined, 20, signal).catch(() => []),
-        fetchAll('/installations', undefined, 20, signal).catch(() => []),
+        orEmpty(fetchAll('/users', undefined, undefined, signal)),
+        orNoNames(fetchTeamNames(signal)),
+        orEmpty(fetchAll('/installations', undefined, undefined, signal)),
       ]);
       return {
         users: new Map(users.map((u) => [u.id, u.displayName])),
-        teams: new Map(teams.map((t) => [t.id, t.displayName])),
+        teams,
         installations: new Map(installations.map((i) => [i.id, i.displayName])),
       };
     },
@@ -87,6 +82,11 @@ export type StatsScope = {
 };
 type StatsArgs = { range: StatsRange } & StatsScope;
 
+/** Pages of call rows a rows-based series reads (the rollups cannot filter by person or installation). */
+const CALL_ROWS_PAGES = 10;
+/** Pages of security findings read for the range. */
+const FINDINGS_PAGES = 4;
+
 const windowOf = (range: StatsRange) => {
   const to = Date.now();
   const bucket = bucketFor(range);
@@ -127,7 +127,7 @@ export const useCallSeries = (args: StatsArgs) => {
               w.to,
             ),
           },
-          10,
+          CALL_ROWS_PAGES,
           signal,
         );
         return seriesFromCalls(rows, window);
@@ -212,7 +212,7 @@ export const useFindings = (range: StatsRange) => {
     queryKey: [...keys.stats, 'findings', range, names.data ? 'named' : 'bare'],
     queryFn: async ({ signal }) => {
       const { from, to } = rangeWindow(range);
-      const rows = await fetchAll('/security/findings', { from, to }, 4, signal);
+      const rows = await fetchAll('/security/findings', { from, to }, FINDINGS_PAGES, signal);
       return findingViews(rows, {
         users: names.data?.users ?? new Map(),
         installations: names.data?.installations ?? new Map(),
@@ -228,8 +228,8 @@ export const useDriftReviews = (status: 'open' | 'all' = 'open', enabled = true)
     enabled,
     queryFn: async ({ signal }) => {
       const [rows, installations] = await Promise.all([
-        fetchAll('/drift-reviews', status === 'open' ? { status } : undefined, 20, signal),
-        fetchAll('/installations', undefined, 20, signal).catch(() => []),
+        fetchAll('/drift-reviews', status === 'open' ? { status } : undefined, undefined, signal),
+        orEmpty(fetchAll('/installations', undefined, undefined, signal)),
       ]);
       return driftViews(rows, new Map(installations.map((i) => [i.id, i.displayName])));
     },

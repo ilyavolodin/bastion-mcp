@@ -3,7 +3,8 @@ import { queueRows, rollingOutReplicas } from '@/api/views/settings';
 import { Card, CardHeader, Legend } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { StatusDot } from '@/components/status';
-import { formatDate, formatRelative, formatUptime, percent } from '@/lib/format';
+import { formatDate, formatRelative, formatUptime, percent, secondsSince } from '@/lib/format';
+import { SECOND, WEEK_MS } from '@/lib/time';
 
 const queueColor = (pct: number) =>
   pct > 55 ? 'var(--sun)' : pct > 20 ? 'var(--sky)' : 'var(--mint)';
@@ -45,10 +46,7 @@ export function SystemStatusSection() {
                 {s.replicas.map((r) => {
                   const color = r.role === 'worker' ? 'var(--tangerine)' : 'var(--sky)';
                   const rollingOut = rolling.has(r.id);
-                  const uptimeSec = Math.max(
-                    0,
-                    (Date.now() - new Date(r.startedAt).getTime()) / 1000,
-                  );
+                  const uptimeSec = secondsSince(r.startedAt, q.dataUpdatedAt);
                   return (
                     <li
                       key={r.id}
@@ -78,7 +76,7 @@ export function SystemStatusSection() {
                         <span
                           className="block h-full"
                           style={{
-                            width: `${Math.min(100, (uptimeSec / (7 * 86400)) * 100)}%`,
+                            width: `${percent(uptimeSec, WEEK_MS / SECOND)}%`,
                             background: color,
                           }}
                         />

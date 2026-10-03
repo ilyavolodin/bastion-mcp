@@ -1,6 +1,12 @@
 /** JSON-RPC errors the downstream layer raises and how any thrown value maps onto them (6.9). */
 import { BastionError, JSONRPC_CODES } from '@bastion-mcp/core';
 
+/** Codes of the implementation range (-32000..-32099) the transports use that are not Bastion's own `ERROR_CODES`. */
+export const TRANSPORT_CODES = {
+  sessionNotFound: -32001,
+  headerMismatch: -32020,
+} as const;
+
 export class InvalidParamsError extends BastionError {
   constructor(message: string, data?: Record<string, unknown>) {
     super('INVALID_PARAMS', message, {

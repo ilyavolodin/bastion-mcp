@@ -32,7 +32,7 @@ const entryOf = (doc: OverrideDocument, d: DefinitionPair): Record<string, unkno
 const customizedFields = (entry: Record<string, unknown>) =>
   Object.keys(entry).filter((k) => k !== 'hidden');
 
-const describe = (d: DefinitionPair): string => {
+const descriptionOf = (d: DefinitionPair): string => {
   const def = d.final ?? d.upstream;
   const text = def && typeof def.description === 'string' ? def.description : '';
   return text.split('\n')[0] ?? '';
@@ -65,7 +65,7 @@ export function ItemsList({
   const visible = defs.filter(
     (d) =>
       (kind === 'all' || d.kind === kind) &&
-      (q === '' || d.name.toLowerCase().includes(q) || describe(d).toLowerCase().includes(q)),
+      (q === '' || d.name.toLowerCase().includes(q) || descriptionOf(d).toLowerCase().includes(q)),
   );
 
   const setHidden = (list: DefinitionPair[], hidden: boolean) => {
@@ -186,7 +186,7 @@ export function ItemsList({
                 />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate font-mono text-[13px]">{d.name}</span>
-                  <span className="truncate text-caption text-muted">{describe(d)}</span>
+                  <span className="truncate text-caption text-muted">{descriptionOf(d)}</span>
                 </div>
                 {d.kind !== 'tool' ? <Tag>{KIND_LABEL[d.kind]}</Tag> : null}
                 {d.added ? <Tag tone="info">Added</Tag> : null}

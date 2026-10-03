@@ -3,10 +3,9 @@ import { z } from 'zod';
 import type { User } from '../generated/client';
 import {
   type AuditContext,
-  afterIdDesc,
+  afterKey,
   assertIfMatch,
   assertSwapped,
-  clampLimit,
   etagOf,
   idCursorOf,
   mutate,
@@ -15,10 +14,11 @@ import {
   orConflict,
   type Paged,
   type PrismaLike,
+  paginate,
   type RepoContext,
   type RepoOptions,
   toContext,
-  toPage,
+  versionedUpdate,
   versionGuard,
 } from './support';
 
@@ -122,29 +122,32 @@ export const createUserRepository = (arg: PrismaLike | RepoContext, options?: Re
     },
 
     async list(filter: UserListFilter = {}): Promise<Paged<UserView>> {
-      const limit = clampLimit(filter.limit);
       const q = filter.q?.trim();
-      const rows = await db.user.findMany({
-        where: {
-          ...(filter.orgRole ? { orgRole: filter.orgRole } : {}),
-          ...(filter.status ? { status: filter.status } : {}),
-          ...(filter.idpConnectionId ? { idpConnectionId: filter.idpConnectionId } : {}),
-          ...(filter.teamId ? { teamMemberships: { some: { teamId: filter.teamId } } } : {}),
-          ...(q
-            ? {
-                OR: [
-                  { email: { contains: q, mode: 'insensitive' } },
-                  { displayName: { contains: q, mode: 'insensitive' } },
-                ],
-              }
-            : {}),
-          ...afterIdDesc(filter.cursor),
-        },
-        orderBy: { id: 'desc' },
-        take: limit + 1,
-      });
-      const page = toPage(rows, limit, idCursorOf);
-      return { items: page.items.map(toUserView), nextCursor: page.nextCursor };
+      return paginate(
+        filter,
+        (take) =>
+          db.user.findMany({
+            where: {
+              ...(filter.orgRole ? { orgRole: filter.orgRole } : {}),
+              ...(filter.status ? { status: filter.status } : {}),
+              ...(filter.idpConnectionId ? { idpConnectionId: filter.idpConnectionId } : {}),
+              ...(filter.teamId ? { teamMemberships: { some: { teamId: filter.teamId } } } : {}),
+              ...(q
+                ? {
+                    OR: [
+                      { email: { contains: q, mode: 'insensitive' } },
+                      { displayName: { contains: q, mode: 'insensitive' } },
+                    ],
+                  }
+                : {}),
+              ...afterKey('id', 'desc', filter.cursor),
+            },
+            orderBy: { id: 'desc' },
+            take,
+          }),
+        idCursorOf,
+        toUserView,
+      );
     },
 
     create(input: CreateUserInput, opts: WriteOptions = {}): Promise<UserView> {
@@ -177,18 +180,21 @@ export const createUserRepository = (arg: PrismaLike | RepoContext, options?: Re
 
     update(id: string, patch: UpdateUserInput, opts: IfMatchOptions): Promise<UserView> {
       return mutate(ctx, async (tx, unit) => {
-        const current = await tx.user.findUnique({ where: { id } });
-        if (!current) throw new NotFoundError('user', id);
-        assertIfMatch(current, opts.ifMatch);
-        assertSwapped(
-          await orConflict('user', () =>
-            tx.user.updateMany({
-              where: { id, ...versionGuard(current) },
-              data: { ...patch, updatedAt: nextUpdatedAt(current) },
-            }),
-          ),
-        );
-        const row = await tx.user.findUniqueOrThrow({ where: { id } });
+        const { current, row } = await versionedUpdate({
+          what: 'user',
+          id,
+          ifMatch: opts.ifMatch,
+          find: () => tx.user.findUnique({ where: { id } }),
+          write: async (_current, where, updatedAt) => {
+            return orConflict('user', () =>
+              tx.user.updateMany({
+                where,
+                data: { ...patch, updatedAt },
+              }),
+            );
+          },
+          reload: () => tx.user.findUniqueOrThrow({ where: { id } }),
+        });
         unit.bump('user', id);
         unit.audit(opts.audit, {
           action: patch.status === 'deactivated' ? 'user.deactivate' : 'user.update',

@@ -1,25 +1,19 @@
-import { UpstreamUnavailableError } from '@bastion-mcp/core';
 import { type PriorDiscovery, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { type Logger, noopLogger } from '../ports';
-import type { RemoteAgentRegistry } from './agent';
-import { CapTracker } from './caps';
+import { UPSTREAM_TIMEOUTS_MS } from '../timeouts';
 import { createUpstreamClient } from './client-factory';
-import { createRemoteFetch, type RemoteSettings, resolveRemoteTarget } from './remote';
-import { SdkUpstreamSession } from './session';
+import {
+  connectClient,
+  type OpenedRemote,
+  openRemote,
+  type RemoteConnectorOptions,
+} from './connect';
 import type { ConnectContext, UpstreamConnector, UpstreamSession } from './types';
 
 /** Connect-time handshake limit; the transport itself has its own request timeouts. */
-export const CONNECT_TIMEOUT_MS = 15_000;
+export const CONNECT_TIMEOUT_MS = UPSTREAM_TIMEOUTS_MS.remoteConnect;
 
-export type RemoteConnectorOptions = {
-  agents: RemoteAgentRegistry;
-  settings: RemoteSettings;
-  /** Bastion version for `clientInfo.version` (6.4). */
-  version: string;
-  logger?: Logger;
-  /** Overrides the 32 MiB / 100 MiB response caps (tests). */
-  caps?: { messageBytes?: number; streamBytes?: number };
-};
+export type { RemoteConnectorOptions };
 
 /**
  * Streamable HTTP upstream (6.4, 8.9): SDK `StreamableHTTPClientTransport` with `versionNegotiation: auto`, the
@@ -34,81 +28,60 @@ export class HttpConnector implements UpstreamConnector {
 
   async connect(ctx: ConnectContext): Promise<UpstreamSession> {
     const { installation } = ctx;
-    if (installation.spec.type !== 'remote' || installation.spec.transport !== 'streamable-http') {
-      throw new Error('HttpConnector needs a streamable-http remote spec');
-    }
-    const target = await resolveRemoteTarget(
-      installation,
-      ctx.principal,
-      ctx.credential,
-      this.options.settings,
+    const remote = await openRemote(
+      ctx,
+      this.options,
+      this.logger,
+      'streamable-http',
+      'HttpConnector',
     );
-    const agent = this.options.agents.get(installation.installationId, target.safe, target.tls);
-    let session: SdkUpstreamSession | undefined;
-    const caps = new CapTracker({
-      ...this.options.caps,
-      installation: installation.slug,
-      logger: this.logger,
-      onViolation: (error) => session?.abortAll(error),
-    });
-    const fetch = createRemoteFetch({ agent, headers: target.headers, caps });
-    const resumed = ctx.remoteSession;
-    if (resumed) {
-      const attached = await this.tryResume(ctx, target.url, fetch, caps);
+    if (ctx.remoteSession) {
+      const attached = await this.tryResume(ctx, remote);
       if (attached) return attached;
     }
-    const transport = new StreamableHTTPClientTransport(target.url, { fetch });
+    const transport = new StreamableHTTPClientTransport(remote.url, { fetch: remote.fetch });
     const client = createUpstreamClient(installation, this.options.version, 'auto');
-    try {
-      await client.connect(transport, {
-        ...(ctx.prior ? { prior: ctx.prior } : {}),
-        signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(CONNECT_TIMEOUT_MS)]),
-        timeout: CONNECT_TIMEOUT_MS,
-      });
-    } catch (error) {
-      await client.close().catch(() => undefined);
-      throw caps.violation ?? error;
-    }
+    await connectClient(client, transport, {
+      signal: ctx.signal,
+      timeoutMs: CONNECT_TIMEOUT_MS,
+      prior: ctx.prior,
+      violation: () => remote.caps.violation,
+    });
     const era = client.getProtocolEra() ?? 'legacy';
     const verdict: PriorDiscovery =
       era === 'modern' && client.getDiscoverResult()
         ? { kind: 'modern', discover: client.getDiscoverResult() as never }
         : { kind: 'legacy' };
     ctx.onVerdict?.(verdict);
-    session = new SdkUpstreamSession({
+    return remote.session({
       client,
       transport,
       installation,
       era,
       continuations: ctx.continuations,
-      logger: this.logger,
-      capViolation: () => caps.violation,
     });
-    return session;
   }
 
   /** Reattaches a stored legacy session id instead of `initialize` (21.2); null when the upstream dropped it. */
   private async tryResume(
     ctx: ConnectContext,
-    url: URL,
-    fetch: ReturnType<typeof createRemoteFetch>,
-    caps: CapTracker,
+    remote: OpenedRemote,
   ): Promise<UpstreamSession | null> {
     const stored = ctx.remoteSession;
     if (!stored) return null;
-    const transport = new StreamableHTTPClientTransport(url, {
-      fetch,
+    const transport = new StreamableHTTPClientTransport(remote.url, {
+      fetch: remote.fetch,
       sessionId: stored.sessionId,
       protocolVersion: stored.protocolVersion,
     });
     const client = createUpstreamClient(ctx.installation, this.options.version, 'legacy');
-    let session: SdkUpstreamSession | undefined;
     try {
-      await client.connect(transport, {
+      await connectClient(client, transport, {
+        signal: ctx.signal,
+        timeoutMs: CONNECT_TIMEOUT_MS,
         prior: { kind: 'legacy' },
-        signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(CONNECT_TIMEOUT_MS)]),
       });
-      session = new SdkUpstreamSession({
+      const session = remote.session({
         client,
         transport,
         installation: ctx.installation,
@@ -118,8 +91,6 @@ export class HttpConnector implements UpstreamConnector {
           serverCapabilities: stored.serverCapabilities,
         },
         continuations: ctx.continuations,
-        logger: this.logger,
-        capViolation: () => caps.violation,
       });
       // Liveness check; also reopens the standalone GET stream of the session (21.2).
       await session.ping({
@@ -130,7 +101,7 @@ export class HttpConnector implements UpstreamConnector {
           clientCapabilities: {},
           trace: {},
         },
-        timeoutMs: 10_000,
+        timeoutMs: UPSTREAM_TIMEOUTS_MS.resumePing,
       });
       await client.notification({ method: 'notifications/initialized' });
       return session;
@@ -140,14 +111,8 @@ export class HttpConnector implements UpstreamConnector {
         error: String(error),
       });
       await client.close().catch(() => undefined);
-      if (caps.violation) throw caps.violation;
+      if (remote.caps.violation) throw remote.caps.violation;
       return null;
     }
   }
 }
-
-export const unavailable = (
-  slug: string,
-  message: string,
-  cause?: unknown,
-): UpstreamUnavailableError => new UpstreamUnavailableError(message, { installation: slug }, cause);

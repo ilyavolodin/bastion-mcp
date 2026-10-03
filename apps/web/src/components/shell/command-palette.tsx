@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { LayoutGrid, Server, Settings2, User, Users, Wrench } from 'lucide-react';
 import { api } from '@/api/client';
 import { useInstallations, useTeams, useUsers } from '@/api/hooks';
+import { STALE_LONG_MS } from '@/api/timing';
 import { toCapabilities } from '@/api/views/servers';
 import { useAuth } from '@/auth/auth';
 import {
@@ -82,7 +83,7 @@ export function CommandPalette() {
     queries: servers.map((s) => ({
       queryKey: ['installations', s.id, 'palette-tools'],
       enabled: open,
-      staleTime: 5 * 60_000,
+      staleTime: STALE_LONG_MS,
       queryFn: () =>
         api.get(`/installations/${s.id}/tools`).then((res) => toCapabilities('tool', res)),
     })),

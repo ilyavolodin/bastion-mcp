@@ -7,10 +7,13 @@ import {
   MAX_INSTRUCTIONS_CHARS,
   type NameCandidate,
   resolveNames,
+  SERVER_NAME,
   sanitizeNamePart,
   sha256Hex,
+  TEST_ORIGIN,
 } from '@bastion-mcp/core';
 import {
+  type ApplyResult,
   applyInstructions,
   applyToPrompt,
   applyToResource,
@@ -20,6 +23,8 @@ import {
   type FinalResource,
   type FinalResourceTemplate,
   type FinalTool,
+  type HiddenItem,
+  type InvalidItem,
   type MergedAdded,
   mergedAdded,
   type OverrideIssue,
@@ -103,11 +108,8 @@ export type CompileInput = {
   signal?: AbortSignal | undefined;
 };
 
-export const SERVER_NAME = 'bastion';
 const BAD_STATUSES: ReadonlySet<string> = new Set(['disabled', 'needs_setup']);
 const SINGLE_KINDS: ReadonlySet<string> = new Set(['installation', 'catalog']);
-/** `installations.origin` of the hidden installation a catalog TEST runs against (11.3). */
-const TEST_ORIGIN = 'test';
 
 const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -219,17 +221,22 @@ export const compileEndpoint = async (input: CompileInput): Promise<EffectiveEnd
 
 // --- assembly -------------------------------------------------------------------------------------
 
-type Entry<F> = {
+type Entry<U, F> = {
   installation: InstallationInfo;
   priority: number;
   upstreamKey: string;
   final: F | null;
   issues: OverrideIssue[];
   overridden: boolean;
+  /** The item as listed after overrides (the upstream item when no override touched it). */
+  item: U;
+  exactName?: string;
 };
 
-type ToolEntry = Entry<FinalTool> & { tool: UpstreamTool; exactName?: string };
-type PromptEntry = Entry<FinalPrompt> & { prompt: UpstreamPrompt; exactName?: string };
+type ToolEntry = Entry<UpstreamTool, FinalTool>;
+type PromptEntry = Entry<UpstreamPrompt, FinalPrompt>;
+type ResourceEntry = Entry<UpstreamResource, FinalResource>;
+type TemplateEntry = Entry<UpstreamResourceTemplate, FinalResourceTemplate>;
 
 const sameJson = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
 
@@ -244,44 +251,190 @@ const wantsUriPrefix = (layers: OverrideLayers): boolean =>
 
 /**
  * A catalog-layer pin cannot be changed by the user layer, even at `full` level (12.1): the catalog value
- * is re-applied last.
+ * is re-applied last. Returns the tool with the pins re-applied (the input is never modified).
  */
-const enforceCatalogToolPins = (
+const withCatalogToolPins = (
   final: FinalTool,
   layers: OverrideLayers,
   upstreamName: string,
-): void => {
-  if (!layers.catalog || !layers.installation) return;
+): FinalTool => {
+  if (!layers.catalog || !layers.installation) return final;
   const pins = resolveToolOverride({ catalog: layers.catalog }, upstreamName).pinnedArguments;
+  const pinned = { ...final.plan.pinned };
+  const issues = [...final.issues];
+  let changed = false;
   for (const [key, value] of Object.entries(pins ?? {})) {
-    if (!sameJson(final.plan.pinned[key], value)) {
-      final.plan.pinned[key] = value;
-      final.plan.validate = true;
-      final.issues.push({
-        code: 'catalog_pin_enforced',
-        message: `pinned argument "${key}" is set by the catalog and cannot be changed`,
-        path: `/pinnedArguments/${key}`,
-      });
-    }
+    if (sameJson(pinned[key], value)) continue;
+    pinned[key] = value;
+    changed = true;
+    issues.push({
+      code: 'catalog_pin_enforced',
+      message: `pinned argument "${key}" is set by the catalog and cannot be changed`,
+      path: `/pinnedArguments/${key}`,
+    });
   }
+  return changed ? { ...final, plan: { ...final.plan, pinned, validate: true }, issues } : final;
 };
 
-const enforceCatalogPromptPins = (
+/** Same rule for prompt arguments; returns the prompt with the catalog pins re-applied. */
+const withCatalogPromptPins = (
   final: FinalPrompt,
   layers: OverrideLayers,
   upstreamName: string,
-): void => {
-  if (!layers.catalog || !layers.installation) return;
+): FinalPrompt => {
+  if (!layers.catalog || !layers.installation) return final;
   const args = resolvePromptOverride({ catalog: layers.catalog }, upstreamName).arguments ?? {};
+  const pinned = { ...final.plan.pinned };
+  const issues = [...final.issues];
+  let changed = false;
   for (const [name, arg] of Object.entries(args)) {
-    if (arg.pinned === undefined || final.plan.pinned[name] === arg.pinned) continue;
-    final.plan.pinned[name] = arg.pinned;
-    final.issues.push({
+    if (arg.pinned === undefined || pinned[name] === arg.pinned) continue;
+    pinned[name] = arg.pinned;
+    changed = true;
+    issues.push({
       code: 'catalog_pin_enforced',
       message: `pinned prompt argument "${name}" is set by the catalog and cannot be changed`,
       path: `/arguments/${name}/pinned`,
     });
   }
+  return changed ? { ...final, plan: { ...final.plan, pinned }, issues } : final;
+};
+
+const isHidden = (r: { kind: string }): r is HiddenItem => r.kind === 'hidden';
+const isInvalid = (r: { kind: string }): r is InvalidItem => r.kind === 'invalid';
+
+/** What differs between the four item kinds when an installation's items are collected. */
+type KindSpec<U, F extends { kind: string; issues: OverrideIssue[] }> = {
+  kind: ItemKind;
+  /** The overrides document key that holds this kind's per-item overrides. */
+  layersKey: keyof OverridesDocument;
+  /** `uriPrefix` rewrites resources and templates even when nothing overrides them. */
+  uriPrefixed: boolean;
+  items(src: UpstreamItems): readonly U[];
+  /** The key overrides and the policy address the item by (name, URI or URI template). */
+  key(item: U): string;
+  apply(item: U, layers: OverrideLayers, slug: string): ApplyResult<F>;
+  finalItem(final: F): U;
+  overridden(item: U, final: F, layers: OverrideLayers): boolean;
+  exactName?(final: F): string | undefined;
+};
+
+const toolSpec: KindSpec<UpstreamTool, FinalTool> = {
+  kind: 'tool',
+  layersKey: 'tools',
+  uriPrefixed: false,
+  items: (src) => src.tools,
+  key: (tool) => tool.name,
+  apply: (tool, layers) => {
+    const r = applyToTool(tool, layers);
+    return r.kind === 'hidden' || r.kind === 'invalid'
+      ? r
+      : withCatalogToolPins(r, layers, tool.name);
+  },
+  finalItem: (final) => final.tool,
+  overridden: (tool, _final, layers) =>
+    Object.keys(resolveToolOverride(layers, tool.name)).length > 0,
+  exactName: (final) => final.exactName,
+};
+
+const promptSpec: KindSpec<UpstreamPrompt, FinalPrompt> = {
+  kind: 'prompt',
+  layersKey: 'prompts',
+  uriPrefixed: false,
+  items: (src) => src.prompts,
+  key: (prompt) => prompt.name,
+  apply: (prompt, layers) => {
+    const r = applyToPrompt(prompt, layers);
+    return r.kind === 'hidden' || r.kind === 'invalid'
+      ? r
+      : withCatalogPromptPins(r, layers, prompt.name);
+  },
+  finalItem: (final) => final.prompt,
+  overridden: (prompt, _final, layers) =>
+    Object.keys(resolvePromptOverride(layers, prompt.name)).length > 0,
+  exactName: (final) => final.exactName,
+};
+
+const resourceSpec: KindSpec<UpstreamResource, FinalResource> = {
+  kind: 'resource',
+  layersKey: 'resources',
+  uriPrefixed: true,
+  items: (src) => src.resources,
+  key: (resource) => resource.uri,
+  apply: (resource, layers, slug) => applyToResource(resource, layers, { installationSlug: slug }),
+  finalItem: (final) => final.resource,
+  overridden: (resource, final) =>
+    final.resource.uri !== resource.uri ||
+    final.resource.title !== resource.title ||
+    final.resource.description !== resource.description,
+};
+
+const templateSpec: KindSpec<UpstreamResourceTemplate, FinalResourceTemplate> = {
+  kind: 'resourceTemplate',
+  layersKey: 'resourceTemplates',
+  uriPrefixed: true,
+  items: (src) => src.resourceTemplates,
+  key: (template) => template.uriTemplate,
+  apply: (template, layers, slug) =>
+    applyToResourceTemplate(template, layers, { installationSlug: slug }),
+  finalItem: (final) => final.template,
+  overridden: () => true,
+};
+
+type Collector = {
+  installation: InstallationInfo;
+  priority: number;
+  slug: string;
+  warnings: EndpointWarning[];
+};
+
+/**
+ * Items of one kind of one installation after its override layers: capped (with a warning), hidden items
+ * dropped, invalid ones reported as warnings. Untouched kinds pass through as they are.
+ */
+const collectKind = <U, F extends { kind: string; issues: OverrideIssue[] }>(
+  spec: KindSpec<U, F>,
+  src: UpstreamItems,
+  { installation, priority, slug, warnings }: Collector,
+): Array<Entry<U, F>> => {
+  const layers = installation.layers;
+  const capped = capList(spec.items(src));
+  if (capped.truncated)
+    warnings.push({ code: 'list_truncated', installation: slug, kind: spec.kind });
+  const passthrough =
+    !(spec.uriPrefixed && wantsUriPrefix(layers)) && !hasOverrides(layers, spec.layersKey);
+  const entries: Array<Entry<U, F>> = [];
+  for (const upstream of capped.items) {
+    const upstreamKey = spec.key(upstream);
+    const base = { installation, priority, upstreamKey };
+    if (passthrough) {
+      entries.push({ ...base, final: null, issues: [], overridden: false, item: upstream });
+      continue;
+    }
+    const r = spec.apply(upstream, layers, slug);
+    if (isHidden(r)) continue;
+    if (isInvalid(r)) {
+      warnings.push({
+        code: 'invalid_override',
+        installation: slug,
+        kind: spec.kind,
+        key: upstreamKey,
+        error: r.error,
+      });
+      continue;
+    }
+    const entry: Entry<U, F> = {
+      ...base,
+      final: r,
+      issues: r.issues,
+      overridden: spec.overridden(upstream, r, layers),
+      item: spec.finalItem(r),
+    };
+    const exactName = spec.exactName?.(r);
+    if (exactName !== undefined) entry.exactName = exactName;
+    entries.push(entry);
+  }
+  return entries;
 };
 
 const policyAnnotations = (tool: UpstreamTool) => {
@@ -361,6 +514,82 @@ const buildInstructions = (
   return cut.trimEnd();
 };
 
+/** Everything steps 3 and 4 of 7.2 take from the loaded installations, before namespacing and Cedar. */
+type Collected = {
+  tools: ToolEntry[];
+  prompts: PromptEntry[];
+  resources: ResourceEntry[];
+  templates: TemplateEntry[];
+  degraded: DegradedEntry[];
+  needsAuth: NeedsAuthEntry[];
+  warnings: EndpointWarning[];
+  instData: Map<string, InstallationData>;
+  /** What Bastion itself serves for each installation (12.2 `added`). */
+  addedOf: Map<string, MergedAdded>;
+  instructionParts: Array<{ installation: InstallationInfo; upstream: string | undefined }>;
+  loadedItems: UpstreamItems[];
+};
+
+const collectEntries = (loaded: readonly LoadedInstallation[]): Collected => {
+  const out: Collected = {
+    tools: [],
+    prompts: [],
+    resources: [],
+    templates: [],
+    degraded: [],
+    needsAuth: [],
+    warnings: [],
+    instData: new Map(),
+    addedOf: new Map(),
+    instructionParts: [],
+    loadedItems: [],
+  };
+  loaded.forEach(({ installation, listing }, priority) => {
+    const slug = effectiveSlug(installation);
+    out.instData.set(installation.id, installationData(installation));
+    if (installation.needsAuth) out.needsAuth.push({ installation: slug });
+    if (listing.status === 'degraded') {
+      if (!installation.needsAuth) out.degraded.push({ installation: slug, code: listing.code });
+      out.instructionParts.push({ installation, upstream: undefined });
+      return;
+    }
+    out.addedOf.set(installation.id, mergedAdded(installation.layers));
+    const src = withAdded(listing.items, installation.layers);
+    out.loadedItems.push(src);
+    out.instructionParts.push({ installation, upstream: src.instructions });
+    const collector: Collector = { installation, priority, slug, warnings: out.warnings };
+    out.tools.push(...collectKind(toolSpec, src, collector));
+    out.prompts.push(...collectKind(promptSpec, src, collector));
+    out.resources.push(...collectKind(resourceSpec, src, collector));
+    out.templates.push(...collectKind(templateSpec, src, collector));
+  });
+  return out;
+};
+
+/** Name candidates of one kind for `resolveNames` (7.3): tools and prompts resolve in separate namespaces. */
+const nameCandidates = <E extends Entry<unknown, unknown>>(list: readonly E[]): NameCandidate[] =>
+  list.map((e, i): NameCandidate => {
+    const c: NameCandidate = {
+      key: String(i),
+      installationId: e.installation.id,
+      priority: e.priority,
+      prefix: e.installation.toolPrefix,
+      upstreamName: e.upstreamKey,
+    };
+    if (e.exactName !== undefined) c.exactName = e.exactName;
+    return c;
+  });
+
+/** The entries Cedar lets the caller see, each with its position in `entries` (and so in `resources`). */
+const partitionByVisibility = <E>(
+  entries: readonly E[],
+  resources: readonly VisibilityResource[],
+  visible: ReadonlySet<VisibilityResource>,
+): Array<{ entry: E; index: number }> =>
+  entries.flatMap((entry, index) =>
+    visible.has(resources[index] as VisibilityResource) ? [{ entry, index }] : [],
+  );
+
 /** Steps 3 to 8 of 7.2 over already-loaded data. Deterministic: same input, same output. */
 export const assembleEndpoint = (
   loaded: readonly LoadedInstallation[],
@@ -369,235 +598,59 @@ export const assembleEndpoint = (
   const { principal, endpoint, policy, requestContext } = input;
   const single = SINGLE_KINDS.has(endpoint.kind);
   const mode = single ? 'onCollision' : endpoint.prefixMode;
-  const degraded: DegradedEntry[] = [];
-  const needsAuth: NeedsAuthEntry[] = [];
-  const warnings: EndpointWarning[] = [];
-  const instData = new Map<string, InstallationData>();
-  /** What Bastion itself serves for each installation (12.2 `added`). */
-  const addedOf = new Map<string, MergedAdded>();
+  const collected = collectEntries(loaded);
+  const { degraded, needsAuth, warnings, instData, addedOf } = collected;
 
-  const toolEntries: ToolEntry[] = [];
-  const promptEntries: PromptEntry[] = [];
-  const resourceEntries: Array<Entry<FinalResource> & { resource: UpstreamResource }> = [];
-  const templateEntries: Array<
-    Entry<FinalResourceTemplate> & { template: UpstreamResourceTemplate }
-  > = [];
-  const instructionParts: Array<{ installation: InstallationInfo; upstream: string | undefined }> =
-    [];
-  const loadedItems: UpstreamItems[] = [];
-
-  loaded.forEach(({ installation, listing }, priority) => {
-    const slug = effectiveSlug(installation);
-    instData.set(installation.id, installationData(installation));
-    if (installation.needsAuth) needsAuth.push({ installation: slug });
-    if (listing.status === 'degraded') {
-      if (!installation.needsAuth) degraded.push({ installation: slug, code: listing.code });
-      instructionParts.push({ installation, upstream: undefined });
-      return;
-    }
-    addedOf.set(installation.id, mergedAdded(installation.layers));
-    const src = withAdded(listing.items, installation.layers);
-    loadedItems.push(src);
-    instructionParts.push({ installation, upstream: src.instructions });
-    const layers = installation.layers;
-    const base = { installation, priority };
-    const trunc = (kind: ItemKind, truncated: boolean) => {
-      if (truncated) warnings.push({ code: 'list_truncated', installation: slug, kind });
-    };
-    const invalid = (kind: ItemKind, key: string, error: string) =>
-      warnings.push({ code: 'invalid_override', installation: slug, kind, key, error });
-
-    const tools = capList(src.tools);
-    trunc('tool', tools.truncated);
-    const toolOverrides = hasOverrides(layers, 'tools');
-    for (const upstream of tools.items) {
-      if (!toolOverrides) {
-        toolEntries.push({
-          ...base,
-          upstreamKey: upstream.name,
-          final: null,
-          issues: [],
-          overridden: false,
-          tool: upstream,
-        });
-        continue;
-      }
-      const r = applyToTool(upstream, layers);
-      if (r.kind === 'hidden') continue;
-      if (r.kind === 'invalid') {
-        invalid('tool', upstream.name, r.error);
-        continue;
-      }
-      enforceCatalogToolPins(r, layers, upstream.name);
-      const entry: ToolEntry = {
-        ...base,
-        upstreamKey: upstream.name,
-        final: r,
-        issues: r.issues,
-        overridden: Object.keys(resolveToolOverride(layers, upstream.name)).length > 0,
-        tool: r.tool,
-      };
-      if (r.exactName !== undefined) entry.exactName = r.exactName;
-      toolEntries.push(entry);
-    }
-
-    const prompts = capList(src.prompts);
-    trunc('prompt', prompts.truncated);
-    const promptOverrides = hasOverrides(layers, 'prompts');
-    for (const upstream of prompts.items) {
-      if (!promptOverrides) {
-        promptEntries.push({
-          ...base,
-          upstreamKey: upstream.name,
-          final: null,
-          issues: [],
-          overridden: false,
-          prompt: upstream,
-        });
-        continue;
-      }
-      const r = applyToPrompt(upstream, layers);
-      if (r.kind === 'hidden') continue;
-      if (r.kind === 'invalid') {
-        invalid('prompt', upstream.name, r.error);
-        continue;
-      }
-      enforceCatalogPromptPins(r, layers, upstream.name);
-      const entry: PromptEntry = {
-        ...base,
-        upstreamKey: upstream.name,
-        final: r,
-        issues: r.issues,
-        overridden: Object.keys(resolvePromptOverride(layers, upstream.name)).length > 0,
-        prompt: r.prompt,
-      };
-      if (r.exactName !== undefined) entry.exactName = r.exactName;
-      promptEntries.push(entry);
-    }
-
-    const prefixed = wantsUriPrefix(layers);
-    const resources = capList(src.resources);
-    trunc('resource', resources.truncated);
-    for (const upstream of resources.items) {
-      if (!prefixed && !hasOverrides(layers, 'resources')) {
-        resourceEntries.push({
-          ...base,
-          upstreamKey: upstream.uri,
-          final: null,
-          issues: [],
-          overridden: false,
-          resource: upstream,
-        });
-        continue;
-      }
-      const r = applyToResource(upstream, layers, { installationSlug: slug });
-      if (r.kind === 'hidden') continue;
-      if (r.kind === 'invalid') {
-        invalid('resource', upstream.uri, r.error);
-        continue;
-      }
-      resourceEntries.push({
-        ...base,
-        upstreamKey: upstream.uri,
-        final: r,
-        issues: r.issues,
-        overridden:
-          r.resource.uri !== upstream.uri ||
-          r.resource.title !== upstream.title ||
-          r.resource.description !== upstream.description,
-        resource: r.resource,
-      });
-    }
-    const templates = capList(src.resourceTemplates);
-    trunc('resourceTemplate', templates.truncated);
-    for (const upstream of templates.items) {
-      if (!prefixed && !hasOverrides(layers, 'resourceTemplates')) {
-        templateEntries.push({
-          ...base,
-          upstreamKey: upstream.uriTemplate,
-          final: null,
-          issues: [],
-          overridden: false,
-          template: upstream,
-        });
-        continue;
-      }
-      const r = applyToResourceTemplate(upstream, layers, { installationSlug: slug });
-      if (r.kind === 'hidden') continue;
-      if (r.kind === 'invalid') {
-        invalid('resourceTemplate', upstream.uriTemplate, r.error);
-        continue;
-      }
-      templateEntries.push({
-        ...base,
-        upstreamKey: upstream.uriTemplate,
-        final: r,
-        issues: r.issues,
-        overridden: true,
-        template: r.template,
-      });
-    }
-  });
-
-  // Namespacing (7.3): tools and prompts resolve in separate namespaces.
-  const candidates = <E extends Entry<unknown> & { exactName?: string }>(list: readonly E[]) =>
-    list.map((e, i): NameCandidate => {
-      const c: NameCandidate = {
-        key: String(i),
-        installationId: e.installation.id,
-        priority: e.priority,
-        prefix: e.installation.toolPrefix,
-        upstreamName: e.upstreamKey,
-      };
-      if (e.exactName !== undefined) c.exactName = e.exactName;
-      return c;
-    });
-  const toolNames = resolveNames(candidates(toolEntries), mode).map((r) => r.name);
-  const promptNames = resolveNames(candidates(promptEntries), mode).map((r) => r.name);
+  // Namespacing (7.3).
+  const toolNames = resolveNames(nameCandidates(collected.tools), mode).map((r) => r.name);
+  const promptNames = resolveNames(nameCandidates(collected.prompts), mode).map((r) => r.name);
 
   // Cedar visibility (7.2) with FINAL annotations; the policy sees upstream names and URIs.
   const instOf = (e: { installation: InstallationInfo }): InstallationData =>
     instData.get(e.installation.id) as InstallationData;
-  const toolRes = toolEntries.map(
+  const visibleOf = (
+    action: 'seeTool' | 'seePrompt' | 'seeResource',
+    resources: readonly VisibilityResource[],
+  ): Set<VisibilityResource> =>
+    new Set(
+      policy.filterVisible({ principal, action, context: requestContext }, resources).visible,
+    );
+  const toolRes = collected.tools.map(
     (e): VisibilityResource => ({
       type: 'Tool',
       installation: instOf(e),
       name: e.upstreamKey,
-      annotations: policyAnnotations(e.tool),
+      annotations: policyAnnotations(e.item),
     }),
   );
-  const seeRequest = (action: 'seeTool' | 'seePrompt' | 'seeResource') => ({
-    principal,
-    action,
-    context: requestContext,
-  });
-  const visibleTools = new Set<VisibilityResource>(
-    policy.filterVisible(seeRequest('seeTool'), toolRes).visible,
-  );
-  const promptRes = promptEntries.map(
+  const visibleTools = visibleOf('seeTool', toolRes);
+  const promptRes = collected.prompts.map(
     (e): VisibilityResource => ({ type: 'Prompt', installation: instOf(e), name: e.upstreamKey }),
   );
-  const visiblePrompts = new Set<VisibilityResource>(
-    policy.filterVisible(seeRequest('seePrompt'), promptRes).visible,
-  );
-  const resRes = [...resourceEntries, ...templateEntries].map(
-    (e): VisibilityResource => ({ type: 'Resource', installation: instOf(e), uri: e.upstreamKey }),
-  );
-  const visibleRes = new Set<VisibilityResource>(
-    policy.filterVisible(seeRequest('seeResource'), resRes).visible,
-  );
+  const visiblePrompts = visibleOf('seePrompt', promptRes);
+  const asResource = (e: Entry<unknown, unknown>): VisibilityResource => ({
+    type: 'Resource',
+    installation: instOf(e),
+    uri: e.upstreamKey,
+  });
+  const resourceRes = collected.resources.map(asResource);
+  const templateRes = collected.templates.map(asResource);
+  const visibleRes = visibleOf('seeResource', [...resourceRes, ...templateRes]);
 
   const items: ItemMeta[] = [];
   const toolRoutes = new Map<string, ToolRoute>();
   const finalTools: UpstreamTool[] = [];
   const keptTools: ToolEntry[] = [];
   const keptToolNames: string[] = [];
-  toolEntries.forEach((e, i) => {
-    if (!visibleTools.has(toolRes[i] as VisibilityResource)) return;
+  for (const { entry: e, index: i } of partitionByVisibility(
+    collected.tools,
+    toolRes,
+    visibleTools,
+  )) {
     const name = toolNames[i] as string;
     keptTools.push(e);
     keptToolNames.push(name);
-    finalTools.push({ ...e.tool, name });
+    finalTools.push({ ...e.item, name });
     const plan: ToolPlan | undefined = e.final?.plan;
     toolRoutes.set(name, {
       installationId: e.installation.id,
@@ -605,17 +658,20 @@ export const assembleEndpoint = (
       finalName: name,
       plan,
     });
-  });
+  }
   const promptRoutes = new Map<string, PromptRoute>();
   const finalPrompts: UpstreamPrompt[] = [];
   const keptPrompts: PromptEntry[] = [];
   const keptPromptNames: string[] = [];
-  promptEntries.forEach((e, i) => {
-    if (!visiblePrompts.has(promptRes[i] as VisibilityResource)) return;
+  for (const { entry: e, index: i } of partitionByVisibility(
+    collected.prompts,
+    promptRes,
+    visiblePrompts,
+  )) {
     const name = promptNames[i] as string;
     keptPrompts.push(e);
     keptPromptNames.push(name);
-    finalPrompts.push({ ...e.prompt, name });
+    finalPrompts.push({ ...e.item, name });
     const plan: PromptPlan | undefined = e.final?.plan;
     const hosted = addedOf.get(e.installation.id)?.prompts[e.upstreamKey];
     promptRoutes.set(name, {
@@ -625,7 +681,7 @@ export const assembleEndpoint = (
       plan,
       ...(hosted ? { hosted } : {}),
     });
-  });
+  }
 
   const bareName = (e: { exactName?: string; upstreamKey: string }): string =>
     sanitizeNamePart(e.exactName ?? e.upstreamKey);
@@ -675,10 +731,10 @@ export const assembleEndpoint = (
 
   // URI index (7.4).
   const uriInput: UriIndexInput = { resources: [], templates: [], seen: [], rewritten: [] };
-  const keptResources: typeof resourceEntries = [];
-  resourceEntries.forEach((e, i) => {
-    if (!visibleRes.has(resRes[i] as VisibilityResource)) return;
-    keptResources.push(e);
+  const keptResources = partitionByVisibility(collected.resources, resourceRes, visibleRes).map(
+    (v) => v.entry,
+  );
+  for (const e of keptResources) {
     const hostedDef = addedOf.get(e.installation.id)?.resources[e.upstreamKey];
     const base: ResourceRoute = e.final?.route ?? { kind: 'resource' };
     const route: ResourceRoute = hostedDef
@@ -686,15 +742,15 @@ export const assembleEndpoint = (
       : base;
     uriInput.resources.push({
       installationId: e.installation.id,
-      advertisedUri: e.resource.uri,
+      advertisedUri: e.item.uri,
       upstreamUri: e.upstreamKey,
       route,
     });
-  });
-  const keptTemplates: typeof templateEntries = [];
-  templateEntries.forEach((e, i) => {
-    if (!visibleRes.has(resRes[resourceEntries.length + i] as VisibilityResource)) return;
-    keptTemplates.push(e);
+  }
+  const keptTemplates = partitionByVisibility(collected.templates, templateRes, visibleRes).map(
+    (v) => v.entry,
+  );
+  for (const e of keptTemplates) {
     const hostedDef = addedOf.get(e.installation.id)?.resourceTemplates[e.upstreamKey];
     const base: ResourceRoute = e.final?.route ?? {
       kind: 'template',
@@ -703,14 +759,14 @@ export const assembleEndpoint = (
     };
     uriInput.templates.push({
       installationId: e.installation.id,
-      advertised: e.template.uriTemplate,
+      advertised: e.item.uriTemplate,
       route: hostedDef
         ? { ...base, hosted: { kind: 'template', uriTemplate: e.upstreamKey, def: hostedDef } }
         : base,
     });
-  });
+  }
   for (const e of keptTools) {
-    const ui = (e.tool._meta as { ui?: { resourceUri?: unknown } } | undefined)?.ui;
+    const ui = (e.item._meta as { ui?: { resourceUri?: unknown } } | undefined)?.ui;
     if (typeof ui?.resourceUri === 'string') {
       uriInput.seen.push({ installationId: e.installation.id, uri: ui.resourceUri });
     }
@@ -727,33 +783,33 @@ export const assembleEndpoint = (
   for (const c of conflicts) warnings.push({ code: 'uri_conflict', ...c });
   const finalResources: UpstreamResource[] = [];
   for (const e of keptResources) {
-    if (hiddenKeys.has(`${e.installation.id}\0${e.resource.uri}`)) continue;
-    finalResources.push(e.resource);
+    if (hiddenKeys.has(`${e.installation.id}\0${e.item.uri}`)) continue;
+    finalResources.push(e.item);
     items.push({
       kind: 'resource',
       installationId: e.installation.id,
       upstreamKey: e.upstreamKey,
-      finalKey: e.resource.uri,
+      finalKey: e.item.uri,
       overridden: e.overridden,
       ...(addedOf.get(e.installation.id)?.resources[e.upstreamKey] ? { added: true as const } : {}),
-      renamed: e.resource.uri !== e.upstreamKey,
+      renamed: e.item.uri !== e.upstreamKey,
       collided: false,
       issues: e.issues,
     });
   }
   const finalTemplates: UpstreamResourceTemplate[] = [];
   for (const e of keptTemplates) {
-    finalTemplates.push(e.template);
+    finalTemplates.push(e.item);
     items.push({
       kind: 'resourceTemplate',
       installationId: e.installation.id,
       upstreamKey: e.upstreamKey,
-      finalKey: e.template.uriTemplate,
+      finalKey: e.item.uriTemplate,
       overridden: e.overridden,
       ...(addedOf.get(e.installation.id)?.resourceTemplates[e.upstreamKey]
         ? { added: true as const }
         : {}),
-      renamed: e.template.uriTemplate !== e.upstreamKey,
+      renamed: e.item.uriTemplate !== e.upstreamKey,
       collided: false,
       issues: e.issues,
     });
@@ -801,7 +857,7 @@ export const assembleEndpoint = (
     degraded: degradedSlugs.has(effectiveSlug(installation)),
   }));
 
-  const instructions = buildInstructions(endpoint, instructionParts);
+  const instructions = buildInstructions(endpoint, collected.instructionParts);
   const teamIds = new Set(principalTeamIds(principal));
   for (const { installation } of loaded) {
     if (installation.owner.kind === 'team') teamIds.add(installation.owner.id);
@@ -839,7 +895,7 @@ export const assembleEndpoint = (
     collisions,
     warnings,
     installations,
-    ttlMs: mergedTtlMs(loadedItems.map((i) => i.ttlMs)),
+    ttlMs: mergedTtlMs(collected.loadedItems.map((i) => i.ttlMs)),
     cacheScope: 'private',
     dependencies: {
       installationIds: loaded.map((l) => l.installation.id),

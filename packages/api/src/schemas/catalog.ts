@@ -8,6 +8,7 @@ import {
 } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
+import { nameSchema } from './common';
 
 export const visibilityBodySchema = z.object({
   org: z.boolean().default(false),
@@ -21,7 +22,7 @@ const atLeastOne = (v: object) => Object.keys(v).length > 0;
 export const entryCreateSchema = z.object({
   slug: slugSchema,
   kind: z.enum(CATALOG_KINDS).default('mcp_server'),
-  displayName: z.string().trim().min(1).max(200),
+  displayName: nameSchema,
   description: z.string().max(4000).default(''),
   tags: z.array(z.string().min(1).max(64)).max(32).default([]),
   /** Team that owns the entry; absent means the organization owns it. */
@@ -35,7 +36,7 @@ export const entryCreateSchema = z.object({
 
 export const entryPatchSchema = z
   .object({
-    displayName: z.string().trim().min(1).max(200),
+    displayName: nameSchema,
     description: z.string().max(4000),
     tags: z.array(z.string().min(1).max(64)).max(32),
     visibility: visibilityBodySchema,
@@ -134,7 +135,7 @@ export const importBodySchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('client_config'),
     snippet: z.record(z.string(), z.unknown()),
-    name: z.string().trim().min(1).max(200).optional(),
+    name: nameSchema.optional(),
   }),
   z.object({
     kind: z.literal('registry'),
@@ -175,7 +176,7 @@ const httpsUrl = z
   .refine((u) => u.startsWith('https://'), 'must be an https URL');
 
 export const pluginSourceCreateSchema = z.object({
-  name: z.string().trim().min(1).max(200),
+  name: nameSchema,
   gitUrl: httpsUrl,
   ref: z.string().min(1).max(255).default('main'),
   path: z.string().min(1).max(1024).nullable().default(null),
@@ -185,7 +186,7 @@ export const pluginSourceCreateSchema = z.object({
 
 export const pluginSourcePatchSchema = z
   .object({
-    name: z.string().trim().min(1).max(200),
+    name: nameSchema,
     gitUrl: httpsUrl,
     ref: z.string().min(1).max(255),
     path: z.string().min(1).max(1024).nullable(),

@@ -1,9 +1,11 @@
 import dns from 'node:dns';
-import { chmod, rm } from 'node:fs/promises';
+import { chmod, mkdir, rm } from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
+import path from 'node:path';
+import { type Clock, systemClock } from '@bastion-mcp/core';
 import { type Span, SpanStatusCode, trace } from '@opentelemetry/api';
-import { type Clock, systemClock } from '../types';
+import { SANDBOX_TIMEOUTS_MS } from '../timeouts';
 import { type EgressAuditEvent, type EgressAuditSink, shouldAudit } from './audit';
 import {
   mirrorRules as buildMirrorRules,
@@ -46,6 +48,8 @@ export type EgressProxyOptions = {
 };
 
 type Identity = { instanceId: string; policy: EgressPolicy };
+type IdentifyResult = Identity | 'bad-credentials' | 'unknown-instance';
+type Identify = () => Promise<IdentifyResult>;
 
 const HOP_BY_HOP = [
   'connection',
@@ -58,6 +62,18 @@ const HOP_BY_HOP = [
   'transfer-encoding',
   'upgrade',
 ];
+
+/** Copies headers minus hop-by-hop ones and those named by `Connection`. */
+const withoutHopByHop = (headers: http.IncomingHttpHeaders): http.OutgoingHttpHeaders => {
+  const named = String(headers.connection ?? '')
+    .split(',')
+    .map((t) => t.trim().toLowerCase());
+  const out: http.OutgoingHttpHeaders = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (!HOP_BY_HOP.includes(name) && !named.includes(name)) out[name] = value;
+  }
+  return out;
+};
 
 const tracer = () => trace.getTracer('bastion.sandbox');
 
@@ -75,16 +91,16 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
   const resolver = options.resolver ?? systemResolver;
   const clock = options.clock ?? systemClock;
   const mirrors = buildMirrorRules(options.mirrorUrls ?? []);
-  const connectTimeout = options.connectTimeoutMs ?? 10_000;
-  const resolveTimeout = options.resolveTimeoutMs ?? 5_000;
-  const idleTimeout = options.idleTimeoutMs ?? 5 * 60_000;
+  const connectTimeout = options.connectTimeoutMs ?? SANDBOX_TIMEOUTS_MS.egressConnect;
+  const resolveTimeout = options.resolveTimeoutMs ?? SANDBOX_TIMEOUTS_MS.egressResolve;
+  const idleTimeout = options.idleTimeoutMs ?? SANDBOX_TIMEOUTS_MS.egressIdle;
   const openServers = new Set<http.Server>();
   const openSockets = new Set<net.Socket>();
 
   const connectTo = (address: string, port: number): net.Socket =>
     options.connect
       ? options.connect({ host: address, port })
-      : net.connect({ host: address, port, timeout: connectTimeout });
+      : net.connect({ host: address, port });
 
   const track = (socket: net.Socket): void => {
     openSockets.add(socket);
@@ -118,15 +134,8 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
   };
 
   type Outcome =
-    | { allowed: true; address: string; via: string }
+    | { allowed: true; address: string; via: 'allowlist' | 'mirror' | 'cidr' }
     | { allowed: false; reason: DenyReason };
-
-  const authorize = async (
-    identify: () => Promise<Identity | 'bad-credentials' | 'unknown-instance'>,
-  ): Promise<Identity | { denied: DenyReason }> => {
-    const result = await identify();
-    return typeof result === 'string' ? { denied: result } : result;
-  };
 
   const evaluate = async (
     identity: Identity,
@@ -206,17 +215,15 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     });
   };
 
-  const identifyByHeader =
-    (header: string | undefined) =>
-    async (): Promise<Identity | 'bad-credentials' | 'unknown-instance'> => {
-      const creds = parseProxyAuthorization(header);
-      if (!creds) return 'bad-credentials';
-      const policy = await options.policies.get(creds.instanceId);
-      if (!policy) return 'unknown-instance';
-      return verifyEgressToken(creds.token, policy.tokenSha256)
-        ? { instanceId: creds.instanceId, policy }
-        : 'bad-credentials';
-    };
+  const identifyByHeader = (header: string | undefined) => async (): Promise<IdentifyResult> => {
+    const creds = parseProxyAuthorization(header);
+    if (!creds) return 'bad-credentials';
+    const policy = await options.policies.get(creds.instanceId);
+    if (!policy) return 'unknown-instance';
+    return verifyEgressToken(creds.token, policy.tokenSha256)
+      ? { instanceId: creds.instanceId, policy }
+      : 'bad-credentials';
+  };
 
   const identifyFixed =
     (instanceId: string) => async (): Promise<Identity | 'unknown-instance'> => {
@@ -271,53 +278,81 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     }
   };
 
+  /** One audit record and span per connection; settles at most once. */
+  const beginAudit = (
+    identity: Identity,
+    protocol: EgressProtocol,
+    host: string,
+    port: number,
+  ): {
+    counters: Counters;
+    settle(
+      resolvedIp: string | null,
+      decision: 'allow' | 'deny',
+      reason: EgressAuditEvent['reason'],
+    ): boolean;
+  } => {
+    const counters: Counters = { up: 0, down: 0 };
+    const base = {
+      span: startSpan(protocol, host, port, identity.instanceId),
+      startedAt: clock.now(),
+      identity,
+      protocol,
+      host,
+      port,
+      counters,
+    };
+    let settled = false;
+    return {
+      counters,
+      settle(resolvedIp, decision, reason) {
+        if (settled) return false;
+        settled = true;
+        finish({ ...base, resolvedIp, decision, reason });
+        return true;
+      },
+    };
+  };
+
   const handleConnect = async (
-    identify: () => Promise<Identity | 'bad-credentials' | 'unknown-instance'>,
+    identify: Identify,
     req: http.IncomingMessage,
     client: net.Socket,
     head: Buffer,
   ): Promise<void> => {
     client.on('error', () => client.destroy());
     const parsed = parseHostPort(req.url ?? '', 443);
-    const auth = await authorize(identify);
-    if ('denied' in auth) return deny(client, auth.denied);
+    const identity = await identify();
+    if (typeof identity === 'string') return deny(client, identity);
     if (!parsed) return deny(client, 'bad-request');
-    const startedAt = clock.now();
-    const span = startSpan('connect', parsed.host, parsed.port, auth.instanceId);
-    const counters: Counters = { up: 0, down: 0 };
-    const base = {
-      span,
-      startedAt,
-      identity: auth,
-      protocol: 'connect' as const,
-      ...parsed,
-      counters,
-    };
-    const outcome = await evaluate(auth, parsed, 'connect');
+    const audit = beginAudit(identity, 'connect', parsed.host, parsed.port);
+    const { counters } = audit;
+    const outcome = await evaluate(identity, parsed, 'connect');
     if (!outcome.allowed) {
-      finish({ ...base, resolvedIp: outcome.resolvedIp, decision: 'deny', reason: outcome.reason });
+      audit.settle(outcome.resolvedIp, 'deny', outcome.reason);
       return deny(client, outcome.reason, { ...parsed, ip: outcome.resolvedIp });
     }
     const upstream = connectTo(outcome.address, parsed.port);
     track(client);
     track(upstream);
-    let settled = false;
     let connected = false;
-    const done = (decision: 'allow' | 'deny', reason: EgressAuditEvent['reason']): void => {
-      if (settled) return;
-      settled = true;
-      finish({ ...base, resolvedIp: outcome.resolvedIp, decision, reason });
-    };
-    upstream.setTimeout(idleTimeout, () => upstream.destroy());
+    // A connect that never completes must be torn down; the idle timeout starts only once connected.
+    const connectTimer = setTimeout(
+      () => upstream.destroy(new Error('connect timeout')),
+      connectTimeout,
+    );
+    connectTimer.unref();
     upstream.once('error', () => {
       if (!connected) {
-        done('deny', 'connect-failed');
+        audit.settle(outcome.resolvedIp, 'deny', 'connect-failed');
         deny(client, 'connect-failed', { ...parsed, ip: outcome.resolvedIp });
       }
       client.destroy();
     });
     upstream.once('connect', () => {
       connected = true;
+      clearTimeout(connectTimer);
+      upstream.setTimeout(idleTimeout, () => upstream.destroy());
       client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
       if (head.length > 0) {
         counters.up += head.length;
@@ -334,23 +369,24 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     });
     // The audit record and span are written when the tunnel closes, so byte counts are final.
     const teardown = (): void => {
+      clearTimeout(connectTimer);
       client.destroy();
       upstream.destroy();
-      if (connected) done('allow', outcome.via as EgressAuditEvent['reason']);
+      if (connected) audit.settle(outcome.resolvedIp, 'allow', outcome.via);
     };
     client.once('close', teardown);
     upstream.once('close', teardown);
   };
 
   const handleRequest = async (
-    identify: () => Promise<Identity | 'bad-credentials' | 'unknown-instance'>,
+    identify: Identify,
     req: http.IncomingMessage,
     res: http.ServerResponse,
   ): Promise<void> => {
-    const auth = await authorize(identify);
-    if ('denied' in auth) {
+    const identity = await identify();
+    if (typeof identity === 'string') {
       req.resume();
-      return deny(res, auth.denied);
+      return deny(res, identity);
     }
     let url: URL;
     try {
@@ -365,39 +401,20 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     }
     const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
     const port = url.port ? Number(url.port) : 80;
-    const startedAt = clock.now();
-    const span = startSpan('http', host, port, auth.instanceId);
-    const counters: Counters = { up: 0, down: 0 };
-    const base = {
-      span,
-      startedAt,
-      identity: auth,
-      protocol: 'http' as const,
-      host,
-      port,
-      counters,
-    };
-    const outcome = await evaluate(auth, { host, port }, 'http');
+    const audit = beginAudit(identity, 'http', host, port);
+    const { counters } = audit;
+    const outcome = await evaluate(identity, { host, port }, 'http');
     if (!outcome.allowed) {
       req.resume();
-      finish({ ...base, resolvedIp: outcome.resolvedIp, decision: 'deny', reason: outcome.reason });
+      audit.settle(outcome.resolvedIp, 'deny', outcome.reason);
       return deny(res, outcome.reason, { host, port, ip: outcome.resolvedIp });
     }
-    const headers: http.OutgoingHttpHeaders = {};
-    const connectionTokens = String(req.headers.connection ?? '')
-      .split(',')
-      .map((t) => t.trim().toLowerCase());
-    for (const [name, value] of Object.entries(req.headers)) {
-      if (HOP_BY_HOP.includes(name) || connectionTokens.includes(name)) continue;
-      headers[name] = value;
-    }
-    headers.host = url.host;
     const upstream = http.request({
       host: outcome.address, // the address resolved once above: DNS rebinding cannot redirect it
       port,
       method: req.method ?? 'GET',
       path: `${url.pathname}${url.search}`,
-      headers,
+      headers: { ...withoutHopByHop(req.headers), host: url.host },
       setHost: false,
       timeout: connectTimeout,
       agent: false,
@@ -405,49 +422,29 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     req.on('data', (chunk: Buffer) => {
       counters.up += chunk.length;
     });
-    let settled = false;
-    const done = (decision: 'allow' | 'deny', reason: EgressAuditEvent['reason']): void => {
-      if (settled) return;
-      settled = true;
-      finish({ ...base, resolvedIp: outcome.resolvedIp, decision, reason });
-    };
     upstream.on('timeout', () => upstream.destroy(new Error('upstream timeout')));
     upstream.on('error', () => {
-      if (!settled) {
-        done('deny', 'connect-failed');
-        if (!res.headersSent) deny(res, 'connect-failed', { host, port, ip: outcome.resolvedIp });
-        else res.destroy();
-      }
+      if (!audit.settle(outcome.resolvedIp, 'deny', 'connect-failed')) return;
+      if (!res.headersSent) deny(res, 'connect-failed', { host, port, ip: outcome.resolvedIp });
+      else res.destroy();
     });
     upstream.on('response', (up) => {
-      const out: http.OutgoingHttpHeaders = {};
-      const upTokens = String(up.headers.connection ?? '')
-        .split(',')
-        .map((t) => t.trim().toLowerCase());
-      for (const [name, value] of Object.entries(up.headers)) {
-        if (HOP_BY_HOP.includes(name) || upTokens.includes(name)) continue;
-        out[name] = value;
-      }
-      res.writeHead(up.statusCode ?? 502, out);
+      res.writeHead(up.statusCode ?? 502, withoutHopByHop(up.headers));
       up.on('data', (chunk: Buffer) => {
         counters.down += chunk.length;
       });
-      up.on('end', () => done('allow', outcome.via as EgressAuditEvent['reason']));
+      up.on('end', () => audit.settle(outcome.resolvedIp, 'allow', outcome.via));
       up.on('error', () => res.destroy());
       up.pipe(res);
     });
     res.on('close', () => {
       upstream.destroy();
-      done('allow', outcome.via as EgressAuditEvent['reason']);
+      audit.settle(outcome.resolvedIp, 'allow', outcome.via);
     });
     req.pipe(upstream);
   };
 
-  const makeServer = (
-    identifyFor: (
-      req: http.IncomingMessage,
-    ) => () => Promise<Identity | 'bad-credentials' | 'unknown-instance'>,
-  ): http.Server => {
+  const makeServer = (identifyFor: (req: http.IncomingMessage) => Identify): http.Server => {
     const server = http.createServer((req, res) => {
       handleRequest(identifyFor(req), req, res).catch(() => {
         if (!res.headersSent) deny(res, 'connect-failed');
@@ -484,13 +481,16 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
       };
     },
     async listenUnix(socketPath, instanceId) {
+      // The socket lives in a directory only this user can enter, so there is no window between listen and chmod.
+      const dir = path.dirname(socketPath);
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      await chmod(dir, 0o700).catch(() => {});
       await rm(socketPath, { force: true });
       const server = makeServer(() => identifyFixed(instanceId));
       await new Promise<void>((resolve, reject) => {
         server.once('error', reject);
         server.listen(socketPath, () => resolve());
       });
-      await chmod(socketPath, 0o600).catch(() => {});
       return { close: () => closeServer(server) };
     },
     async close() {

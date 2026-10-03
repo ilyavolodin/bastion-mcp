@@ -1,10 +1,8 @@
-/** `skills/list`, `skills/get` (6.8, 25.8) and verbatim forwarding of unknown methods on single-installation endpoints (6.3). */
-import { trace } from '@opentelemetry/api';
-import { byteSize, CallRecord } from '../observability/call-log';
+import { byteSize } from '../observability/call-log';
 import { InvalidParamsError, MethodNotFoundError, UnknownItemError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
-import { recordOperationOutcome } from './outcome';
+import { runRoutedOperation } from './outcome';
 import {
   callPrincipalOf,
   isRecord,
@@ -27,12 +25,7 @@ export const forwardToInstallation = async (
   const installationId = singleInstallationId(ctx);
   const installation = installationId ? ctx.resolved.installations.get(installationId) : undefined;
   if (!installation) throw new MethodNotFoundError(method);
-  const record = new CallRecord(method, deps.clock.now());
-  const span = trace.getActiveSpan()?.spanContext() ?? ctx.trace;
-  record.installationId = installation.id;
-  record.catalogEntryId = installation.catalogEntryId;
-  record.catalogVersionId = installation.catalogVersionId;
-  try {
+  return runRoutedOperation(deps, ctx, method, installation, async (record) => {
     const principal = await callPrincipalOf(deps, ctx);
     const outcome = await deps.upstream.execute({
       installationId: installation.id,
@@ -53,12 +46,7 @@ export const forwardToInstallation = async (
     const result = isRecord(outcome.result) ? outcome.result : {};
     record.bytesOut = byteSize(result);
     return { kind: 'complete', result };
-  } catch (error) {
-    record.fail(error);
-    throw error;
-  } finally {
-    recordOperationOutcome(deps, ctx, record, span, installation, method);
-  }
+  });
 };
 
 export const createForward = (deps: OperationDeps, method: string): Operation => ({

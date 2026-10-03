@@ -1,3 +1,4 @@
+export * from './body';
 export * from './channels';
 export * from './classify';
 export * from './errors';

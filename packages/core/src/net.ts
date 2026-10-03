@@ -1,3 +1,4 @@
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { BlockList, isIP, type LookupFunction } from 'node:net';
 
 /**
@@ -235,3 +236,99 @@ export const pinnedLookup =
       callback(null, pinned.address, pinned.family);
     }
   };
+
+// --- URL guard (8.8, 8.9, 9.6) -------------------------------------------------------------------------------------
+export type UrlCheckReason =
+  | 'invalid-url'
+  | 'scheme'
+  | 'credentials'
+  | 'insecure'
+  | 'unresolvable'
+  | 'blocked-address';
+
+/** Thrown by `resolveAndCheckUrl`; callers map `reason` to their own error type and wording. */
+export class UrlCheckError extends Error {
+  constructor(
+    readonly reason: UrlCheckReason,
+    message: string,
+    readonly detail?: { host?: string; address?: string },
+  ) {
+    super(message);
+    this.name = 'UrlCheckError';
+  }
+}
+
+export type UrlCheckOptions = {
+  addressPolicy?: AddressPolicy;
+  /** Resolves a hostname to every address; defaults to the system resolver. */
+  lookup?: (host: string) => Promise<string[]>;
+  /** Plain http is refused unless this says yes (checked before resolving). */
+  allowHttp?: (url: URL, hostname: string) => boolean;
+  /** Plain http is also accepted when this says yes for the resolved addresses (checked after the address policy). */
+  allowHttpAddresses?: (addresses: readonly string[]) => boolean;
+};
+
+export type CheckedUrl = {
+  url: URL;
+  hostname: string;
+  addresses: string[];
+  address: string;
+  family: 4 | 6;
+};
+
+const systemLookup = async (host: string): Promise<string[]> =>
+  (await dnsLookup(host, { all: true, verbatim: true })).map((entry) => entry.address);
+
+/**
+ * The one SSRF guard: parses the URL, refuses non-http(s) schemes and embedded credentials, resolves the host ONCE
+ * (literal and inet_aton forms are normalized first), refuses every denied address, and refuses plain http unless a
+ * caller hook allows it. The caller connects to the returned `address` (DNS-rebinding safe).
+ */
+export const resolveAndCheckUrl = async (
+  raw: string,
+  options: UrlCheckOptions = {},
+): Promise<CheckedUrl> => {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new UrlCheckError('invalid-url', 'invalid URL');
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new UrlCheckError('scheme', `URL scheme ${url.protocol} is not allowed`);
+  }
+  if (url.username || url.password) throw new UrlCheckError('credentials', 'credentials in URL');
+  const hostname = url.hostname.replace(/^\[|\]$/g, '');
+  const plain = url.protocol === 'http:';
+  const httpAllowedByHost = plain && options.allowHttp?.(url, hostname) === true;
+  if (plain && !httpAllowedByHost && !options.allowHttpAddresses) {
+    throw new UrlCheckError('insecure', 'https is required', { host: hostname });
+  }
+  const literal = isIP(hostname) ? hostname : normalizeIpLiteral(hostname);
+  let addresses: string[];
+  if (literal) addresses = [literal];
+  else {
+    try {
+      addresses = await (options.lookup ?? systemLookup)(hostname);
+    } catch {
+      throw new UrlCheckError('unresolvable', 'host did not resolve', { host: hostname });
+    }
+  }
+  const first = addresses[0];
+  if (first === undefined) {
+    throw new UrlCheckError('unresolvable', 'host did not resolve', { host: hostname });
+  }
+  const policy = options.addressPolicy ?? {};
+  for (const address of addresses) {
+    if (isAddressDenied(address, policy)) {
+      throw new UrlCheckError('blocked-address', blockedAddressMessage(hostname, address), {
+        host: hostname,
+        address,
+      });
+    }
+  }
+  if (plain && !httpAllowedByHost && options.allowHttpAddresses?.(addresses) !== true) {
+    throw new UrlCheckError('insecure', 'https is required', { host: hostname });
+  }
+  return { url, hostname, addresses, address: first, family: addressFamily(first) };
+};

@@ -9,6 +9,7 @@ import {
 } from '../src/framework/route';
 import { RouteDeclarationError } from '../src/framework/route-table';
 import { itemSchema } from '../src/schemas/common';
+import { sessionCsrfToken } from './helpers/fakes/base';
 import { buildTestApi, type TestApi } from './helpers/harness';
 
 let api: TestApi | undefined;
@@ -83,7 +84,8 @@ describe('17.1 authentication', () => {
 
   it('9.2 requires the CSRF header on state-changing calls made with a session', async () => {
     api = await buildTestApi();
-    const cookie = 'bastion_sid=sid-admin; bastion_csrf=abc';
+    const csrf = sessionCsrfToken('sid-admin');
+    const cookie = `bastion_sid=sid-admin; bastion_csrf=${csrf}`;
     const denied = await api.call('anonymous', 'POST', '/users', {
       headers: { cookie },
       body: newUser('csrf@example.com'),
@@ -91,10 +93,23 @@ describe('17.1 authentication', () => {
     expect(denied.status).toBe(403);
     expect(asRecord(denied.body).code).toBe('csrf_failed');
     const ok = await api.call('anonymous', 'POST', '/users', {
-      headers: { cookie, 'x-bastion-csrf': 'abc' },
+      headers: { cookie, 'x-bastion-csrf': csrf },
       body: newUser('csrf@example.com'),
     });
     expect(ok.status).toBe(201);
+  });
+
+  it('9.2 a double-submit pair that was not issued with the session is rejected (cookie tossing)', async () => {
+    api = await buildTestApi();
+    const res = await api.call('anonymous', 'POST', '/users', {
+      headers: {
+        cookie: 'bastion_sid=sid-admin; bastion_csrf=attacker',
+        'x-bastion-csrf': 'attacker',
+      },
+      body: newUser('toss@example.com'),
+    });
+    expect(res.status).toBe(403);
+    expect(asRecord(res.body).code).toBe('csrf_failed');
   });
 
   it('17.1 does not require CSRF for bearer tokens', async () => {

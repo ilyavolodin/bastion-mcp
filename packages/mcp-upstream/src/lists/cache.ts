@@ -1,6 +1,7 @@
-import { redisKeys, sha256Hex } from '@bastion-mcp/core';
+import { MS, redisKeys, sha256Hex } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { type Clock, type Logger, noopLogger, type RedisLike, systemClock } from '../ports';
+import { LIST_METHODS } from './kinds';
 
 /**
  * Upstream list cache (6.7): per `(installationId, credentialHash)` in a per-worker LRU (10,000 entries) and in Redis
@@ -8,16 +9,10 @@ import { type Clock, type Logger, noopLogger, type RedisLike, systemClock } from
  * `BASTION_LIST_CACHE_TTL_MS` (default 300,000). Invalidation deletes both.
  */
 
-export const LIST_METHODS = [
-  'tools/list',
-  'prompts/list',
-  'resources/list',
-  'resources/templates/list',
-] as const;
-export type ListMethod = (typeof LIST_METHODS)[number];
+export * from './kinds';
 
 export const LRU_ENTRIES = 10_000;
-export const DEFAULT_LIST_CACHE_TTL_MS = 300_000;
+export const DEFAULT_LIST_CACHE_TTL_MS = 5 * MS.MINUTE;
 
 export type CachedList = {
   items: unknown[];

@@ -107,3 +107,17 @@ export const loadUserResource = async (deps: ApiDeps, id: string): Promise<Resou
 
 /** Used when the addressed row does not exist: authorization falls back to the broadest check (Org). */
 export const orMissing = (resource: ResourceData | null): ResourceData => resource ?? orgResource();
+
+/** A stand-in installation with no owner: only admins pass, so a missing row looks like a forbidden one. */
+export const unownedInstallation = (id: string): ResourceData => ({
+  type: 'Installation',
+  id,
+  catalogEntryId: id,
+});
+
+/** A stand-in catalog entry with no owner (same purpose as `unownedInstallation`). */
+export const unownedEntry = (id: string): ResourceData => ({
+  type: 'CatalogEntry',
+  id,
+  risk: 'low',
+});

@@ -24,7 +24,12 @@ import {
 } from '../ports';
 import { isAllowedResource, issuerFor, mcpResource } from '../urls';
 import { createOidcAdapterClass } from './adapter';
-import { type PreparedClient, type PreRegisterInput, prepareClient } from './clients';
+import {
+  type ClientRandomness,
+  type PreparedClient,
+  type PreRegisterInput,
+  prepareClient,
+} from './clients';
 import { type IdJagVerifier, registerJwtBearerGrant } from './id-jag-grant';
 import { createInteractionApi, type InteractionApi } from './interaction';
 import { loadAsJwks } from './keys';
@@ -66,6 +71,8 @@ export type AuthorizationServerDeps = {
   enterpriseManaged?: boolean;
   /** Renderers for the pages oidc-provider serves itself (device flow, logout, errors). */
   pages?: ProviderPages;
+  /** Generators for pre-registered client ids and secrets; default random. */
+  clientRandomness?: ClientRandomness;
 };
 
 export type AuthorizationServer = {
@@ -333,7 +340,7 @@ export const createAuthorizationServer = async (
     },
     interactions: createInteractionApi(() => current),
     async preRegisterClient(input) {
-      const prepared = prepareClient(input);
+      const prepared = prepareClient(input, deps.clientRandomness);
       await new Adapter('Client').upsert(prepared.clientId, prepared.payload as never, 0);
       return prepared;
     },

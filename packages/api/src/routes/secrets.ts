@@ -1,8 +1,8 @@
 import type { ResourceData } from '@bastion-mcp/policy';
-import { z } from 'zod';
 import {
   type Authz,
   authz,
+  defineDelete,
   defineMutation,
   defineRoute,
   type RouteDefinition,
@@ -65,20 +65,15 @@ const perScope = (scope: SecretScope): RouteDefinition[] => [
       secretVersion(input, scope, input.params.ownerId ?? '', input.params.name ?? ''),
     handler: (ctx) => putSecret(ctx, scope, ctx.params.ownerId, ctx.params.name, ctx.body.value),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: `/secrets/${scope}/{ownerId}/{name}`,
     tag: TAG,
     summary: `Delete a ${scope} secret`,
-    schema: { params: secretParams, response: z.null() },
+    params: secretParams,
     authz: scopeAuthz(scope),
-    status: 204,
     version: (input) =>
       secretVersion(input, scope, input.params.ownerId ?? '', input.params.name ?? ''),
-    handler: async (ctx) => {
-      await deleteSecret(ctx, scope, ctx.params.ownerId, ctx.params.name);
-      return null;
-    },
+    remove: (ctx) => deleteSecret(ctx, scope, ctx.params.ownerId, ctx.params.name),
   }),
 ];
 

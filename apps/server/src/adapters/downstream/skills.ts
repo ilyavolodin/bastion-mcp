@@ -1,3 +1,4 @@
+import { MS, TtlCache } from '@bastion-mcp/core';
 import type { SkillsProvider } from '@bastion-mcp/mcp-downstream';
 import {
   buildSkillIndex,
@@ -12,7 +13,8 @@ import type { Infra } from '../../infra';
 import { visibleReleases } from '../plugin-access';
 import { createPluginServices } from '../plugin-services';
 
-const INDEX_TTL_MS = 30_000;
+const INDEX_TTL_MS = 30 * MS.SECOND;
+const MAX_INDEXES_CACHED = 5_000;
 const MAX_RELEASES_CACHED = 32;
 
 /**
@@ -23,7 +25,11 @@ const MAX_RELEASES_CACHED = 32;
 export const createSkillsProvider = (infra: Infra): SkillsProvider => {
   const services = createPluginServices(infra);
   const items = new Map<string, Promise<ReleaseItem[]>>();
-  const indexes = new Map<string, { at: number; index: SkillIndex }>();
+  const indexes = new TtlCache<string, SkillIndex>({
+    ttlMs: INDEX_TTL_MS,
+    max: MAX_INDEXES_CACHED,
+    clock: infra.clock,
+  });
 
   const releaseItems = (marketplaceId: string, seq: number): Promise<ReleaseItem[]> => {
     const key = `${marketplaceId}:${seq}`;
@@ -44,7 +50,7 @@ export const createSkillsProvider = (infra: Infra): SkillsProvider => {
     principal: Parameters<SkillsProvider['list']>[0],
   ): Promise<SkillIndex> => {
     const cached = indexes.get(principal.id);
-    if (cached && Date.now() - cached.at < INDEX_TTL_MS) return cached.index;
+    if (cached) return cached;
     const plugins: VisiblePlugin[] = [];
     for (const release of await visibleReleases(infra, principal)) {
       for (const item of await releaseItems(release.id, release.seq)) {
@@ -52,8 +58,7 @@ export const createSkillsProvider = (infra: Infra): SkillsProvider => {
       }
     }
     const index = buildSkillIndex(plugins, services.baseUrl);
-    if (indexes.size > 5_000) indexes.clear();
-    indexes.set(principal.id, { at: Date.now(), index });
+    indexes.set(principal.id, index);
     return index;
   };
 

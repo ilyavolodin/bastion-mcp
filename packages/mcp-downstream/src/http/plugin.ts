@@ -13,7 +13,13 @@ import {
   InsufficientScopeError,
   type Principal,
 } from '@bastion-mcp/auth';
-import { type BastionError, isBastionError, sha256Hex } from '@bastion-mcp/core';
+import {
+  type BastionError,
+  isBastionError,
+  isRecord,
+  JSONRPC_CODES,
+  sha256Hex,
+} from '@bastion-mcp/core';
 import { type FloodLimiter, floodBucketFor } from '@bastion-mcp/limits';
 import {
   type EndpointCache,
@@ -33,10 +39,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Exchange, LegacyAdapter, ListenAdapter } from '../adapters/contracts';
 import { type createDirectHandler, isDirectExchange } from '../adapters/modern/direct';
 import type { ModernAdapter } from '../adapters/modern/server';
+import { first } from '../adapters/shared';
 import { type BastionRequestContext, bastionRequestContext } from '../context';
 import type { CatalogInstallPort, Logger, TokenVerifierPort } from '../ports';
 import { toRpcErrorBody } from '../rpc';
-import type { JsonObject, ResolvedEndpoint } from '../types';
+import type { ResolvedEndpoint } from '../types';
 import type { EndpointResolver } from './resolver';
 
 export const MAX_BODY_BYTES = 4 * 1024 * 1024;
@@ -72,9 +79,6 @@ type Prepared = {
   endpointPath: ParsedEndpointPath;
   origin: 'client' | 'plugin';
 };
-
-const header = (value: string | string[] | undefined): string | undefined =>
-  Array.isArray(value) ? value[0] : value;
 
 const rpcError = (code: number, message: string, data?: Record<string, unknown>) => ({
   jsonrpc: '2.0' as const,
@@ -175,7 +179,7 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
           { kind: SpanKind.INTERNAL },
           async (span) => {
             try {
-              return await deps.verifier.verify(header(req.headers.authorization), requestUrl);
+              return await deps.verifier.verify(first(req.headers.authorization), requestUrl);
             } catch (error) {
               span.setStatus({ code: SpanStatusCode.ERROR, message: 'authentication failed' });
               throw error;
@@ -224,7 +228,7 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
       }
       prepared.set(req, {
         principal,
-        token: bearerToken(header(req.headers.authorization)),
+        token: bearerToken(first(req.headers.authorization)),
         resolved,
         endpointPath: parsed,
         origin,
@@ -240,11 +244,14 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
       }
       let body: unknown;
       if (req.method === 'POST') {
-        if (!isJsonContentType(header(req.headers['content-type']) ?? '')) {
+        if (!isJsonContentType(first(req.headers['content-type']) ?? '')) {
           await reply
             .code(415)
             .send(
-              rpcError(-32600, 'Unsupported Media Type: Content-Type must be application/json'),
+              rpcError(
+                JSONRPC_CODES.INVALID_REQUEST,
+                'Unsupported Media Type: Content-Type must be application/json',
+              ),
             );
           return;
         }
@@ -252,7 +259,7 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
           const raw = req.body instanceof Buffer ? req.body : Buffer.alloc(0);
           body = JSON.parse(raw.toString('utf8')) as unknown;
         } catch {
-          await reply.code(400).send(rpcError(-32700, 'Parse error'));
+          await reply.code(400).send(rpcError(JSONRPC_CODES.PARSE_ERROR, 'Parse error'));
           return;
         }
       }
@@ -274,9 +281,7 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
         origin: prep.origin,
         headers: req.headers,
         ...(body === undefined ? {} : { body }),
-        ...(typeof meta === 'object' && meta !== null && !Array.isArray(meta)
-          ? { meta: meta as JsonObject }
-          : {}),
+        ...(isRecord(meta) ? { meta } : {}),
       };
       // `request.raw.auth` is how the SDK receives the verified principal (`authInfo`).
       Object.assign(req.raw, { auth: rc.authInfo });
@@ -289,7 +294,9 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
           } catch (error) {
             deps.logger.error('mcp exchange failed', { error: String(error) });
             if (!reply.raw.headersSent) {
-              const payload = JSON.stringify(rpcError(-32603, 'Internal error'));
+              const payload = JSON.stringify(
+                rpcError(JSONRPC_CODES.INTERNAL_ERROR, 'Internal error'),
+              );
               reply.raw.writeHead(500, { 'content-type': 'application/json' });
               reply.raw.end(payload);
             } else if (!reply.raw.writableEnded) {
@@ -307,7 +314,7 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
         await deps.legacy.handle(exchange);
         return;
       }
-      if (header(exchange.req.headers['mcp-method']) === 'subscriptions/listen') {
+      if (first(exchange.req.headers['mcp-method']) === 'subscriptions/listen') {
         await deps.listen.handle(exchange);
         return;
       }
@@ -342,15 +349,15 @@ export const isLegacyExchange = (input: {
 }): boolean => {
   const outcome = classifyInboundRequest({
     httpMethod: input.method,
-    ...(header(input.headers['mcp-protocol-version']) === undefined
+    ...(first(input.headers['mcp-protocol-version']) === undefined
       ? {}
-      : { protocolVersionHeader: header(input.headers['mcp-protocol-version']) as string }),
-    ...(header(input.headers['mcp-method']) === undefined
+      : { protocolVersionHeader: first(input.headers['mcp-protocol-version']) as string }),
+    ...(first(input.headers['mcp-method']) === undefined
       ? {}
-      : { mcpMethodHeader: header(input.headers['mcp-method']) as string }),
-    ...(header(input.headers['mcp-name']) === undefined
+      : { mcpMethodHeader: first(input.headers['mcp-method']) as string }),
+    ...(first(input.headers['mcp-name']) === undefined
       ? {}
-      : { mcpNameHeader: header(input.headers['mcp-name']) as string }),
+      : { mcpNameHeader: first(input.headers['mcp-name']) as string }),
     body: input.body,
   });
   return outcome.kind === 'legacy';

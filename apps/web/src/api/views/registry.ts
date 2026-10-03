@@ -5,6 +5,7 @@
  * open requests). Everything else is the generated schema type.
  */
 import type { Res, Schemas } from '../schema';
+import { REGISTRY_SYNC_SKEW_MS, REGISTRY_SYNC_TIMEOUT_MS } from '../timing';
 
 export type RegistryServer = Schemas['RegistryServer'];
 export type RegistryServerDetail = Schemas['RegistryServerDetail'];
@@ -136,29 +137,56 @@ export const syncInfo = (source: Pick<RegistrySource, 'lastSync'>): SyncInfo | n
   return raw as SyncInfo;
 };
 
-/** Sync requests are remembered here until the source reports a result newer than the click. */
-const requested = new Map<string, number>();
-export const markSyncRequested = (sourceId: string, at = Date.now()): void => {
-  requested.set(sourceId, at);
+/** When a sync was asked for, per source id. The screens keep it in the query cache (`useSyncRequests`). */
+export type SyncRequests = ReadonlyMap<string, number>;
+export const NO_SYNC_REQUESTS: SyncRequests = new Map();
+
+/** The requests with one more: the sync of `sourceId` was asked for at `at` (epoch ms). */
+export const withSyncRequested = (
+  requests: SyncRequests,
+  sourceId: string,
+  at: number,
+): SyncRequests => new Map(requests).set(sourceId, at);
+
+/** The source has reported a walk that finished after the click (clock skew between server and browser allowed). */
+const reportedSince = (source: Pick<RegistrySource, 'lastSync'>, at: number): boolean => {
+  const info = syncInfo(source);
+  return info !== null && Date.parse(info.finishedAt) >= at - REGISTRY_SYNC_SKEW_MS;
 };
 
-/** A sync was requested and the source has not reported anything newer yet (it times out after 15 minutes). */
-export const isSyncing = (source: Pick<RegistrySource, 'id' | 'lastSync'>): boolean => {
+const expired = (at: number, now: number): boolean => now - at > REGISTRY_SYNC_TIMEOUT_MS;
+
+/**
+ * A sync was requested and the source has not reported anything newer yet (it times out after 15 minutes). Pure: the
+ * requests and the clock are arguments; `pruneSyncRequests` forgets the ones that are over.
+ */
+export const isSyncing = (
+  source: Pick<RegistrySource, 'id' | 'lastSync'>,
+  requested: SyncRequests,
+  now: number,
+): boolean => {
   const at = requested.get(source.id);
-  if (at === undefined) return false;
-  if (Date.now() - at > 15 * 60_000) {
-    requested.delete(source.id);
-    return false;
-  }
-  const info = syncInfo(source);
-  const finished = info ? Date.parse(info.finishedAt) : 0;
-  // The stats of a finished walk are written after the clicks; allow for clock skew between server and browser.
-  if (info && finished >= at - 5_000) {
-    requested.delete(source.id);
-    return false;
-  }
-  return true;
+  if (at === undefined || expired(at, now)) return false;
+  return !reportedSince(source, at);
 };
+
+/** The requests without the ones that reported a result or timed out; the same map when nothing changed. */
+export const pruneSyncRequests = (
+  sources: readonly Pick<RegistrySource, 'id' | 'lastSync'>[],
+  requested: SyncRequests,
+  now: number,
+): SyncRequests => {
+  const byId = new Map(sources.map((s) => [s.id, s]));
+  const kept = [...requested].filter(([id, at]) => {
+    const source = byId.get(id);
+    return !expired(at, now) && !(source && reportedSince(source, at));
+  });
+  return kept.length === requested.size ? requested : new Map(kept);
+};
+
+/** The tag tone of a source's trust level. */
+export const trustTone = (trust: string): 'ok' | 'info' | 'neutral' =>
+  trust === 'official' ? 'ok' : trust === 'internal' ? 'info' : 'neutral';
 
 export const TRUST_LABEL: Record<string, string> = {
   official: 'Official',

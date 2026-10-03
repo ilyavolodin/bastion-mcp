@@ -12,7 +12,8 @@ import { Avatar, Card, CardHeader, Tag } from '@/components/primitives';
 import { CardsSkeleton, QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
-import { formatNumber, installationAction, percent } from '@/lib/format';
+import { formatNumber, installationAction, isWithin, percent } from '@/lib/format';
+import { WEEK_MS } from '@/lib/time';
 import { InstallationTile } from '../servers/installation-tile';
 import { useInstallationAction } from '../servers/use-installation-action';
 import { ConnectCard } from './connect-card';
@@ -162,17 +163,17 @@ function WeekCard() {
 }
 
 /** Admin and Manager: who in the team has connected an AI tool this week. */
-function TeamCard() {
+function TeamAdoptionCard() {
   const { me, role } = useAuth();
   const teams = useTeams(role === 'admin');
   const myTeam = me.teams.find((t) => t.role === 'manager') ?? me.teams[0];
   const team =
     role === 'admin' ? (teams.data?.find((t) => t.id === myTeam?.id) ?? teams.data?.[0]) : myTeam;
   const users = useUsers(team ? { teamId: team.id } : {});
-  const weekAgo = Date.now() - 7 * 86_400_000;
   const people = users.data ?? [];
+  // `now` is when the people were read: the week is counted back from there, not from a clock read while rendering.
   const connected = (u: (typeof people)[number]) =>
-    u.lastActiveAt !== null && new Date(u.lastActiveAt).getTime() > weekAgo;
+    isWithin(u.lastActiveAt, WEEK_MS, users.dataUpdatedAt);
   const missing = people.filter((u) => !connected(u)).length;
   return (
     <Card aria-label="Team adoption" className="gap-3.5">
@@ -266,7 +267,7 @@ export function HomePage() {
       <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
         <QuotasCard />
         <WeekCard />
-        {role === 'admin' || role === 'manager' ? <TeamCard /> : null}
+        {role === 'admin' || role === 'manager' ? <TeamAdoptionCard /> : null}
       </div>
     </>
   );

@@ -42,7 +42,11 @@ export type ScimServiceDeps = {
   connection?: IdpConnection | null;
   clock?: Clock;
   newId?: () => string;
+  /** Receives unexpected failures (the response stays a generic 500). */
+  logger?: ScimLogger;
 };
+
+export type ScimLogger = { error(message: string, fields?: Record<string, unknown>): void };
 
 const boolish = z.union([z.boolean(), z.string()]).transform((v) => toBoolean(v));
 
@@ -68,6 +72,12 @@ const groupBodySchema = z.object({
 
 const EMAIL = /^[^@\s]+@[^@\s]+$/;
 
+/** Splits a display name into given and family names (the first word is the given name). */
+const splitName = (displayName: string): { given: string | null; family: string | null } => {
+  const [given, ...family] = displayName.split(' ');
+  return { given: given ?? null, family: family.length > 0 ? family.join(' ') : null };
+};
+
 export class ScimService {
   private readonly clock: Clock;
   private readonly newId: () => string;
@@ -92,6 +102,11 @@ export class ScimService {
           scimErrorBody(new ScimError(409, 'resource already exists', 'uniqueness')),
         );
       }
+      this.deps.logger?.error('scim request failed', {
+        error: e,
+        method: req.method,
+        path: req.path,
+      });
       return this.json(500, scimErrorBody(new ScimError(500, 'internal error')));
     }
   }
@@ -139,15 +154,10 @@ export class ScimService {
   ): Promise<ScimResponse> {
     if (!id) {
       if (method === 'GET') {
-        const q = this.listQuery(req.query);
-        const { total, items } = await this.deps.store.listUsers(q);
-        return this.json(
-          200,
-          this.list(
-            items.map((u) => this.userResource(u)),
-            total,
-            q.startIndex,
-          ),
+        return this.listResponse(
+          req.query,
+          (q) => this.deps.store.listUsers(q),
+          (u) => this.userResource(u),
         );
       }
       if (method === 'POST') return this.createUser(req.body);
@@ -173,19 +183,23 @@ export class ScimService {
     }
   }
 
-  private parseUserBody(body: unknown) {
-    const parsed = userBodySchema.safeParse(body);
-    if (!parsed.success) throw new ScimError(400, 'invalid User resource', 'invalidSyntax');
-    const b = parsed.data;
-    const primary = b.emails?.find((e) => e.primary)?.value ?? b.emails?.[0]?.value;
-    const email = (EMAIL.test(b.userName) ? b.userName : (primary ?? b.userName))
-      .trim()
-      .toLowerCase();
+  /** Lowercased, trimmed email that must look like an address and be in an allowed domain (9.1). */
+  private checkedEmail(raw: string): string {
+    const email = raw.trim().toLowerCase();
     if (!EMAIL.test(email))
       throw new ScimError(400, 'userName must be an email address', 'invalidValue');
     if (this.connection && !isEmailDomainAllowed(email, this.connection.emailDomains)) {
       throw new ScimError(400, 'email domain is not allowed', 'invalidValue');
     }
+    return email;
+  }
+
+  private parseUserBody(body: unknown) {
+    const parsed = userBodySchema.safeParse(body);
+    if (!parsed.success) throw new ScimError(400, 'invalid User resource', 'invalidSyntax');
+    const b = parsed.data;
+    const primary = b.emails?.find((e) => e.primary)?.value ?? b.emails?.[0]?.value;
+    const email = this.checkedEmail(EMAIL.test(b.userName) ? b.userName : (primary ?? b.userName));
     const composed = [b.name?.givenName, b.name?.familyName].filter(Boolean).join(' ');
     const displayName =
       b.displayName?.trim() ||
@@ -226,14 +240,14 @@ export class ScimService {
   }
 
   private draftFromRecord(r: ScimUserRecord): UserDraft {
-    const [given, ...family] = r.displayName.split(' ');
+    const { given, family } = splitName(r.displayName);
     return {
       userName: r.userName,
       displayName: r.displayName,
       externalId: r.externalId,
       active: r.active,
-      givenName: given ?? null,
-      familyName: family.length > 0 ? family.join(' ') : null,
+      givenName: given,
+      familyName: family,
       nameTouched: false,
     };
   }
@@ -251,14 +265,12 @@ export class ScimService {
 
   /** Shared by PUT and PATCH: diff the draft against the record and apply it (9.1). */
   private async updateUser(record: ScimUserRecord, draft: UserDraft): Promise<ScimResponse> {
+    const changes: Extract<UserChange, { kind: 'update' }>['changes'] = {};
     const email = draft.userName.trim().toLowerCase();
     if (!EMAIL.test(email))
       throw new ScimError(400, 'userName must be an email address', 'invalidValue');
-    const changes: Extract<UserChange, { kind: 'update' }>['changes'] = {};
     if (email !== record.userName.toLowerCase()) {
-      if (this.connection && !isEmailDomainAllowed(email, this.connection.emailDomains)) {
-        throw new ScimError(400, 'email domain is not allowed', 'invalidValue');
-      }
+      this.checkedEmail(email);
       const owner = await this.deps.store.findUserIdByEmail(email);
       if (owner && owner !== record.id) {
         throw new ScimError(409, 'a user with this userName already exists', 'uniqueness');
@@ -300,15 +312,10 @@ export class ScimService {
   ): Promise<ScimResponse> {
     if (!id) {
       if (method === 'GET') {
-        const q = this.listQuery(req.query);
-        const { total, items } = await this.deps.store.listGroups(q);
-        return this.json(
-          200,
-          this.list(
-            items.map((g) => this.groupResource(g)),
-            total,
-            q.startIndex,
-          ),
+        return this.listResponse(
+          req.query,
+          (q) => this.deps.store.listGroups(q),
+          (g) => this.groupResource(g),
         );
       }
       if (method === 'POST') return this.createGroup(req.body);
@@ -376,19 +383,21 @@ export class ScimService {
       createdAt: new Date(this.clock.now()),
       updatedAt: null,
     };
-    const plans = await this.membershipPlans(group, b.members, [], [team]);
-    const first = plans[0];
-    if (first) first.createTeams.push(team);
-    else {
-      plans.push({
-        user: { kind: 'none', id: team.id },
-        createTeams: [team],
-        membershipUpserts: [],
-        membershipRemovals: [],
-        events: [],
-        warnings: [],
-      });
-    }
+    const memberPlans = await this.membershipPlans(group, b.members, [], [team]);
+    // The new team rides on the first plan (or on a plan of its own when there are no members to add).
+    const [first, ...others] = memberPlans;
+    const plans: ProvisioningPlan[] = first
+      ? [{ ...first, createTeams: [...first.createTeams, team] }, ...others]
+      : [
+          {
+            user: { kind: 'none', id: team.id },
+            createTeams: [team],
+            membershipUpserts: [],
+            membershipRemovals: [],
+            events: [],
+            warnings: [],
+          },
+        ];
     await this.deps.store.applyPlans(plans);
     const created = await this.deps.store.getGroup(team.id);
     if (!created) throw new ScimError(500, 'created group not found');
@@ -464,7 +473,7 @@ export class ScimService {
   }
 
   private userResource(u: ScimUserRecord) {
-    const [given, ...family] = u.displayName.split(' ');
+    const { given, family } = splitName(u.displayName);
     return {
       schemas: [SCIM_SCHEMAS.user],
       id: u.id,
@@ -473,7 +482,7 @@ export class ScimService {
       name: {
         formatted: u.displayName,
         ...(given ? { givenName: given } : {}),
-        ...(family.length > 0 ? { familyName: family.join(' ') } : {}),
+        ...(family ? { familyName: family } : {}),
       },
       displayName: u.displayName,
       emails: [{ value: u.userName, type: 'work', primary: true }],
@@ -504,6 +513,17 @@ export class ScimService {
         location: this.location('Groups', g.id),
       },
     };
+  }
+
+  /** Shared `GET /Users` and `GET /Groups`: parse the query, page the store, render the list envelope. */
+  private async listResponse<R>(
+    query: Record<string, string | undefined>,
+    fetchPage: (q: ScimListQuery) => Promise<{ total: number; items: R[] }>,
+    render: (item: R) => unknown,
+  ): Promise<ScimResponse> {
+    const q = this.listQuery(query);
+    const { total, items } = await fetchPage(q);
+    return this.json(200, this.list(items.map(render), total, q.startIndex));
   }
 
   private list(resources: unknown[], total: number, startIndex: number) {

@@ -1,7 +1,7 @@
 import { sha256Hex } from '@bastion-mcp/core';
+import { type FakeUpstream, startFakeUpstream } from '@bastion-mcp/testkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { haveDocker } from './helpers/env';
-import { type FakeUpstream, startFakeUpstream } from './helpers/fake-upstream';
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,

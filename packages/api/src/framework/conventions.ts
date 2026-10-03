@@ -1,3 +1,4 @@
+import { decodeJsonToken, encodeJsonToken } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { PreconditionFailedError, PreconditionRequiredError } from '../errors';
 import type { ListQuery, Page } from '../ports/store';
@@ -44,15 +45,12 @@ export const pageOfArray = <T>(
   return { items: slice, nextCursor: next < items.length ? encodeOffset(next) : null };
 };
 
-export const encodeOffset = (offset: number): string =>
-  Buffer.from(JSON.stringify({ o: offset })).toString('base64url');
+export const encodeOffset = (offset: number): string => encodeJsonToken({ o: offset });
 
 export const decodeOffset = (cursor: string | undefined): number => {
   if (!cursor) return 0;
   try {
-    const parsed = z
-      .object({ o: z.number().int().min(0) })
-      .parse(JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')));
+    const parsed = z.object({ o: z.number().int().min(0) }).parse(decodeJsonToken(cursor));
     return parsed.o;
   } catch {
     return 0;

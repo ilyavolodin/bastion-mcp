@@ -13,22 +13,6 @@ import type { Body } from '@/api/schema';
 export const SLUG_HELP = 'Lowercase letters, digits and dashes, 2 to 40 characters.';
 const slug = z.string().refine(isValidSlug, SLUG_HELP);
 
-/** The first message per field of a failed parse, keyed by the top-level field name. */
-export const fieldErrors = (error: z.ZodError): Record<string, string> => {
-  const out: Record<string, string> = {};
-  for (const issue of error.issues) {
-    const key = String(issue.path[0] ?? '');
-    if (!(key in out)) out[key] = issue.message;
-  }
-  return out;
-};
-
-/** Server-side field errors (`/slug`) as a map keyed by field name. */
-export const serverFieldErrors = (
-  errors: readonly { path: string; message: string }[],
-): Record<string, string> =>
-  Object.fromEntries(errors.map((e) => [e.path.replace(/^\//, '').split('/')[0] ?? '', e.message]));
-
 /**
  * A "URL name" that follows the display name until the user edits it (derived with core's `slugify`, 40 characters,
  * like the slugs of the API).

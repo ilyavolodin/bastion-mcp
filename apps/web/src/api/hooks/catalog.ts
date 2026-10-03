@@ -10,8 +10,10 @@ import {
   toVersionBody,
 } from '@/features/catalog/draft';
 import { fromBase64, toBase64 } from '@/lib/base64';
-import { api, fetchAll } from '../client';
+import { asRecord } from '@/lib/json';
+import { api, fetchAll, LOOKUP_PAGES } from '../client';
 import type { Body, CatalogKind } from '../schema';
+import { POLL_TEST_RUN_MS } from '../timing';
 import {
   type AutoInstallView,
   type CatalogEntry,
@@ -24,15 +26,15 @@ import {
   toEntryView,
 } from '../views/catalog';
 import { keys, useApiMutation } from './base';
+import { fetchTeamNames } from './lookups';
 
 const encodePath = (path: string) => path.split('/').map(encodeURIComponent).join('/');
 
-/** Teams by id, for the owner and audience labels of the catalog screens. */
-const teamNames = async (signal?: AbortSignal): Promise<Map<string, string>> =>
-  new Map((await fetchAll('/teams', {}, 5, signal)).map((t) => [t.id, t.displayName]));
-
 /** Entries listed with their version labels need one `GET /catalog/{id}/versions` each: this many at most. */
 const VERSION_FAN_OUT = 30;
+
+/** Pages of plugin entries the approvals list walks (each entry costs further requests). */
+const PLUGIN_ENTRY_PAGES = 2;
 
 /**
  * How many real installations each entry has: the hidden test installations of the TEST flow (`origin: 'test'`) do
@@ -43,7 +45,7 @@ const realInstallationCounts = async (
 ): Promise<Map<string, number> | null> => {
   try {
     const counts = new Map<string, number>();
-    for (const i of await fetchAll('/installations', {}, 20, signal)) {
+    for (const i of await fetchAll('/installations', {}, undefined, signal)) {
       if (i.origin === 'test' || !i.catalogEntryId) continue;
       counts.set(i.catalogEntryId, (counts.get(i.catalogEntryId) ?? 0) + 1);
     }
@@ -61,8 +63,8 @@ export const useCatalog = (params: { kind?: CatalogKind; q?: string } = {}) =>
     queryKey: [...keys.catalog, 'list', params],
     queryFn: async ({ signal }): Promise<CatalogEntryView[]> => {
       const [rows, names, installs] = await Promise.all([
-        fetchAll('/catalog', params, 20, signal),
-        teamNames(signal),
+        fetchAll('/catalog', params, undefined, signal),
+        fetchTeamNames(signal),
         realInstallationCounts(signal),
       ]);
       const withVersions = new Map<string, CatalogVersion[]>();
@@ -98,7 +100,7 @@ export const useCatalogEntry = (id: string | undefined) =>
     queryFn: async ({ signal }): Promise<CatalogEntryDetail> => {
       const [entry, versions] = await Promise.all([
         api.get(`/catalog/${id ?? ''}`, { signal }),
-        fetchAll(`/catalog/${id ?? ''}/versions`, {}, 5, signal),
+        fetchAll(`/catalog/${id ?? ''}/versions`, {}, LOOKUP_PAGES, signal),
       ]);
       return { entry, versions };
     },
@@ -109,7 +111,8 @@ export const useCatalogVersion = (entryId: string | undefined, versionId: string
   useQuery<CatalogVersionDetail>({
     queryKey: [...keys.catalog, 'version', entryId, versionId],
     enabled: Boolean(entryId && versionId),
-    refetchInterval: (q) => (q.state.data?.testResult?.status === 'running' ? 800 : false),
+    refetchInterval: (q) =>
+      q.state.data?.testResult?.status === 'running' ? POLL_TEST_RUN_MS : false,
     queryFn: ({ signal }): Promise<CatalogVersionDetail> =>
       api.get(`/catalog/${entryId ?? ''}/versions/${versionId ?? ''}`, { signal }),
   });
@@ -127,8 +130,6 @@ const canonical = (v: unknown): unknown =>
 /** JSON equality that ignores key order. */
 const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
-const rec = (v: unknown): Record<string, unknown> =>
-  typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
 const isDefaultOverrides = (doc: Record<string, unknown>) =>
   Object.keys(doc).length === 0 || sameJson(doc, { version: 1 });
 
@@ -207,7 +208,7 @@ export const useSaveDraft = (entryId: string, version: CatalogVersion | undefine
       }
       // The test stores the lockfile it captured on the draft (8.7): it is not the form's, so it is carried over
       // when the package is unchanged, and never makes the spec look edited.
-      const stored = rec(version.serverSpec);
+      const stored = asRecord(version.serverSpec);
       if (
         body.serverSpec &&
         stored.lockfile &&
@@ -345,8 +346,8 @@ export const useExecutableApprovals = (enabled = true) =>
     enabled,
     queryFn: async ({ signal }): Promise<ExecutableApprovalView[]> => {
       const [entries, users] = await Promise.all([
-        fetchAll('/catalog', { kind: 'plugin' }, 2, signal),
-        fetchAll('/users', {}, 5, signal),
+        fetchAll('/catalog', { kind: 'plugin' }, PLUGIN_ENTRY_PAGES, signal),
+        fetchAll('/users', {}, LOOKUP_PAGES, signal),
       ]);
       const names = new Map(users.map((u) => [u.id, u.displayName]));
       const perEntry = await Promise.all(
@@ -420,9 +421,9 @@ export const useAutoInstallPolicies = () =>
     queryKey: keys.autoInstall,
     queryFn: async ({ signal }): Promise<AutoInstallView[]> => {
       const [rows, entries, names] = await Promise.all([
-        fetchAll('/auto-install-policies', {}, 20, signal),
-        fetchAll('/catalog', {}, 20, signal),
-        teamNames(signal),
+        fetchAll('/auto-install-policies', {}, undefined, signal),
+        fetchAll('/catalog', {}, undefined, signal),
+        fetchTeamNames(signal),
       ]);
       const entryNames = new Map(entries.map((e) => [e.id, e.displayName]));
       return rows.map((r) => toAutoInstallView(r, { entryNames, teamNames: names }));
@@ -454,11 +455,3 @@ export const usePreviewAutoInstall = () =>
     (input: { id: string; changes: Body<'post', '/auto-install-policies/{id}/preview'> }) =>
       api.post(`/auto-install-policies/${input.id}/preview`, input.changes),
   );
-
-/** Teams for the audience pickers: id and name. */
-export const useTeamOptions = () =>
-  useQuery({
-    queryKey: [...keys.teams, 'options'],
-    queryFn: async ({ signal }) =>
-      (await fetchAll('/teams', {}, 5, signal)).map((t) => ({ id: t.id, name: t.displayName })),
-  });

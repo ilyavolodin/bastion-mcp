@@ -1,18 +1,16 @@
-import { randomBytes } from 'node:crypto';
 import {
   CLIENT_ID_PREFIX,
   generateClientSecret,
   hashClientSecret,
   validateClientJwks,
 } from '@bastion-mcp/auth';
-import { isValidSlug, sha256Hex } from '@bastion-mcp/core';
+import { type AuthMethod, isValidSlug, MS, sha256Hex } from '@bastion-mcp/core';
 import { ConflictApiError, NotFoundApiError, ValidationApiError } from '../errors';
 import type { IdpTestResult } from '../ports';
 import type { Row } from '../ports/store';
-import { CrudService, nowIso, type ReadCtx, type WriteCtx } from './crud';
+import { CrudService, nowIso, type ReadCtx, randomToken, type WriteCtx } from './crud';
 
 const SCIM_TOKEN_PREFIX = 'bst_scim_';
-const DAY_MS = 86_400_000;
 
 // --- service accounts (9.3) -------------------------------------------------------------------------------
 
@@ -25,7 +23,7 @@ export const serviceAccounts = new CrudService({
 
 type CredentialResult = {
   clientId: string;
-  authMethod: 'client_secret_basic' | 'private_key_jwt';
+  authMethod: AuthMethod;
   clientSecret?: string;
 };
 
@@ -45,7 +43,7 @@ export const createServiceAccount = async (
     teamId: string;
     slug: string;
     displayName: string;
-    authMethod: 'client_secret_basic' | 'private_key_jwt';
+    authMethod: AuthMethod;
     jwks?: Record<string, string>[] | undefined;
   },
 ): Promise<Row & CredentialResult> => {
@@ -65,7 +63,7 @@ export const createServiceAccount = async (
       { path: '/jwks', message: 'required' },
     ]);
   }
-  const clientId = `${CLIENT_ID_PREFIX}${randomBytes(12).toString('base64url')}`;
+  const clientId = `${CLIENT_ID_PREFIX}${randomToken(ctx.deps, 12)}`;
   const secret = body.authMethod === 'client_secret_basic' ? generateClientSecret() : undefined;
   const id = ctx.deps.newId();
   const account = await ctx.tx.store.insert('service_accounts', {
@@ -227,14 +225,14 @@ export const createScimToken = async (
   ctx: WriteCtx,
   body: { name: string; expiresInDays?: number | undefined },
 ): Promise<Row & { token: string }> => {
-  const token = `${SCIM_TOKEN_PREFIX}${randomBytes(32).toString('base64url')}`;
+  const token = `${SCIM_TOKEN_PREFIX}${randomToken(ctx.deps, 32)}`;
   const now = ctx.deps.clock.now();
   const row = await scimTokens.create(ctx, {
     name: body.name,
     tokenSha256: sha256Hex(token),
     createdBy: ctx.principal.id,
     expiresAt: body.expiresInDays
-      ? new Date(now.getTime() + body.expiresInDays * DAY_MS).toISOString()
+      ? new Date(now.getTime() + body.expiresInDays * MS.DAY).toISOString()
       : null,
     revokedAt: null,
   });

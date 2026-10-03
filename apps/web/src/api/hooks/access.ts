@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { api, fetchAll } from '../client';
+import { FAN_OUT, mapInBatches } from '../batch';
+import { api, fetchAll, MAX_PAGES_DEFAULT } from '../client';
 import type { Body, Schemas, TeamRole } from '../schema';
 import { buildDirectory, type Directory, filterUsers } from '../views/access';
 import { keys, pagedQuery, useApiMutation } from './base';
-
-/** How many team detail requests run at once while the directory loads. */
-const FAN_OUT = 6;
+import { fetchTeams } from './lookups';
 
 /**
  * People and teams, joined. `GET /users` has no team list and `GET /teams` has no members, so the directory reads
@@ -13,18 +12,13 @@ const FAN_OUT = 6;
  */
 const loadDirectory = async (signal: AbortSignal): Promise<Directory> => {
   const [users, teams] = await Promise.all([
-    fetchAll('/users', undefined, 20, signal),
-    fetchAll('/teams', undefined, 20, signal),
+    fetchAll('/users', undefined, undefined, signal),
+    fetchTeams(signal, MAX_PAGES_DEFAULT),
   ]);
-  const details: Schemas['TeamDetail'][] = [];
-  for (let i = 0; i < teams.length; i += FAN_OUT) {
-    const batch = await Promise.all(
-      teams
-        .slice(i, i + FAN_OUT)
-        .map((t) => api.get(`/teams/${t.id}`, { signal }).catch(() => null)),
-    );
-    for (const d of batch) if (d) details.push(d);
-  }
+  const fetched = await mapInBatches(teams, FAN_OUT, (t) =>
+    api.get(`/teams/${t.id}`, { signal }).catch(() => null),
+  );
+  const details = fetched.filter((d): d is Schemas['TeamDetail'] => d !== null);
   return buildDirectory(users, details);
 };
 

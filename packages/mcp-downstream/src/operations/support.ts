@@ -1,6 +1,8 @@
 /** Shared building blocks of the operations: identities, Cedar inputs, upstream contexts, spans and guard application. */
+
 import {
   canonicalDigest,
+  isRecord,
   type RequestStateBinding,
   type TemplateContext,
   TOKEN_PREFIXES,
@@ -22,6 +24,7 @@ import type {
   JsonObject as UpstreamJson,
   UpstreamNotification,
 } from '@bastion-mcp/mcp-upstream';
+import { SPAN_ATTRS } from '@bastion-mcp/mcp-upstream';
 import type { InstallationData, McpRequestContext, ToolAnnotations } from '@bastion-mcp/policy';
 import type { EffectiveEndpoint, InstallationInfo } from '@bastion-mcp/router';
 import { SPAN_NAMES } from '@bastion-mcp/telemetry';
@@ -34,11 +37,10 @@ import {
   trace,
 } from '@opentelemetry/api';
 import { InvalidParamsError } from '../rpc';
-import type { JsonObject, OpContext } from '../types';
+import { type JsonObject, LOGGING_LEVELS, type OpContext } from '../types';
 import type { OperationDeps } from './deps';
 
-export const isRecord = (value: unknown): value is JsonObject =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+export { isRecord };
 
 // --- identities ------------------------------------------------------------------------------------------------
 
@@ -68,6 +70,10 @@ export const templateContextOf = (
   ...(variables === undefined ? {} : { var: variables }),
 });
 
+/** Whether a pinned-argument plan holds `{{var.*}}` templates that need the installation's variables (12.4). */
+export const needsInstallationVariables = (plan: { pinned?: unknown } | undefined): boolean =>
+  plan?.pinned !== undefined && JSON.stringify(plan.pinned).includes('{{');
+
 // --- Cedar (10.4, 12.4) ------------------------------------------------------------------------------------------
 
 export const installationDataOf = (info: InstallationInfo): InstallationData => {
@@ -83,6 +89,8 @@ export const installationDataOf = (info: InstallationInfo): InstallationData => 
 };
 
 const zoneFormats = new Map<string, Intl.DateTimeFormat>();
+/** Zones come from policy data; the memo stays bounded however many distinct ones appear. */
+const MAX_ZONE_FORMATS = 64;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /**
@@ -100,6 +108,7 @@ export const wallClock = (nowMs: number, timeZone = 'UTC'): { hour: number; week
       hourCycle: 'h23',
       weekday: 'short',
     });
+    if (zoneFormats.size >= MAX_ZONE_FORMATS) zoneFormats.clear();
     zoneFormats.set(timeZone, format);
   }
   const parts = format.formatToParts(date);
@@ -147,6 +156,10 @@ export const toolAnnotationsOf = (tool: Record<string, unknown> | undefined): To
 
 // --- trace context -----------------------------------------------------------------------------------------------
 
+/** The active span's context, or the request's own when no span is active (the ROOT fallback). */
+export const spanContextOf = (ctx: Pick<OpContext, 'trace'>): SpanContext =>
+  trace.getSpanContext(context.active()) ?? ctx.trace;
+
 export const traceCarrierOf = (sc: SpanContext): { traceparent: string } => ({
   traceparent: `00-${sc.traceId}-${sc.spanId}-${(sc.traceFlags & 0xff).toString(16).padStart(2, '0')}`,
 });
@@ -189,7 +202,7 @@ export const upstreamContextOf = (
   installationId,
   era: ctx.era,
   clientCapabilities: ctx.clientCapabilities,
-  trace: traceCarrierOf(trace.getSpanContext(context.active()) ?? ctx.trace),
+  trace: traceCarrierOf(spanContextOf(ctx)),
   endpointId: ctx.endpoint.endpointId,
   singleInstallationEndpoint: isSingleInstallationEndpoint(ctx),
   signal: options.signal ?? ctx.signal,
@@ -227,12 +240,11 @@ export const remapProgress = (
   };
 };
 
-const LEVELS = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'];
-
 const logAllowed = (min: string | undefined, level: unknown): boolean => {
   if (min === undefined) return true;
-  const minIndex = LEVELS.indexOf(min);
-  const index = typeof level === 'string' ? LEVELS.indexOf(level) : -1;
+  const minIndex = (LOGGING_LEVELS as readonly string[]).indexOf(min);
+  const index =
+    typeof level === 'string' ? (LOGGING_LEVELS as readonly string[]).indexOf(level) : -1;
   return index < 0 || minIndex < 0 || index >= minIndex;
 };
 
@@ -287,7 +299,7 @@ export type GuardSubject = {
 };
 
 export const runGuards = async (
-  deps: Pick<OperationDeps, 'guards' | 'guardProfiles' | 'tracer'>,
+  deps: Pick<OperationDeps, 'guards' | 'guardProfiles' | 'tracer' | 'clock'>,
   ctx: OpContext,
   phase: GuardPhase,
   subject: GuardSubject,
@@ -311,7 +323,7 @@ export const runGuards = async (
     catalogVersionId: subject.installation.catalogVersionId,
     toolProfileId,
   });
-  const started = Date.now();
+  const started = deps.clock.now();
   const run = await deps.guards.run(input, layers, { signal: ctx.signal });
   recordGuardSpans(deps, run, started);
   return run;
@@ -330,10 +342,10 @@ const recordGuardSpans = (
       kind: SpanKind.INTERNAL,
       startTime: cursor,
       attributes: {
-        'bastion.guard.instance': record.guard,
-        'bastion.guard.phase': record.phase,
-        'bastion.guard.verdict': record.verdict,
-        'bastion.guard.action': record.action,
+        [SPAN_ATTRS.guardInstance]: record.guard,
+        [SPAN_ATTRS.guardPhase]: record.phase,
+        [SPAN_ATTRS.guardVerdict]: record.verdict,
+        [SPAN_ATTRS.guardAction]: record.action,
       },
     });
     if (record.verdict === 'error') span.setStatus({ code: SpanStatusCode.ERROR });

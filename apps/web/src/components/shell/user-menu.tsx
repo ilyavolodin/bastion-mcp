@@ -1,7 +1,7 @@
 import * as Primitive from '@radix-ui/react-dropdown-menu';
 import { useNavigate } from '@tanstack/react-router';
 import { Check, ChevronsUpDown, KeyRound, LogOut, Moon } from 'lucide-react';
-import { CSRF_COOKIE, CSRF_HEADER, readCookie } from '@/api/client';
+import { CSRF_COOKIE, CSRF_HEADER, clearEtags, readCookie } from '@/api/client';
 import { useAuth } from '@/auth/auth';
 import { Avatar } from '@/components/primitives';
 import {
@@ -24,6 +24,7 @@ export async function signOut(): Promise<void> {
       headers: csrf ? { [CSRF_HEADER]: csrf } : {},
     });
   } finally {
+    clearEtags();
     window.location.assign('/auth/login');
   }
 }

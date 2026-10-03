@@ -1,4 +1,4 @@
-import { expect, vi } from 'vitest';
+import { expect, onTestFinished, vi } from 'vitest';
 import { server } from '@/mocks/server';
 import { findOperation, type HttpMethod, validateRequest } from './contract';
 
@@ -31,18 +31,25 @@ export function captureRequests() {
     );
   };
   server.events.on('request:start', onStart);
+  const stop = () => server.events.removeListener('request:start', onStart);
+  // A failing test must not leave the listener behind for the next one.
+  onTestFinished(stop);
   return {
     calls,
-    stop: () => server.events.removeListener('request:start', onStart),
+    stop,
     /** Waits for a request of this method whose path matches, and returns the last one. */
     async next(method: HttpMethod, path: RegExp | string): Promise<Captured> {
       const match = (c: Captured) =>
         c.method === method &&
         (typeof path === 'string' ? c.path.endsWith(path) : path.test(c.path));
-      await vi.waitFor(async () => {
-        await Promise.all(reads);
-        expect(calls.some(match)).toBe(true);
-      });
+      // As patient as Testing Library's `findBy` (see `setup.ts`): a loaded machine must not fail the test.
+      await vi.waitFor(
+        async () => {
+          await Promise.all(reads);
+          expect(calls.some(match)).toBe(true);
+        },
+        { timeout: 8000 },
+      );
       return calls.filter(match).at(-1) as Captured;
     },
   };

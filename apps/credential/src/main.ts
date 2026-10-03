@@ -14,18 +14,21 @@ const readStdin = async (): Promise<string> => {
   return Buffer.concat(chunks).toString('utf8');
 };
 
-const server = (): URL =>
-  resolveServerUrl({
+let resolvedServer: URL | undefined;
+const server = (): URL => {
+  resolvedServer ??= resolveServerUrl({
     env: process.env,
     readFile: (path) => readFileSync(path, 'utf8'),
     home: homedir(),
   });
+  return resolvedServer;
+};
 
 const manager = (): TokenManager =>
   new TokenManager({
     server: server(),
     store: new KeyringTokenStore(),
-    fetch: (input, init) => fetch(input, init),
+    fetch,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: () => Date.now(),
     prompt: async (authorization) => {

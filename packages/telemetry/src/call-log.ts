@@ -9,6 +9,8 @@ export const MAX_PREVIEW_BYTES = 2048;
 export const FLUSH_INTERVAL_MS = 500;
 export const FLUSH_BATCH_SIZE = 500;
 export const MAX_BUFFERED_ROWS = 50_000;
+export const BACKOFF_INITIAL_MS = 500;
+export const BACKOFF_MAX_MS = 30_000;
 
 const uuid = z.string().uuid();
 const jsonValue: z.ZodType<unknown> = z.unknown();
@@ -130,8 +132,8 @@ export class CallLogWriter {
     this.flushIntervalMs = options.flushIntervalMs ?? FLUSH_INTERVAL_MS;
     this.batchSize = options.batchSize ?? FLUSH_BATCH_SIZE;
     this.maxBuffered = options.maxBuffered ?? MAX_BUFFERED_ROWS;
-    this.backoffInitialMs = options.backoffInitialMs ?? 500;
-    this.backoffMaxMs = options.backoffMaxMs ?? 30_000;
+    this.backoffInitialMs = options.backoffInitialMs ?? BACKOFF_INITIAL_MS;
+    this.backoffMaxMs = options.backoffMaxMs ?? BACKOFF_MAX_MS;
   }
 
   get size(): number {

@@ -1,4 +1,8 @@
 import type { InstallationView } from '@/api/views/servers';
+import { DAY, HOUR, MINUTE, SECOND } from './time';
+
+/** The locale every number and date of the console is formatted in. */
+export const LOCALE = 'en-US';
 
 export const initials = (name: string): string =>
   name
@@ -8,20 +12,21 @@ export const initials = (name: string): string =>
     .map((p) => p.charAt(0).toUpperCase())
     .join('');
 
-const pad = (n: number) => String(n).padStart(2, '0');
+/** Two digits, zero padded. */
+export const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 export const formatClock = (iso: string, seconds = false): string => {
   const d = new Date(iso);
-  const base = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  return seconds ? `${base}:${pad(d.getSeconds())}` : base;
+  const base = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return seconds ? `${base}:${pad2(d.getSeconds())}` : base;
 };
 
 export const formatDate = (iso: string): string =>
-  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  new Date(iso).toLocaleDateString(LOCALE, { month: 'short', day: 'numeric' });
 
 export const formatRelative = (iso: string, now: number = Date.now()): string => {
   const diff = Math.max(0, now - new Date(iso).getTime());
-  const min = Math.round(diff / 60_000);
+  const min = Math.round(diff / MINUTE);
   if (min < 1) return 'just now';
   if (min < 60) return `${min} min ago`;
   const h = Math.round(min / 60);
@@ -37,32 +42,28 @@ export const formatDuration = (ms: number): string => {
   return `${s < 10 ? s.toFixed(1) : Math.round(s)} s`;
 };
 
+const DAY_SECONDS = DAY / SECOND;
+const HOUR_SECONDS = HOUR / SECOND;
+const MINUTE_SECONDS = MINUTE / SECOND;
+
 export const formatUptime = (sec: number): string => {
-  if (sec >= 86_400) return `${Math.floor(sec / 86_400)} d`;
-  if (sec >= 3600) return `${Math.floor(sec / 3600)} h`;
-  return `${Math.max(1, Math.floor(sec / 60))} min`;
+  if (sec >= DAY_SECONDS) return `${Math.floor(sec / DAY_SECONDS)} d`;
+  if (sec >= HOUR_SECONDS) return `${Math.floor(sec / HOUR_SECONDS)} h`;
+  return `${Math.max(1, Math.floor(sec / MINUTE_SECONDS))} min`;
 };
 
-export const formatNumber = (n: number): string => n.toLocaleString('en-US');
+/** Whole seconds from `startedAt` to `now` (epoch ms); never negative. */
+export const secondsSince = (startedAt: string, now: number): number =>
+  Math.max(0, (now - new Date(startedAt).getTime()) / SECOND);
+
+/** True when `iso` is at most `windowMs` before `now` (epoch ms); false for no time at all. */
+export const isWithin = (iso: string | null, windowMs: number, now: number): boolean =>
+  iso !== null && new Date(iso).getTime() > now - windowMs;
+
+export const formatNumber = (n: number): string => n.toLocaleString(LOCALE);
 
 export const percent = (part: number, whole: number): number =>
   whole <= 0 ? 0 : Math.min(100, Math.max(0, (part / whole) * 100));
-
-export const PALETTE = [
-  'var(--tangerine)',
-  'var(--sky)',
-  'var(--teal)',
-  'var(--berry)',
-  'var(--mint)',
-  'var(--sun)',
-] as const;
-
-/** A stable avatar colour for an id or name. */
-export const avatarColor = (seed: string): string => {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length] ?? PALETTE[0];
-};
 
 export type InstallationAction = {
   label: string;

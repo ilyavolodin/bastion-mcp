@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Prisma } from '../generated/client';
 import {
   type AuditContext,
-  afterIdDesc,
+  afterKey,
   ConflictError,
   clampLimit,
   compact,
@@ -17,12 +17,12 @@ import {
   orConflict,
   type Paged,
   type PrismaLike,
+  paginate,
   type RepoContext,
   type RepoOptions,
   toContext,
   toJson,
   toJsonOrNull,
-  toPage,
 } from './support';
 
 // --- registry_sources (11.6) ---------------------------------------------------------------------------------------------
@@ -498,18 +498,21 @@ export const createInstallRequestStore = (arg: PrismaLike | RepoContext, options
         cursor?: string;
       } = {},
     ): Promise<Paged<InstallRequestRecord>> {
-      const limit = clampLimit(filter.limit);
-      const rows = await db.installRequest.findMany({
-        where: {
-          ...(filter.requesterId ? { requesterId: filter.requesterId } : {}),
-          ...(filter.status ? { status: filter.status } : {}),
-          ...afterIdDesc(filter.cursor),
-        },
-        orderBy: { id: 'desc' },
-        take: limit + 1,
-      });
-      const page = toPage(rows, limit, idCursorOf);
-      return { items: page.items.map(toRequest), nextCursor: page.nextCursor };
+      return paginate(
+        filter,
+        (take) =>
+          db.installRequest.findMany({
+            where: {
+              ...(filter.requesterId ? { requesterId: filter.requesterId } : {}),
+              ...(filter.status ? { status: filter.status } : {}),
+              ...afterKey('id', 'desc', filter.cursor),
+            },
+            orderBy: { id: 'desc' },
+            take,
+          }),
+        idCursorOf,
+        toRequest,
+      );
     },
   };
 };

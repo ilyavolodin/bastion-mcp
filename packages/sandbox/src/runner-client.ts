@@ -12,6 +12,7 @@ import {
   type StartRequestInput,
   startEventSchema,
 } from './protocol';
+import { SANDBOX_TIMEOUTS_MS } from './timeouts';
 import type { RunnerClient, StdioChannel, StdioHandlers } from './types';
 
 export type RunnerTarget =
@@ -44,7 +45,7 @@ const requestOptions = (target: RunnerTarget): http.RequestOptions =>
     ? { socketPath: target.socketPath, host: 'runner' }
     : { host: target.host, port: target.port };
 
-const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = SANDBOX_TIMEOUTS_MS.runnerRequest;
 
 type RawResponse = { status: number; body: string };
 

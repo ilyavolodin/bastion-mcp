@@ -1,5 +1,4 @@
 import { networkInterfaces } from 'node:os';
-import { join } from 'node:path';
 import { SandboxStartFailedError } from '@bastion-mcp/core';
 import { RedisEgressPolicyStore } from '@bastion-mcp/mcp-upstream';
 import {
@@ -42,7 +41,7 @@ class UnavailableDriver implements SandboxDriver {
 
 /** The address sandboxes use to reach this worker's egress proxy: `BASTION_EGRESS_HOST`, the pod IP, or the host name. */
 export const egressHost = (infra: Infra): string => {
-  const explicit = process.env.BASTION_EGRESS_HOST ?? infra.options.advertiseHost;
+  const explicit = infra.env.egressHost ?? infra.options.advertiseHost;
   if (explicit) return explicit;
   for (const list of Object.values(networkInterfaces())) {
     for (const nic of list ?? []) if (nic.family === 'IPv4' && !nic.internal) return nic.address;
@@ -126,8 +125,8 @@ export const createSandboxStack = async (infra: Infra): Promise<SandboxStack> =>
         dataDir: config.dataDir,
         seccompProfile,
         egress,
-        runnerPath: process.env.BASTION_RUNNER_PATH ?? '/opt/bastion/runner.mjs',
-        runtimeDir: process.env.BASTION_RUNTIME_DIR ?? join('/opt', 'runtime'),
+        runnerPath: infra.env.runnerPath,
+        runtimeDir: infra.env.runtimeDir,
       });
       driver = bwrap;
       state = async () => {

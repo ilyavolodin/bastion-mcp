@@ -3,6 +3,7 @@
  * reviews. Every type is the generated one (`Schemas`, `Res`, `Query`); what lives here is what the screens derive
  * from them (time slots, outcome groups, joined names, the worst guard verdict).
  */
+import { DAY, HOUR, MINUTE } from '@/lib/time';
 import type { Body, CallOutcome, Query, Res, Schemas } from '../schema';
 
 export type CallRow = Schemas['CallRecord'];
@@ -14,9 +15,7 @@ type Series = Res<'get', '/stats/calls'>;
 // --- time ranges and filters ----------------------------------------------------------------------------------
 
 export type StatsRange = '1h' | '24h' | '7d' | '14d' | '90d';
-export const MINUTE = 60_000;
-export const HOUR = 60 * MINUTE;
-export const DAY = 24 * HOUR;
+export { DAY, HOUR, MINUTE };
 
 export const RANGE_MS: Record<StatsRange, number> = {
   '1h': HOUR,

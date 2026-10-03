@@ -14,6 +14,7 @@ import { ProblemAlert } from '@/components/problem';
 import { QueryBoundary } from '@/components/query-boundary';
 import { RoleGate } from '@/components/role-gate';
 import { Button } from '@/components/ui/button';
+import { DEBOUNCE_TYPING_MS, useDebounced } from '@/hooks/use-debounced-value';
 import { stableStringify } from '@/lib/diff';
 import {
   type OverrideDocument,
@@ -54,18 +55,15 @@ function Editor({
 
   // Recompute the final definitions shortly after every edit.
   const { mutate: runPreview } = preview;
+  const settledDoc = useDebounced(doc, DEBOUNCE_TYPING_MS);
   React.useEffect(() => {
-    const t = setTimeout(
-      () =>
-        runPreview({
-          installationId,
-          document: doc,
-          layer: scope === 'everyone' ? 'catalog' : 'installation',
-        }),
-      250,
-    );
-    return () => clearTimeout(t);
-  }, [doc, installationId, scope, runPreview]);
+    if (settledDoc !== doc) return;
+    runPreview({
+      installationId,
+      document: doc,
+      layer: scope === 'everyone' ? 'catalog' : 'installation',
+    });
+  }, [doc, settledDoc, installationId, scope, runPreview]);
 
   const defs = React.useMemo(
     () => (preview.data ? toDefinitionPairs(preview.data) : []),

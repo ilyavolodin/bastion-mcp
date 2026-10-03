@@ -1,15 +1,14 @@
 import { randomBytes } from 'node:crypto';
-import { SandboxStartFailedError } from '@bastion-mcp/core';
+import { type Clock, SandboxStartFailedError, systemClock } from '@bastion-mcp/core';
 import { HttpRunnerClient, parseRunnerAddress } from '../runner-client';
-import {
-  type Clock,
-  type IsolationLevel,
-  type RunnerClient,
-  type SandboxDriver,
-  type SandboxHandle,
-  type SandboxRef,
-  type SandboxSpec,
-  systemClock,
+import { SANDBOX_TIMEOUTS_MS } from '../timeouts';
+import type {
+  IsolationLevel,
+  RunnerClient,
+  SandboxDriver,
+  SandboxHandle,
+  SandboxRef,
+  SandboxSpec,
 } from '../types';
 import {
   bastionSelector,
@@ -95,7 +94,9 @@ export class KubernetesDriver implements SandboxDriver {
     name: string,
     signal: AbortSignal,
   ): Promise<{ address: string; claim: KubeObject }> {
-    const deadline = AbortSignal.timeout(this.options.claimTimeoutMs ?? 120_000);
+    const deadline = AbortSignal.timeout(
+      this.options.claimTimeoutMs ?? SANDBOX_TIMEOUTS_MS.claimBound,
+    );
     const stop = AbortSignal.any([signal, deadline]);
     while (!stop.aborted) {
       for await (const claim of this.api.watchClaim(name, stop)) {
@@ -113,7 +114,9 @@ export class KubernetesDriver implements SandboxDriver {
     runner: RunnerClient,
     signal: AbortSignal,
   ): Promise<'unbound' | 'bound' | 'running'> {
-    const deadline = AbortSignal.timeout(this.options.runnerReadyTimeoutMs ?? 60_000);
+    const deadline = AbortSignal.timeout(
+      this.options.runnerReadyTimeoutMs ?? SANDBOX_TIMEOUTS_MS.runnerReady,
+    );
     const stop = AbortSignal.any([signal, deadline]);
     let last: unknown;
     while (!stop.aborted) {

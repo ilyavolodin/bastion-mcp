@@ -224,6 +224,12 @@ describe('9.1 identity providers', () => {
 });
 
 describe('9.1 SCIM tokens', () => {
+  it('9.1 draws the SCIM secret from the injected token source', async () => {
+    api = await buildTestApi({ overrides: { randomToken: (bytes) => `fixed-${bytes}` } });
+    const res = await api.call('admin', 'POST', '/scim-tokens', { body: { name: 'Entra' } });
+    expect(rec(res.body).token).toBe('bst_scim_fixed-32');
+  });
+
   it('9.1 returns the SCIM secret once and stores only its SHA-256', async () => {
     api = await buildTestApi();
     const res = await api.call('admin', 'POST', '/scim-tokens', {

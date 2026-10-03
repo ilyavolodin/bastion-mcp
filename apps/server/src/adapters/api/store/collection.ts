@@ -199,10 +199,9 @@ export const translateError = (error: unknown, what: string): never => {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === 'P2002') throw new ConflictApiError(`${what} already exists`);
     if (error.code === 'P2003')
-      throw new ConflictApiError(
-        `${what} references or is referenced by another resource`,
-        'conflict',
-      );
+      throw new ConflictApiError(`${what} references or is referenced by another resource`, {
+        code: 'conflict',
+      });
     if (error.code === 'P2025') throw new NotFoundApiError(what);
   }
   throw error;

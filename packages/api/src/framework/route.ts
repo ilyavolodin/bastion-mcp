@@ -6,7 +6,7 @@ import type {
   ResourceData,
 } from '@bastion-mcp/policy';
 import type { FastifyRequest } from 'fastify';
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { ApiDeps } from '../ports';
 import type { ApiEvent } from '../ports/events';
 import type { AuditDescriptor, Tx } from '../ports/uow';
@@ -58,6 +58,8 @@ export const authz = {
   filter: (rule: string): Authz => ({ kind: 'filter', rule }),
   /** Authenticated principal acting on its own data. */
   self: (): Authz => ({ kind: 'self' }),
+  /** `installations.personal` on the organization: any member managing their own installations. */
+  personal: (): Authz => authz.on('installations.personal', () => ORG),
 };
 
 export type OrgResource = { type: 'Org' };
@@ -233,6 +235,36 @@ export const defineMutation = <S extends RouteSchema>(
   version: 'version' in def ? (def.version as RouteDefinition['version']) : undefined,
   handler: def.handler,
 });
+
+type DeleteSchema<P extends z.ZodType> = { params: P; response: z.ZodNull };
+
+/**
+ * Declares a `DELETE` that answers 204: the shared shape of every "remove this row" route. `remove` runs
+ * inside the mutation transaction and must write the audit event (17.1).
+ */
+export const defineDelete = <P extends z.ZodType>(def: {
+  url: string;
+  tag: string;
+  summary: string;
+  params: P;
+  authz: Authz;
+  version: VersionLoader<DeleteSchema<P>>;
+  remove: (ctx: MutationContext<DeleteSchema<P>>) => Promise<unknown>;
+}): RouteDefinition =>
+  defineMutation<DeleteSchema<P>>({
+    method: 'DELETE',
+    url: def.url,
+    tag: def.tag,
+    summary: def.summary,
+    schema: { params: def.params, response: z.null() },
+    authz: def.authz,
+    status: 204,
+    version: def.version,
+    handler: async (ctx) => {
+      await def.remove(ctx);
+      return null;
+    },
+  });
 
 /** Declares a Server-Sent Events route (`text/event-stream`). */
 export const defineStream = <S extends Omit<RouteSchema, 'response'>>(

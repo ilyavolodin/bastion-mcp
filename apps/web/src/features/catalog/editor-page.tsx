@@ -21,6 +21,7 @@ import { ProblemAlert } from '@/components/problem';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Stepper } from '@/components/stepper';
 import { Button } from '@/components/ui/button';
+import { serverFieldErrors } from '@/lib/form-errors';
 import { useSearchState } from '@/lib/search';
 import {
   type Draft,
@@ -62,12 +63,6 @@ const searchSchema = z.object({
   /** Set when a new entry was saved from the Test step: the test starts once the saved entry has loaded. */
   run: z.string().optional(),
 });
-
-/** Server-side field errors (`/slug`) keyed by the first path segment. */
-const fieldErrorsOf = (e: ApiError): Record<string, string> =>
-  Object.fromEntries(
-    e.errors.map((f) => [f.path.replace(/^\//, '').split('/')[0] ?? '', f.message]),
-  );
 
 /** The step that edits what a server-side error path points at. */
 export const stepOfPath = (path: string): StepId => {
@@ -168,7 +163,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
     } catch (e) {
       setSaveError(e);
       if (e instanceof ApiError) {
-        setErrors(fieldErrorsOf(e));
+        setErrors(serverFieldErrors(e.errors));
         toast.error(e.detail || e.title);
         setS({ step: stepOfPath(e.errors[0]?.path ?? '') });
         return null;

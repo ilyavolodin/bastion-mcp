@@ -1,4 +1,4 @@
-import { canonicalJson } from '@bastion-mcp/core';
+import { canonicalJson, isRecord } from '@bastion-mcp/core';
 import { joinIndex, joinKey } from './paths';
 import type { TextSegment } from './types';
 
@@ -6,9 +6,6 @@ import type { TextSegment } from './types';
 
 const MAX_DEPTH = 64;
 const APP_HTML = /^text\/html\s*;\s*profile\s*=\s*"?mcp-app"?\s*$/i;
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Every string leaf of a JSON value, addressed by path. */
 export const extractStringLeaves = (

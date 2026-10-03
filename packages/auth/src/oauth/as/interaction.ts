@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isRecord } from '@bastion-mcp/core';
 import type Provider from 'oidc-provider';
 import { CONSENT_TTL_S } from '../constants';
 import { buildConsentView, type ConsentView } from './consent';
@@ -12,8 +13,7 @@ export type InteractionView =
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
 
-const asRecord = (value: unknown): Record<string, unknown> =>
-  typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+const asRecord = (value: unknown): Record<string, unknown> => (isRecord(value) ? value : {});
 
 /**
  * The login/consent handoff the ui role implements pages for. Login completes through the IdP login

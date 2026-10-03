@@ -3,6 +3,7 @@ import { listQuerySchema, pageSchema } from '../framework/conventions';
 import {
   type AuthzInput,
   authz,
+  defineDelete,
   defineMutation,
   defineRoute,
   defineStream,
@@ -174,19 +175,14 @@ export const catalogRoutes: RouteDefinition[] = [
     version: versionOf('catalog_entries'),
     handler: (ctx) => updateEntry(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/catalog/{id}',
     tag: TAG,
     summary: 'Delete a catalog entry (409 while real installations use it)',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('catalog.delete', entryRes),
-    status: 204,
     version: versionOf('catalog_entries'),
-    handler: async (ctx) => {
-      await deleteEntry(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => deleteEntry(ctx, ctx.params.id),
   }),
 
   // --- versions -------------------------------------------------------------------------------------------
@@ -336,19 +332,14 @@ export const catalogRoutes: RouteDefinition[] = [
     version: fileVersion,
     handler: (ctx) => putFile(ctx, ctx.params.id, ctx.params.vid, ctx.params.path, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/catalog/{id}/versions/{vid}/files/{path}',
     tag: PLUGIN_TAG,
     summary: 'Delete a file of a draft version',
-    schema: { params: fileParams, response: z.null() },
+    params: fileParams,
     authz: authz.on('catalog.update', entryRes),
-    status: 204,
     version: fileVersion,
-    handler: async (ctx) => {
-      await deleteFile(ctx, ctx.params.id, ctx.params.vid, ctx.params.path);
-      return null;
-    },
+    remove: (ctx) => deleteFile(ctx, ctx.params.id, ctx.params.vid, ctx.params.path),
   }),
 
   // --- plugin sources -------------------------------------------------------------------------------------
@@ -380,19 +371,14 @@ export const catalogRoutes: RouteDefinition[] = [
     version: versionOf('plugin_sources'),
     handler: (ctx) => pluginSources.update(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/plugin-sources/{id}',
     tag: PLUGIN_TAG,
     summary: 'Delete a plugin source',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('plugin-sources.write', org),
-    status: 204,
     version: versionOf('plugin_sources'),
-    handler: async (ctx) => {
-      await pluginSources.remove(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => pluginSources.remove(ctx, ctx.params.id),
   }),
   defineMutation({
     method: 'POST',

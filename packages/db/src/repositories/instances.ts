@@ -3,10 +3,9 @@ import { z } from 'zod';
 import type { EgressAccessRequest, Instance } from '../generated/client';
 import {
   type AuditContext,
-  afterIdDesc,
+  afterKey,
   bytesToHex,
   ConflictError,
-  clampLimit,
   compact,
   hexToBytes,
   idCursorOf,
@@ -14,12 +13,12 @@ import {
   NotFoundError,
   type Paged,
   type PrismaLike,
+  paginate,
   type RepoContext,
   type RepoOptions,
   toContext,
   toJson,
   toJsonOrNull,
-  toPage,
 } from './support';
 
 // --- instances (8.6) -----------------------------------------------------------------------------------------------------
@@ -384,19 +383,22 @@ export const createEgressAccessRequestRepository = (
         cursor?: string;
       } = {},
     ): Promise<Paged<EgressAccessRequestView>> {
-      const limit = clampLimit(filter.limit);
-      const rows = await db.egressAccessRequest.findMany({
-        where: {
-          ...(filter.installationId ? { installationId: filter.installationId } : {}),
-          ...(filter.requesterId ? { requesterId: filter.requesterId } : {}),
-          ...(filter.status ? { status: filter.status } : {}),
-          ...afterIdDesc(filter.cursor),
-        },
-        orderBy: { id: 'desc' },
-        take: limit + 1,
-      });
-      const page = toPage(rows, limit, idCursorOf);
-      return { items: page.items.map(toEgressRequest), nextCursor: page.nextCursor };
+      return paginate(
+        filter,
+        (take) =>
+          db.egressAccessRequest.findMany({
+            where: {
+              ...(filter.installationId ? { installationId: filter.installationId } : {}),
+              ...(filter.requesterId ? { requesterId: filter.requesterId } : {}),
+              ...(filter.status ? { status: filter.status } : {}),
+              ...afterKey('id', 'desc', filter.cursor),
+            },
+            orderBy: { id: 'desc' },
+            take,
+          }),
+        idCursorOf,
+        toEgressRequest,
+      );
     },
     /** One open request per `(installation, host, port, requester)`; a repeat returns the existing one. */
     create(

@@ -97,7 +97,7 @@ export class EngineLimiter implements Limiter {
         } else if (e.rule.action === 'reject') {
           throw new RateLimitedError(
             `Concurrency limit "${e.rule.name}" reached (${e.rule.params.max} in flight); retry shortly.`,
-            { retryAfterMs: this.concurrencyRetryMs, limit: e.rule.name },
+            { retryAfterMs: this.concurrencyRetryMs, limit: e.rule.name, kind: 'concurrency' },
           );
         } else {
           warnings.push({

@@ -23,7 +23,7 @@ import { keyStoreOf } from './boot/key-store';
 import { migrate } from './boot/migrate';
 import { assertMigrationsCurrent, PendingMigrationsError } from './boot/preflight';
 import { seedDefaults } from './boot/seed';
-import { loadServerConfig, type ServerOptions } from './config';
+import { isProduction, loadServerConfig, type ServerOptions } from './config';
 import type { AuthServices, WorkerServices } from './contracts';
 import { createHealthRegistry, registerHealthRoutes } from './http/health';
 import { registerSecurityHeaders, registerSpa } from './http/shell';
@@ -31,8 +31,10 @@ import { registerAuthRoutes } from './http/ui';
 import { registerPluginRoutes } from './http/ui/plugins';
 import { registerSubregistryRoutes } from './http/ui/registry';
 import { createInfra, type Infra } from './infra';
+import { pollUntil } from './poll';
 import { createWorker } from './roles/worker';
 import { createScheduler } from './scheduler';
+import { BODY_LIMIT_BYTES, DRAIN_GRACE_MS, KEYS_POLL_MS, KEYS_WAIT_MS } from './timing';
 
 export type RunningServer = {
   config: BastionConfig;
@@ -47,20 +49,19 @@ export type RunningServer = {
   stop(): Promise<void>;
 };
 
-const isProduction = (): boolean => process.env.NODE_ENV === 'production';
-
 /** Waits until the ui role has created the signing and state keys (a worker may start first). */
-const waitForKeys = async (infra: Infra, timeoutMs = 60_000): Promise<void> => {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const keys = await keyStoreOf(infra)
-      .listStateKeys()
-      .catch(() => []);
-    if (keys.length > 0) return;
-    if (Date.now() > deadline)
-      throw new Error('state keys do not exist yet: start the ui role once');
-    await new Promise((r) => setTimeout(r, 1000));
-  }
+const waitForKeys = async (infra: Infra, timeoutMs = KEYS_WAIT_MS): Promise<void> => {
+  const found = await pollUntil(
+    async () =>
+      (
+        await keyStoreOf(infra)
+          .listStateKeys()
+          .catch(() => [])
+      ).length > 0,
+    Boolean,
+    { timeoutMs, intervalMs: KEYS_POLL_MS, clock: infra.clock },
+  );
+  if (!found) throw new Error('state keys do not exist yet: start the ui role once');
 };
 
 export const startServer = async (
@@ -68,7 +69,7 @@ export const startServer = async (
   options: ServerOptions = {},
 ): Promise<RunningServer> => {
   const config = loadServerConfig(env);
-  const infra = createInfra(config, options);
+  const infra = createInfra(config, options, env);
   const { logger } = infra;
   try {
     // Migrations: refuse to boot against pending ones in production; elsewhere apply them for convenience.
@@ -78,7 +79,7 @@ export const startServer = async (
       } catch (error) {
         if (!(error instanceof PendingMigrationsError)) throw error;
         // Production refuses to boot against pending migrations (20.1); elsewhere they are applied for convenience.
-        if (isProduction()) throw error;
+        if (isProduction(env)) throw error;
         logger.info({ pending: error.status.pending }, 'applying pending migrations');
         await migrate(config.databaseUrl);
       }
@@ -96,7 +97,7 @@ export const startServer = async (
       logger: false,
       trustProxy: true,
       forceCloseConnections: true,
-      bodyLimit: 10 * 1024 * 1024,
+      bodyLimit: BODY_LIMIT_BYTES,
     });
 
     await registerSecurityHeaders(app, {
@@ -124,6 +125,7 @@ export const startServer = async (
     }
 
     let scheduler: ReturnType<typeof createScheduler> | undefined;
+    const installationLookup = createInstallationLookup(infra);
     if (config.roles.ui) {
       const api = await buildApiDeps(infra, auth, {
         worker,
@@ -136,14 +138,17 @@ export const startServer = async (
       await registerAuthRoutes(app, { infra, auth });
       await registerSubregistryRoutes(app, { infra, auth });
       await registerPluginRoutes(app, { infra, auth });
-      await registerSpa(app, { publicUrl: config.publicUrl, publicDir: options.publicDir });
+      await registerSpa(app, {
+        publicUrl: config.publicUrl,
+        publicDir: options.publicDir ?? infra.env.publicDir,
+      });
       if (options.scheduler !== false) {
         scheduler = createScheduler(infra, {
           driver: worker?.driver,
           onKeysRotated: () => auth.refreshKeys(),
           pushMirror: (marketplaceId) => createPluginServices(infra).mirror.push(marketplaceId),
           refreshUpstreamToken: async (principalId, installationId) => {
-            const installation = await createInstallationLookup(infra).get(installationId);
+            const installation = await installationLookup.get(installationId);
             if (installation)
               await auth.broker.refresh({ type: 'user', id: principalId }, installation);
           },
@@ -166,8 +171,7 @@ export const startServer = async (
         logger.info('shutting down');
         // ui: stop the scheduler (releases the leader lock), then close the server; worker: drain (21.2).
         await scheduler?.stop().catch(() => undefined);
-        const draining = worker?.stop(25_000).catch(() => undefined);
-        await draining;
+        await worker?.stop(DRAIN_GRACE_MS).catch(() => undefined);
         stopPolicyWatch();
         stopLimitWatch();
         await app.close().catch(() => undefined);

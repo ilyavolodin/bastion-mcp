@@ -1,5 +1,6 @@
 import { MAX_INPUT_ROUNDS, TIMEOUTS_MS } from '@bastion-mcp/core';
 import { ProtocolError, SdkError, SdkErrorCode } from '@modelcontextprotocol/client';
+import { type Clock, systemClock } from '../ports';
 import type { ClientCapabilitiesLike, InputRequestMap, UpstreamNotification } from '../types';
 import {
   answerExpired,
@@ -7,6 +8,7 @@ import {
   asErrorResponse,
   type BatchEntry,
   clientSupports,
+  remainingBudget,
   type ServerRequestKind,
   toInputRequests,
 } from './helpers';
@@ -36,6 +38,7 @@ export type CallScopeOptions = {
   roots: readonly string[];
   debounceMs?: number;
   maxRounds?: number;
+  clock?: Clock;
 };
 
 export class LegacyCallScope {
@@ -49,6 +52,7 @@ export class LegacyCallScope {
   private readonly roots: readonly string[];
   private readonly debounceMs: number;
   private readonly maxRounds: number;
+  private readonly clock: Clock;
   /** Requests received since the last freeze. */
   private waiting: Pending[] = [];
   /** The batch that was handed out as `inputRequests`, keyed `b0`... */
@@ -71,6 +75,7 @@ export class LegacyCallScope {
     this.roots = options.roots;
     this.debounceMs = options.debounceMs ?? TIMEOUTS_MS.continuationDebounce;
     this.maxRounds = options.maxRounds ?? MAX_INPUT_ROUNDS;
+    this.clock = options.clock ?? systemClock;
   }
 
   // --- the upstream call -----------------------------------------------------------------------------------------
@@ -138,7 +143,7 @@ export class LegacyCallScope {
 
   private startCallTimer(ms: number): void {
     this.clearCallTimer();
-    this.timeoutDeadline = Date.now() + ms;
+    this.timeoutDeadline = this.clock.now() + ms;
     this.callTimer = setTimeout(() => {
       this.abort.abort(
         new SdkError(SdkErrorCode.RequestTimeout, `Request timed out after ${this.timeoutMs} ms`),
@@ -158,7 +163,7 @@ export class LegacyCallScope {
 
   private pauseTimeout(): void {
     if (this.timeoutMs === 0 || this.pausedRemaining !== undefined || !this.callTimer) return;
-    this.pausedRemaining = Math.max(1, this.timeoutDeadline - Date.now());
+    this.pausedRemaining = remainingBudget(this.timeoutDeadline, this.clock.now());
     this.clearCallTimer();
   }
 

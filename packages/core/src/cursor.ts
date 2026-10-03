@@ -1,19 +1,19 @@
 import { TOKEN_PREFIXES } from './constants';
+import { decodeJsonToken, encodeJsonToken } from './json';
 
 type CursorPayload = { offset: number; endpointHash: string };
 
 /** `bcur1.` + base64url({offset, endpointHash}) (7.5). */
 export const encodeListCursor = (payload: CursorPayload): string =>
-  `${TOKEN_PREFIXES.listCursor}${Buffer.from(JSON.stringify(payload)).toString('base64url')}`;
+  `${TOKEN_PREFIXES.listCursor}${encodeJsonToken(payload)}`;
 
 /** Returns the offset to resume at; a malformed cursor or one from an older endpoint hash restarts at 0. */
 export const decodeListCursor = (cursor: string | undefined, endpointHash: string): number => {
   if (!cursor?.startsWith(TOKEN_PREFIXES.listCursor)) return 0;
   try {
-    const raw = Buffer.from(cursor.slice(TOKEN_PREFIXES.listCursor.length), 'base64url').toString(
-      'utf8',
-    );
-    const parsed = JSON.parse(raw) as Partial<CursorPayload>;
+    const parsed = decodeJsonToken(
+      cursor.slice(TOKEN_PREFIXES.listCursor.length),
+    ) as Partial<CursorPayload>;
     const valid =
       parsed.endpointHash === endpointHash &&
       Number.isInteger(parsed.offset) &&

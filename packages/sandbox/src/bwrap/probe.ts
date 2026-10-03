@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { SANDBOX_TIMEOUTS_MS } from '../timeouts';
 
 /**
  * Startup probe of 8.5: `bwrap --unshare-user --unshare-net true`. The root is bound read-only so `true` exists in
@@ -23,7 +24,7 @@ export const PROBE_ARGS = [
 
 export const execProbe: ExecProbe = (command, args) =>
   new Promise((resolve) => {
-    execFile(command, args, { timeout: 10_000 }, (error, _stdout, stderr) => {
+    execFile(command, args, { timeout: SANDBOX_TIMEOUTS_MS.probe }, (error, _stdout, stderr) => {
       if (!error) return resolve({ code: 0, stderr });
       const code = typeof error.code === 'number' ? error.code : null;
       resolve({ code, stderr, error: error.message });

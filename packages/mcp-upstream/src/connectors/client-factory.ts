@@ -1,3 +1,4 @@
+import { PROTOCOL_VERSIONS } from '@bastion-mcp/core';
 import { Client, type ClientCapabilities } from '@modelcontextprotocol/client';
 import type { ResolvedInstallation } from '../ports';
 import { bastionClientInfo, declaredCapabilities } from './identity';
@@ -20,7 +21,7 @@ export const createUpstreamClient = (
         ? { mode: 'auto' }
         : negotiation === 'legacy'
           ? { mode: 'legacy' }
-          : { mode: { pin: '2026-07-28' } },
+          : { mode: { pin: PROTOCOL_VERSIONS.modern[0] } },
     inputRequired: { autoFulfill: false },
     enforceStrictCapabilities: false,
   });

@@ -1,8 +1,8 @@
+import { type FakeIdp, startFakeIdp } from '@bastion-mcp/testkit';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createIdJagVerifier, MemoryJtiGuard } from '../../src/oauth/idp/id-jag';
 import type { IdpConnection } from '../../src/oauth/ports';
 import { createSafeFetch } from '../../src/oauth/safe-fetch';
-import { type FakeIdp, startFakeIdp } from './fake-idp';
 import { MemoryIdpConnections } from './fakes';
 
 let idp: FakeIdp;

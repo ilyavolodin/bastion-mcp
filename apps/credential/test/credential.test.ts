@@ -4,6 +4,7 @@ import {
   CredentialError,
   discoverEndpoints,
   isBastionRequest,
+  isTerminalRefreshError,
   MemoryTokenStore,
   normalizeServerUrl,
   parseCredentialRequest,
@@ -221,8 +222,14 @@ describe('25.6 device authorization grant (RFC 8628) against a fake server', () 
       refreshAccessToken(endpoints, 'r', respond(500, { error: 'server_error' })),
     ).rejects.toThrow(/refresh/);
     expect(
-      await refreshAccessToken(endpoints, 'r', respond(400, { error: 'invalid_request' })),
+      await refreshAccessToken(endpoints, 'r', respond(400, { error: 'invalid_grant' })),
     ).toBeUndefined();
+    await expect(
+      refreshAccessToken(endpoints, 'r', respond(400, { error: 'invalid_request' })),
+    ).rejects.toThrow(/refresh/);
+    await expect(
+      refreshAccessToken(endpoints, 'r', respond(401, { error: 'invalid_client' })),
+    ).rejects.toThrow(/refresh/);
     await expect(requestDeviceAuthorization(endpoints, respond(200, { nope: 1 }))).rejects.toThrow(
       /refused/,
     );
@@ -326,5 +333,23 @@ describe('25.6 commands', () => {
     });
     expect(crash.code).toBe(1);
     expect(crash.err).not.toContain('TOKEN-999');
+  });
+});
+
+describe('25.6 isTerminalRefreshError', () => {
+  it('25.6 only invalid_grant means the stored refresh token is dead', () => {
+    expect(isTerminalRefreshError('invalid_grant')).toBe(true);
+    for (const error of ['invalid_request', 'invalid_client', 'server_error', '', undefined]) {
+      expect(isTerminalRefreshError(error)).toBe(false);
+    }
+  });
+
+  it('25.6 a configuration error keeps the stored refresh token', async () => {
+    const h = await harness((form) =>
+      form.get('grant_type') === 'refresh_token' ? err('invalid_client', 401) : ok('AT'),
+    );
+    await h.store.set(h.server.url.origin, 'RT-keep');
+    await expect(h.manager.getAccessToken()).rejects.toThrow(/refresh/);
+    expect(await h.store.get(h.server.url.origin)).toBe('RT-keep');
   });
 });

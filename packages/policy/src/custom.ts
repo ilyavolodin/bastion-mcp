@@ -50,7 +50,8 @@ export const CUSTOM_CANDIDATE_ID = 'candidate';
 export const validateCustomPolicy = (
   cedarText: string,
   tests: readonly unknown[],
-  base: PolicyDataInput = {},
+  base: PolicyDataInput,
+  now: Date,
 ): CustomPolicyReport => {
   const errors: string[] = [];
   let policies: ReturnType<typeof splitPolicies> = [];
@@ -82,7 +83,7 @@ export const validateCustomPolicy = (
   });
   const results = parsedTests.data.map((test): CustomPolicyTestResult => {
     try {
-      const outcome = simulate(engine, test.request);
+      const outcome = simulate(engine, test.request, now);
       const reasonsOk = (test.expectReasons ?? []).every((id) =>
         outcome.reasons.some((r) => r === id || r.endsWith(`.${id}`)),
       );

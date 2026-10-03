@@ -1,5 +1,5 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { BastionError, isValidSlug, newId } from '@bastion-mcp/core';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { type AuthMethod, BastionError, isValidSlug, newId, sha256Hex } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { IdentityValidationError } from '../errors';
 import { base62Encode } from '../pat/token';
@@ -9,7 +9,7 @@ import type { Principal, PrincipalRecord } from '../principal';
 export const CLIENT_SECRET_PREFIX = 'bst_sec_';
 export const CLIENT_ID_PREFIX = 'sa_';
 
-export type ServiceAccountAuthMethod = 'client_secret_basic' | 'private_key_jwt';
+export type ServiceAccountAuthMethod = AuthMethod;
 
 /** A `service_accounts` row (16.2). */
 export type ServiceAccount = {
@@ -48,8 +48,6 @@ export interface ServiceAccountDirectory {
   setStatus(id: string, status: ServiceAccount['status']): Promise<void>;
 }
 
-const sha256Hex = (v: string): string => createHash('sha256').update(v).digest('hex');
-
 export const generateClientSecret = (random: (n: number) => Uint8Array = randomBytes): string =>
   `${CLIENT_SECRET_PREFIX}${base62Encode(random(32), 43)}`;
 
@@ -66,15 +64,27 @@ export const verifyClientSecret = (
   return a.length === b.length && timingSafeEqual(a, b);
 };
 
+const MIN_RSA_BITS = 2048;
+const ALLOWED_JWK_ALGS: readonly string[] = ['RS256', 'ES256'];
+
+/** Bit length of a base64url RSA modulus, ignoring leading zero bytes. */
+const rsaModulusBits = (n: string): number => {
+  const bytes = Buffer.from(n, 'base64url');
+  const first = bytes.findIndex((b) => b !== 0);
+  if (first < 0) return 0;
+  return (bytes.length - first) * 8 - Math.clz32(bytes[first] ?? 0) + 24;
+};
+
 const jwkSchema = z
   .record(z.string(), z.string())
   .refine((k) => !('d' in k) && !('p' in k) && !('q' in k) && !('k' in k), 'private key material')
   .refine(
     (k) =>
       (k.kty === 'EC' && k.crv === 'P-256' && !!k.x && !!k.y) ||
-      (k.kty === 'RSA' && !!k.n && !!k.e),
+      (k.kty === 'RSA' && !!k.n && !!k.e && rsaModulusBits(k.n) >= MIN_RSA_BITS),
     'unsupported key',
-  );
+  )
+  .refine((k) => k.alg === undefined || ALLOWED_JWK_ALGS.includes(k.alg), 'unsupported alg');
 
 /** `private_key_jwt` keys must be public ES256 (P-256) or RSA keys. */
 export const validateClientJwks = (jwks: unknown): PublicJwk[] => {

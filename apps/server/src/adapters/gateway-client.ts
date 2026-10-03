@@ -8,14 +8,16 @@
  * signing key (`typ at+jwt`, audience `https://host/mcp`, 60 s, client id `bastion-ui`), so every worker verifies it
  * exactly like any other token and applies the full pipeline of 4.4.
  */
-import { randomUUID } from 'node:crypto';
 import { buildPrincipal, type Principal } from '@bastion-mcp/auth';
-import { BastionError, effectiveTeamSlug } from '@bastion-mcp/core';
+import { BastionError, effectiveTeamSlug, newId, SECONDS, UI_CLIENT_ID } from '@bastion-mcp/core';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { importJWK, SignJWT } from 'jose';
-import { SERVER_VERSION } from '../config';
+import { serverVersion } from '../config';
 import type { AuthServices } from '../contracts';
 import type { Infra } from '../infra';
+
+/** Lifetime of the locally minted access token. */
+export const ACCESS_TOKEN_TTL_SECONDS = SECONDS.MINUTE;
 
 export const mintAccessToken = async (
   infra: Infra,
@@ -23,21 +25,22 @@ export const mintAccessToken = async (
   principalId: string,
 ): Promise<string> => {
   const keys = await auth.keyStore.listSigningKeys('as');
-  const now = Date.now();
+  const now = infra.clock.now();
+  const issuedAt = Math.floor(now / 1000);
   const active = keys
     .filter((k) => k.activeFrom.getTime() <= now && k.retireAfter.getTime() > now)
     .sort((a, b) => b.activeFrom.getTime() - a.activeFrom.getTime())[0];
   if (!active) throw new Error('no usable signing key');
   const jwk = await auth.keyStore.loadSigningPrivateKey(active.kid);
   const key = await importJWK(jwk as never, 'ES256');
-  return new SignJWT({ scope: 'mcp', client_id: 'bastion-ui', 'bastion:pt': 'user' })
+  return new SignJWT({ scope: 'mcp', client_id: UI_CLIENT_ID, 'bastion:pt': 'user' })
     .setProtectedHeader({ alg: 'ES256', kid: active.kid, typ: 'at+jwt' })
     .setSubject(principalId)
     .setIssuer(infra.config.urls.issuer)
     .setAudience(`${infra.config.publicUrl}/mcp`)
-    .setJti(randomUUID())
-    .setIssuedAt()
-    .setExpirationTime('60s')
+    .setJti(newId())
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + ACCESS_TOKEN_TTL_SECONDS)
     .sign(key);
 };
 
@@ -50,7 +53,7 @@ export const principalFor = async (
   if (!record?.active) {
     throw new BastionError('POLICY_DENIED', 'the principal is not active', { httpStatus: 403 });
   }
-  return buildPrincipal(record, { authMethod: 'session', clientId: 'bastion-ui', scopes: ['mcp'] });
+  return buildPrincipal(record, { authMethod: 'session', clientId: UI_CLIENT_ID, scopes: ['mcp'] });
 };
 
 /** The slug in `/mcp/i/{slug}`: team installations are addressed as `{teamSlug}-{slug}` (7.1). */
@@ -76,7 +79,7 @@ export const connectAsPrincipal = async (
   slug: string,
 ): Promise<Client> => {
   const token = await mintAccessToken(infra, auth, principalId);
-  const client = new Client({ name: 'bastion-ui', version: SERVER_VERSION }, {
+  const client = new Client({ name: UI_CLIENT_ID, version: serverVersion(infra.config) }, {
     capabilities: {},
     versionNegotiation: { mode: 'auto' },
   } as never);

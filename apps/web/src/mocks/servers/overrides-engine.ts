@@ -72,21 +72,66 @@ const changesBetween = (before: unknown, after: unknown, path = ''): Change[] =>
     : [{ path, op: 'replace' as const, before, after }];
 };
 
+/** `applyText` of `@bastion-mcp/overrides`: replace by default; append and prepend join with a newline. */
 const describe = (current: unknown, override: unknown): string | undefined => {
   const base = typeof current === 'string' ? current : '';
   if (typeof override === 'string') return override;
   if (isObject(override) && typeof override.text === 'string') {
-    if (override.mode === 'append') return base ? `${base}\n\n${override.text}` : override.text;
-    if (override.mode === 'prepend') return base ? `${override.text}\n\n${base}` : override.text;
+    if (override.mode === 'replace' || !base) return override.text;
+    if (override.mode === 'append') return `${base}\n${override.text}`;
+    if (override.mode === 'prepend') return `${override.text}\n${base}`;
     return override.text;
   }
   return undefined;
 };
 
-const layerOf = (doc: Json | undefined, section: string, key: string): Json =>
-  isObject(doc?.[section]) && isObject((doc[section] as Json)[key])
-    ? ((doc[section] as Json)[key] as Json)
-    : {};
+// --- which override entries apply to an item (12.3) ----------------------------------------------------------------
+
+const isGlobKey = (key: string): boolean => /[*?[\]]/.test(key);
+
+/** The glob subset the mock needs (`*` stays inside one path segment, `**` crosses them, `?` is one character). */
+const globMatches = (pattern: string, subject: string): boolean => {
+  const source = pattern
+    .split(/(\*\*|\*|\?)/)
+    .map((part) =>
+      part === '**'
+        ? '.*'
+        : part === '*'
+          ? '[^/]*'
+          : part === '?'
+            ? '[^/]'
+            : part.replace(/[.+^${}()|[\]\\]/g, '\\$&'),
+    )
+    .join('');
+  return new RegExp(`^${source}$`).test(subject);
+};
+
+/** Entries whose key matches `subject`, in application order: globs short to long, the exact key last. */
+const matchingEntries = (record: Json, subject: string): Json[] => {
+  const globs = Object.keys(record)
+    .filter((k) => k !== subject && isGlobKey(k) && globMatches(k, subject))
+    .sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0));
+  const keys = subject in record ? [...globs, subject] : globs;
+  return keys.map((k) => record[k]).filter(isObject);
+};
+
+/** `b` over `a`, field by field: a field `b` defines wins; annotations merge hint by hint (`mergeToolOverride`). */
+const mergeOverride = (a: Json, b: Json): Json => {
+  const merged: Json = { ...a, ...b };
+  if (isObject(a.annotations) && isObject(b.annotations)) {
+    merged.annotations = { ...a.annotations, ...b.annotations };
+  }
+  return merged;
+};
+
+const foldLayer = (doc: Json | undefined, section: string, subject: string): Json => {
+  const record = isObject(doc?.[section]) ? (doc[section] as Json) : {};
+  return matchingEntries(record, subject).reduce<Json>(mergeOverride, {});
+};
+
+/** The override of one item: the installation layer over the catalog layer, once merged, applied once (12.3). */
+const resolveOverride = (layers: readonly (Json | undefined)[], section: string, key: string) =>
+  layers.reduce<Json>((acc, doc) => mergeOverride(acc, foldLayer(doc, section, key)), {});
 
 type Applied =
   | { status: 'hidden' }
@@ -99,24 +144,19 @@ const apply = (
   key: string,
   layers: readonly (Json | undefined)[],
 ): Applied => {
+  const ov = resolveOverride(layers, section, key);
+  if (ov.hidden === true) return { status: 'hidden' };
   let final: Json = { ...upstream };
-  for (const doc of layers) {
-    const ov = layerOf(doc, section, key);
-    if (ov.hidden === true) return { status: 'hidden' };
-    if (typeof ov.name === 'string') final = { ...final, name: ov.name };
-    if (typeof ov.title === 'string') final = { ...final, title: ov.title };
-    const text = describe(final.description, ov.description);
-    if (text !== undefined) final = { ...final, description: text };
-    if (isObject(ov.annotations)) {
-      final = {
-        ...final,
-        annotations: {
-          ...(isObject(final.annotations) ? final.annotations : {}),
-          ...ov.annotations,
-        },
-      };
-    }
+  if (typeof ov.title === 'string') final = { ...final, title: ov.title };
+  const text = describe(final.description, ov.description);
+  if (text !== undefined) final = { ...final, description: text };
+  if (isObject(ov.annotations)) {
+    final = {
+      ...final,
+      annotations: { ...(isObject(final.annotations) ? final.annotations : {}), ...ov.annotations },
+    };
   }
+  if (typeof ov.name === 'string') final = { ...final, name: ov.name };
   const changes = changesBetween(upstream, final);
   return {
     status: 'ok',

@@ -16,6 +16,7 @@ import type { CallLogRow } from '@bastion-mcp/telemetry';
 import {
   type FakeLegacyHttpServer,
   type FakeModernServer,
+  freePort,
   startFakeLegacyHttpServer,
   startFakeModernServer,
 } from '@bastion-mcp/testkit';
@@ -294,18 +295,6 @@ export const startStack = async (options: StackOptions): Promise<Stack> => {
       redis.disconnect();
     },
   };
-};
-
-const freePort = async (): Promise<number> => {
-  const net = await import('node:net');
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, '127.0.0.1', () => {
-      const p = (server.address() as { port: number }).port;
-      server.close(() => resolve(p));
-    });
-    server.on('error', reject);
-  });
 };
 
 export type Fakes = { modern: FakeModernServer; legacy: FakeLegacyHttpServer };

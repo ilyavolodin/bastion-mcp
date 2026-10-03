@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../client';
 import type { Body } from '../schema';
+import { POLL_SYSTEM_MS } from '../timing';
 import { keys, pagedQuery, useApiMutation } from './base';
 
 // --- Org settings (read by many screens) ---------------------------------------------------------------
@@ -72,15 +73,12 @@ export const usePatchLimitRule = () =>
 export const useDeleteLimitRule = () =>
   useApiMutation((id: string) => api.delete(`/limit-rules/${id}`), [keys.limits]);
 
-/** Teams a rule can belong to (`ownerTeamId`). */
-export const useLimitTeamOptions = () => useQuery(pagedQuery([...keys.teams, 'options'], '/teams'));
-
 // --- System ---------------------------------------------------------------------------------------------------
 export const useSystemStatus = (enabled = true) =>
   useQuery({
     queryKey: keys.system,
     enabled,
-    refetchInterval: 30_000,
+    refetchInterval: POLL_SYSTEM_MS,
     queryFn: ({ signal }) => api.get('/system/status', { signal }),
   });
 

@@ -1,8 +1,7 @@
 import type { SigningKeyMeta } from '@bastion-mcp/secrets';
 
-/** Injectable time source (epoch milliseconds). */
-export type Clock = { now(): number };
-export const systemClock: Clock = { now: () => Date.now() };
+/** Injectable time source (epoch milliseconds), shared with every package. */
+export { type Clock, systemClock } from '@bastion-mcp/core';
 
 /** The subset of a Redis client the OAuth layer uses. TTLs are seconds. */
 export interface RedisLike {

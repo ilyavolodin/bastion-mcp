@@ -104,3 +104,27 @@ export const asErrorResponse = (value: unknown): { code: number; message: string
 
 /** Maximum rounds of input per original request (6.5). */
 export { MAX_INPUT_ROUNDS } from '@bastion-mcp/core';
+
+/**
+ * The wire body of an `input_required` outcome (6.5): `inputRequests` (when there are any) and the opaque
+ * `requestState`. Every layer that puts an outcome on the wire builds it here.
+ */
+export const inputRequiredPayload = (outcome: {
+  inputRequests?: InputRequestMap | undefined;
+  requestState: string;
+}): { inputRequests?: InputRequestMap; requestState: string } => ({
+  ...(outcome.inputRequests === undefined ? {} : { inputRequests: outcome.inputRequests }),
+  requestState: outcome.requestState,
+});
+
+/** Milliseconds left until `deadlineAt`, never below 1 so a timer armed with it still fires. Pure. */
+export const remainingBudget = (deadlineAt: number, now: number): number =>
+  Math.max(1, deadlineAt - now);
+
+/** The timeout of a call: its own limit, cut down to what is left of the caller's deadline (6.4). Pure. */
+export const budgetedTimeout = (
+  baseMs: number,
+  deadlineAt: number | undefined,
+  now: number,
+): number =>
+  deadlineAt === undefined ? baseMs : Math.min(baseMs, remainingBudget(deadlineAt, now));

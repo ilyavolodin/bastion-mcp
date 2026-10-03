@@ -94,6 +94,7 @@
     "@modelcontextprotocol/sdk": "1.31.0",
     "@playwright/test": "1.63.0",
     "@types/pg": "8.23.1",
+    "bastion-runner": "workspace:*",
     "tsdown": "0.23.0"
   }
 }

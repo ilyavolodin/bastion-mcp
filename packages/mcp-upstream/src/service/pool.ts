@@ -10,13 +10,14 @@ import {
   type ResolvedInstallation,
   systemClock,
 } from '../ports';
+import { UPSTREAM_TIMEOUTS_MS } from '../timeouts';
 
 /**
  * Modern remote upstreams are stateless: each worker keeps a pool of SDK clients keyed by
  * `(installationId, credentialHash)` and any replica calls them directly (6.4).
  */
 
-export const POOL_IDLE_MS = 5 * 60_000;
+export const POOL_IDLE_MS = UPSTREAM_TIMEOUTS_MS.poolIdle;
 
 type Entry = {
   session: UpstreamSession;
@@ -159,7 +160,7 @@ export class RemotePool {
 
   private ensureSweeper(): void {
     if (this.sweeper) return;
-    this.sweeper = setInterval(() => this.sweep(), 60_000);
+    this.sweeper = setInterval(() => this.sweep(), UPSTREAM_TIMEOUTS_MS.poolSweep);
     this.sweeper.unref?.();
   }
 

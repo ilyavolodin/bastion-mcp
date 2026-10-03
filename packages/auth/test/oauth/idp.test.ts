@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { type FakeIdp, startFakeIdp } from '@bastion-mcp/testkit';
 import fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { IdpClients, IdpLogin, type IdpLoginDeps } from '../../src/oauth/idp/login';
@@ -13,7 +14,6 @@ import { testIdpConnection } from '../../src/oauth/idp/test-connection';
 import { IdpRefreshError, IdpTokenVault, refreshIdpTokens } from '../../src/oauth/idp/tokens';
 import type { IdpConnection } from '../../src/oauth/ports';
 import { createSafeFetch } from '../../src/oauth/safe-fetch';
-import { type FakeIdp, startFakeIdp } from './fake-idp';
 import { MemoryIdpConnections, MemoryIdpTokens, MemorySecrets } from './fakes';
 
 let idp: FakeIdp;

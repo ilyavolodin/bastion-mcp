@@ -1,4 +1,4 @@
-import { canonicalDigest, type DRIFT_POLICIES, type ITEM_KINDS } from '@bastion-mcp/core';
+import { canonicalDigest, type DRIFT_POLICIES, type ITEM_KINDS, isRecord } from '@bastion-mcp/core';
 import { extractDefinitionSegments } from './extract';
 import type { GuardPipeline, GuardRunResult, ProfileLayers } from './pipeline';
 import type { InstallationRef, PrincipalRef } from './types';
@@ -27,9 +27,6 @@ export type Definition = {
 
 /** Pin key to hex SHA-256. Stored on the catalog version (or the personal installation). */
 export type PinSet = Record<string, string>;
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** The key an item is tracked under: its name, or its URI for resources and templates. */
 export const pinKey = (def: Definition): string => {

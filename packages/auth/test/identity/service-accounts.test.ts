@@ -164,3 +164,22 @@ describe('9.3 service accounts', () => {
     expect(upstreamAuthModeAllowed({ type: 'user' }, 'oauth')).toBe(true);
   });
 });
+
+describe('9.3 private_key_jwt key strength', () => {
+  const modulus = (bits: number) => Buffer.alloc(bits / 8, 0xff).toString('base64url');
+  it('9.3 rejects RSA keys under 2048 bits and algs other than RS256/ES256', () => {
+    expect(() => validateClientJwks([{ kty: 'RSA', n: modulus(1024), e: 'AQAB' }])).toThrow(
+      IdentityValidationError,
+    );
+    expect(validateClientJwks([{ kty: 'RSA', n: modulus(2048), e: 'AQAB' }])).toHaveLength(1);
+    expect(() =>
+      validateClientJwks([{ kty: 'RSA', n: modulus(2048), e: 'AQAB', alg: 'RS1' }]),
+    ).toThrow(IdentityValidationError);
+    expect(() =>
+      validateClientJwks([{ kty: 'RSA', n: modulus(2048), e: 'AQAB', alg: 'HS256' }]),
+    ).toThrow(IdentityValidationError);
+    expect(
+      validateClientJwks([{ kty: 'RSA', n: modulus(2048), e: 'AQAB', alg: 'RS256' }]),
+    ).toHaveLength(1);
+  });
+});

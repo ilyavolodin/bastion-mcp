@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { pinnedLookup, type SafeRemoteUrl } from '@bastion-mcp/sandbox';
 import { Agent } from 'undici';
+import { POOL_SIZES, UPSTREAM_TIMEOUTS_MS } from '../timeouts';
 
 /** Per-installation `undici` Agents (8.9): keep-alive, 64 connections, 30 s connect timeout, custom CA and client cert. */
 
@@ -10,8 +11,8 @@ export type TlsMaterial = {
   key?: string | undefined;
 };
 
-export const AGENT_CONNECTIONS = 64;
-export const AGENT_CONNECT_TIMEOUT_MS = 30_000;
+export const AGENT_CONNECTIONS = POOL_SIZES.agentConnections;
+export const AGENT_CONNECT_TIMEOUT_MS = UPSTREAM_TIMEOUTS_MS.agentConnect;
 
 const digest = (tls: TlsMaterial): string =>
   createHash('sha256')
@@ -39,7 +40,7 @@ export class RemoteAgentRegistry {
     }
     const agent = new Agent({
       connections: AGENT_CONNECTIONS,
-      keepAliveTimeout: 30_000,
+      keepAliveTimeout: UPSTREAM_TIMEOUTS_MS.agentKeepAlive,
       connect: {
         timeout: AGENT_CONNECT_TIMEOUT_MS,
         lookup: pinnedLookup(safe),

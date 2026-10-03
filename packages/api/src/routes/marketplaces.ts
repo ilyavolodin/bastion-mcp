@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { listQuerySchema, pageSchema } from '../framework/conventions';
-import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
+import {
+  authz,
+  defineDelete,
+  defineMutation,
+  defineRoute,
+  type RouteDefinition,
+} from '../framework/route';
 import { idParams } from '../schemas/common';
 import {
   itemBodySchema,
@@ -91,19 +97,14 @@ export const marketplacesRoutes: RouteDefinition[] = [
     version: versionOf('marketplaces'),
     handler: (ctx) => marketplaces.update(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/marketplaces/{id}',
     tag: TAG,
     summary: 'Delete a marketplace and its items',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.oneOf(WRITE, writeChoice),
-    status: 204,
     version: versionOf('marketplaces'),
-    handler: async (ctx) => {
-      await deleteMarketplace(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => deleteMarketplace(ctx, ctx.params.id),
   }),
   defineMutation({
     method: 'PUT',
@@ -116,19 +117,14 @@ export const marketplacesRoutes: RouteDefinition[] = [
     version: itemVersion,
     handler: (ctx) => putItem(ctx, ctx.params.id, ctx.params.entryId, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/marketplaces/{id}/items/{entryId}',
     tag: TAG,
     summary: 'Remove an item; cuts a release',
-    schema: { params: itemParams, response: z.null() },
+    params: itemParams,
     authz: authz.oneOf(WRITE, writeChoice),
-    status: 204,
     version: itemVersion,
-    handler: async (ctx) => {
-      await removeItem(ctx, ctx.params.id, ctx.params.entryId);
-      return null;
-    },
+    remove: (ctx) => removeItem(ctx, ctx.params.id, ctx.params.entryId),
   }),
   defineRoute({
     method: 'GET',

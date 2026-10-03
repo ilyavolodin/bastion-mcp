@@ -1,12 +1,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { ORG_HOST } from '../src/mocks/seed';
 
 // Runs against the Vite dev server in MSW mode (`pnpm dev`): no login, no backend.
 
 test('Home renders with the endpoint and installation tiles', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
-  await expect(page.getByText('https://bastion.acme.dev/mcp')).toBeVisible();
+  await expect(page.getByText(`https://${ORG_HOST}/mcp`)).toBeVisible();
   await expect(page.getByRole('link', { name: /Postgres analytics/ })).toBeVisible();
 });
 

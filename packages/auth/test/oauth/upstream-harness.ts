@@ -1,4 +1,9 @@
 import { randomBytes } from 'node:crypto';
+import {
+  type FakeUpstream,
+  type FakeUpstreamBehavior,
+  startFakeUpstream,
+} from '@bastion-mcp/testkit';
 import type { OAuthMetrics, RefreshOutcome } from '../../src/oauth/metrics';
 import { createSafeFetch } from '../../src/oauth/safe-fetch';
 import {
@@ -7,7 +12,6 @@ import {
   UpstreamOAuthBroker,
   type UpstreamPrincipal,
 } from '../../src/oauth/upstream/broker';
-import { type FakeUpstream, type FakeUpstreamBehavior, startFakeUpstream } from './fake-upstream';
 import {
   MemoryRedis,
   MemorySecrets,

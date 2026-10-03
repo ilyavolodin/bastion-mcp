@@ -7,6 +7,7 @@
  *
  * Rows stay open objects (`looseObject`): columns added later pass through without breaking older clients.
  */
+
 import {
   AUTO_INSTALL_MODES,
   AUTO_INSTALL_SCOPES,
@@ -40,6 +41,7 @@ import { z } from 'zod';
 import { pageSchema } from '../framework/conventions';
 import type { Page, Row } from '../ports/store';
 import { installFormSchema } from './catalog';
+import { authMethodSchema, prefixModeSchema } from './common';
 import { autoInstallTargetSchema } from './installations';
 import { mirrorStateSchema, mirrorTargetSchema } from './marketplaces';
 import { mapsToSchema } from './users';
@@ -51,6 +53,10 @@ const row = <S extends z.ZodRawShape>(id: string, shape: S) =>
 const iso = z.string();
 const isoOrNull = z.string().nullable();
 const json = z.record(z.string(), z.unknown());
+
+/** Column fragments most rows share. */
+const created = { createdAt: iso };
+const owner = { ownerType: z.enum(OWNER_TYPES), ownerId: z.string() };
 
 const visibility = z.object({
   org: z.boolean(),
@@ -70,14 +76,14 @@ export const userRow = row('User', {
   status: z.enum(USER_STATUSES),
   catalogPublishOrgWide: z.boolean(),
   lastLoginAt: isoOrNull,
-  createdAt: iso,
+  ...created,
 });
 
 export const teamRow = row('Team', {
   slug: z.string(),
   displayName: z.string(),
   idpGroup: z.string().nullable(),
-  createdAt: iso,
+  ...created,
 });
 
 /** One consent of the caller to an OAuth client (an AI tool): what it may use and until when (9.3, 9.4). */
@@ -88,7 +94,7 @@ export const oauthGrantRow = row('OAuthGrant', {
   scopes: z.array(z.string()),
   resources: z.array(z.string()),
   expiresAt: z.string().nullable(),
-  createdAt: iso,
+  ...created,
 });
 
 export const teamMemberRow = row('TeamMember', {
@@ -96,14 +102,11 @@ export const teamMemberRow = row('TeamMember', {
   userId: z.string(),
   role: z.enum(TEAM_ROLES),
   source: z.enum(MEMBERSHIP_SOURCES),
-  createdAt: iso,
+  ...created,
 });
 
 export const teamDetailRow = row('TeamDetail', {
-  slug: z.string(),
-  displayName: z.string(),
-  idpGroup: z.string().nullable(),
-  createdAt: iso,
+  ...teamRow.shape,
   members: z.array(teamMemberRow),
 });
 
@@ -112,7 +115,7 @@ export const roleMappingRuleRow = row('RoleMappingRule', {
   groupPattern: z.string(),
   mapsTo: mapsToSchema,
   priority: z.number().int(),
-  createdAt: iso,
+  ...created,
 });
 
 export const serviceAccountRow = row('ServiceAccount', {
@@ -121,15 +124,14 @@ export const serviceAccountRow = row('ServiceAccount', {
   displayName: z.string(),
   status: z.enum(['active', 'disabled']),
   oauthClientId: z.string().nullable(),
-  authMethod: z.enum(['client_secret_basic', 'private_key_jwt']),
-  createdAt: iso,
+  authMethod: authMethodSchema,
+  ...created,
 });
 
 export const serviceAccountCreatedRow = z
   .looseObject({
     ...serviceAccountRow.shape,
     clientId: z.string(),
-    authMethod: z.enum(['client_secret_basic', 'private_key_jwt']),
     clientSecret: z.string().optional(),
   })
   .meta({ id: 'ServiceAccountCreated' });
@@ -152,7 +154,7 @@ export const idpConnectionRow = row('IdpConnection', {
   enterpriseManagedAuth: z.boolean(),
   redirectToRoot: z.boolean(),
   enabled: z.boolean(),
-  createdAt: iso,
+  ...created,
 });
 
 export const scimTokenRow = row('ScimToken', {
@@ -160,7 +162,7 @@ export const scimTokenRow = row('ScimToken', {
   createdBy: z.string(),
   expiresAt: isoOrNull,
   revokedAt: isoOrNull,
-  createdAt: iso,
+  ...created,
 });
 
 export const scimTokenCreatedRow = z
@@ -180,7 +182,7 @@ export const notificationRow = row('Notification', {
   title: z.string().nullable(),
   data: z.unknown(),
   readAt: isoOrNull,
-  createdAt: iso,
+  ...created,
 });
 
 // --- catalog ----------------------------------------------------------------------------------------------------
@@ -201,7 +203,7 @@ export const catalogEntryRow = row('CatalogEntry', {
   userOverrides: z.enum(USER_OVERRIDE_LEVELS),
   onDrift: z.enum(DRIFT_POLICIES),
   createdBy: z.string(),
-  createdAt: iso,
+  ...created,
   registrySourceId: z.string().nullable().optional(),
   registryServerName: z.string().nullable().optional(),
 });
@@ -240,7 +242,7 @@ export const catalogVersionRow = row('CatalogVersion', {
   status: z.enum(CATALOG_VERSION_STATUSES),
   changelog: z.string().nullable(),
   createdBy: z.string(),
-  createdAt: iso,
+  ...created,
   publishedAt: isoOrNull,
 });
 
@@ -290,7 +292,7 @@ export const pluginSourceRow = row('PluginSource', {
   tracked: z.boolean(),
   lastCommit: z.string().nullable(),
   lastSync: z.unknown(),
-  createdAt: iso,
+  ...created,
 });
 
 export const storeEntry = z
@@ -348,8 +350,7 @@ export const guardResultRecord = z.looseObject({
 // --- installations, endpoints, drift, auto-install -------------------------------------------------------------
 
 export const installationRow = row('Installation', {
-  ownerType: z.enum(OWNER_TYPES),
-  ownerId: z.string(),
+  ...owner,
   catalogEntryId: z.string().nullable(),
   catalogVersionId: z.string().nullable(),
   pinnedVersion: z.boolean(),
@@ -364,18 +365,17 @@ export const installationRow = row('Installation', {
   origin: z.string(),
   status: z.enum(INSTALLATION_STATUSES),
   statusDetail: z.unknown(),
-  createdAt: iso,
+  ...created,
 });
 
 export const endpointRow = row('Endpoint', {
-  ownerType: z.enum(OWNER_TYPES),
-  ownerId: z.string(),
+  ...owner,
   slug: z.string(),
   displayName: z.string(),
   installationIds: z.array(z.string()),
-  prefixMode: z.enum(['always', 'onCollision']),
+  prefixMode: prefixModeSchema,
   instructions: z.string().nullable(),
-  createdAt: iso,
+  ...created,
 });
 
 export const driftReviewRow = row('DriftReview', {
@@ -391,7 +391,7 @@ export const driftReviewRow = row('DriftReview', {
   decidedBy: z.string().nullable(),
   decidedAt: isoOrNull,
   reason: z.string().nullable(),
-  createdAt: iso,
+  ...created,
 });
 
 export const autoInstallPolicyRow = row('AutoInstallPolicy', {
@@ -402,7 +402,7 @@ export const autoInstallPolicyRow = row('AutoInstallPolicy', {
   applyToExisting: z.boolean(),
   enabled: z.boolean(),
   createdBy: z.string(),
-  createdAt: iso,
+  ...created,
 });
 
 export const egressEntry = z
@@ -427,7 +427,7 @@ export const registrySourceRow = row('RegistrySource', {
   syncIntervalS: z.number().int(),
   lastUpdatedSince: isoOrNull,
   lastSync: z.unknown(),
-  createdAt: iso,
+  ...created,
 });
 
 export const installRequestRow = row('InstallRequest', {
@@ -440,7 +440,7 @@ export const installRequestRow = row('InstallRequest', {
   decidedBy: z.string().nullable(),
   decidedAt: isoOrNull,
   reason: z.string().nullable(),
-  createdAt: iso,
+  ...created,
 });
 
 // --- policy, guards, limits, marketplaces ----------------------------------------------------------------------
@@ -455,7 +455,7 @@ export const policyRuleRow = row('PolicyRule', {
   enabled: z.boolean(),
   priority: z.number().int(),
   createdBy: z.string(),
-  createdAt: iso,
+  ...created,
 });
 
 export const customPolicyRow = row('CustomPolicy', {
@@ -464,7 +464,7 @@ export const customPolicyRow = row('CustomPolicy', {
   tests: z.array(z.unknown()),
   enabled: z.boolean(),
   createdBy: z.string(),
-  createdAt: iso,
+  ...created,
 });
 
 export const guardProfileRow = z
@@ -473,7 +473,7 @@ export const guardProfileRow = z
     updatedAt: z.string(),
     name: z.string(),
     isOrgDefault: z.boolean(),
-    createdAt: iso,
+    ...created,
     ...guardProfileSchema.omit({ profileId: true }).partial().shape,
   })
   .meta({ id: 'GuardProfile' });
@@ -488,7 +488,7 @@ export const limitRuleRow = z
     cost: z.record(z.string(), z.number()).nullable().optional(),
     params: z.record(z.string(), z.unknown()),
     ownerTeamId: z.string().nullable(),
-    createdAt: iso,
+    ...created,
   })
   .meta({ id: 'LimitRule' });
 
@@ -503,7 +503,7 @@ export const marketplaceRow = row('Marketplace', {
   mirrorStatus: mirrorStateSchema.nullable(),
   promotedRelease: z.number().int().nullable(),
   createdBy: z.string(),
-  createdAt: iso,
+  ...created,
 });
 
 export const marketplaceItemRow = row('MarketplaceItem', {

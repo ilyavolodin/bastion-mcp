@@ -3,11 +3,12 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { applyServerEvent, openEventStream } from '@/api/events';
 import { getDb } from '@/mocks/db';
+import { DAY } from '@/mocks/util';
 import { expectNoA11yViolations, renderRoute } from './utils';
 
 /** Share of the last 24 hours' calls of one server that did not succeed, as the health tile computes it. */
 const errorRateOf = (installationId: string): string => {
-  const since = Date.now() - 24 * 3_600_000;
+  const since = getDb().now - DAY;
   const calls = getDb().data.observability.calls.filter(
     (c) => c.installationId === installationId && new Date(c.ts).getTime() >= since,
   );
@@ -53,7 +54,7 @@ describe('Observability (15, 18.3)', () => {
 
   /** Calls of the last 24 hours per person, as the mock call log has them. */
   const callsByPerson = () => {
-    const since = Date.now() - 24 * 3_600_000;
+    const since = getDb().now - DAY;
     const by = new Map<string, number>();
     for (const c of getDb().data.observability.calls) {
       if (new Date(c.ts).getTime() < since) continue;

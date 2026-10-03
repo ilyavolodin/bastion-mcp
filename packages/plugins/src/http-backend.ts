@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { gitEnv } from './git-env';
 
 export type HttpBackendRequest = {
   gitBinary?: string;
@@ -24,8 +25,7 @@ const HEADER_END = /\r?\n\r?\n/;
  */
 export const runHttpBackend = (request: HttpBackendRequest): Promise<Response> =>
   new Promise<Response>((resolve, reject) => {
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
+    const env = gitEnv(process.env, {
       GATEWAY_INTERFACE: 'CGI/1.1',
       SERVER_PROTOCOL: 'HTTP/1.1',
       GIT_PROJECT_ROOT: request.root,
@@ -40,11 +40,10 @@ export const runHttpBackend = (request: HttpBackendRequest): Promise<Response> =
       GIT_CONFIG_KEY_1: 'http.receivepack',
       GIT_CONFIG_VALUE_1: 'false',
       GIT_TERMINAL_PROMPT: '0',
-    };
-    delete env.REMOTE_USER;
-    if (request.contentType) env.CONTENT_TYPE = request.contentType;
-    if (request.contentEncoding) env.HTTP_CONTENT_ENCODING = request.contentEncoding;
-    if (request.gitProtocol) env.HTTP_GIT_PROTOCOL = request.gitProtocol;
+      CONTENT_TYPE: request.contentType ?? undefined,
+      HTTP_CONTENT_ENCODING: request.contentEncoding ?? undefined,
+      HTTP_GIT_PROTOCOL: request.gitProtocol ?? undefined,
+    });
 
     const child = spawn(request.gitBinary ?? 'git', ['http-backend'], {
       env,

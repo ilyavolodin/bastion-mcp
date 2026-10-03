@@ -5,7 +5,9 @@ import {
   parseServerSpec,
   type RemoteSpec,
   type ServerSpec,
+  secretRef,
   serverSpecTemplates,
+  varRef,
 } from '@bastion-mcp/core';
 import { ZodError } from 'zod';
 import { RegistryMappingError } from './errors';
@@ -55,7 +57,17 @@ export type MappingResult =
 
 // --- Helpers --------------------------------------------------------------------------------------------------------
 
-const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_.-]*)\}/g;
+const PLACEHOLDER_SOURCE = '\\{([A-Za-z_][A-Za-z0-9_.-]*)\\}';
+
+/** Includes `key` only when `value` is defined, keeping optional properties absent rather than `undefined`. */
+const optional = <K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>> =>
+  value === undefined ? {} : ({ [key]: value } as Partial<Record<K, V>>);
+
+/** Like `optional`, and also drops the empty string. */
+const optionalText = <K extends string>(
+  key: K,
+  value: string | undefined,
+): Partial<Record<K, string>> => optional(key, value === '' ? undefined : value);
 
 /** Template reference names must match `[A-Za-z_][A-Za-z0-9_]*`. */
 export const sanitizeVariableName = (raw: string): string => {
@@ -67,30 +79,66 @@ type Collector = {
   variables: Map<string, FormVariable>;
   secrets: Map<string, FormSecret>;
   warnings: string[];
+  /** Registry name to template name, so one registry name always maps to the same reference. */
+  names: Map<string, string>;
+  taken: Set<string>;
 };
 
 const newCollector = (): Collector => ({
   variables: new Map(),
   secrets: new Map(),
   warnings: [],
+  names: new Map(),
+  taken: new Set(),
 });
 
-const addVariable = (c: Collector, name: string, def: ServerJsonVariable | undefined): void => {
+/**
+ * The template name for a registry name. Distinct registry names that sanitize alike (`a-b`, `a_b`) get
+ * distinct names: the first keeps the plain form, later ones get `_2`, `_3`, in order of appearance.
+ */
+const nameFor = (c: Collector, raw: string): string => {
+  const known = c.names.get(raw);
+  if (known !== undefined) return known;
+  const base = sanitizeVariableName(raw);
+  let name = base;
+  for (let n = 2; c.taken.has(name); n += 1) name = `${base}_${n}`;
+  c.taken.add(name);
+  c.names.set(raw, name);
+  return name;
+};
+
+type VariableMeta = {
+  description?: string | undefined;
+  isRequired?: boolean | undefined;
+  default?: string | undefined;
+  choices?: string[] | undefined;
+};
+
+const addVariable = (c: Collector, name: string, def: VariableMeta | undefined): void => {
   if (c.variables.has(name)) return;
   c.variables.set(name, {
     name,
     label: name,
     required: def?.isRequired ?? def?.default === undefined,
-    ...(def?.description ? { description: def.description } : {}),
-    ...(def?.default !== undefined ? { default: def.default } : {}),
-    ...(def?.choices ? { choices: def.choices } : {}),
+    ...optionalText('description', def?.description),
+    ...optional('default', def?.default),
+    ...optional('choices', def?.choices),
   });
 };
 
 const addSecret = (c: Collector, name: string, description: string | undefined): void => {
   if (c.secrets.has(name)) return;
-  c.secrets.set(name, { name, label: name, ...(description ? { description } : {}) });
+  c.secrets.set(name, { name, label: name, ...optionalText('description', description) });
 };
+
+/** The `variables` entry of a RemoteSpec for a form variable. */
+const formVariableToSpec = (v: FormVariable): Record<string, unknown> => ({
+  name: v.name,
+  ...optionalText('description', v.description),
+  isRequired: v.required,
+  ...optional('default', v.default),
+  ...optional('choices', v.choices),
+});
 
 /**
  * Rewrites registry `{placeholder}` markers to `{{var.NAME}}` or `{{secret.NAME}}` and records them.
@@ -102,19 +150,28 @@ const convertPlaceholders = (
   c: Collector,
   forceSecret = false,
 ): string =>
-  value.replace(PLACEHOLDER, (_match, raw: string) => {
-    const name = sanitizeVariableName(raw);
+  value.replace(new RegExp(PLACEHOLDER_SOURCE, 'g'), (_match, raw: string) => {
+    const name = nameFor(c, raw);
     const def = variables?.[raw];
     if (forceSecret || def?.isSecret) {
       addSecret(c, name, def?.description);
-      return `{{secret.${name}}}`;
+      return secretRef(name);
     }
     addVariable(c, name, def);
-    return `{{var.${name}}}`;
+    return varRef(name);
   });
 
 const hasPlaceholder = (value: string | undefined): value is string =>
-  value !== undefined && /\{[A-Za-z_][A-Za-z0-9_.-]*\}/.test(value);
+  value !== undefined && new RegExp(PLACEHOLDER_SOURCE).test(value);
+
+/** True when a placeholder in `value` refers to a variable the registry marks secret. */
+const referencesSecretVariable = (
+  value: string,
+  variables: Record<string, ServerJsonVariable> | undefined,
+): boolean =>
+  [...value.matchAll(new RegExp(PLACEHOLDER_SOURCE, 'g'))].some(
+    (m) => variables?.[m[1] ?? '']?.isSecret === true,
+  );
 
 const hasSecretRef = (template: string): boolean => template.includes('{{secret.');
 
@@ -144,7 +201,9 @@ const validateSpec = (candidate: unknown): ServerSpec => {
 
 // --- Runtime selection ----------------------------------------------------------------------------------------------
 
-const supportedPackage = (pkg: ServerJsonPackage): boolean =>
+type SupportedPackage = ServerJsonPackage & { registryType: 'npm' | 'pypi' };
+
+const supportedPackage = (pkg: ServerJsonPackage): pkg is SupportedPackage =>
   (pkg.registryType === 'npm' || pkg.registryType === 'pypi') && pkg.transport.type === 'stdio';
 
 /** Every way the entry can run, for policy checks and the importer's switch (11.6). */
@@ -152,7 +211,7 @@ export const availableRuntimes = (serverJson: ServerJson): RuntimeKind[] => {
   const out = new Set<RuntimeKind>();
   if ((serverJson.remotes ?? []).length > 0) out.add('remote');
   for (const pkg of serverJson.packages ?? []) {
-    if (supportedPackage(pkg)) out.add(pkg.registryType as 'npm' | 'pypi');
+    if (supportedPackage(pkg)) out.add(pkg.registryType);
   }
   return [...out];
 };
@@ -179,21 +238,19 @@ const mapArguments = (
     const description = arg.description;
     const base = {
       type: named ? ('named' as const) : ('positional' as const),
-      ...(named && arg.name ? { name: arg.name } : {}),
-      ...(description ? { description } : {}),
-      ...(arg.isRequired !== undefined ? { isRequired: arg.isRequired } : {}),
+      ...(named ? optionalText('name', arg.name) : {}),
+      ...optionalText('description', description),
+      ...optional('isRequired', arg.isRequired),
     };
-    const hintName = sanitizeVariableName(
-      arg.valueHint ?? arg.name?.replace(/^-+/, '') ?? `arg${index}`,
-    );
+    const hintName = nameFor(c, arg.valueHint ?? arg.name?.replace(/^-+/, '') ?? `arg${index}`);
 
     if (arg.isSecret) {
       addSecret(c, hintName, description);
       inject.push({
         to: 'arg',
-        ...(position !== undefined ? { position } : {}),
-        ...(named && arg.name ? { flag: arg.name } : {}),
-        value: `{{secret.${hintName}}}`,
+        ...optional('position', position),
+        ...(named ? optionalText('flag', arg.name) : {}),
+        value: secretRef(hintName),
       });
       return;
     }
@@ -206,14 +263,9 @@ const mapArguments = (
       return;
     }
     if (arg.valueHint || (isPositional && arg.isRequired)) {
-      addVariable(c, hintName, {
-        ...(description ? { description } : {}),
-        ...(arg.isRequired !== undefined ? { isRequired: arg.isRequired } : {}),
-        ...(arg.default !== undefined ? { default: arg.default } : {}),
-        ...(arg.choices ? { choices: arg.choices } : {}),
-      });
+      addVariable(c, hintName, arg);
       if (arg.isRequired || arg.default !== undefined) {
-        out.push({ ...base, value: `{{var.${hintName}}}` });
+        out.push({ ...base, value: varRef(hintName) });
       }
       return;
     }
@@ -234,8 +286,8 @@ const mapEnvironment = (
   for (const ev of vars) {
     if (ev.name === '') continue; // the real registry has entries with a nameless variable
     const meta = {
-      ...(ev.description ? { description: ev.description } : {}),
-      ...(ev.isRequired !== undefined ? { isRequired: ev.isRequired } : {}),
+      ...optionalText('description', ev.description),
+      ...optional('isRequired', ev.isRequired),
     };
     if (hasPlaceholder(ev.value)) {
       const converted = convertPlaceholders(ev.value, ev.variables, c, ev.isSecret === true);
@@ -244,23 +296,23 @@ const mapEnvironment = (
       continue;
     }
     if (ev.isSecret) {
-      const field = sanitizeVariableName(ev.name);
+      const field = nameFor(c, ev.name);
       addSecret(c, field, ev.description);
-      inject.push({ to: 'env', name: ev.name, value: `{{secret.${field}}}` });
+      inject.push({ to: 'env', name: ev.name, value: secretRef(field) });
       continue;
     }
     if (ev.value !== undefined) {
       out.push({ name: ev.name, ...meta, value: ev.value });
       continue;
     }
-    const field = sanitizeVariableName(ev.name);
+    const field = nameFor(c, ev.name);
     addVariable(c, field, ev);
     out.push({
       name: ev.name,
       ...meta,
-      value: `{{var.${field}}}`,
-      ...(ev.default !== undefined ? { default: ev.default } : {}),
-      ...(ev.choices ? { choices: ev.choices } : {}),
+      value: varRef(field),
+      ...optional('default', ev.default),
+      ...optional('choices', ev.choices),
     });
   }
   return out;
@@ -301,43 +353,32 @@ const mapRemote = (remote: ServerJsonRemote, c: Collector): unknown => {
 
   for (const h of remote.headers ?? []) {
     if (h.name === '') continue; // the real registry has entries with a nameless header
-    const field = sanitizeVariableName(h.name);
-    const hasValue = h.value !== undefined && h.value !== '';
-    const templated = hasValue && hasPlaceholder(h.value);
-    const probe = templated
-      ? convertPlaceholders(h.value as string, h.variables, newCollector())
-      : '';
-    if (h.isSecret || hasSecretRef(probe)) {
-      const template = templated
-        ? convertPlaceholders(h.value as string, h.variables, c, h.isSecret === true)
-        : `{{secret.${field}}}`;
-      if (!templated) addSecret(c, field, h.description);
+    const field = nameFor(c, h.name);
+    const value = h.value === '' ? undefined : h.value;
+    if (h.isSecret || (hasPlaceholder(value) && referencesSecretVariable(value, h.variables))) {
+      const template = hasPlaceholder(value)
+        ? convertPlaceholders(value, h.variables, c, h.isSecret === true)
+        : secretRef(field);
+      if (!hasPlaceholder(value)) addSecret(c, field, h.description);
       inject.push({ to: 'header', name: h.name, value: template });
       continue;
     }
     const meta = {
       name: h.name,
-      ...(h.description ? { description: h.description } : {}),
-      ...(h.isRequired !== undefined ? { isRequired: h.isRequired } : {}),
+      ...optionalText('description', h.description),
+      ...optional('isRequired', h.isRequired),
     };
-    if (hasValue) {
-      headers.push({ ...meta, value: convertPlaceholders(h.value as string, h.variables, c) });
+    if (value !== undefined) {
+      headers.push({ ...meta, value: convertPlaceholders(value, h.variables, c) });
     } else {
       addVariable(c, field, h);
-      headers.push({ ...meta, value: `{{var.${field}}}` });
+      headers.push({ ...meta, value: varRef(field) });
     }
   }
 
-  const variables: Record<string, Record<string, unknown>> = {};
-  for (const v of c.variables.values()) {
-    variables[v.name] = {
-      name: v.name,
-      ...(v.description ? { description: v.description } : {}),
-      isRequired: v.required,
-      ...(v.default !== undefined ? { default: v.default } : {}),
-      ...(v.choices ? { choices: v.choices } : {}),
-    };
-  }
+  const variables = Object.fromEntries(
+    [...c.variables.values()].map((v) => [v.name, formVariableToSpec(v)]),
+  );
   return {
     type: 'remote',
     transport: remote.type,
@@ -366,20 +407,11 @@ export const serverJsonToSpec = (
   const remote = remotes[0];
   const pkg = packages[0];
 
-  const choice =
-    prefer === 'remote'
-      ? remote
-        ? 'remote'
-        : pkg
-          ? 'package'
-          : undefined
-      : pkg
-        ? 'package'
-        : remote
-          ? 'remote'
-          : undefined;
+  const asRemote = remote ? (c: Collector) => mapRemote(remote, c) : undefined;
+  const asPackage = pkg ? (c: Collector) => mapPackage(pkg, c) : undefined;
+  const mapper = prefer === 'remote' ? (asRemote ?? asPackage) : (asPackage ?? asRemote);
 
-  if (choice === undefined) {
+  if (mapper === undefined) {
     if ((serverJson.packages ?? []).length > 0) {
       const detail = `registry types ${registryTypes.join(', ')} cannot be run by Bastion`;
       return { installable: false, reason: 'unsupported runtime', detail, registryTypes };
@@ -393,10 +425,7 @@ export const serverJsonToSpec = (
   }
 
   const collector = newCollector();
-  const candidate =
-    choice === 'remote' && remote
-      ? mapRemote(remote, collector)
-      : mapPackage(pkg as ServerJsonPackage, collector);
+  const candidate = mapper(collector);
   const spec = validateSpec(candidate);
   return {
     installable: true,
@@ -421,9 +450,9 @@ export const deriveInstallForm = (spec: ServerSpec): InstallForm => {
     for (const [key, v] of Object.entries(spec.variables ?? {})) {
       hint(key, {
         required: v.isRequired ?? v.default === undefined,
-        ...(v.description ? { description: v.description } : {}),
-        ...(v.default !== undefined ? { default: v.default } : {}),
-        ...(v.choices ? { choices: v.choices } : {}),
+        ...optionalText('description', v.description),
+        ...optional('default', v.default),
+        ...optional('choices', v.choices),
       });
     }
     for (const h of spec.headers ?? []) {
@@ -431,7 +460,7 @@ export const deriveInstallForm = (spec: ServerSpec): InstallForm => {
       if (ref.length === 1 && ref[0]?.startsWith('var.')) {
         hint(ref[0].slice(4), {
           required: h.isRequired ?? false,
-          ...(h.description ? { description: h.description } : {}),
+          ...optionalText('description', h.description),
         });
       }
     }
@@ -441,9 +470,9 @@ export const deriveInstallForm = (spec: ServerSpec): InstallForm => {
       if (refs.length === 1 && refs[0]?.startsWith('var.')) {
         hint(refs[0].slice(4), {
           required: ev.isRequired ?? ev.default === undefined,
-          ...(ev.description ? { description: ev.description } : {}),
-          ...(ev.default !== undefined ? { default: ev.default } : {}),
-          ...(ev.choices ? { choices: ev.choices } : {}),
+          ...optionalText('description', ev.description),
+          ...optional('default', ev.default),
+          ...optional('choices', ev.choices),
         });
       }
     }
@@ -452,7 +481,7 @@ export const deriveInstallForm = (spec: ServerSpec): InstallForm => {
         if (!ref.startsWith('var.')) continue;
         hint(ref.slice(4), {
           required: arg.isRequired ?? true,
-          ...(arg.description ? { description: arg.description } : {}),
+          ...optionalText('description', arg.description),
         });
       }
     }
@@ -460,7 +489,7 @@ export const deriveInstallForm = (spec: ServerSpec): InstallForm => {
 
   const variables: FormVariable[] = [];
   const seen = new Set<string>();
-  for (const template of serverSpecTemplates(spec)) {
+  const addReferences = (template: string): void => {
     for (const ref of extractReferences(template)) {
       if (!ref.startsWith('var.')) continue;
       const name = ref.slice(4);
@@ -468,28 +497,17 @@ export const deriveInstallForm = (spec: ServerSpec): InstallForm => {
       seen.add(name);
       variables.push({ name, label: name, required: true, ...hints.get(name) });
     }
-  }
-  // Variables declared on a remote but referenced only through its URL are covered above only when the
-  // URL is a template of the spec; include declared ones that nothing else reached.
-  if (spec.type === 'remote') {
-    for (const ref of extractReferences(spec.url)) {
-      if (!ref.startsWith('var.') || seen.has(ref.slice(4))) continue;
-      seen.add(ref.slice(4));
-      variables.push({
-        name: ref.slice(4),
-        label: ref.slice(4),
-        required: true,
-        ...hints.get(ref.slice(4)),
-      });
-    }
-  }
+  };
+  for (const template of serverSpecTemplates(spec)) addReferences(template);
+  // `serverSpecTemplates` does not cover a remote's URL, which can reference variables too.
+  if (spec.type === 'remote') addReferences(spec.url);
 
   const secrets: FormSecret[] =
     spec.auth.mode === 'userSecret'
       ? spec.auth.fields.map((f) => ({
           name: f.name,
           label: f.label,
-          ...(f.description ? { description: f.description } : {}),
+          ...optionalText('description', f.description),
         }))
       : [];
   return { variables, secrets };

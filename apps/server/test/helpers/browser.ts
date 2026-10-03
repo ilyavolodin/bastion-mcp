@@ -12,7 +12,13 @@ import https from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type Browser, type BrowserContext, chromium, type Page } from '@playwright/test';
+import {
+  type BrowserContext,
+  chromium,
+  type Page,
+  type Browser as PlaywrightBrowser,
+} from '@playwright/test';
+import { PUBLIC_HOST, PUBLIC_URL } from './constants';
 
 export const opensslAvailable = (): boolean => {
   try {
@@ -34,7 +40,7 @@ export const chromiumAvailable = (): boolean => {
 export const browserTestsAvailable = (): boolean => opensslAvailable() && chromiumAvailable();
 
 export type BrowserRig = {
-  browser: Browser;
+  browser: PlaywrightBrowser;
   /** A new context at the given viewport and color scheme. */
   context(options?: {
     width?: number;
@@ -94,9 +100,9 @@ export const startBrowserRig = async (serverPort: number): Promise<BrowserRig> =
           path,
           headers: {
             ...req.headers,
-            host: 'bastion.test',
+            host: PUBLIC_HOST,
             'x-forwarded-proto': 'https',
-            'x-forwarded-host': 'bastion.test',
+            'x-forwarded-host': PUBLIC_HOST,
           },
         },
         (up) => {
@@ -126,7 +132,7 @@ export const startBrowserRig = async (serverPort: number): Promise<BrowserRig> =
       }),
     async open(context, path) {
       const page = await context.newPage();
-      await page.goto(`https://bastion.test${path}`);
+      await page.goto(`${PUBLIC_URL}${path}`);
       return page;
     },
     async close() {

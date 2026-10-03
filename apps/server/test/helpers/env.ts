@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { Redis } from 'ioredis';
 import pg from 'pg';
 import { inject } from 'vitest';
+import { PUBLIC_URL, TEST_INTERNAL_SECRET } from './constants';
 import { TEMPLATE_DB } from './global-setup';
 
 /** True when the global setup started containers; suites use `describe.skipIf(!haveDocker())`. */
@@ -39,8 +40,8 @@ export const createTestEnv = async (): Promise<TestEnv> => {
     redisUrl,
     dataDir,
     env: (overrides = {}) => ({
-      BASTION_PUBLIC_URL: 'https://bastion.test',
-      BASTION_INTERNAL_SECRET: 'x'.repeat(48),
+      BASTION_PUBLIC_URL: PUBLIC_URL,
+      BASTION_INTERNAL_SECRET: TEST_INTERNAL_SECRET,
       BASTION_DATABASE_URL: url.toString(),
       BASTION_REDIS_URL: redisUrl,
       BASTION_DATA_DIR: dataDir,

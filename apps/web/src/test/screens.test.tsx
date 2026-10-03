@@ -1,12 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { getDb } from '@/mocks/db';
+import { ORG_HOST } from '@/mocks/seed';
 import { expectNoA11yViolations, renderRoute } from './utils';
 
 describe('Home (18.3)', () => {
   it('shows the endpoint, one-click client configs, tiles with one next action and quotas', async () => {
     const { user } = await renderRoute('/');
-    expect(await screen.findByText('https://bastion.acme.dev/mcp')).toBeInTheDocument();
+    expect(await screen.findByText(`https://${ORG_HOST}/mcp`)).toBeInTheDocument();
     expect(screen.getByText(/GitHub isn’t connected yet/)).toBeInTheDocument();
     expect(await screen.findByText('Add API key')).toBeInTheDocument();
     expect(screen.getByText('See why')).toBeInTheDocument();
@@ -14,7 +15,7 @@ describe('Home (18.3)', () => {
     await user.click(screen.getByRole('button', { name: /Claude Code/ }));
     expect(
       await screen.findByText(
-        'claude mcp add --transport http bastion-default https://bastion.acme.dev/mcp',
+        `claude mcp add --transport http bastion-default https://${ORG_HOST}/mcp`,
       ),
     ).toBeInTheDocument();
   });

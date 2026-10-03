@@ -1,8 +1,15 @@
 import type { MeResponse } from '@/api/me';
 import type { Me } from '@/api/views/session';
+import { PLATFORM_TEAM_ID, PLATFORM_TEAM_SLUG } from './seed';
+import { getDb } from './state';
+
+/** The slug of a team the person belongs to: the team row's, so a renamed team keeps its slug. */
+const slugOf = (id: string): string =>
+  getDb().data.access.teams.find((t) => t.id === id)?.slug ??
+  (id === PLATFORM_TEAM_ID ? PLATFORM_TEAM_SLUG : id);
 
 /** The mock's `GET /me` body. Typed by the generated response, so API drift is a compile error. */
-export const toMeResponse = (me: Me): MeResponse => ({
+export const toMeResponse = (me: Me, updatedAt: string): MeResponse => ({
   id: me.id,
   type: 'user',
   orgRole: me.orgRole,
@@ -14,10 +21,10 @@ export const toMeResponse = (me: Me): MeResponse => ({
   teams: me.teams.map((t) => ({
     teamId: t.id,
     role: t.role,
-    slug: t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    slug: slugOf(t.id),
     displayName: t.name,
   })),
   org: me.org,
   capabilities: me.capabilities,
-  updatedAt: '2026-10-01T00:00:00.000Z',
+  updatedAt,
 });

@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
-import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
+import {
+  authz,
+  defineDelete,
+  defineMutation,
+  defineRoute,
+  type RouteDefinition,
+} from '../framework/route';
 import { idParams } from '../schemas/common';
 import {
   asRow,
@@ -135,19 +141,14 @@ export const usersRoutes: RouteDefinition[] = [
     version: versionOf('teams'),
     handler: (ctx) => updateTeam(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/teams/{id}',
     tag: TAG,
     summary: 'Delete a team and its memberships',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('teams.write', org),
-    status: 204,
     version: versionOf('teams'),
-    handler: async (ctx) => {
-      await deleteTeam(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => deleteTeam(ctx, ctx.params.id),
   }),
   defineMutation({
     method: 'PUT',
@@ -166,14 +167,12 @@ export const usersRoutes: RouteDefinition[] = [
       )?.updatedAt ?? null,
     handler: (ctx) => setMember(ctx, ctx.params.id, ctx.params.userId, ctx.body.role),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/teams/{id}/members/{userId}',
     tag: TAG,
     summary: 'Remove a member from a team',
-    schema: { params: memberParams, response: z.null() },
+    params: memberParams,
     authz: authz.on('teams.members', teamOf()),
-    status: 204,
     version: async (input) =>
       (
         await input.deps.store.get(
@@ -181,10 +180,7 @@ export const usersRoutes: RouteDefinition[] = [
           `${input.params.id ?? ''}:${input.params.userId ?? ''}`,
         )
       )?.updatedAt ?? null,
-    handler: async (ctx) => {
-      await removeMember(ctx, ctx.params.id, ctx.params.userId);
-      return null;
-    },
+    remove: (ctx) => removeMember(ctx, ctx.params.id, ctx.params.userId),
   }),
 
   defineRoute({
@@ -221,18 +217,13 @@ export const usersRoutes: RouteDefinition[] = [
       return roleMappingRules.update(ctx, ctx.params.id, ctx.body);
     },
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/role-mapping-rules/{id}',
     tag: TAG,
     summary: 'Delete a role-mapping rule',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('users.write', org),
-    status: 204,
     version: versionOf('role_mapping_rules'),
-    handler: async (ctx) => {
-      await roleMappingRules.remove(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => roleMappingRules.remove(ctx, ctx.params.id),
   }),
 ];

@@ -5,16 +5,18 @@
  */
 import { bootstrapAdmin } from '@bastion-mcp/auth';
 import type { BastionConfig } from '@bastion-mcp/core';
+import { type FakeIdp, startFakeIdp } from '@bastion-mcp/testkit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createAuthServices } from '../../src/adapters/auth';
 import { loadServerConfig, type ServerOptions } from '../../src/config';
 import type { AuthServices } from '../../src/contracts';
 import { registerAuthRoutes } from '../../src/http/ui';
 import { createInfra, type Infra } from '../../src/infra';
+import { PUBLIC_URL, TEST_PRIVATE_UPSTREAM_CIDRS } from './constants';
 import { createTestEnv, type TestEnv } from './env';
-import { type FakeIdp, startFakeIdp } from './fake-idp';
+import { proxyFetch as proxyFetchToPort } from './proxy-fetch';
 
-export const PUBLIC_ORIGIN = 'https://bastion.test';
+export const PUBLIC_ORIGIN = PUBLIC_URL;
 export const ADMIN_EMAIL = 'root@acme.example';
 export const ADMIN_PASSWORD = 'correct horse battery staple';
 
@@ -45,18 +47,9 @@ export type UiHarness = {
   close(): Promise<void>;
 };
 
-export const proxyFetch =
-  (base: string): typeof fetch =>
-  (input, init) => {
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const url = raw.startsWith(PUBLIC_ORIGIN) ? base + raw.slice(PUBLIC_ORIGIN.length) : raw;
-    const headers = new Headers(init?.headers);
-    if (url.startsWith(base)) {
-      headers.set('x-forwarded-proto', 'https');
-      headers.set('x-forwarded-host', 'bastion.test');
-    }
-    return fetch(url, { ...init, headers });
-  };
+/** `fetch` that routes the public origin to the loopback listener at `base` (the one `proxyFetch` of proxy-fetch.ts). */
+export const proxyFetch = (base: string): typeof fetch =>
+  proxyFetchToPort(Number(new URL(base).port)) as typeof fetch;
 
 export const makeBrowser = (base: string, followable: string[] = []): Browser => {
   const jar = new Map<string, string>();
@@ -120,7 +113,7 @@ export const startUiHarness = async (options: HarnessOptions = {}): Promise<UiHa
   const config = loadServerConfig(
     env.env({
       BASTION_ROLE: 'ui',
-      BASTION_PRIVATE_UPSTREAM_CIDRS: '127.0.0.0/8',
+      BASTION_PRIVATE_UPSTREAM_CIDRS: TEST_PRIVATE_UPSTREAM_CIDRS,
       ...options.env,
     }),
   );

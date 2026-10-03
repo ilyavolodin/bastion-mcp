@@ -3,6 +3,7 @@
  * a membership has no name, an OAuth client has no status), so the screens join them here. Everything is derived
  * from the generated schema types; nothing restates an API body.
  */
+import { pad2 } from '@/lib/format';
 import type { Body, OrgRole, Schemas, TeamRole } from '../schema';
 
 // --- people and teams -------------------------------------------------------------------------------------------
@@ -160,7 +161,6 @@ const ROLE_LABEL: Record<string, string> = {
   manager: 'Manager',
 };
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const pad = (n: number) => String(n).padStart(2, '0');
 
 const nameIn = <T extends { id: string }>(
   list: readonly T[],
@@ -220,7 +220,7 @@ export const whenChips = (when: RuleWhen): Chip[] => {
   if (when.hours) {
     chips.push({
       key: 'hours',
-      label: `Hours ${pad(when.hours.from)}:00–${pad(when.hours.to)}:00`,
+      label: `Hours ${pad2(when.hours.from)}:00–${pad2(when.hours.to)}:00`,
     });
   }
   if (when.weekdays?.length) {

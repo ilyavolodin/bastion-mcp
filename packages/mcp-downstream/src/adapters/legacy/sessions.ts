@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { REDIS_CHANNELS, redisKeys, TTL } from '@bastion-mcp/core';
 import { z } from 'zod';
 import type { DownstreamRedis } from '../../ports';
-import type { ClientCaps, ClientInfo, LoggingLevel } from '../../types';
+import { type ClientCaps, type ClientInfo, LOGGING_LEVELS, type LoggingLevel } from '../../types';
 
 export type SessionRecord = {
   id: string;
@@ -33,17 +33,6 @@ const jsonField = <T extends z.ZodType>(schema: T, fallback: z.infer<T>) =>
       return z.NEVER;
     }
   });
-
-const LEVELS = [
-  'debug',
-  'info',
-  'notice',
-  'warning',
-  'error',
-  'critical',
-  'alert',
-  'emergency',
-] as const;
 
 const hashSchema = z.object({
   principalId: z.string().min(1),
@@ -78,7 +67,7 @@ export class LegacySessionStore {
     const parsed = hashSchema.safeParse(raw);
     if (!parsed.success) return null;
     const d = parsed.data;
-    const level = LEVELS.find((l) => l === d.logLevel);
+    const level = LOGGING_LEVELS.find((l) => l === d.logLevel);
     return {
       id,
       principalId: d.principalId,

@@ -1,5 +1,3 @@
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import {
   createMcpHandler,
@@ -8,6 +6,7 @@ import {
   ResourceTemplate,
 } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { readJsonBody, startHttp } from '../http';
 
 /**
  * A modern (2026-07-28) remote MCP server for tests (6.4, 6.5, 6.6): tools, resources, prompts, an
@@ -35,12 +34,6 @@ export type FakeModernServer = {
   /** Require this bearer token; other requests get 401. */
   setRequiredToken: (token: string | undefined) => void;
   close: () => Promise<void>;
-};
-
-const readBody = async (req: http.IncomingMessage): Promise<Buffer> => {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
-  return Buffer.concat(chunks);
 };
 
 export const startFakeModernServer = async (
@@ -197,39 +190,27 @@ export const startFakeModernServer = async (
   const handler = createMcpHandler(() => build(), { legacy: 'reject' });
   const node = toNodeHandler(handler);
 
-  const server = http.createServer((req, res) => {
-    void (async () => {
-      const raw = await readBody(req);
-      let body: unknown;
-      try {
-        body = raw.length > 0 ? JSON.parse(raw.toString('utf8')) : undefined;
-      } catch {
-        body = undefined;
-      }
-      requests.push({ method: req.method ?? '', url: req.url ?? '', headers: req.headers, body });
-      if (
-        typeof body === 'object' &&
-        body !== null &&
-        (body as { method?: string }).method === 'server/discover'
-      ) {
-        discover += 1;
-      }
-      if (requiredToken !== undefined && req.headers.authorization !== `Bearer ${requiredToken}`) {
-        res.writeHead(401, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'unauthorized' }));
-        return;
-      }
-      await node(req as never, res, body);
-    })().catch(() => {
-      if (!res.headersSent) res.writeHead(500);
-      res.end();
-    });
+  const server = await startHttp(async (req, res) => {
+    const body = await readJsonBody(req);
+    requests.push({ method: req.method ?? '', url: req.url ?? '', headers: req.headers, body });
+    if (
+      typeof body === 'object' &&
+      body !== null &&
+      (body as { method?: string }).method === 'server/discover'
+    ) {
+      discover += 1;
+    }
+    if (requiredToken !== undefined && req.headers.authorization !== `Bearer ${requiredToken}`) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    await node(req as never, res, body);
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
+
   return {
-    url: `http://127.0.0.1:${port}/mcp`,
-    port,
+    url: `${server.url}/mcp`,
+    port: server.port,
     requests,
     aborted,
     discoverCount: () => discover,
@@ -240,8 +221,7 @@ export const startFakeModernServer = async (
     },
     close: async () => {
       await handler.close();
-      server.closeAllConnections();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await server.close();
     },
   };
 };

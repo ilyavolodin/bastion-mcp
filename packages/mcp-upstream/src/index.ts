@@ -1,6 +1,7 @@
 export * from './connectors/agent';
 export * from './connectors/caps';
 export * from './connectors/client-factory';
+export * from './connectors/connect';
 export * from './connectors/era-cache';
 export * from './connectors/http';
 export * from './connectors/identity';
@@ -36,4 +37,5 @@ export * from './service/pool';
 export * from './service/service';
 export * from './tasks/extensions';
 export * from './tasks/wrap';
+export * from './timeouts';
 export * from './types';

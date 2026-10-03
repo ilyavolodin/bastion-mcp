@@ -12,7 +12,8 @@ export const TINTS = [
   'var(--mint)',
 ] as const;
 
-const hash = (value: string): number => {
+/** A stable, non-negative 32-bit hash of a string. */
+export const hashString = (value: string): number => {
   let h = 0;
   for (let i = 0; i < value.length; i++) h = (Math.imul(h, 31) + value.charCodeAt(i)) >>> 0;
   return h;
@@ -23,4 +24,18 @@ export const letterOf = (name: string): string =>
   (name.match(/[A-Za-z0-9]/)?.[0] ?? '?').toUpperCase();
 
 /** A stable tint for a slug or id. */
-export const tintOf = (key: string): string => TINTS[hash(key) % TINTS.length] ?? TINTS[0];
+export const tintOf = (key: string): string => TINTS[hashString(key) % TINTS.length] ?? TINTS[0];
+
+/** Colours of the generic avatar of a person or a name (the initials chip). */
+export const AVATAR_COLORS = [
+  'var(--tangerine)',
+  'var(--sky)',
+  'var(--teal)',
+  'var(--berry)',
+  'var(--mint)',
+  'var(--sun)',
+] as const;
+
+/** A stable avatar colour for an id or name. */
+export const avatarColor = (seed: string): string =>
+  AVATAR_COLORS[hashString(seed) % AVATAR_COLORS.length] ?? AVATAR_COLORS[0];

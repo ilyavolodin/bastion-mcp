@@ -1,3 +1,4 @@
+import { isRecord } from '@bastion-mcp/core';
 /**
  * JSON Schema helpers: 2020-12 compilation with ajv (12.3), argument validation (12.3), and the
  * `x-mcp-header` rules of the 2026-07-28 Streamable HTTP transport.
@@ -9,8 +10,7 @@ import type { JsonObject, JsonValue } from './schema';
 
 const DRAFT_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
 
-export const isObject = (value: unknown): value is JsonObject =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+export const isObject = (value: unknown): value is JsonObject => isRecord(value);
 
 /**
  * Compiles `schema` as JSON Schema 2020-12 and returns the validator; throws with ajv's message when

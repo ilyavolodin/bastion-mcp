@@ -66,7 +66,7 @@ export type ApiDeps = {
   config: ApiConfig;
   auth: {
     tokens: Pick<TokenVerifier, 'verify'>;
-    sessions: Pick<SessionService, 'authenticate'>;
+    sessions: Pick<SessionService, 'authenticate' | 'checkCsrf'>;
   };
   principals: PrincipalStore;
   policy: {
@@ -107,4 +107,6 @@ export type ApiDeps = {
   limits: Pick<Limiter, 'readUsage'>;
   clock: { now(): Date };
   newId(): string;
+  /** `bytes` random bytes as base64url; defaults to `crypto.randomBytes`. Inject it to make tokens predictable in tests. */
+  randomToken?(bytes: number): string;
 };

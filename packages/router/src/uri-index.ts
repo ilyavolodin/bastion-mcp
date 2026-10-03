@@ -1,5 +1,5 @@
 /** The per-endpoint URI index (7.4): Exact, Seen, Template and Rewritten routing for `resources/read`. */
-import { BastionError, JSONRPC_CODES, redisKeys } from '@bastion-mcp/core';
+import { BastionError, isRecord, JSONRPC_CODES, redisKeys, TTL } from '@bastion-mcp/core';
 import {
   type HostedRead,
   mapResourceRead,
@@ -134,7 +134,7 @@ export class ResourceNotFoundError extends BastionError {
 
 // --- Seen URIs (7.4) ------------------------------------------------------------------------------
 
-export const SEEN_TTL_SECONDS = 24 * 60 * 60;
+export const SEEN_TTL_SECONDS = TTL.uriSeen;
 
 /** Port for the Redis hash `uriseen:{principalId}:{endpointId}`. */
 export interface SeenUriStore {
@@ -196,9 +196,6 @@ export class RedisSeenUriStore implements SeenUriStore {
     return parsed.success ? parsed.data : null;
   }
 }
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** URIs in a tool result (`resource_link`, embedded `resource`) and `_meta.ui.resourceUri` (7.4, 6.8). */
 export const extractSeenUris = (result: unknown): string[] => {

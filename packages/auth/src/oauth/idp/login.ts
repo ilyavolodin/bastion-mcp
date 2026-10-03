@@ -1,6 +1,7 @@
 import { type Keyring, openJson, sealJson } from '@bastion-mcp/core';
 import * as client from 'openid-client';
 import { z } from 'zod';
+import { LOGIN_CONFIG_TTL_MS, LOGIN_STATE_TTL_MS } from '../constants';
 import {
   buildConfiguration,
   checkIssuerParameter,
@@ -22,8 +23,6 @@ import { idpRedirectUri } from '../urls';
 import { IdpClaimError, loginScopes, mapClaims, type NormalizedProfile } from './profile';
 
 const STATE_PREFIX = 'bls1.';
-const STATE_TTL_MS = 10 * 60 * 1000;
-const CONFIG_TTL_MS = 10 * 60 * 1000;
 
 export type IdpTokenSet = {
   accessToken: string;
@@ -108,7 +107,7 @@ export class IdpClients {
   async configuration(connection: IdpConnection): Promise<client.Configuration> {
     const key = `${connection.discoveryUrl}|${connection.clientId}|${connection.clientSecretId}|${connection.redirectToRoot}`;
     const cached = this.cache.get(connection.id);
-    if (cached && cached.key === key && this.clock.now() - cached.at < CONFIG_TTL_MS)
+    if (cached && cached.key === key && this.clock.now() - cached.at < LOGIN_CONFIG_TTL_MS)
       return cached.config;
     const secret = await this.deps.secrets.revealById(connection.clientSecretId);
     if (!secret) throw new IdpLoginError('IdP client secret is missing', 'config');
@@ -182,7 +181,7 @@ export class IdpLogin extends IdpClients {
         n: nonce,
         p: verifier,
         r: options.returnTo ?? null,
-        x: this.clock.now() + STATE_TTL_MS,
+        x: this.clock.now() + LOGIN_STATE_TTL_MS,
       },
       this.deps.stateKeyring,
       { prefix: STATE_PREFIX, aad: connection.id },

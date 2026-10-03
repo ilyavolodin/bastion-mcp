@@ -1,4 +1,4 @@
-import { type Clock, systemClock } from './types';
+import { type Clock, systemClock } from '@bastion-mcp/core';
 
 /** stderr handling (8.7): 200 lines/s per instance, last 1,000 lines kept, sinks injected. */
 

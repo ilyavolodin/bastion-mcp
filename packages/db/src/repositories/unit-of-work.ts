@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from '../generated/client';
 import { createAuditLogRepository } from './audit-log';
+import { createAutoInstallRepository } from './auto-install';
 import {
   createBlobStore,
   createCatalogEntryRepository,
@@ -7,18 +8,17 @@ import {
   createCatalogVersionRepository,
   createExecutableApprovalRepository,
 } from './catalog';
-import {
-  createAutoInstallRepository,
-  createEndpointRepository,
-  createInstallationRegistry,
-  createInstallationRepository,
-  createRouterRepository,
-} from './installations';
+import { createDefinitionPinRepository, createDriftReviewRepository } from './definition-pins';
+import { createEndpointRepository } from './endpoints';
+import { createGuardProfileRepository } from './guard-profiles';
+import { createInstallationRegistry, createRouterRepository } from './installation-registry';
+import { createInstallationRepository } from './installations';
 import {
   createEgressAccessRequestRepository,
   createInstanceRepository,
   createSnapshotStore,
 } from './instances';
+import { createLimitRuleRepository } from './limit-rules';
 import {
   createIdpConnectionRepository,
   createIdpTokenStore,
@@ -41,6 +41,11 @@ import {
   type MarketplaceStoreDeps,
 } from './plugins';
 import {
+  createCustomPolicyRepository,
+  createPolicyDataSource,
+  createPolicyRuleRepository,
+} from './policies';
+import {
   createPrincipalRepository,
   createProvisioningRepository,
   createScimStore,
@@ -52,15 +57,6 @@ import {
   createRegistrySourceStore,
 } from './registry';
 import { createKeyStore, createSecretRepository, type SecretCodec } from './secrets';
-import {
-  createCustomPolicyRepository,
-  createDefinitionPinRepository,
-  createDriftReviewRepository,
-  createGuardProfileRepository,
-  createLimitRuleRepository,
-  createPolicyDataSource,
-  createPolicyRuleRepository,
-} from './security';
 import {
   flushUnit,
   type PrismaLike,

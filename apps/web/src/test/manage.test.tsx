@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { getDb } from '@/mocks/db';
+import { ORG_HOST } from '@/mocks/seed';
 import { expectNoA11yViolations, renderRoute } from './utils';
 
 describe('Catalog editor (11.3, 18.3)', () => {
@@ -240,10 +241,10 @@ describe('Plugins (25, 18.3)', () => {
   it('shows per-client set up commands and the plugins of the latest release with their policy', async () => {
     await renderRoute('/plugins');
     expect(
-      await screen.findByText('/plugin marketplace add https://bastion.acme.dev/plugins/acme.git'),
+      await screen.findByText(`/plugin marketplace add https://${ORG_HOST}/plugins/acme.git`),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('codex plugin marketplace add https://bastion.acme.dev/plugins/acme.git'),
+      screen.getByText(`codex plugin marketplace add https://${ORG_HOST}/plugins/acme.git`),
     ).toBeInTheDocument();
     expect(screen.getByText('Release notes')).toBeInTheDocument();
     expect(screen.getByText('Required')).toBeInTheDocument();

@@ -52,10 +52,9 @@ export const createPolicy = async (
   const entry = await ctx.tx.store.get('catalog_entries', body.catalogEntryId);
   if (!entry) throw new NotFoundApiError('catalog entry');
   if (entry.status !== 'published') {
-    throw new ConflictApiError(
-      'only published entries can be auto-installed',
-      'entry_not_published',
-    );
+    throw new ConflictApiError('only published entries can be auto-installed', {
+      code: 'entry_not_published',
+    });
   }
   return autoInstallPolicies.create(ctx, { ...body, createdBy: ctx.principal.id });
 };

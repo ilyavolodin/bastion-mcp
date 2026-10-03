@@ -79,6 +79,7 @@ describe('11.6 registry sources', () => {
     expect(res.status).toBe(200);
     // The walk runs after the response is decided, never inside the request transaction.
     expect(rec(res.body).queued).toBe(true);
+    expect(rec(res.body).stats).toBeNull();
     await vi.waitFor(() => expect(syncCalls).toEqual([{ id: 'src-official', full: true }]));
     expect(api.uow.audits.at(-1)?.action).toBe('registry_source.sync');
   });

@@ -8,6 +8,7 @@ import { Card, CardHeader, Segmented, Tag } from '@/components/primitives';
 import { ProblemAlert } from '@/components/problem';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
+import { isRecord } from '@/lib/json';
 import {
   expandTemplate,
   hasParameters,
@@ -27,9 +28,6 @@ const KIND_LABEL: Record<TryKind, string> = {
   prompt: 'Prompt',
   resource: 'Resource',
 };
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** The name AI tools use: the override's name, else the upstream one. */
 const finalName = (d: DefinitionPair): string =>

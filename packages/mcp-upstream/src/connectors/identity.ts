@@ -1,6 +1,7 @@
 import { META_KEYS, TIMEOUTS_MS } from '@bastion-mcp/core';
 import { injectTraceContext } from '@bastion-mcp/telemetry';
 import { CLIENT_CAPABILITIES_META_KEY, LOG_LEVEL_META_KEY } from '@modelcontextprotocol/client';
+import { LIST_METHODS } from '../lists/kinds';
 import type { CallPrincipal, ResolvedInstallation } from '../ports';
 import type { ClientCapabilitiesLike, JsonObject, TraceCarrier } from '../types';
 
@@ -93,13 +94,6 @@ export const activeTraceCarrier = (): TraceCarrier => {
   };
 };
 
-const LIST_METHODS = new Set([
-  'tools/list',
-  'prompts/list',
-  'resources/list',
-  'resources/templates/list',
-]);
-
 /** 60 s for `tools/call`, 15 s for lists, reads and prompts; per-entry override up to 30 minutes (6.4). */
 export const timeoutFor = (
   method: string,
@@ -109,7 +103,9 @@ export const timeoutFor = (
     return Math.min(timeouts?.toolCallMs ?? TIMEOUTS_MS.toolCall, TIMEOUTS_MS.maxOverride);
   }
   const override =
-    LIST_METHODS.has(method) || method.startsWith('prompts/') || method.startsWith('resources/')
+    (LIST_METHODS as readonly string[]).includes(method) ||
+    method.startsWith('prompts/') ||
+    method.startsWith('resources/')
       ? timeouts?.listMs
       : undefined;
   return Math.min(override ?? TIMEOUTS_MS.list, TIMEOUTS_MS.maxOverride);

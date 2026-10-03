@@ -1,11 +1,12 @@
 import { POLICY_EFFECTS } from '@bastion-mcp/core';
 import { customPolicyTestSchema, toolRuleRowSchema } from '@bastion-mcp/policy';
 import { z } from 'zod';
+import { decisionSchema, nameSchema } from './common';
 
 const atLeastOne = (v: object) => Object.keys(v).length > 0;
 
 const ruleFields = {
-  name: z.string().trim().min(1).max(200),
+  name: nameSchema,
   ownerTeamId: z.string().min(1).nullable(),
   effect: z.enum(POLICY_EFFECTS),
   who: toolRuleRowSchema.shape.who,
@@ -32,7 +33,7 @@ export const policyRulePatchSchema = z
   .refine(atLeastOne, 'at least one field is required');
 
 export const customPolicyCreateSchema = z.object({
-  name: z.string().trim().min(1).max(200),
+  name: nameSchema,
   cedar: z
     .string()
     .min(1)
@@ -43,7 +44,7 @@ export const customPolicyCreateSchema = z.object({
 
 export const customPolicyPatchSchema = z
   .object({
-    name: z.string().trim().min(1).max(200),
+    name: nameSchema,
     cedar: z
       .string()
       .min(1)
@@ -61,7 +62,7 @@ export const validationReportSchema = z.object({
     z.object({
       name: z.string(),
       passed: z.boolean(),
-      expected: z.enum(['allow', 'deny']),
+      expected: decisionSchema,
       actual: z.enum(['allow', 'deny', 'error']),
       reasons: z.array(z.string()),
       error: z.string().optional(),
@@ -70,7 +71,7 @@ export const validationReportSchema = z.object({
 });
 
 export const simulationResultSchema = z.object({
-  decision: z.enum(['allow', 'deny']),
+  decision: decisionSchema,
   reasons: z.array(z.string()),
   errors: z.array(z.string()),
   determiningPolicies: z.array(z.object({ id: z.string(), text: z.string() })),

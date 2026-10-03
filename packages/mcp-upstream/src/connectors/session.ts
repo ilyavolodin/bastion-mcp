@@ -1,4 +1,13 @@
-import { type Era, newId, TIMEOUTS_MS } from '@bastion-mcp/core';
+import {
+  type Clock,
+  CONTINUABLE_METHODS,
+  type Era,
+  isRecord,
+  JSONRPC_CODES,
+  newId,
+  systemClock,
+  TIMEOUTS_MS,
+} from '@bastion-mcp/core';
 import {
   type Client,
   isInputRequiredResult,
@@ -8,7 +17,11 @@ import {
 } from '@modelcontextprotocol/client';
 import { ContinuationLostError } from '../errors';
 import { LegacyCallScope, type ScopeEvent } from '../input-required/call-scope';
-import { answerMissingCapability, type ServerRequestKind } from '../input-required/helpers';
+import {
+  answerMissingCapability,
+  budgetedTimeout,
+  type ServerRequestKind,
+} from '../input-required/helpers';
 import type { ContinuationRegistry } from '../input-required/registry';
 import { type Logger, noopLogger, type ResolvedInstallation } from '../ports';
 import { extensionAllowed, filterExtensions } from '../tasks/extensions';
@@ -39,14 +52,11 @@ export const RAW_RESULT: StandardSchemaV1<unknown, JsonObject> = {
     version: 1,
     vendor: 'bastion',
     validate: (value) =>
-      typeof value === 'object' && value !== null && !Array.isArray(value)
+      isRecord(value)
         ? { value: value as JsonObject }
         : { issues: [{ message: 'result must be an object' }] },
   },
 };
-
-/** Methods whose legacy upstream call may raise server-to-client requests (6.5). */
-const CONTINUABLE = new Set(['tools/call', 'prompts/get', 'resources/read']);
 
 const MODERN_ONLY_EXTENSIONS_KEY = 'extensions';
 
@@ -62,6 +72,7 @@ export type SdkSessionOptions = {
   };
   continuations?: ContinuationRegistry | undefined;
   logger?: Logger;
+  clock?: Clock;
   /** Abort reason when a response cap was exceeded (6.9). */
   capViolation?: () => Error | undefined;
   /** Close details of the transport (sandbox exit frame, WebSocket close code). */
@@ -78,6 +89,7 @@ export class SdkUpstreamSession implements UpstreamSession {
   private readonly installation: ResolvedInstallation;
   private readonly options: SdkSessionOptions;
   private readonly logger: Logger;
+  private readonly clock: Clock;
   private readonly sinks = new Set<(n: UpstreamNotification) => void>();
   private readonly closeHandlers: ((info: CloseInfo) => void)[] = [];
   private readonly inflight = new Set<InFlight>();
@@ -93,6 +105,7 @@ export class SdkUpstreamSession implements UpstreamSession {
     this.installation = options.installation;
     this.era = options.era;
     this.logger = options.logger ?? noopLogger;
+    this.clock = options.clock ?? systemClock;
     this.wireClient();
   }
 
@@ -205,7 +218,7 @@ export class SdkUpstreamSession implements UpstreamSession {
     const forward = (method: string) => (notification: { params?: unknown }) => {
       this.dispatchNotification({
         method,
-        ...(isObject(notification.params) ? { params: notification.params } : {}),
+        ...(isRecord(notification.params) ? { params: notification.params } : {}),
       });
     };
     for (const method of [
@@ -224,7 +237,7 @@ export class SdkUpstreamSession implements UpstreamSession {
       ((n: { params?: unknown }) => {
         const note: UpstreamNotification = {
           method: 'notifications/message',
-          ...(isObject(n.params) ? { params: n.params } : {}),
+          ...(isRecord(n.params) ? { params: n.params } : {}),
         };
         const emitters = [...this.inflight].flatMap((call) => (call.emit ? [call.emit] : []));
         if (emitters.length === 0) this.dispatchNotification(note);
@@ -235,7 +248,7 @@ export class SdkUpstreamSession implements UpstreamSession {
       if (notification.method.startsWith('notifications/progress')) return;
       this.dispatchNotification({
         method: notification.method,
-        ...(isObject(notification.params) ? { params: notification.params } : {}),
+        ...(isRecord(notification.params) ? { params: notification.params } : {}),
       });
     };
     client.onclose = () => {
@@ -279,11 +292,10 @@ export class SdkUpstreamSession implements UpstreamSession {
 
   private effectiveTimeout(method: string, options: OpOptions): number {
     const base = options.timeoutMs ?? timeoutFor(method, this.installation.spec.timeouts);
-    const deadline = options.ctx.deadlineAt;
-    return deadline === undefined ? base : Math.max(1, Math.min(base, deadline - Date.now()));
+    return budgetedTimeout(base, options.ctx.deadlineAt, this.clock.now());
   }
 
-  private sendParams(method: string, params: JsonObject, options: OpOptions): JsonObject {
+  private sendParams(params: JsonObject, options: OpOptions): JsonObject {
     const { ctx } = options;
     let capabilities: ClientCapabilitiesLike | undefined;
     if (this.era === 'modern') {
@@ -307,9 +319,8 @@ export class SdkUpstreamSession implements UpstreamSession {
         logLevel: ctx.logLevel,
         capabilities,
       },
-      isObject(params._meta) ? params._meta : undefined,
+      isRecord(params._meta) ? params._meta : undefined,
     );
-    void method;
     return { ...params, _meta: meta };
   }
 
@@ -346,10 +357,10 @@ export class SdkUpstreamSession implements UpstreamSession {
   async request(method: string, params: JsonObject, options: OpOptions): Promise<SessionOutcome> {
     if (this._closed) throw new Error('upstream session is closed');
     if (method.startsWith('tasks/') || method === 'tools/call')
-      this.assertExtensionUse(method, params, options);
+      this.assertExtensionUse(method, options);
     const timeout = this.effectiveTimeout(method, options);
-    const sendParams = this.sendParams(method, params, options);
-    if (this.era === 'legacy' && CONTINUABLE.has(method)) {
+    const sendParams = this.sendParams(params, options);
+    if (this.era === 'legacy' && CONTINUABLE_METHODS.has(method)) {
       return this.requestContinuable(method, sendParams, timeout, options);
     }
     const abort = new AbortController();
@@ -374,7 +385,7 @@ export class SdkUpstreamSession implements UpstreamSession {
   }
 
   /** A blocked or unlisted extension must not be used even if the downstream asked for it (6.8). */
-  private assertExtensionUse(method: string, _params: JsonObject, options: OpOptions): void {
+  private assertExtensionUse(method: string, options: OpOptions): void {
     if (!method.startsWith('tasks/')) return;
     const allowed = extensionAllowed(
       'io.modelcontextprotocol/tasks',
@@ -385,7 +396,7 @@ export class SdkUpstreamSession implements UpstreamSession {
     );
     if (!allowed)
       throw Object.assign(new Error('extension not allowed for this installation'), {
-        code: -32601,
+        code: JSONRPC_CODES.METHOD_NOT_FOUND,
       });
   }
 
@@ -402,6 +413,7 @@ export class SdkUpstreamSession implements UpstreamSession {
       id: newId(),
       clientCapabilities: ctx.clientCapabilities,
       roots: this.installation.roots,
+      clock: this.clock,
     });
     scope.emit = ctx.emit;
     this.scopes.add(scope);
@@ -472,9 +484,6 @@ export class SdkUpstreamSession implements UpstreamSession {
   }
 }
 
-const isObject = (value: unknown): value is JsonObject =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
 const linkSignal = (signal: AbortSignal | undefined, abort: AbortController): (() => void) => {
   if (!signal) return () => undefined;
   const onAbort = (): void => abort.abort(signal.reason);
@@ -499,6 +508,6 @@ export const toOutcome = (raw: unknown): SessionOutcome => {
       upstreamState: r.requestState,
     };
   }
-  if (isObject(raw) && raw.resultType === 'task') return { kind: 'task', task: raw };
+  if (isRecord(raw) && raw.resultType === 'task') return { kind: 'task', task: raw };
   return { kind: 'complete', result: raw };
 };

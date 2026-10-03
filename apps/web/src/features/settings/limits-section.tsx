@@ -7,8 +7,8 @@ import {
   useCreateLimitRule,
   useDeleteLimitRule,
   useLimitRules,
-  useLimitTeamOptions,
   usePatchLimitRule,
+  useTeamOptions,
 } from '@/api/hooks';
 import {
   describeLimit,
@@ -97,7 +97,7 @@ function LimitDialog({ editing, onClose }: { editing: LimitRule | 'new'; onClose
   const creating = editing === 'new';
   const create = useCreateLimitRule();
   const patch = usePatchLimitRule();
-  const teams = useLimitTeamOptions();
+  const teams = useTeamOptions();
   const [formError, setFormError] = React.useState<string | undefined>();
   const form = useForm<LimitFormValues>({
     resolver: zodResolver(limitSchema),
@@ -256,7 +256,7 @@ function LimitDialog({ editing, onClose }: { editing: LimitRule | 'new'; onClose
             <option value="">Organization</option>
             {(teams.data ?? []).map((t) => (
               <option key={t.id} value={t.id}>
-                {t.displayName}
+                {t.name}
               </option>
             ))}
           </Select>

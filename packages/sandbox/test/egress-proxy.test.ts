@@ -391,3 +391,49 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
     await asyncFail.close();
   });
 });
+
+describe('8.8 egress proxy timeouts and unix socket', () => {
+  const policy: EgressPolicy = {
+    tokenSha256: sha256Hex(TOKEN),
+    allow: ['ok.test:443'],
+    phase: 'running',
+  };
+
+  it('8.8 destroys an upstream socket that never connects and answers 502', async () => {
+    const hanging = new net.Socket();
+    const proxy = createEgressProxy({
+      policies: { get: async () => policy },
+      audit: { record: () => {} },
+      resolver: async () => ['93.184.216.34'],
+      connect: () => hanging,
+      connectTimeoutMs: 50,
+    });
+    const { port } = await proxy.listenTcp(0, '127.0.0.1');
+    const r = await rawRequest(
+      port,
+      `CONNECT ok.test:443 HTTP/1.1\r\nProxy-Authorization: ${auth()}\r\n\r\n`,
+    );
+    expect(r.head).toContain('502');
+    expect(hanging.destroyed).toBe(true);
+    await proxy.close();
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    '8.8 puts the unix socket in a private directory and removes it on close',
+    async () => {
+      const { stat } = await import('node:fs/promises');
+      const base = await mkdtemp(path.join(tmpdir(), 'bastion-egress-'));
+      const socketPath = path.join(base, 'egress.sock');
+      const proxy = createEgressProxy({
+        policies: { get: async () => policy },
+        audit: { record: () => {} },
+      });
+      const listener = await proxy.listenUnix(socketPath, 'inst-1');
+      if (process.platform !== 'win32') {
+        expect((await stat(path.dirname(socketPath))).mode & 0o777).toBe(0o700);
+      }
+      await listener.close();
+      await proxy.close();
+    },
+  );
+});

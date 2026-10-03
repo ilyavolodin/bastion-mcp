@@ -98,6 +98,45 @@ export const assertSwapped = (result: { count: number }): void => {
   if (result.count !== 1) throw new PreconditionFailedError();
 };
 
+export type VersionedUpdate<Row extends Versioned> = {
+  /** Names the resource in the 404. */
+  what: string;
+  id: string;
+  ifMatch: string | undefined;
+  find: () => Promise<Row | null>;
+  /** The compare-and-swap `updateMany`: `where` carries the id and version guard, `updatedAt` is the new version. */
+  write: (
+    current: Row,
+    where: { id: string; updatedAt: Date | null },
+    updatedAt: Date,
+  ) => Promise<{ count: number }>;
+  /** Runs after the swap succeeded and before the row is reloaded (search reindexing). */
+  afterSwap?: () => Promise<void>;
+  reload: () => Promise<Row>;
+};
+
+/**
+ * The shared shape of an `If-Match` update: find (404), `assertIfMatch` (428/412), compare-and-swap
+ * (`assertSwapped`, 412), reload. Returns the row before and after; bumps and audit stay with the caller.
+ */
+export const versionedUpdate = async <Row extends Versioned>(
+  spec: VersionedUpdate<Row>,
+  now: Date = new Date(),
+): Promise<{ current: Row; row: Row }> => {
+  const current = await spec.find();
+  if (!current) throw new NotFoundError(spec.what, spec.id);
+  assertIfMatch(current, spec.ifMatch);
+  assertSwapped(
+    await spec.write(
+      current,
+      { id: spec.id, ...versionGuard(current) },
+      nextUpdatedAt(current, now),
+    ),
+  );
+  await spec.afterSwap?.();
+  return { current, row: await spec.reload() };
+};
+
 // --- pagination (17.1) --------------------------------------------------------------------------------
 
 export type Paged<T> = { items: T[]; nextCursor: string | null };
@@ -138,39 +177,38 @@ export const toPage = <T>(
   return { items, nextCursor: encodeCursor(cursorOf(last)) };
 };
 
-/**
- * Keyset condition for rows ordered by `id desc`. Ids are UUIDv7, so this is "newest first" and, unlike
- * a timestamp (stored with microseconds, read with milliseconds), an exact total order.
- */
-export const afterIdDesc = (cursor: string | undefined): Record<string, unknown> => {
-  const c = decodeCursor(cursor);
-  if (!c) return {};
-  const [id] = c;
-  if (typeof id !== 'string') throw new InvalidCursorError();
-  return { id: { lt: id } };
-};
-
-/** Keyset condition for `id asc`. */
-export const afterIdAsc = (cursor: string | undefined): Record<string, unknown> => {
-  const c = decodeCursor(cursor);
-  if (!c) return {};
-  const [id] = c;
-  if (typeof id !== 'string') throw new InvalidCursorError();
-  return { id: { gt: id } };
-};
-
 export const idCursorOf = (row: { id: string }): (string | number)[] => [row.id];
 
-/** Keyset condition for rows ordered by one unique string column ascending (slug, email, name). */
-export const afterStringAsc = (
+/**
+ * Keyset condition on one unique string column: `desc` pages with `lt`, `asc` with `gt`. Ids are UUIDv7, so
+ * `afterKey('id', 'desc', cursor)` is "newest first" and, unlike a timestamp (stored with microseconds, read
+ * with milliseconds), an exact total order. Slugs, emails and names use `asc`.
+ */
+export const afterKey = (
   field: string,
+  direction: 'asc' | 'desc',
   cursor: string | undefined,
 ): Record<string, unknown> => {
   const c = decodeCursor(cursor);
   if (!c) return {};
   const [value] = c;
   if (typeof value !== 'string') throw new InvalidCursorError();
-  return { [field]: { gt: value } };
+  return { [field]: { [direction === 'desc' ? 'lt' : 'gt']: value } };
+};
+
+/**
+ * The list boilerplate: clamps the limit, fetches `take = limit + 1` rows through `fetch`, cuts the page and
+ * maps the rows. The cursor itself is applied by the caller's `where` (see `afterKey`).
+ */
+export const paginate = async <Row, View>(
+  filter: { limit?: number | undefined },
+  fetch: (take: number) => Promise<Row[]>,
+  cursorOf: (row: Row) => (string | number)[],
+  toView: (row: Row) => View,
+): Promise<Paged<View>> => {
+  const limit = clampLimit(filter.limit);
+  const page = toPage(await fetch(limit + 1), limit, cursorOf);
+  return { items: page.items.map(toView), nextCursor: page.nextCursor };
 };
 
 // --- JSON and bytes -----------------------------------------------------------------------------------
@@ -213,6 +251,8 @@ export type AuditContext = {
   ip?: string | null;
   userAgent?: string | null;
   requestId?: string | null;
+  /** The event time; defaults to the system clock. */
+  now?: Date;
 };
 
 export type AuditEventSpec = {

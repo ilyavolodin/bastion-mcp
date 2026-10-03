@@ -5,7 +5,9 @@
  * redirect handling on top, so OIDC and OAuth flows can be driven like a user agent would.
  */
 
-export const PUBLIC_URL = 'https://bastion.test';
+import { PUBLIC_URL } from './constants';
+
+export { PUBLIC_URL };
 
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 

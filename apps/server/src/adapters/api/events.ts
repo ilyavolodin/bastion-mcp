@@ -3,8 +3,8 @@
  * every replica: they go to Redis (`bastion:events`) and each replica delivers them to its own subscribers. The
  * publishing replica delivers locally at once and ignores its own echo.
  */
-import { randomUUID } from 'node:crypto';
 import type { ApiEvent, EventBus } from '@bastion-mcp/api';
+import { newId } from '@bastion-mcp/core';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
@@ -38,7 +38,7 @@ export const createEventBus = (deps: {
   duplicate: () => Redis;
   onError?: (message: string) => void;
 }): RedisEventBus => {
-  const origin = randomUUID();
+  const origin = newId();
   const handlers = new Set<(event: ApiEvent) => void>();
   let sub: Redis | undefined;
 

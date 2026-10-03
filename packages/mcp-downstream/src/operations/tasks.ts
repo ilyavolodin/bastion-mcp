@@ -2,7 +2,6 @@
 
 import { extractResultSegments, extractStringLeaves, type TextSegment } from '@bastion-mcp/guards';
 import { type TaskIdPayload, unwrapTaskId } from '@bastion-mcp/mcp-upstream';
-import { trace } from '@opentelemetry/api';
 import { byteSize, CallRecord } from '../observability/call-log';
 import { InvalidParamsError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
@@ -13,6 +12,7 @@ import {
   callPrincipalOf,
   isRecord,
   runGuards,
+  spanContextOf,
   upstreamContextOf,
   withMeta,
 } from './support';
@@ -41,7 +41,7 @@ const taskOperation = (deps: OperationDeps, method: TaskMethod): Operation => ({
     // A task of an installation this endpoint does not serve looks like any invalid id.
     if (!installation) throw new InvalidParamsError('invalid taskId');
     const record = new CallRecord(method, deps.clock.now());
-    const span = trace.getActiveSpan()?.spanContext() ?? ctx.trace;
+    const span = spanContextOf(ctx);
     record.installationId = installation.id;
     record.catalogEntryId = installation.catalogEntryId;
     record.catalogVersionId = installation.catalogVersionId;

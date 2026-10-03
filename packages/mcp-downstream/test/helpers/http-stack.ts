@@ -17,6 +17,7 @@ import type {
   UpstreamItems,
 } from '@bastion-mcp/router';
 import type { CallLogRow } from '@bastion-mcp/telemetry';
+import { freePort } from '@bastion-mcp/testkit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createDownstream, type Downstream, type DownstreamConfig } from '../../src/downstream';
 import type { CatalogInstallPort, SkillsProvider, TokenVerifierPort } from '../../src/ports';
@@ -64,17 +65,7 @@ const principalFor = (id: string): Principal =>
     { authMethod: 'oauth', clientId: 'client-1', scopes: ['mcp'], credentialId: 'jti' },
   );
 
-export const freePort = async (): Promise<number> => {
-  const net = await import('node:net');
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, '127.0.0.1', () => {
-      const p = (server.address() as { port: number }).port;
-      server.close(() => resolve(p));
-    });
-    server.on('error', reject);
-  });
-};
+export { freePort };
 
 export const startHttpStack = async (options: HttpStackOptions = {}): Promise<HttpStack> => {
   const users = Object.fromEntries(

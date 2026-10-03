@@ -4,19 +4,15 @@ import { ApiError } from '@/api/client';
 import {
   useCreateRegistrySource,
   useDeleteRegistrySource,
+  useIsSyncing,
+  useMarkSyncRequested,
   usePatchRegistrySource,
   usePutRegistryPolicy,
   useRegistryPolicy,
   useRegistrySources,
   useSyncRegistrySource,
 } from '@/api/hooks';
-import {
-  isSyncing,
-  markSyncRequested,
-  type RegistrySource,
-  syncInfo,
-  TRUST_LABEL,
-} from '@/api/views/registry';
+import { type RegistrySource, syncInfo, TRUST_LABEL, trustTone } from '@/api/views/registry';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/form';
 import { Card, CardHeader, Tag } from '@/components/primitives';
@@ -26,6 +22,11 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { formatRelative } from '@/lib/format';
+import { MINUTE, SECOND, WEEK_MS } from '@/lib/time';
+
+/** The API accepts a registry sync interval from a minute to a week. */
+const MIN_SYNC_INTERVAL_S = MINUTE / SECOND;
+const MAX_SYNC_INTERVAL_S = WEEK_MS / SECOND;
 
 const PRESETS = [
   {
@@ -60,7 +61,8 @@ function AddSourceDialog({ open, onClose }: { open: boolean; onClose: () => void
   const [error, setError] = React.useState<string | undefined>();
   const set = (patch: Partial<typeof empty>) => setV((prev) => ({ ...prev, ...patch }));
   const interval = Number(v.syncIntervalS);
-  const invalidInterval = !Number.isInteger(interval) || interval < 60 || interval > 7 * 86400;
+  const invalidInterval =
+    !Number.isInteger(interval) || interval < MIN_SYNC_INTERVAL_S || interval > MAX_SYNC_INTERVAL_S;
   return (
     <Dialog
       open={open}
@@ -406,7 +408,8 @@ function SourceRow({
   const sync = useSyncRegistrySource();
   const remove = useDeleteRegistrySource();
   const info = syncInfo(source);
-  const syncing = isSyncing(source);
+  const markSyncRequested = useMarkSyncRequested();
+  const syncing = useIsSyncing([source])(source);
   const start = (full: boolean) => {
     markSyncRequested(source.id);
     sync.mutate(
@@ -426,17 +429,7 @@ function SourceRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-label font-semibold">{source.name}</span>
-            <Tag
-              tone={
-                source.trust === 'official'
-                  ? 'ok'
-                  : source.trust === 'internal'
-                    ? 'info'
-                    : 'neutral'
-              }
-            >
-              {TRUST_LABEL[source.trust] ?? source.trust}
-            </Tag>
+            <Tag tone={trustTone(source.trust)}>{TRUST_LABEL[source.trust] ?? source.trust}</Tag>
             <Tag tone={source.enabled ? 'ok' : 'warn'}>
               {source.enabled ? 'Enabled' : 'Disabled'}
             </Tag>

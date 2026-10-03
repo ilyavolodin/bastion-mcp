@@ -10,6 +10,7 @@ import { setRole } from '../boot/set-role';
 import { loadServerConfig } from '../config';
 import { createInfra, type Infra } from '../infra';
 import { KEY_PURPOSES, publishKeyChange, rotateKeys } from '../scheduler/tasks/keys';
+import { CLI_CONNECT_TIMEOUT_MS } from '../timing';
 import { exportConfig, importConfig } from './config-io';
 
 export type Env = Record<string, string | undefined>;
@@ -129,7 +130,7 @@ export const checkConfig = async (env: Env): Promise<CheckRow[]> => {
 
   const client = new pg.Client({
     connectionString: config.databaseUrl,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: CLI_CONNECT_TIMEOUT_MS,
   });
   try {
     await client.connect();
@@ -157,7 +158,7 @@ export const checkConfig = async (env: Env): Promise<CheckRow[]> => {
 
   const redis = new Redis(config.redisUrl, {
     maxRetriesPerRequest: 1,
-    connectTimeout: 5000,
+    connectTimeout: CLI_CONNECT_TIMEOUT_MS,
     lazyConnect: true,
     retryStrategy: () => null,
   });

@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { canManageEntry } from '@/features/catalog/entry-actions';
 import { getDb } from '@/mocks/db';
+import { iso } from '@/mocks/util';
 import { captureRequests, expectSent } from './capture';
 import { expectNoA11yViolations, renderRoute } from './utils';
 
@@ -251,8 +252,8 @@ describe('Catalog editor lifecycle (11.1, 11.3, 18.3)', () => {
           id: 'run-needs-connect',
           versionId: v.id,
           status: 'failed',
-          startedAt: new Date().toISOString(),
-          finishedAt: new Date().toISOString(),
+          startedAt: iso(db.now),
+          finishedAt: iso(db.now),
           steps: [
             { id: 'prepare', status: 'passed' },
             {

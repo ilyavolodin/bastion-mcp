@@ -11,8 +11,8 @@ import {
   type SandboxSpec,
 } from '@bastion-mcp/sandbox';
 import { fakeStdioServerPath } from '@bastion-mcp/testkit';
-import type { Installer } from '../../../runner/src/install';
-import { createRunner, type Runner } from '../../../runner/src/server';
+import { createRunner, type Installer, type Runner } from 'bastion-runner';
+import { TEST_SANDBOX_DRIVER } from './constants';
 
 type Entry = { id: string; runner: Runner; address: string; token: string; dir: string };
 
@@ -40,7 +40,7 @@ export class LocalRunnerPool {
  * runner and the real `SandboxConnector`.
  */
 export class LocalProcessDriver implements SandboxDriver {
-  readonly name = 'bubblewrap' as const;
+  readonly name = TEST_SANDBOX_DRIVER;
   readonly isolation = 'namespaces' as const;
   createCount = 0;
   attachCount = 0;
@@ -94,7 +94,7 @@ export class LocalProcessDriver implements SandboxDriver {
     await client.bind(token);
     this.pool.entries.set(spec.instanceId, { id: spec.instanceId, runner, address, token, dir });
     return {
-      ref: { driver: 'bubblewrap', id: spec.instanceId, address, runnerToken: token },
+      ref: { driver: TEST_SANDBOX_DRIVER, id: spec.instanceId, address, runnerToken: token },
       runner: client,
     };
   }
@@ -125,7 +125,7 @@ export class LocalProcessDriver implements SandboxDriver {
 
   async *list(): AsyncIterable<SandboxRef> {
     for (const entry of this.pool.entries.values()) {
-      yield { driver: 'bubblewrap', id: entry.id, address: entry.address, runnerToken: '' };
+      yield { driver: TEST_SANDBOX_DRIVER, id: entry.id, address: entry.address, runnerToken: '' };
     }
   }
 }

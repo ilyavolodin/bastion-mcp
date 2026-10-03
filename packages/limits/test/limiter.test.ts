@@ -62,7 +62,11 @@ describe('14.2 concurrency', () => {
     await limiter.check(op(), [conc()], 'r2');
     const err = await limiter.check(op(), [conc()], 'r3').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(RateLimitedError);
-    expect((err as RateLimitedError).data).toEqual({ retryAfterMs: 1000, limit: 'In flight' });
+    expect((err as RateLimitedError).data).toEqual({
+      retryAfterMs: 1000,
+      limit: 'In flight',
+      kind: 'concurrency',
+    });
     expect((err as RateLimitedError).mcpCode).toBe(-32011);
   });
 

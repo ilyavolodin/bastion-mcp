@@ -4,8 +4,8 @@
  * stubbed (a bearer token is a user id) and the ports that belong to other parts of the server are not configured.
  */
 import { createServer as createHttpServer } from 'node:http';
-import { createServer } from 'node:net';
 import { loadConfig, newId, sha256Hex } from '@bastion-mcp/core';
+import { freePort } from '@bastion-mcp/testkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createEventBus } from '../src/adapters/api/events';
 import { createIdentityPorts } from '../src/adapters/api/identity';
@@ -19,16 +19,6 @@ const REMOTE_SPEC = {
   url: 'https://upstream.example/mcp',
   auth: { mode: 'none' },
 } as const;
-
-const freePort = (): Promise<number> =>
-  new Promise((resolve, reject) => {
-    const s = createServer();
-    s.listen(0, '127.0.0.1', () => {
-      const port = (s.address() as { port: number }).port;
-      s.close(() => resolve(port));
-    });
-    s.on('error', reject);
-  });
 
 describe.skipIf(!haveDocker())('17 control-plane API over Postgres and Redis', () => {
   let env: TestEnv;

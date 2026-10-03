@@ -841,3 +841,31 @@ describe('9.1 SCIM server: Groups', () => {
     expect((await s.call('POST', '/Groups', { displayName: 'Ops' })).status).toBe(409);
   });
 });
+
+describe('9.1 SCIM server: logging', () => {
+  it('9.1 an unexpected failure is logged through the logger port, never returned', async () => {
+    const store = new MemoryScimStore();
+    store.getUser = async () => {
+      throw new Error('db password=hunter2');
+    };
+    const logged: { message: string; error: unknown }[] = [];
+    const svc = new ScimService({
+      store,
+      tokens: { findByHash: async () => ({ id: 't', expiresAt: null, revokedAt: null }) },
+      deactivator: { deactivate: async () => {} },
+      baseUrl: 'https://bastion.test',
+      logger: { error: (message, fields) => logged.push({ message, error: fields?.error }) },
+    });
+    const r = await svc.handle({
+      method: 'GET',
+      path: '/Users/x',
+      query: {},
+      headers: { authorization: 'Bearer anything' },
+      body: undefined,
+    });
+    expect(r.status).toBe(500);
+    expect(JSON.stringify(r.body)).not.toContain('hunter2');
+    expect(logged).toHaveLength(1);
+    expect(String(logged[0]?.error)).toContain('hunter2');
+  });
+});

@@ -44,11 +44,11 @@ import {
 import type { AuthServices } from '../contracts';
 import { bastionProviderPages } from '../http/pages/provider-pages';
 import type { Infra } from '../infra';
+import { KEY_REFRESH_MS, LAST_USED_FLUSH_MS } from '../timing';
+import { watchConfig } from './config-watch';
 import { authRedis } from './redis';
 
 const KEY_TOPICS = new Set(['signing_keys', 'state_keys', 'keys']);
-const KEY_REFRESH_MS = 5 * 60 * 1000;
-const LAST_USED_FLUSH_MS = 5000;
 
 /** Redis `revoked:{principalId}` watermark (9.1) plus the `bastion:revoke` channel (16.3). */
 export const createRevocationStore = (infra: Infra): RevocationStore => ({
@@ -211,18 +211,9 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
     }, KEY_REFRESH_MS),
   );
   unsubscribers.push(
-    infra.pubsub.subscribe(REDIS_CHANNELS.config, (message) => {
-      try {
-        const parsed: unknown = JSON.parse(message);
-        const topic =
-          typeof parsed === 'object' && parsed !== null
-            ? (parsed as { topic?: unknown }).topic
-            : undefined;
-        if (typeof topic === 'string' && KEY_TOPICS.has(topic)) {
-          refreshKeys().catch((e) => log('key refresh failed', e));
-        }
-      } catch {
-        // not a key event
+    watchConfig(infra, (event) => {
+      if (event.topic !== undefined && KEY_TOPICS.has(event.topic)) {
+        refreshKeys().catch((e) => log('key refresh failed', e));
       }
     }),
   );
@@ -334,6 +325,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
       },
     },
     baseUrl: config.publicUrl,
+    logger: { error: (message, fields) => logger.error(fields ?? {}, message) },
     connection: enabledConnections.length === 1 ? (enabledConnections[0] ?? null) : null,
   });
 

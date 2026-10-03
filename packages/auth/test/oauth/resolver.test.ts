@@ -6,6 +6,7 @@ import {
   UpstreamAuthRequiredError,
   UpstreamUnavailableError,
 } from '@bastion-mcp/core';
+import { type FakeIdp, startFakeIdp } from '@bastion-mcp/testkit';
 import { decodeJwt, decodeProtectedHeader } from 'jose';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { IdpLogin } from '../../src/oauth/idp/login';
@@ -14,7 +15,6 @@ import type { IdpConnection } from '../../src/oauth/ports';
 import { IdpMintedTokens } from '../../src/oauth/upstream/idp-minted';
 import { OAuthConfigError } from '../../src/oauth/upstream/injection';
 import { type SecretResolver, UpstreamCredentialResolver } from '../../src/oauth/upstream/resolver';
-import { type FakeIdp, startFakeIdp } from './fake-idp';
 import { MemoryIdpConnections, MemoryIdpTokens } from './fakes';
 import {
   HOST,

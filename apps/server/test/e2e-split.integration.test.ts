@@ -4,10 +4,14 @@
  * legacy remote instance between two workers.
  */
 import { redisKeys } from '@bastion-mcp/core';
-import { type FakeLegacyHttpServer, startFakeLegacyHttpServer } from '@bastion-mcp/testkit';
+import {
+  type FakeIdp,
+  type FakeLegacyHttpServer,
+  startFakeIdp,
+  startFakeLegacyHttpServer,
+} from '@bastion-mcp/testkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestEnv, haveDocker, type TestEnv } from './helpers/env';
-import { type FakeIdp, startFakeIdp } from './helpers/fake-idp';
 import {
   api,
   connectWithToken,

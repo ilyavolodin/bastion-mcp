@@ -11,6 +11,12 @@ export const API_BASE = '/api/v1';
 export const CSRF_COOKIE = 'bastion_csrf';
 export const CSRF_HEADER = 'x-bastion-csrf';
 export const DEFAULT_TIMEOUT_MS = 30_000;
+/** Rows asked per page of a cursor list. */
+export const PAGE_LIMIT = 500;
+/** Pages `fetchAll` follows at most: a screen that wants a whole list. */
+export const MAX_PAGES_DEFAULT = 20;
+/** Pages of a lookup that only labels rows (names of teams, sources, entries): a failure or a cut costs only labels. */
+export const LOOKUP_PAGES = 5;
 
 export type FieldError = { path: string; message: string };
 
@@ -85,6 +91,7 @@ export const configureApi = (next: Partial<Hooks>): void => {
   hooks = { ...hooks, ...next };
 };
 
+/** The version of every row read so far, sent back as `If-Match`; cleared with the session (`clearEtags`). */
 const etags = new Map<string, string>();
 
 /**
@@ -113,6 +120,7 @@ const rememberRowEtags = (path: string, data: unknown): void => {
 export const rememberEtag = (path: string, etag: string): void => {
   etags.set(path, etag);
 };
+/** Forgets every remembered ETag: on sign out and when the session ends (a 401). */
 export const clearEtags = (): void => etags.clear();
 
 export const readCookie = (name: string, source: string = document.cookie): string | null => {
@@ -241,7 +249,11 @@ export async function request<T>(
   } catch (e) {
     if (e instanceof ApiProblemError) {
       const err = fromProblem(e);
-      if (err.isUnauthorized) hooks.onUnauthorized();
+      if (err.isUnauthorized) {
+        // The session is gone: the versions remembered under it must not be sent to whoever signs in next.
+        clearEtags();
+        hooks.onUnauthorized();
+      }
       throw err;
     }
     if (e instanceof ApiError) throw e;
@@ -305,14 +317,14 @@ export type CursorPage<T> = { items: T[]; nextCursor: string | null };
 export async function fetchAll<P extends ApiPath<'get'>>(
   path: P,
   query?: LooseQuery<QueryOf<'get', P>>,
-  maxPages = 20,
+  maxPages = MAX_PAGES_DEFAULT,
   signal?: AbortSignal,
 ): Promise<ItemOf<ResOf<'get', P>>[]> {
   const out: ItemOf<ResOf<'get', P>>[] = [];
   let cursor: string | null = null;
   for (let i = 0; i < maxPages; i++) {
     const page: CursorPage<ItemOf<ResOf<'get', P>>> = (await request('GET', path, {
-      query: { limit: 500, ...(query as Query | undefined), cursor },
+      query: { limit: PAGE_LIMIT, ...(query as Query | undefined), cursor },
       ...(signal ? { signal } : {}),
     })) as CursorPage<ItemOf<ResOf<'get', P>>>;
     out.push(...page.items);

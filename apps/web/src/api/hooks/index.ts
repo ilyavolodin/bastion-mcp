@@ -1,6 +1,7 @@
 export * from './access';
 export * from './base';
 export * from './catalog';
+export * from './lookups';
 export * from './observability';
 export * from './plugins';
 export * from './registry';

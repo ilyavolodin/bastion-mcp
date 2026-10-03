@@ -16,7 +16,10 @@ import {
   type Sample,
   type SampleFactory,
 } from '../http';
+import { isAdmin, managesTeam } from '../roles';
+import { ME_ID, ORG_HOST } from '../seed';
 import { getDb } from '../state';
+import { DAY, HOUR, iso, nowIso, validationFailed } from '../util';
 
 type Marketplace = Schemas['Marketplace'];
 type Release = Schemas['MarketplaceRelease'];
@@ -30,10 +33,7 @@ export type PluginsData = {
   usage: Record<string, Usage>;
 };
 
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
-const iso = (ms: number) => new Date(ms).toISOString();
-export const MOCK_HOST = 'bastion.acme.dev';
+export const MOCK_HOST = ORG_HOST;
 
 const ITEMS: Release['items'] = [
   { name: 'release-notes', version: '1.4.0', policy: 'installedByDefault' },
@@ -80,7 +80,7 @@ export const buildPluginsData = (now: number): PluginsData => ({
         updatedAt: iso(now - 3 * HOUR),
       },
       promotedRelease: 5,
-      createdBy: 'u-dana',
+      createdBy: ME_ID,
       createdAt: iso(now - 90 * DAY),
       updatedAt: iso(now - HOUR),
     },
@@ -108,18 +108,10 @@ export const buildPluginsData = (now: number): PluginsData => ({
 // --- handlers -----------------------------------------------------------------------------------------------------
 
 const data = () => getDb().data.plugins;
-const nowIso = () => new Date().toISOString();
 
 /** Org-owned marketplaces are administered by admins, team-owned ones by that team's managers (10.1). */
-const canWrite = (m: Marketplace): boolean => {
-  const db = getDb();
-  if (db.role === 'admin') return true;
-  return (
-    db.role === 'manager' &&
-    m.ownerTeamId !== null &&
-    db.me.teams.some((t) => t.id === m.ownerTeamId && t.role === 'manager')
-  );
-};
+const canWrite = (m: Marketplace): boolean =>
+  isAdmin() || (m.ownerTeamId !== null && managesTeam(m.ownerTeamId));
 
 const ROLLOUT_CLIENTS = [
   'claude-code',
@@ -269,9 +261,10 @@ export const pluginsHandlers: HttpHandler[] = [
     if (!m) return notFound('Marketplace');
     const client = url.searchParams.get('client');
     if (!isClient(client)) {
-      return problem(422, 'validation_failed', 'Some fields need attention', 'unknown client', [
-        { path: '/client', message: `use one of ${ROLLOUT_CLIENTS.join(', ')}` },
-      ]);
+      return validationFailed(
+        [{ path: '/client', message: `use one of ${ROLLOUT_CLIENTS.join(', ')}` }],
+        'unknown client',
+      );
     }
     const latest =
       client === 'claude-desktop-3p' && m.promotedRelease !== null

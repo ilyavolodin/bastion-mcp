@@ -1,6 +1,8 @@
 import {
   type BastionError,
+  CONTINUABLE_METHODS,
   type Keyring,
+  MS,
   newId,
   type RequestStateBinding,
   UpstreamAuthRequiredError,
@@ -13,10 +15,11 @@ import { SpanKind, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api
 import type { EraCache } from '../connectors/era-cache';
 import { activeTraceCarrier, timeoutFor } from '../connectors/identity';
 import type { OpOptions, UpstreamSession } from '../connectors/types';
-import { ContinuationLostError, type ErrorContext, mapUpstreamError, toRpcError } from '../errors';
+import { ContinuationLostError, type ErrorContext, mapUpstreamError } from '../errors';
 import { clientSupports } from '../input-required/helpers';
 import { lookupContinuation } from '../input-required/registry';
 import type { EnsureArgs, InstanceManager, LiveInstance } from '../instances/manager';
+import { SPAN_ATTRS } from '../instances/telemetry';
 import type { LeaseManager } from '../ownership/lease';
 import type { WorkerRegistry } from '../ownership/registry';
 import { gracefulShutdown, InflightTracker } from '../ownership/shutdown';
@@ -47,9 +50,6 @@ import {
   type WireContext,
 } from '../types';
 import type { RemotePool } from './pool';
-
-/** Methods whose retry carries `inputResponses` and a wrapped `requestState` (6.5). */
-const CONTINUABLE = new Set(['tools/call', 'prompts/get', 'resources/read']);
 
 const CONNECT_RETRY_DELAY_MS = 250;
 
@@ -129,7 +129,7 @@ export class UpstreamService implements InternalRpcHandlers {
   }
 
   private nowSeconds(): number {
-    return Math.floor(this.clock.now() / 1000);
+    return Math.floor(this.clock.now() / MS.SECOND);
   }
 
   // --- public API for the downstream operation layer --------------------------------------------------------------
@@ -145,25 +145,42 @@ export class UpstreamService implements InternalRpcHandlers {
     params: JsonObject;
     ctx: UpstreamCallContext;
   }): Promise<UpstreamOutcome> {
+    const { ctx } = request;
+    return this.guarded(
+      request.installationId,
+      ctx,
+      request.method,
+      async (installation) => {
+        const credential = await this.credentialFor(ctx.principal, installation);
+        return this.dispatch(installation, credential, request.method, request.params, ctx);
+      },
+      (mapped, installation) =>
+        mapped instanceof UpstreamAuthRequiredError
+          ? this.authElicitation(installation, mapped, request, ctx)
+          : undefined,
+    );
+  }
+
+  /**
+   * The envelope of every operation entry point: counted as in flight (graceful shutdown), the installation resolved,
+   * and any failure mapped to its `BastionError`. `recover` may turn a mapped error into an outcome instead.
+   */
+  private guarded<T>(
+    installationId: string,
+    ctx: Pick<UpstreamCallContext, 'principal'>,
+    method: string,
+    body: (installation: ResolvedInstallation) => Promise<T>,
+    recover?: (mapped: BastionError, installation: ResolvedInstallation) => T | undefined,
+  ): Promise<T> {
     return this.inflight.track(async () => {
-      const { ctx } = request;
       let installation: ResolvedInstallation | undefined;
       try {
-        installation = await this.requireInstallation(request.installationId);
-        const credential = await this.credentialFor(ctx.principal, installation);
-        return await this.dispatch(installation, credential, request.method, request.params, ctx);
+        installation = await this.requireInstallation(installationId);
+        return await body(installation);
       } catch (error) {
-        const mapped = await this.mapError(
-          error,
-          installation,
-          request.installationId,
-          ctx,
-          request.method,
-        );
-        if (installation && mapped instanceof UpstreamAuthRequiredError) {
-          const elicitation = this.authElicitation(installation, mapped, request, ctx);
-          if (elicitation) return elicitation;
-        }
+        const mapped = await this.mapError(error, installation, installationId, ctx, method);
+        const recovered = installation ? recover?.(mapped, installation) : undefined;
+        if (recovered !== undefined) return recovered;
         throw mapped;
       }
     });
@@ -181,7 +198,7 @@ export class UpstreamService implements InternalRpcHandlers {
     ctx: UpstreamCallContext,
   ): UpstreamOutcome | undefined {
     if (
-      !CONTINUABLE.has(request.method) ||
+      !CONTINUABLE_METHODS.has(request.method) ||
       !clientSupports(ctx.clientCapabilities, 'elicitation', { mode: 'url' })
     ) {
       return undefined;
@@ -268,7 +285,7 @@ export class UpstreamService implements InternalRpcHandlers {
     return this.deps.credentials.resolve(principal, installation, installation.spec);
   }
 
-  async mapError(
+  mapError(
     error: unknown,
     installation: ResolvedInstallation | undefined,
     installationId: string,
@@ -308,7 +325,7 @@ export class UpstreamService implements InternalRpcHandlers {
       );
     }
     const effectiveParams = prepared?.params ?? params;
-    const binding = this.binding(installation, method, effectiveParams, ctx, prepared?.binding);
+    const binding = prepared?.binding ?? this.binding(installation, method, effectiveParams, ctx);
 
     if (spec.type === 'remote' && spec.transport === 'streamable-http') {
       const pooled = await this.deps.pool.get(installation, ctx.principal, credential, signal);
@@ -416,7 +433,6 @@ export class UpstreamService implements InternalRpcHandlers {
     binding: RequestStateBinding,
   ): Promise<UpstreamOutcome> {
     const started = performance.now();
-    const target = (params.name ?? params.uri) as string | undefined;
     const span = upstreamMcpSpan({
       method,
       toolName: method === 'tools/call' ? (params.name as string | undefined) : undefined,
@@ -432,7 +448,6 @@ export class UpstreamService implements InternalRpcHandlers {
       protocolVersion: session.protocolVersion,
       networkTransport: installation.spec.type === 'package' ? 'pipe' : 'tcp',
     });
-    void target;
     let errorType: string | undefined;
     try {
       return await this.tracer.startActiveSpan(
@@ -444,7 +459,7 @@ export class UpstreamService implements InternalRpcHandlers {
             const trace = { ...ctx.trace, ...activeTraceCarrier() };
             const options: OpOptions = { ctx: { ...ctx, trace } };
             const outcome = await session.request(method, params, options);
-            return this.wrap(outcome, installation, method, binding, ctx);
+            return this.wrap(outcome, installation, binding, ctx);
           } catch (error) {
             errorType = error instanceof Error ? error.name : 'error';
             otelSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
@@ -461,7 +476,7 @@ export class UpstreamService implements InternalRpcHandlers {
           ? { 'gen_ai.tool.name': params.name }
           : {}),
         ...(errorType === undefined ? {} : { 'error.type': errorType }),
-        'bastion.catalog.entry': installation.catalogEntryName,
+        [SPAN_ATTRS.catalogEntry]: installation.catalogEntryName,
       });
     }
   }
@@ -470,11 +485,9 @@ export class UpstreamService implements InternalRpcHandlers {
   private wrap(
     outcome: SessionOutcome,
     installation: ResolvedInstallation,
-    method: string,
     binding: RequestStateBinding,
     ctx: UpstreamCallContext,
   ): UpstreamOutcome {
-    void method;
     switch (outcome.kind) {
       case 'complete':
         return outcome;
@@ -514,9 +527,7 @@ export class UpstreamService implements InternalRpcHandlers {
     method: string,
     params: JsonObject,
     ctx: UpstreamCallContext,
-    from?: RequestStateBinding,
   ): RequestStateBinding {
-    if (from) return from;
     const isRead = method === 'resources/read';
     return {
       principalId: ctx.principal.userId,
@@ -545,7 +556,7 @@ export class UpstreamService implements InternalRpcHandlers {
         inputResponses: Record<string, unknown>;
       }
     | undefined {
-    if (!CONTINUABLE.has(method) || params.requestState === undefined) return undefined;
+    if (!CONTINUABLE_METHODS.has(method) || params.requestState === undefined) return undefined;
     const binding = this.binding(installation, method, params, ctx);
     const state = unwrapRequestState(this.deps.stateKeyring, String(params.requestState), binding, {
       now: this.nowSeconds(),
@@ -586,7 +597,7 @@ export class UpstreamService implements InternalRpcHandlers {
         ctx,
         installation,
       );
-      return this.wrap(outcome, installation, 'resume', binding, ctx);
+      return this.wrap(outcome, installation, binding, ctx);
     }
     const worker = await this.deps.registry.lookup(record.workerId);
     if (!worker) throw new ContinuationLostError(installation.slug);
@@ -660,38 +671,25 @@ export class UpstreamService implements InternalRpcHandlers {
     signal: AbortSignal,
   ): Promise<UpstreamOutcome> {
     const ctx = this.localContext(body.ctx, emit, signal);
-    return this.inflight.track(async () => {
-      let installation: ResolvedInstallation | undefined;
-      try {
-        installation = await this.requireInstallation(body.ctx.installationId);
-        const credential = await this.credentialFor(ctx.principal, installation);
-        const record = await this.deps.instances.instanceFor(installation);
-        const target = record.id === instanceId ? record : { ...record, id: instanceId };
-        const binding = this.binding(installation, body.method, body.params, ctx);
-        const ensured = await this.deps.instances.ensure({
-          record: target,
-          installation,
-          principal: ctx.principal,
-          credential,
-          signal,
+    return this.guarded(body.ctx.installationId, ctx, body.method, async (installation) => {
+      const credential = await this.credentialFor(ctx.principal, installation);
+      const record = await this.deps.instances.instanceFor(installation);
+      const target = record.id === instanceId ? record : { ...record, id: instanceId };
+      const binding = this.binding(installation, body.method, body.params, ctx);
+      const ensured = await this.deps.instances.ensure({
+        record: target,
+        installation,
+        principal: ctx.principal,
+        credential,
+        signal,
+      });
+      if (ensured.kind !== 'local') {
+        // Ownership moved while the request was in flight: the caller retries (no forwarding loops).
+        throw new UpstreamUnavailableError('the server moved to another worker; retry', {
+          installation: installation.slug,
         });
-        if (ensured.kind !== 'local') {
-          // Ownership moved while the request was in flight: the caller retries (no forwarding loops).
-          throw new UpstreamUnavailableError('the server moved to another worker; retry', {
-            installation: installation.slug,
-          });
-        }
-        return await this.runOnLive(
-          ensured.live,
-          installation,
-          body.method,
-          body.params,
-          ctx,
-          binding,
-        );
-      } catch (error) {
-        throw await this.mapError(error, installation, body.ctx.installationId, ctx, body.method);
       }
+      return this.runOnLive(ensured.live, installation, body.method, body.params, ctx, binding);
     });
   }
 
@@ -702,31 +700,24 @@ export class UpstreamService implements InternalRpcHandlers {
     signal: AbortSignal,
   ): Promise<UpstreamOutcome> {
     const ctx = this.localContext(body.ctx, emit, signal);
-    return this.inflight.track(async () => {
-      let installation: ResolvedInstallation | undefined;
-      try {
-        installation = await this.requireInstallation(body.ctx.installationId);
-        const record = await lookupContinuation(this.deps.redis, continuationId);
-        if (!record || record.workerId !== this.deps.registry.workerId) {
-          throw new ContinuationLostError(installation.slug);
-        }
-        const outcome = await this.resumeLocal(
-          record.instanceId,
-          continuationId,
-          body.inputResponses,
-          ctx,
-          installation,
-        );
-        return this.wrap(
-          outcome,
-          installation,
-          'resume',
-          this.binding(installation, 'tools/call', {}, ctx),
-          ctx,
-        );
-      } catch (error) {
-        throw await this.mapError(error, installation, body.ctx.installationId, ctx);
+    return this.guarded(body.ctx.installationId, ctx, 'tools/call', async (installation) => {
+      const record = await lookupContinuation(this.deps.redis, continuationId);
+      if (!record || record.workerId !== this.deps.registry.workerId) {
+        throw new ContinuationLostError(installation.slug);
       }
+      const outcome = await this.resumeLocal(
+        record.instanceId,
+        continuationId,
+        body.inputResponses,
+        ctx,
+        installation,
+      );
+      return this.wrap(
+        outcome,
+        installation,
+        this.binding(installation, 'tools/call', {}, ctx),
+        ctx,
+      );
     });
   }
 
@@ -747,7 +738,6 @@ export class UpstreamService implements InternalRpcHandlers {
   /** `instructions` and `serverInfo` the upstream sent at its handshake (7.6), as last seen by this worker. */
   upstreamMeta(
     installation: ResolvedInstallation,
-    _principal: CallPrincipal,
     credential: ResolvedCredential,
   ): { instructions?: string | undefined; serverInfo?: UpstreamSession['serverInfo'] } {
     return this.metaByKey.get(`${installation.installationId}:${credential.credentialHash}`) ?? {};
@@ -805,10 +795,6 @@ export class UpstreamService implements InternalRpcHandlers {
     return { instanceId: record.id, ...ensured };
   }
 
-  runLive<T>(live: LiveInstance, fn: (session: UpstreamSession) => Promise<T>): Promise<T> {
-    return this.deps.instances.run(live, fn);
-  }
-
   /** Finds out where an installation's owned instance lives, without starting anything. */
   async locateInstance(
     installation: ResolvedInstallation,
@@ -818,11 +804,6 @@ export class UpstreamService implements InternalRpcHandlers {
     const located = await this.deps.leases.locate(record.id);
     if (located.kind === 'vacant') return { instanceId: record.id, owner: 'none' };
     return { instanceId: record.id, owner: located.kind === 'local' ? 'local' : 'remote' };
-  }
-
-  /** `{code, message, data}` of an error for JSON-RPC responses. */
-  rpcError(error: BastionError): ReturnType<typeof toRpcError> {
-    return toRpcError(error);
   }
 
   /** Graceful shutdown (21.2): finish in-flight work, close connections (sandboxes keep running), drop leases. */

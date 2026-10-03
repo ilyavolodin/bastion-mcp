@@ -2,10 +2,9 @@
  * `node --import ./dist/otel.js ./dist/main.js` (15.1): starts the OpenTelemetry SDK before any other module loads,
  * after setting the resource defaults the telemetry package reads from the environment.
  */
-import { hostname } from 'node:os';
+import { resourceDefaults } from './resource-env';
 
-process.env.BASTION_VERSION ??= '0.1.0';
-process.env.BASTION_ENVIRONMENT ??= process.env.NODE_ENV ?? 'production';
-process.env.BASTION_WORKER_ID ??= `${hostname()}-${process.pid}`;
+for (const [key, value] of Object.entries(resourceDefaults(process.env)))
+  process.env[key] ??= value;
 
 await import('@bastion-mcp/telemetry/otel-register');

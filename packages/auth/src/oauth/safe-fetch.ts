@@ -1,15 +1,13 @@
-import { lookup as dnsLookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import {
   type AddressPolicy,
-  addressFamily,
   BastionError,
-  blockedAddressMessage,
   isAddressDenied,
-  normalizeIpLiteral,
   pinnedLookup,
+  resolveAndCheckUrl,
+  UrlCheckError,
 } from '@bastion-mcp/core';
 import { Agent, type Dispatcher } from 'undici';
+import { MAX_PINNED_AGENTS, OAUTH_TIMEOUTS_MS } from './constants';
 import type { FetchFn } from './ports';
 
 /** SSRF guard for every discovery, registration and token endpoint call (9.6, 23.3). */
@@ -28,12 +26,6 @@ export type OutboundPolicy = {
   timeoutMs?: number;
 };
 
-const defaultLookup = async (host: string): Promise<string[]> =>
-  (await dnsLookup(host, { all: true })).map((entry) => entry.address);
-
-const stripBrackets = (host: string): string =>
-  host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
-
 export type OutboundTarget = { url: URL; address: string; family: 4 | 6 };
 
 /**
@@ -44,77 +36,83 @@ export const resolveOutboundTarget = async (
   raw: string,
   policy: OutboundPolicy = {},
 ): Promise<OutboundTarget> => {
-  let url: URL;
   try {
-    url = new URL(raw);
-  } catch {
-    throw new OutboundDeniedError('invalid URL');
+    const checked = await resolveAndCheckUrl(raw, {
+      ...(policy.addressPolicy ? { addressPolicy: policy.addressPolicy } : {}),
+      ...(policy.lookup ? { lookup: policy.lookup } : {}),
+      // Plain http is only for targets inside an admin-allowed CIDR, and only when the caller opted in.
+      allowHttpAddresses: (addresses) =>
+        policy.allowHttpToAllowedCidrs === true &&
+        addresses.every((address) => isAddressDenied(address, {})),
+    });
+    return { url: checked.url, address: checked.address, family: checked.family };
+  } catch (error) {
+    if (!(error instanceof UrlCheckError)) throw error;
+    throw new OutboundDeniedError(
+      error.reason === 'scheme' ? 'only http(s) URLs are allowed' : error.message,
+    );
   }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new OutboundDeniedError('only http(s) URLs are allowed');
-  }
-  if (url.username || url.password) throw new OutboundDeniedError('credentials in URL');
-  const host = stripBrackets(url.hostname);
-  const literal = isIP(host) ? host : normalizeIpLiteral(host);
-  const addresses = literal ? [literal] : await (policy.lookup ?? defaultLookup)(host);
-  if (addresses.length === 0) throw new OutboundDeniedError('host did not resolve');
-  const addressPolicy = policy.addressPolicy ?? {};
-  for (const address of addresses) {
-    if (isAddressDenied(address, addressPolicy)) {
-      throw new OutboundDeniedError(blockedAddressMessage(host, address));
-    }
-  }
-  if (url.protocol === 'http:') {
-    const allowedInternal =
-      policy.allowHttpToAllowedCidrs === true &&
-      addresses.every((address) => isAddressDenied(address, {}));
-    if (!allowedInternal) throw new OutboundDeniedError('https is required');
-  }
-  const first = addresses[0] as string;
-  return { url, address: first, family: addressFamily(first) };
 };
 
 /** Throws OutboundDeniedError unless the URL is https (or http to an admin-allowed address) and public. */
 export const assertOutboundUrl = async (raw: string, policy: OutboundPolicy = {}): Promise<URL> =>
   (await resolveOutboundTarget(raw, policy)).url;
 
-const MAX_AGENTS = 64;
-const agents = new Map<string, Agent>();
+/** Keep-alive dispatchers, one per validated address; each connection can only reach that address. */
+export type PinnedDispatcherPool = {
+  get(target: OutboundTarget): Dispatcher;
+  /** Closes every dispatcher (shutdown and tests). */
+  close(): Promise<void>;
+};
 
-/** One keep-alive dispatcher per validated address; its connections can only reach that address. */
-const pinnedDispatcher = (target: OutboundTarget): Dispatcher => {
-  const key = target.address;
-  const existing = agents.get(key);
-  if (existing) return existing;
-  if (agents.size >= MAX_AGENTS) {
-    const oldest = agents.keys().next().value;
-    if (oldest !== undefined) {
-      void agents
-        .get(oldest)
-        ?.close()
-        .catch(() => undefined);
-      agents.delete(oldest);
-    }
-  }
-  const agent = new Agent({
-    keepAliveTimeout: 10_000,
-    connect: { lookup: pinnedLookup(target), timeout: 10_000 },
-  });
-  agents.set(key, agent);
-  return agent;
+export const createPinnedDispatcherPool = (): PinnedDispatcherPool => {
+  const agents = new Map<string, Agent>();
+  return {
+    get(target) {
+      const existing = agents.get(target.address);
+      if (existing) return existing;
+      if (agents.size >= MAX_PINNED_AGENTS) {
+        const oldest = agents.keys().next();
+        if (!oldest.done) {
+          void agents
+            .get(oldest.value)
+            ?.close()
+            .catch(() => undefined);
+          agents.delete(oldest.value);
+        }
+      }
+      const agent = new Agent({
+        keepAliveTimeout: OAUTH_TIMEOUTS_MS.keepAlive,
+        connect: { lookup: pinnedLookup(target), timeout: OAUTH_TIMEOUTS_MS.connect },
+      });
+      agents.set(target.address, agent);
+      return agent;
+    },
+    async close() {
+      const open = [...agents.values()];
+      agents.clear();
+      await Promise.all(open.map((agent) => agent.close().catch(() => undefined)));
+    },
+  };
 };
 
 /** Wraps a fetch: checks the URL, pins the connection to the checked address, never follows redirects, applies a timeout. */
-export const createSafeFetch = (inner: FetchFn, policy: OutboundPolicy = {}): FetchFn => {
+export const createSafeFetch = (
+  inner: FetchFn,
+  policy: OutboundPolicy = {},
+  pool: PinnedDispatcherPool = createPinnedDispatcherPool(),
+): FetchFn => {
   const safe = async (input: Parameters<FetchFn>[0], init?: Parameters<FetchFn>[1]) => {
     const target =
       typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     const resolved = await resolveOutboundTarget(target, policy);
-    const signals: AbortSignal[] = [AbortSignal.timeout(policy.timeoutMs ?? 10_000)];
+    const signals: AbortSignal[] = [
+      AbortSignal.timeout(policy.timeoutMs ?? OAUTH_TIMEOUTS_MS.request),
+    ];
     if (init?.signal) signals.push(init.signal);
     return inner(input, {
       ...init,
-      dispatcher: pinnedDispatcher(resolved),
+      dispatcher: pool.get(resolved),
       redirect: 'manual',
       signal: AbortSignal.any(signals),
     } as unknown as RequestInit);

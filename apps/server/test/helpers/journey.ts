@@ -3,6 +3,7 @@
  * cookie and CSRF header, and the TS SDK v2 client performing the OAuth 2.1 flow against Bastion's authorization server.
  */
 import { createHash, randomBytes } from 'node:crypto';
+import type { FakeIdp } from '@bastion-mcp/testkit';
 import {
   Client,
   type OAuthClientProvider,
@@ -10,7 +11,6 @@ import {
   UnauthorizedError,
 } from '@modelcontextprotocol/client';
 import type { Infra } from '../../src/infra';
-import type { FakeIdp } from './fake-idp';
 import { type Browser, makeBrowser, PUBLIC_ORIGIN, proxyFetch } from './ui-harness';
 
 export { PUBLIC_ORIGIN };

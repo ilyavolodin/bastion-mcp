@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { type FakeRegistry, startFakeRegistry } from '@bastion-mcp/testkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createRegistryClient, parseRegistryEntry, serverJsonToSpec } from '../src';
-import { type FakeRegistry, startFakeRegistry } from './fake-registry';
 
 /** A trimmed copy of a REAL `GET https://registry.modelcontextprotocol.io/v0.1/servers?limit=100` response. */
 const real = JSON.parse(

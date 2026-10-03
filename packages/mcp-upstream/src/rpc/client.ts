@@ -3,7 +3,9 @@ import { INTERNAL_SIG_HEADER, INTERNAL_TS_HEADER, signInternalRequest } from '@b
 import { type BastionMetrics, injectTraceContext, SPAN_NAMES } from '@bastion-mcp/telemetry';
 import { SpanKind, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api';
 import { Agent, request } from 'undici';
+import { remainingBudget } from '../input-required/helpers';
 import { type Clock, systemClock } from '../ports';
+import { POOL_SIZES, UPSTREAM_TIMEOUTS_MS } from '../timeouts';
 import type { UpstreamNotification, UpstreamOutcome, WireContext } from '../types';
 import {
   fromErrorEvent,
@@ -64,7 +66,11 @@ export class InternalRpcClient {
     this.tracer = options.tracer ?? trace.getTracer('bastion-mcp-upstream');
     this.agent =
       options.agent ??
-      new Agent({ keepAliveTimeout: 60_000, connections: 128, connect: { timeout: 5_000 } });
+      new Agent({
+        keepAliveTimeout: UPSTREAM_TIMEOUTS_MS.rpcKeepAlive,
+        connections: POOL_SIZES.rpcConnections,
+        connect: { timeout: UPSTREAM_TIMEOUTS_MS.rpcConnect },
+      });
   }
 
   async close(): Promise<void> {
@@ -98,8 +104,8 @@ export class InternalRpcClient {
     injectTraceContext({}, headers);
     const timeout = AbortSignal.timeout(
       deadlineAt === undefined
-        ? (this.options.defaultTimeoutMs ?? 35 * 60_000)
-        : Math.max(1, deadlineAt - this.clock.now()) + 5_000,
+        ? (this.options.defaultTimeoutMs ?? UPSTREAM_TIMEOUTS_MS.rpcDefaultCall)
+        : remainingBudget(deadlineAt, this.clock.now()) + UPSTREAM_TIMEOUTS_MS.rpcDeadlineSlack,
     );
     try {
       return await request(`http://${address}${path}`, {

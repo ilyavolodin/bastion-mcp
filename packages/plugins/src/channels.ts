@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
-import { SCOPES } from '@bastion-mcp/core';
+import { HEADERS, SCOPES } from '@bastion-mcp/core';
+import { BodyTooLargeError, readBodyCapped } from './body';
 import type { GitRepositoryCache } from './git-cache';
 import { runHttpBackend } from './http-backend';
 import type {
@@ -152,7 +153,13 @@ export const createPluginsHandler = (
 
       const latest = await deps.releases.latest(marketplace.id);
       if (!latest) return notFound();
-      const body = new Uint8Array(await readBody(request));
+      let body: Uint8Array;
+      try {
+        body = await readBody(request);
+      } catch (error) {
+        if (error instanceof BodyTooLargeError) return text(413, 'request body too large');
+        throw error;
+      }
       const repo = await deps.repositories.ensure(marketplace, latest.seq);
       const response = await runHttpBackend({
         ...(deps.gitBinary ? { gitBinary: deps.gitBinary } : {}),
@@ -186,7 +193,7 @@ export const createPluginsHandler = (
         headers: {
           'content-type': 'application/json; charset=utf-8',
           'cache-control': 'private, no-cache',
-          'x-bastion-release': String(selected.seq),
+          [HEADERS.release]: String(selected.seq),
         },
       });
     }
@@ -203,16 +210,16 @@ export const createPluginsHandler = (
         'content-disposition': `attachment; filename="${route.file}"`,
         'cache-control': 'private, no-cache',
         etag: `"${archive.sha256}"`,
-        'x-bastion-release': String(selected.seq),
+        [HEADERS.release]: String(selected.seq),
       },
     });
   };
 };
 
-const readBody = async (request: Request): Promise<ArrayBuffer> => {
+const readBody = async (request: Request): Promise<Uint8Array> => {
   const declared = Number(request.headers.get('content-length') ?? 0);
-  if (declared > MAX_BODY_BYTES) throw new Error('request body too large');
-  return request.arrayBuffer();
+  if (declared > MAX_BODY_BYTES) throw new BodyTooLargeError(MAX_BODY_BYTES);
+  return readBodyCapped(request.body, MAX_BODY_BYTES);
 };
 
 /** Adapts the `Request` handler to a Node `http` listener; paths it does not own answer 404. */

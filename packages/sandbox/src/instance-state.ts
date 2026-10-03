@@ -1,4 +1,4 @@
-import { FAILURE_BACKOFF_MS } from '@bastion-mcp/core';
+import { FAILURE_BACKOFF_MS, MS } from '@bastion-mcp/core';
 
 /**
  * Pure helpers for the instance manager built later in `mcp-upstream` (8.6):
@@ -91,7 +91,7 @@ export const instanceStateMachine = (
 };
 
 // --- failure backoff (8.6) --------------------------------------------------------------------------------------
-export const FAILURE_WINDOW_MS = 30 * 60 * 1000;
+export const FAILURE_WINDOW_MS = 30 * MS.MINUTE;
 export const ERROR_FAILURE_THRESHOLD = 3;
 export const EARLY_EXIT_WINDOW_MS = 30 * 1000;
 

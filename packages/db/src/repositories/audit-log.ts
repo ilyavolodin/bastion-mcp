@@ -2,12 +2,11 @@ import { type VerifyResult, verifyAuditChain } from '../audit';
 import type { AuditEvent, Prisma } from '../generated/client';
 import {
   bytesToHex,
-  clampLimit,
   decodeCursor,
-  encodeCursor,
   InvalidCursorError,
   type Paged,
   type PrismaLike,
+  paginate,
   type RepoContext,
   type RepoOptions,
   toContext,
@@ -94,17 +93,18 @@ export const createAuditLogRepository = (arg: PrismaLike | RepoContext, options?
     async list(
       filter: AuditFilter & { limit?: number; cursor?: string } = {},
     ): Promise<Paged<AuditEventView>> {
-      const limit = clampLimit(filter.limit);
       const before = seqCursor(filter.cursor);
-      const rows = await db.auditEvent.findMany({
-        where: { AND: [where(filter), before === undefined ? {} : { seq: { lt: before } }] },
-        orderBy: { seq: 'desc' },
-        take: limit + 1,
-      });
-      const hasMore = rows.length > limit;
-      const items = rows.slice(0, limit).map(toView);
-      const last = items[items.length - 1];
-      return { items, nextCursor: hasMore && last ? encodeCursor([last.seq.toString()]) : null };
+      return paginate(
+        filter,
+        (take) =>
+          db.auditEvent.findMany({
+            where: { AND: [where(filter), before === undefined ? {} : { seq: { lt: before } }] },
+            orderBy: { seq: 'desc' },
+            take,
+          }),
+        (row) => [row.seq.toString()],
+        toView,
+      );
     },
 
     async get(id: string): Promise<AuditEventView | null> {

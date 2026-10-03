@@ -2,22 +2,19 @@
  * Boots the real server in-process against the shared containers: `startServer` with `BASTION_ROLE` all, worker or
  * ui, ephemeral ports, plain HTTP behind the `proxyFetch` illusion of `https://bastion.test`.
  */
-import { createServer } from 'node:net';
 import type { SandboxDriver } from '@bastion-mcp/sandbox';
+import { freePort } from '@bastion-mcp/testkit';
 import type { ServerOptions } from '../../src/config';
 import { type RunningServer, startServer } from '../../src/server';
+import {
+  TEST_INSECURE_UPSTREAM_HOSTS,
+  TEST_PRIVATE_UPSTREAM_CIDRS,
+  TEST_SANDBOX_DRIVER,
+} from './constants';
 import type { TestEnv } from './env';
 import { type FetchLike, PUBLIC_URL, proxyFetch } from './proxy-fetch';
 
-export const freePort = (): Promise<number> =>
-  new Promise((resolve, reject) => {
-    const server = createServer();
-    server.listen(0, '127.0.0.1', () => {
-      const port = (server.address() as { port: number }).port;
-      server.close(() => resolve(port));
-    });
-    server.on('error', reject);
-  });
+export { freePort };
 
 export type StackOptions = {
   env: TestEnv;
@@ -52,9 +49,9 @@ export const bootStack = async (opts: StackOptions): Promise<Stack> => {
     BASTION_INTERNAL_PORT: String(internalPort),
     BASTION_EGRESS_PORT: String(egressPort),
     BASTION_PUBLIC_URL: PUBLIC_URL,
-    BASTION_SANDBOX_DRIVER: 'bubblewrap',
-    BASTION_INSECURE_UPSTREAM_HOSTS: '127.0.0.1,localhost',
-    BASTION_PRIVATE_UPSTREAM_CIDRS: '127.0.0.0/8',
+    BASTION_SANDBOX_DRIVER: TEST_SANDBOX_DRIVER,
+    BASTION_INSECURE_UPSTREAM_HOSTS: TEST_INSECURE_UPSTREAM_HOSTS,
+    BASTION_PRIVATE_UPSTREAM_CIDRS: TEST_PRIVATE_UPSTREAM_CIDRS,
     ...(opts.vars ?? {}),
   });
   const server = await startServer(env, {

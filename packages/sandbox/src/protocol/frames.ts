@@ -9,6 +9,8 @@
  * Pure module shared by the runner and `RunnerClient`; it never throws on untrusted input.
  */
 
+import { HEADERS } from '@bastion-mcp/core';
+
 export const STDIO_SUBPROTOCOL = 'bastion.stdio.v1';
 /** WebSocket close code sent to a connection replaced by a newer one (8.3, 21.2). */
 export const CLOSE_CODE_REPLACED = 4001;
@@ -16,7 +18,7 @@ export const MAX_STDERR_LINE_BYTES = 8 * 1024;
 /** Hard cap for one frame; matches the upstream message cap (6.4) plus envelope room. */
 export const MAX_FRAME_BYTES = 33 * 1024 * 1024;
 /** Response header on the WebSocket upgrade that reports messages dropped while disconnected. */
-export const DROPPED_HEADER = 'x-bastion-dropped';
+export const DROPPED_HEADER = HEADERS.dropped;
 
 export type JsonObject = { [key: string]: unknown };
 

@@ -1,5 +1,4 @@
 /** `prompts/get` (6.3): routed like a tool call, with prompt arguments and `messagesTransform` (12.4). */
-import { isBastionError, toToolErrorResult } from '@bastion-mcp/core';
 import { extractPromptSegments, extractRequestSegments } from '@bastion-mcp/guards';
 import {
   addedPromptResult,
@@ -7,17 +6,16 @@ import {
   mapPromptGet,
   missingPromptArguments,
 } from '@bastion-mcp/overrides';
-import { trace } from '@opentelemetry/api';
-import { CallRecord } from '../observability/call-log';
 import { InvalidParamsError, UnknownItemError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
-import { recordOperationOutcome } from './outcome';
+import { runRoutedOperation } from './outcome';
 import { runRouted } from './routed';
 import {
   callPrincipalOf,
   installationDataOf,
   isRecord,
+  needsInstallationVariables,
   retryParts,
   templateContextOf,
 } from './support';
@@ -43,14 +41,11 @@ export const createPromptsGet = (deps: OperationDeps): Operation => ({
     const installation = route ? ctx.resolved.installations.get(route.installationId) : undefined;
     if (!route || !installation) throw new UnknownItemError('prompt', name);
     const retry = retryParts(params);
-    const record = new CallRecord('prompts/get', deps.clock.now());
-    const span = trace.getActiveSpan()?.spanContext() ?? ctx.trace;
-    try {
+    return runRoutedOperation(deps, ctx, 'prompts/get', installation, async (record) => {
       const principal = await callPrincipalOf(deps, ctx);
-      const resolved =
-        route.plan?.pinned && Object.values(route.plan.pinned).some((v) => v.includes('{{'))
-          ? await deps.installations.get(installation.id)
-          : null;
+      const resolved = needsInstallationVariables(route.plan)
+        ? await deps.installations.get(installation.id)
+        : null;
       const mapped = mapPromptGet(
         { finalName: name, arguments: args },
         { upstreamName: route.upstreamName, plan: route.plan },
@@ -64,7 +59,7 @@ export const createPromptsGet = (deps: OperationDeps): Operation => ({
           throw new InvalidParamsError(`missing required argument: ${missing.join(', ')}`);
         }
       }
-      return await runRouted(
+      return runRouted(
         deps,
         ctx,
         {
@@ -101,14 +96,6 @@ export const createPromptsGet = (deps: OperationDeps): Operation => ({
         retry,
         record,
       );
-    } catch (error) {
-      record.fail(error);
-      // Only `tools/call` converts denials into tool results; other methods answer JSON-RPC errors (6.9).
-      void isBastionError;
-      void toToolErrorResult;
-      throw error;
-    } finally {
-      recordOperationOutcome(deps, ctx, record, span, installation, 'prompts/get');
-    }
+    });
   },
 });

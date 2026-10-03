@@ -1,10 +1,10 @@
 import { SandboxStdioTransport } from '@bastion-mcp/sandbox';
 import { type Logger, noopLogger } from '../ports';
+import { UPSTREAM_TIMEOUTS_MS } from '../timeouts';
 import { createUpstreamClient, type Negotiation } from './client-factory';
+import { connectClient } from './connect';
 import { SdkUpstreamSession } from './session';
 import type { CloseInfo, ConnectContext, UpstreamConnector, UpstreamSession } from './types';
-
-const CONNECT_TIMEOUT_MS = 30_000;
 
 /**
  * Sandboxed stdio upstream (6.4, 8.3): the SDK `Client` over `SandboxStdioTransport`. The era comes from the catalog
@@ -30,15 +30,10 @@ export class SandboxConnector implements UpstreamConnector {
     const negotiation: Negotiation =
       protocol === 'modern' ? 'modern' : protocol === 'auto' ? 'auto' : 'legacy';
     const client = createUpstreamClient(installation, this.options.version, negotiation);
-    try {
-      await client.connect(transport as never, {
-        signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(CONNECT_TIMEOUT_MS)]),
-        timeout: CONNECT_TIMEOUT_MS,
-      });
-    } catch (error) {
-      await client.close().catch(() => undefined);
-      throw error;
-    }
+    await connectClient(client, transport as never, {
+      signal: ctx.signal,
+      timeoutMs: UPSTREAM_TIMEOUTS_MS.sandboxConnect,
+    });
     const era = client.getProtocolEra() ?? 'legacy';
     return new SdkUpstreamSession({
       client,

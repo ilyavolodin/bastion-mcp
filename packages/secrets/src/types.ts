@@ -2,9 +2,8 @@ import type { SECRET_SCOPES } from '@bastion-mcp/core';
 
 export type SecretScope = (typeof SECRET_SCOPES)[number];
 
-/** Injectable time source so caches and rotation are testable with a fake clock. */
-export type Clock = { now(): number };
-export const systemClock: Clock = { now: () => Date.now() };
+/** Injectable time source (from core) so caches and rotation are testable with a fake clock. */
+export { type Clock, systemClock } from '@bastion-mcp/core';
 
 /** Identity of a secret row: unique on (scope, ownerId, name) (16.2). `ownerId` is null for org/system. */
 export type SecretKey = {

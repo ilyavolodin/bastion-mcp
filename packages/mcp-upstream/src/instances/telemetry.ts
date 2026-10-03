@@ -1,6 +1,23 @@
 import { type INSTANCE_ACQUIRE_EVENTS, SPAN_NAMES } from '@bastion-mcp/telemetry';
 import { SpanStatusCode, type Tracer, trace } from '@opentelemetry/api';
 
+/** Span and metric attribute keys the proxy layers write (15.2, 15.3). */
+export const SPAN_ATTRS = {
+  instanceId: 'bastion.instance.id',
+  installationId: 'bastion.installation.id',
+  installationSlug: 'bastion.installation.slug',
+  sandboxDriver: 'bastion.sandbox.driver',
+  catalogEntry: 'bastion.catalog.entry',
+  catalogVersion: 'bastion.catalog.version',
+  policyAction: 'bastion.policy.action',
+  policyDecision: 'bastion.policy.decision',
+  callOutcome: 'bastion.call.outcome',
+  guardInstance: 'bastion.guard.instance',
+  guardPhase: 'bastion.guard.phase',
+  guardVerdict: 'bastion.guard.verdict',
+  guardAction: 'bastion.guard.action',
+} as const;
+
 export type AcquireEventName = (typeof INSTANCE_ACQUIRE_EVENTS)[number];
 export type AcquireEvents = { add(name: AcquireEventName): void };
 

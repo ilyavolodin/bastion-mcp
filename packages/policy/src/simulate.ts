@@ -33,7 +33,7 @@ export type SimulationResult = {
 
 export const simulationContext = (
   partial: { [K in keyof McpRequestContext]?: McpRequestContext[K] | undefined },
-  now: Date = new Date(),
+  now: Date,
 ): McpRequestContext => ({
   clientId: partial.clientId ?? 'simulator',
   clientName: partial.clientName ?? 'Simulator',
@@ -49,11 +49,7 @@ export const simulationContext = (
  * Decision and reasons for any principal, action, resource and context (10.4). Input is untrusted and
  * parsed with zod; evaluation uses exactly the production path.
  */
-export const simulate = (
-  engine: PolicyEngine,
-  raw: unknown,
-  now: Date = new Date(),
-): SimulationResult => {
+export const simulate = (engine: PolicyEngine, raw: unknown, now: Date): SimulationResult => {
   const request = simulateRequestSchema.parse(raw);
   const authorize: AuthorizeRequest = {
     principal: request.principal,

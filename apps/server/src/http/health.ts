@@ -8,6 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import { bundledMigrations } from '../boot/migrate';
 import type { DriverState } from '../contracts';
 import type { Infra } from '../infra';
+import { HEALTH_CHECK_TIMEOUT_MS } from '../timing';
 
 export type HealthDeps = {
   infra: Infra;
@@ -18,7 +19,7 @@ export type HealthDeps = {
 };
 
 export const createHealthRegistry = ({ infra, worker, extra }: HealthDeps): HealthRegistry => {
-  const registry = new HealthRegistry({ timeoutMs: 2000 });
+  const registry = new HealthRegistry({ timeoutMs: HEALTH_CHECK_TIMEOUT_MS });
   registry.register('postgres', async () => {
     await infra.db.prisma.$queryRaw`SELECT 1`;
     return { ok: true };

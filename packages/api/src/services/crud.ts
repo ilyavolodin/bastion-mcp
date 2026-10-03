@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { ConflictApiError, NotFoundApiError } from '../errors';
 import { type ListQueryInput, toListQuery } from '../framework/conventions';
 import type { BaseContext, MutationTx, RouteSchema } from '../framework/route';
@@ -32,6 +33,10 @@ export const redact = (value: Record<string, unknown>): Record<string, unknown> 
   Object.fromEntries(
     Object.entries(value).map(([k, v]) => [k, SENSITIVE.test(k) ? '[redacted]' : v]),
   );
+
+/** A random base64url token of `bytes` bytes from the injected source (default `crypto.randomBytes`). */
+export const randomToken = (deps: ApiDeps, bytes: number): string =>
+  deps.randomToken ? deps.randomToken(bytes) : randomBytes(bytes).toString('base64url');
 
 export const nowIso = (deps: ApiDeps): string => deps.clock.now().toISOString();
 

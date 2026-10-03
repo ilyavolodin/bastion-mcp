@@ -1,38 +1,31 @@
+import { SECONDS } from '@bastion-mcp/core';
 import { REGISTRY_TRUST_LEVELS, registryPolicySchema } from '@bastion-mcp/registry';
 import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
+import { nameSchema } from './common';
 
 const atLeastOne = (v: object) => Object.keys(v).length > 0;
 
 export const registrySourceCreateSchema = z.object({
-  name: z.string().trim().min(1).max(200),
+  name: nameSchema,
   baseUrl: z.string().url().max(2048),
   /** Name of the secret holding the registry credential; the value never passes through the API. */
   authSecretId: z.string().min(1).max(256).nullable().default(null),
   authHeaderName: z.string().min(1).max(128).nullable().default(null),
   trust: z.enum(REGISTRY_TRUST_LEVELS).default('community'),
   enabled: z.boolean().default(true),
-  syncIntervalS: z
-    .number()
-    .int()
-    .min(60)
-    .max(7 * 86400)
-    .default(3600),
+  syncIntervalS: z.number().int().min(60).max(SECONDS.WEEK).default(SECONDS.HOUR),
 });
 
 export const registrySourcePatchSchema = z
   .object({
-    name: z.string().trim().min(1).max(200),
+    name: nameSchema,
     baseUrl: z.string().url().max(2048),
     authSecretId: z.string().min(1).max(256).nullable(),
     authHeaderName: z.string().min(1).max(128).nullable(),
     trust: z.enum(REGISTRY_TRUST_LEVELS),
     enabled: z.boolean(),
-    syncIntervalS: z
-      .number()
-      .int()
-      .min(60)
-      .max(7 * 86400),
+    syncIntervalS: z.number().int().min(60).max(SECONDS.WEEK),
   })
   .partial()
   .refine(atLeastOne, 'at least one field is required');
@@ -40,7 +33,8 @@ export const registrySourcePatchSchema = z
 export const syncBodySchema = z.object({ full: z.boolean().default(false) });
 export const syncResultSchema = z.looseObject({
   ok: z.boolean(),
-  stats: z.looseObject({}),
+  /** Null when the walk is queued: stats arrive in the source's `lastSync`. */
+  stats: z.looseObject({}).nullable(),
   deletedNames: z.array(z.string()),
   deprecatedNames: z.array(z.string()),
 });

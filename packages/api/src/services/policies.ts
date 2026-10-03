@@ -62,7 +62,7 @@ const baseData = async (ctx: Pick<ReadCtx, 'deps'>): Promise<PolicyDataInput> =>
 export const validatePolicy = async (
   ctx: Pick<ReadCtx, 'deps'>,
   body: { cedar: string; tests: unknown[] },
-) => validateCustomPolicy(body.cedar, body.tests, await baseData(ctx));
+) => validateCustomPolicy(body.cedar, body.tests, await baseData(ctx), ctx.deps.clock.now());
 
 const assertValid = async (
   ctx: Pick<ReadCtx, 'deps'>,

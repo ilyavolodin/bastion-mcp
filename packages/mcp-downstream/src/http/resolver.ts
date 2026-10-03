@@ -1,5 +1,6 @@
 /** Endpoint resolution (4.4, 7.1, 7.2): slug to endpoint definition, effective endpoint from the per-worker cache. */
 import type { Principal } from '@bastion-mcp/auth';
+import { MS, TtlCache } from '@bastion-mcp/core';
 import { clockContext, type McpRequestContext } from '@bastion-mcp/policy';
 import {
   compileEndpoint,
@@ -37,14 +38,17 @@ export type EndpointResolverDeps = {
 export const endpointKey = (parsed: ParsedEndpointPath): string =>
   parsed.kind === 'default' ? 'default' : `${parsed.kind}:${parsed.slug}`;
 
-const NEGATIVE_TTL_MS = 5_000;
-const NEGATIVE_MAX = 10_000;
+/** How long a slug that resolved to nothing keeps answering `null` without loading data (hidden is nonexistent). */
+export const NEGATIVE_TTL_MS = 5 * MS.SECOND;
+export const NEGATIVE_MAX = 10_000;
 
 export class EndpointResolver {
   private readonly resolved = new WeakMap<EffectiveEndpoint, ResolvedEndpoint>();
-  private readonly negative = new Map<string, number>();
+  private readonly negative: TtlCache<string, true>;
 
-  constructor(private readonly deps: EndpointResolverDeps) {}
+  constructor(private readonly deps: EndpointResolverDeps) {
+    this.negative = new TtlCache({ ttlMs: NEGATIVE_TTL_MS, max: NEGATIVE_MAX, clock: deps.clock });
+  }
 
   /** `null` when the slug names nothing the principal can use (hidden is nonexistent, 6.9). */
   async resolve(
@@ -54,11 +58,7 @@ export class EndpointResolver {
   ): Promise<ResolvedEndpoint | null> {
     const key = endpointKey(parsed);
     const negativeKey = `${principal.id}\0${key}`;
-    const until = this.negative.get(negativeKey);
-    if (until !== undefined) {
-      if (until > this.deps.clock.now()) return null;
-      this.negative.delete(negativeKey);
-    }
+    if (this.negative.get(negativeKey)) return null;
     const configVersion = await this.deps.data.configVersion();
     const cacheKey = { principalId: principal.id, endpointId: key, configVersion };
     let missing = false;
@@ -102,7 +102,7 @@ export class EndpointResolver {
         throw error;
       });
     if (!endpoint) {
-      this.remember(negativeKey);
+      this.negative.set(negativeKey, true);
       return null;
     }
     const entry = this.resolved.get(endpoint);
@@ -112,11 +112,6 @@ export class EndpointResolver {
       return this.resolve(principal, parsed, request);
     }
     return entry;
-  }
-
-  private remember(negativeKey: string): void {
-    if (this.negative.size >= NEGATIVE_MAX) this.negative.clear();
-    this.negative.set(negativeKey, this.deps.clock.now() + NEGATIVE_TTL_MS);
   }
 }
 

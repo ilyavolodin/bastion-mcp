@@ -1,6 +1,11 @@
-import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
-import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
+import {
+  authz,
+  defineDelete,
+  defineMutation,
+  defineRoute,
+  type RouteDefinition,
+} from '../framework/route';
 import { idParams } from '../schemas/common';
 import {
   limitRuleCreateSchema,
@@ -43,19 +48,14 @@ export const limitsRoutes: RouteDefinition[] = [
     version: versionOf('limit_rules'),
     handler: (ctx) => updateLimitRule(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/limit-rules/{id}',
     tag: TAG,
     summary: 'Delete a limit rule',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('limits.write', org),
-    status: 204,
     version: versionOf('limit_rules'),
-    handler: async (ctx) => {
-      await limitRules.remove(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => limitRules.remove(ctx, ctx.params.id),
   }),
   defineRoute({
     method: 'GET',

@@ -1,3 +1,4 @@
+import { isRecord } from '@bastion-mcp/core';
 import { z } from 'zod';
 import type { ClaimMap, IdpConnection } from '../ports';
 
@@ -36,9 +37,7 @@ const read = (claims: Record<string, unknown>, path: string): unknown => {
   if (path in claims) return claims[path];
   // dotted paths such as `realm_access.roles`
   return path.split('.').reduce<unknown>((value, part) => {
-    return typeof value === 'object' && value !== null
-      ? (value as Record<string, unknown>)[part]
-      : undefined;
+    return isRecord(value) ? value[part] : undefined;
   }, claims);
 };
 

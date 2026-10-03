@@ -15,7 +15,7 @@ import type {
   StatsQuery,
   StatsSeries,
 } from '@bastion-mcp/api';
-import { CALL_OUTCOMES } from '@bastion-mcp/core';
+import { CALL_OUTCOMES, type Clock, MS, systemClock } from '@bastion-mcp/core';
 import {
   decodeCursor,
   encodeCursor,
@@ -47,16 +47,16 @@ const toCallRecord = (
   userId: row.principalId,
 });
 
-const rangeOf = (q: StatsQuery): { from: Date; to: Date } => {
-  const to = q.to ? new Date(q.to) : new Date();
-  const from = q.from ? new Date(q.from) : new Date(to.getTime() - 24 * 3_600_000);
+const rangeOf = (q: StatsQuery, now: Date): { from: Date; to: Date } => {
+  const to = q.to ? new Date(q.to) : now;
+  const from = q.from ? new Date(q.from) : new Date(to.getTime() - MS.DAY);
   return { from, to };
 };
 
 const tierFor = (q: StatsQuery, from: Date, to: Date): Tier => {
   if (q.bucket) return q.bucket;
   const span = to.getTime() - from.getTime();
-  return span <= 6 * 3_600_000 ? 'minute' : span <= 60 * 86_400_000 ? 'hour' : 'day';
+  return span <= 6 * MS.HOUR ? 'minute' : span <= 60 * MS.DAY ? 'hour' : 'day';
 };
 
 const GROUPS = {
@@ -78,9 +78,16 @@ const groupOf = (value: string | undefined): Group | undefined =>
 export type ObservabilityDeps = {
   prisma: PrismaClient;
   repos: Pick<Repositories, 'callLog' | 'auditLog'>;
+  /** Time source for default ranges; the system clock when absent. */
+  clock?: Clock;
 };
 
-export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallReader => {
+export const createCallReader = ({
+  prisma,
+  repos,
+  clock = systemClock,
+}: ObservabilityDeps): CallReader => {
+  const nowDate = (): Date => new Date(clock.now());
   const rollupSeries = async (
     q: StatsQuery,
     pick: (row: {
@@ -92,7 +99,7 @@ export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallRead
       p99: number | null;
     }) => Record<string, number>,
   ): Promise<StatsSeries> => {
-    const { from, to } = rangeOf(q);
+    const { from, to } = rangeOf(q, nowDate());
     if (to.getTime() <= from.getTime()) return { buckets: [] };
     const tier = tierFor(q, from, to);
     const asked = groupOf(q.groupBy);
@@ -134,7 +141,7 @@ export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallRead
    * rollups carry no principal).
    */
   const logSeries = async (q: StatsQuery): Promise<StatsSeries> => {
-    const { from, to } = rangeOf(q);
+    const { from, to } = rangeOf(q, nowDate());
     const tier = tierFor(q, from, to);
     const group = groupOf(q.groupBy);
     const col =
@@ -207,7 +214,7 @@ export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallRead
       })),
 
     async guardStats(q) {
-      const { from, to } = rangeOf(q);
+      const { from, to } = rangeOf(q, nowDate());
       const tier = tierFor(q, from, to);
       const rows = await prisma.$queryRaw<
         { ts: Date; guard: string; verdict: string; n: number }[]
@@ -231,7 +238,7 @@ export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallRead
     },
 
     async sandboxStats(q) {
-      const { from, to } = rangeOf(q);
+      const { from, to } = rangeOf(q, nowDate());
       const tier = tierFor(q, from, to);
       const rows = await prisma.$queryRaw<
         { ts: Date; grp: string; starts: number; failures: number }[]
@@ -253,7 +260,7 @@ export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallRead
     /** Guard blocks, open drift reviews and denied egress, newest first (13, 13.6, 8.8). */
     async findings(filter): Promise<Page<FindingRecord>> {
       const from = filter.from ? new Date(filter.from) : new Date(0);
-      const to = filter.to ? new Date(filter.to) : new Date(Date.now() + 86_400_000);
+      const to = filter.to ? new Date(filter.to) : new Date(clock.now() + MS.DAY);
       const cursor = decodeCursor(filter.cursor);
       const before = cursor ? new Date(Number(cursor[0])) : to;
       const beforeId = cursor ? String(cursor[1]) : 'ffffffff-ffff-ffff-ffff-ffffffffffff';

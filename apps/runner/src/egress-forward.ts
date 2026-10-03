@@ -1,5 +1,8 @@
 import net from 'node:net';
 
+export const DEFAULT_EGRESS_HOST = '127.0.0.1';
+export const DEFAULT_EGRESS_PORT = 3128;
+
 /**
  * Bubblewrap mode (8.5): inside the jail only loopback exists, so the runner listens on 127.0.0.1:3128 and
  * relays raw bytes (CONNECT tunnels and absolute-form HTTP alike) to the per-instance Unix socket that the
@@ -30,10 +33,10 @@ export const startEgressForwarder = (options: {
       upstream.pipe(client);
     });
     server.once('error', reject);
-    server.listen(options.port ?? 3128, options.host ?? '127.0.0.1', () => {
+    server.listen(options.port ?? DEFAULT_EGRESS_PORT, options.host ?? DEFAULT_EGRESS_HOST, () => {
       const addr = server.address();
       resolve({
-        port: typeof addr === 'object' && addr ? addr.port : (options.port ?? 3128),
+        port: typeof addr === 'object' && addr ? addr.port : (options.port ?? DEFAULT_EGRESS_PORT),
         close: () =>
           new Promise<void>((done) => {
             for (const s of sockets) s.destroy();

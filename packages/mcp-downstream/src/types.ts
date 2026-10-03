@@ -21,15 +21,18 @@ export type ClientCaps = {
 
 export type ClientInfo = { name: string; version: string; title?: string | undefined };
 
-export type LoggingLevel =
-  | 'debug'
-  | 'info'
-  | 'notice'
-  | 'warning'
-  | 'error'
-  | 'critical'
-  | 'alert'
-  | 'emergency';
+export const LOGGING_LEVELS = [
+  'debug',
+  'info',
+  'notice',
+  'warning',
+  'error',
+  'critical',
+  'alert',
+  'emergency',
+] as const;
+
+export type LoggingLevel = (typeof LOGGING_LEVELS)[number];
 
 /** Progress and log notifications that belong to one request (6.6). */
 export type RequestScopedNotification = { method: string; params?: JsonObject | undefined };

@@ -5,6 +5,7 @@ import {
   isValidMarketplaceSlug,
   MARKETPLACE_ITEM_POLICIES,
   newId,
+  PARTITION_DAYS_AHEAD,
 } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { ensurePartitions } from '../partitions';
@@ -20,7 +21,6 @@ import {
   jsonObjectSchema,
   mutate,
   NotFoundError,
-  nextUpdatedAt,
   orConflict,
   type PrismaLike,
   type RepoContext,
@@ -29,6 +29,7 @@ import {
   toJson,
   toJsonOrNull,
   ValidationError,
+  versionedUpdate,
   versionGuard,
 } from './support';
 
@@ -258,22 +259,25 @@ export const createMarketplaceRepository = (
           ? patch.mirror
           : mirrorTargetSchema.parse(patch.mirror);
       return mutate(ctx, async (tx, unit) => {
-        const current = await tx.marketplace.findUnique({ where: { id } });
-        if (!current) throw new NotFoundError('marketplace', id);
-        assertIfMatch(current, opts.ifMatch);
-        const { audience, mirror: _m, ...rest } = patch;
-        assertSwapped(
-          await tx.marketplace.updateMany({
-            where: { id, ...versionGuard(current) },
-            data: {
-              ...rest,
-              ...(audience === undefined ? {} : { audience: toJson(audience) }),
-              ...(mirror === undefined ? {} : { mirror: toJsonOrNull(mirror) }),
-              updatedAt: nextUpdatedAt(current),
-            },
-          }),
-        );
-        const row = await tx.marketplace.findUniqueOrThrow({ where: { id } });
+        const { current, row } = await versionedUpdate({
+          what: 'marketplace',
+          id,
+          ifMatch: opts.ifMatch,
+          find: () => tx.marketplace.findUnique({ where: { id } }),
+          write: async (_current, where, updatedAt) => {
+            const { audience, mirror: _m, ...rest } = patch;
+            return tx.marketplace.updateMany({
+              where,
+              data: {
+                ...rest,
+                ...(audience === undefined ? {} : { audience: toJson(audience) }),
+                ...(mirror === undefined ? {} : { mirror: toJsonOrNull(mirror) }),
+                updatedAt,
+              },
+            });
+          },
+          reload: () => tx.marketplace.findUniqueOrThrow({ where: { id } }),
+        });
         unit.audit(opts.audit, {
           action: 'marketplace.update',
           targetType: 'marketplace',
@@ -674,7 +678,7 @@ export const createDistributionEventSink = (
       await insert(events);
     } catch (error) {
       if (!/no partition/i.test(String(error))) throw error;
-      await ensurePartitions(db, 'distribution_events', 7);
+      await ensurePartitions(db, 'distribution_events', PARTITION_DAYS_AHEAD);
       await insert(events);
     }
   };

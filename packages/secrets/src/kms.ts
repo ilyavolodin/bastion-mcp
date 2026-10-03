@@ -1,12 +1,7 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-  timingSafeEqual,
-} from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { sha256Hex } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { KmsUnavailableError } from './errors';
 import type { KmsProvider } from './types';
@@ -39,8 +34,7 @@ export const withTimeout = async <T>(
 
 /* ------------------------------ local provider ------------------------------ */
 
-const fingerprint = (key: Buffer): string =>
-  createHash('sha256').update(key).digest('hex').slice(0, 16);
+const fingerprint = (key: Buffer): string => sha256Hex(key).slice(0, 16);
 
 const parseKeyFile = (content: Buffer): Buffer => {
   if (content.length === KEY_BYTES) return content;

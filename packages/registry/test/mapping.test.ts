@@ -412,3 +412,49 @@ describe('property: mapping', () => {
     );
   });
 });
+
+describe('11.6 variable name collisions', () => {
+  const remoteWith = (url: string, variables: Record<string, unknown>) =>
+    serverJsonSchema.parse({
+      name: 'io.github.acme/collide',
+      description: 'd',
+      version: '1.0.0',
+      remotes: [{ type: 'streamable-http', url, variables }],
+    });
+
+  it('11.6 placeholders a-b and a_b stay two distinct variables, deterministically', () => {
+    const doc = remoteWith('https://x.example/{a-b}/{a_b}', {
+      'a-b': { description: 'dash' },
+      a_b: { description: 'underscore' },
+    });
+    const first = serverJsonToSpec(doc);
+    const second = serverJsonToSpec(doc);
+    if (!first.installable || first.spec.type !== 'remote') throw new Error('expected remote');
+    expect(first.spec.url).toBe('https://x.example/{{var.a_b}}/{{var.a_b_2}}');
+    expect(first.form.variables.map((v) => v.description)).toEqual(['dash', 'underscore']);
+    expect(second).toEqual(first);
+  });
+
+  it('11.6 secret env vars A-B and A_B stay two distinct secrets', () => {
+    const doc = serverJsonSchema.parse({
+      name: 'io.github.acme/collide',
+      description: 'd',
+      version: '1.0.0',
+      packages: [
+        {
+          registryType: 'npm',
+          identifier: 'p',
+          version: '1.2.3',
+          transport: { type: 'stdio' },
+          environmentVariables: [
+            { name: 'A-B', isSecret: true },
+            { name: 'A_B', isSecret: true },
+          ],
+        },
+      ],
+    });
+    const result = serverJsonToSpec(doc);
+    if (!result.installable) throw new Error('expected installable');
+    expect(result.form.secrets.map((s) => s.name)).toEqual(['A_B', 'A_B_2']);
+  });
+});

@@ -1,3 +1,4 @@
+import { systemClock as coreSystemClock, dateClock } from '@bastion-mcp/core';
 import type { ReleaseRecord } from './release';
 import type { ItemPolicy, ReleaseItem } from './render';
 import type { PluginFile } from './types';
@@ -7,11 +8,10 @@ import type { PluginFile } from './types';
  * unit-testable and imports neither the database nor the secret store.
  */
 
-export interface Clock {
-  now(): Date;
-}
+/** `Date`-returning clock; built from the core numeric clock. */
+export type Clock = ReturnType<typeof dateClock>;
 
-export const systemClock: Clock = { now: () => new Date() };
+export const systemClock: Clock = dateClock(coreSystemClock);
 
 /** Content-addressed file bodies (`blobs`, 16.2). */
 export interface BlobStore {

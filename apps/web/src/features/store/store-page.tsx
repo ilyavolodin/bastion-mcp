@@ -12,6 +12,7 @@ import { CardsSkeleton, QueryBoundary } from '@/components/query-boundary';
 import { RoleGate } from '@/components/role-gate';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { DEBOUNCE_TYPING_MS, useDebounced } from '@/hooks/use-debounced-value';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { cn } from '@/lib/cn';
 import { useSearchState } from '@/lib/search';
@@ -86,13 +87,14 @@ export function StorePage() {
   const store = useStore(search.q ?? '');
   const detail = useStoreEntry(search.entry ?? null);
 
-  // Debounce typing into the URL so the list refetches once per pause.
+  // Debounce typing into the URL so the list refetches once per pause. Only a change of the typed text writes the
+  // URL: a change of the URL from outside (back, a link) is not undone by an older draft.
+  const typed = useDebounced(draft, DEBOUNCE_TYPING_MS);
+  const urlQuery = search.q ?? '';
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the debounced text changes, not when the URL does
   React.useEffect(() => {
-    const t = setTimeout(() => {
-      if (draft !== (search.q ?? '')) setSearch({ q: draft || undefined });
-    }, 250);
-    return () => clearTimeout(t);
-  }, [draft, search.q, setSearch]);
+    if (typed !== urlQuery) setSearch({ q: typed || undefined });
+  }, [typed]);
 
   const categories = React.useMemo(
     () => ['All', ...Array.from(new Set((store.data ?? []).map((e) => e.category))).sort()],

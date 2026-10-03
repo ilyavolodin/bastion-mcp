@@ -7,6 +7,7 @@ import {
 } from 'jose';
 import { z } from 'zod';
 import type { IdJagVerifier } from '../as/id-jag-grant';
+import { JWKS_TTL_MS } from '../constants';
 import type { FetchFn, IdpConnection, IdpConnectionStore } from '../ports';
 import { type Clock, systemClock } from '../ports';
 import { discoveryDocument } from './discovery';
@@ -27,7 +28,6 @@ const idJagClaims = z.object({
   exp: z.number(),
 });
 
-const JWKS_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_TYP = new Set(['oauth-id-jag+jwt', 'jwt']);
 
 /** One-time use of `jti` values (replay protection). */

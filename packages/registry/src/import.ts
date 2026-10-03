@@ -1,6 +1,11 @@
-import { type Injection, parseServerSpec, type ServerSpec } from '@bastion-mcp/core';
+import { type Injection, isRecord, parseServerSpec, type ServerSpec } from '@bastion-mcp/core';
 import { ZodError } from 'zod';
-import { RegistryMappingError, RegistryUnavailableError } from './errors';
+import { MAX_BODY_BYTES, readBodyCapped } from './body';
+import {
+  RegistryInvalidResponseError,
+  RegistryMappingError,
+  RegistryUnavailableError,
+} from './errors';
 import { type MappingResult, type Prefer, sanitizeVariableName, serverJsonToSpec } from './mapping';
 import type { FetchFn } from './ports';
 import { type ServerJson, serverJsonSchema } from './server-json';
@@ -23,6 +28,7 @@ const fetchJson = async (
   url: string,
   timeoutMs: number,
   signal: AbortSignal | undefined,
+  maxBodyBytes: number,
   accept = 'application/json',
 ): Promise<unknown> => {
   const timeout = AbortSignal.timeout(timeoutMs);
@@ -40,14 +46,23 @@ const fetchJson = async (
   if (!response.ok) {
     throw new RegistryUnavailableError(`package registry answered HTTP ${response.status}`);
   }
+  let text: string;
   try {
-    return await response.json();
+    text = await readBodyCapped(response, maxBodyBytes);
+  } catch (error) {
+    if (error instanceof RegistryInvalidResponseError) throw error;
+    throw new RegistryUnavailableError('package registry response could not be read', {
+      cause: error,
+    });
+  }
+  try {
+    return JSON.parse(text);
   } catch (error) {
     throw new RegistryUnavailableError('package registry answered invalid JSON', { cause: error });
   }
 };
 
-type ResolverOptions = { fetch?: FetchFn; timeoutMs?: number };
+type ResolverOptions = { fetch?: FetchFn; timeoutMs?: number; maxBodyBytes?: number };
 
 /** npm packument lookup against `BASTION_NPM_REGISTRY` (or the public registry). */
 export const createNpmVersionResolver = (
@@ -63,6 +78,7 @@ export const createNpmVersionResolver = (
       `${trimSlash(registryUrl)}/${path}`,
       options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       signal,
+      options.maxBodyBytes ?? MAX_BODY_BYTES,
       'application/vnd.npm.install-v1+json, application/json',
     );
     const tags = (body as { 'dist-tags'?: { latest?: unknown } } | null)?.['dist-tags'];
@@ -85,6 +101,7 @@ export const createPypiVersionResolver = (
       `${root}/pypi/${encodeURIComponent(identifier.toLowerCase())}/json`,
       options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       signal,
+      options.maxBodyBytes ?? MAX_BODY_BYTES,
     );
     const version = (body as { info?: { version?: unknown } } | null)?.info?.version;
     if (typeof version !== 'string' || version.length === 0) {
@@ -145,25 +162,20 @@ const snippetSchema = {
         throw new RegistryMappingError('the snippet is not valid JSON', { cause: error });
       }
     }
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    if (!isRecord(value)) {
       throw new RegistryMappingError('the snippet must be a JSON object');
     }
-    let record = value as Record<string, unknown>;
+    let record = value;
     // Accept `{ "mcpServers": { "name": {...} } }` and `{ "name": {...} }` with a single entry.
     const wrapper = record.mcpServers ?? record.servers;
-    if (
-      typeof wrapper === 'object' &&
-      wrapper !== null &&
-      !('command' in record) &&
-      !('url' in record)
-    ) {
-      record = wrapper as Record<string, unknown>;
+    if (isRecord(wrapper) && !('command' in record) && !('url' in record)) {
+      record = wrapper;
     }
     if (!('command' in record) && !('url' in record)) {
       const entries = Object.entries(record);
       const only = entries[0];
-      if (entries.length === 1 && only && typeof only[1] === 'object' && only[1] !== null) {
-        return { ...(only[1] as Record<string, unknown>), __name: only[0] };
+      if (entries.length === 1 && only && isRecord(only[1])) {
+        return { ...only[1], __name: only[0] };
       }
       if (entries.length > 1) {
         throw new RegistryMappingError(

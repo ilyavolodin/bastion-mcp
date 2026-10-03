@@ -1,3 +1,4 @@
+import { type FakeRegistry, startFakeRegistry } from '@bastion-mcp/testkit';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   assertRegistryBaseUrl,
@@ -9,7 +10,6 @@ import {
   RegistryUnavailableError,
   RegistryUrlDeniedError,
 } from '../src';
-import { type FakeRegistry, startFakeRegistry } from './fake-registry';
 import * as fx from './fixtures/server-json';
 
 let fake: FakeRegistry;

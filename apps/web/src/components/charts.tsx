@@ -1,5 +1,6 @@
 import type * as React from 'react';
 import { ResponsiveContainer } from 'recharts';
+import { LOCALE, pad2 } from '@/lib/format';
 
 /** Shared Recharts styling: Zest tokens only, so both themes work. */
 export const AXIS_TICK = { fill: 'var(--ink-muted)', fontSize: 12 } as const;
@@ -65,9 +66,9 @@ export function ChartTooltip({
 
 export const hourLabel = (iso: string | number): string => {
   const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:00`;
+  return `${pad2(d.getHours())}:00`;
 };
 export const dayLabel = (iso: string | number): string =>
-  new Date(iso).toLocaleDateString('en-US', { weekday: 'short' });
+  new Date(iso).toLocaleDateString(LOCALE, { weekday: 'short' });
 export const dateLabel = (iso: string | number): string =>
-  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  new Date(iso).toLocaleDateString(LOCALE, { month: 'short', day: 'numeric' });

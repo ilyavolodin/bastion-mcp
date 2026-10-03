@@ -75,6 +75,3 @@ export interface SandboxDriver {
   destroy(ref: SandboxRef): Promise<void>;
   list(): AsyncIterable<SandboxRef>;
 }
-
-export type Clock = { now(): number };
-export const systemClock: Clock = { now: () => Date.now() };

@@ -1,6 +1,8 @@
 import type { RouteDefinition } from '../framework/route';
 import { accountRoutes } from './account';
+import { autoInstallRoutes, driftRoutes } from './auto-install';
 import { catalogRoutes } from './catalog';
+import { endpointsRoutes } from './endpoints';
 import { eventsRoutes } from './events';
 import { guardsRoutes } from './guards';
 import { identityRoutes } from './identity';
@@ -8,6 +10,7 @@ import { installationsRoutes } from './installations';
 import { limitsRoutes } from './limits';
 import { marketplacesRoutes } from './marketplaces';
 import { observabilityRoutes } from './observability';
+import { overridesRoutes } from './overrides';
 import { policiesRoutes } from './policies';
 import { registryRoutes } from './registry';
 import { secretsRoutes } from './secrets';
@@ -23,6 +26,10 @@ export const ALL_ROUTES: readonly RouteDefinition[] = [
   ...identityRoutes,
   ...catalogRoutes,
   ...installationsRoutes,
+  ...endpointsRoutes,
+  ...overridesRoutes,
+  ...driftRoutes,
+  ...autoInstallRoutes,
   ...registryRoutes,
   ...policiesRoutes,
   ...guardsRoutes,

@@ -7,17 +7,18 @@ import { ORG_SETTING_DEFAULTS, orgSettingsSchema } from '@bastion-mcp/core/org-s
 import type { HttpHandler } from 'msw';
 import type { Res, Schemas } from '@/api/schema';
 import {
+  checkVersion,
   etagHeaders,
-  forbidden,
   HttpResponse,
   noContent,
   notFound,
   pageOf,
-  problem,
   route,
   type SampleFactory,
 } from '../http';
-import { getDb } from '../state';
+import { INTERNAL_REGISTRY_NAME, ORG_NAME, SEED_IDS, TOOL_WARN_THRESHOLD } from '../seed';
+import { getDb, nextId } from '../state';
+import { DAY, HOUR, iso, nowIso, validationFailed } from '../util';
 
 type OrgSettings = Res<'get', '/settings'>['settings'];
 
@@ -31,15 +32,14 @@ export type SettingsData = {
   system: Res<'get', '/system/status'>;
 };
 
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
-const iso = (ms: number) => new Date(ms).toISOString();
+/** The seeded per-user limits, which the quotas of `GET /me/quotas` report (`session.ts`). */
+export const SEEDED_LIMITS = { callsPerDay: 5000, concurrentCalls: 8 } as const;
 
 export const buildSettingsData = (now: number): SettingsData => ({
   settings: {
     ...ORG_SETTING_DEFAULTS,
-    org: { displayName: 'Acme Corp', timeZone: 'America/New_York' },
-    endpoints: { toolWarnThreshold: 40 },
+    org: { displayName: ORG_NAME, timeZone: 'America/New_York' },
+    endpoints: { toolWarnThreshold: TOOL_WARN_THRESHOLD },
     logs: { ...ORG_SETTING_DEFAULTS.logs, capturePreviews: true },
   },
   settingsUpdatedAt: iso(now - 9 * DAY),
@@ -83,7 +83,7 @@ export const buildSettingsData = (now: number): SettingsData => ({
       subjectMatch: 'each',
       scope: {},
       kind: 'quota',
-      params: { points: 5000, period: 'day' },
+      params: { points: SEEDED_LIMITS.callsPerDay, period: 'day' },
       metric: 'calls',
       cost: null,
       action: 'reject',
@@ -115,7 +115,7 @@ export const buildSettingsData = (now: number): SettingsData => ({
       subjectMatch: 'each',
       scope: {},
       kind: 'concurrency',
-      params: { max: 8, leaseSeconds: 900 },
+      params: { max: SEEDED_LIMITS.concurrentCalls, leaseSeconds: 900 },
       metric: 'calls',
       cost: null,
       action: 'reject',
@@ -136,7 +136,14 @@ export const buildSettingsData = (now: number): SettingsData => ({
       { id: 'ui-1', role: 'ui', startedAt: iso(now - 6 * DAY), version: '1.4.0' },
       { id: 'ui-2', role: 'ui', startedAt: iso(now - 6 * DAY), version: '1.4.0' },
     ],
-    leases: { active: 14, byInstallation: { 'i-github': 6, 'i-postgres': 4, 'i-jira': 4 } },
+    leases: {
+      active: 14,
+      byInstallation: {
+        [SEED_IDS.installation.github]: 6,
+        [SEED_IDS.installation.postgres]: 4,
+        [SEED_IDS.installation.jira]: 4,
+      },
+    },
     queues: {
       'upstream-reconnect': { depth: 8, oldestAgeSeconds: 12 },
       'sandbox-start': { depth: 34, oldestAgeSeconds: 3 },
@@ -153,7 +160,7 @@ export const buildSettingsData = (now: number): SettingsData => ({
       },
       {
         sourceId: 'rs-acme',
-        name: 'Acme internal registry',
+        name: INTERNAL_REGISTRY_NAME,
         lastSyncAt: iso(now - 6 * HOUR),
         ok: false,
         error: 'timeout fetching /v0/servers',
@@ -170,10 +177,8 @@ export const buildSettingsData = (now: number): SettingsData => ({
 });
 
 const data = () => getDb().data.settings;
-const isAdmin = () => getDb().role === 'admin';
-let seq = 100;
-const newId = (prefix: string) => `${prefix}-${++seq}`;
-const stamp = () => new Date().toISOString();
+const newId = nextId;
+const stamp = nowIso;
 
 const requireFields = (body: object, names: string[]) =>
   names
@@ -182,9 +187,6 @@ const requireFields = (body: object, names: string[]) =>
       return v === undefined || v === null || v === '';
     })
     .map((n) => ({ path: `/${n}`, message: 'Required' }));
-
-const invalid = (errors: { path: string; message: string }[]) =>
-  problem(422, 'validation_failed', 'Some fields need attention', 'Validation failed', errors);
 
 const limitParamErrors = (kind: string, params: Record<string, unknown>) => {
   const positive = (k: string) =>
@@ -198,216 +200,283 @@ const limitParamErrors = (kind: string, params: Record<string, unknown>) => {
 
 export const settingsHandlers: HttpHandler[] = [
   // --- org settings --------------------------------------------------------------------------------------------
-  route.get('/settings', () => {
-    if (!['admin', 'manager', 'auditor'].includes(getDb().role)) return forbidden();
-    const d = data();
-    return HttpResponse.json(
-      { settings: d.settings, updatedAt: d.settingsUpdatedAt },
-      { headers: etagHeaders(d.settingsUpdatedAt) },
-    );
-  }),
-  route.patch('/settings', async ({ body }) => {
-    if (!isAdmin()) return forbidden();
-    const patch = await body();
-    const d = data();
-    const errors: { path: string; message: string }[] = [];
-    const next = { ...d.settings } as Record<string, unknown>;
-    for (const [key, value] of Object.entries(patch)) {
-      const shape = (
-        orgSettingsSchema.shape as Record<
-          string,
-          {
-            safeParse: (v: unknown) => {
-              success: boolean;
-              error?: { issues: { message: string }[] };
-            };
-          }
-        >
-      )[key];
-      const parsed = shape?.safeParse(value);
-      if (!parsed?.success) {
-        errors.push({
-          path: `/${key}`,
-          message: parsed?.error?.issues[0]?.message ?? 'Unknown setting',
-        });
-      } else next[key] = value;
-    }
-    if (errors.length > 0) return invalid(errors);
-    d.settings = next as OrgSettings;
-    d.settingsUpdatedAt = stamp();
-    return HttpResponse.json(
-      { settings: d.settings, updatedAt: d.settingsUpdatedAt },
-      { headers: etagHeaders(d.settingsUpdatedAt) },
-    );
-  }),
+  route.get(
+    '/settings',
+    () => {
+      const d = data();
+      return HttpResponse.json(
+        { settings: d.settings, updatedAt: d.settingsUpdatedAt },
+        { headers: etagHeaders(d.settingsUpdatedAt) },
+      );
+    },
+    { allow: 'readConfig' },
+  ),
+  route.patch(
+    '/settings',
+    async ({ request, body }) => {
+      const d = data();
+      const stale = checkVersion(request, { updatedAt: d.settingsUpdatedAt });
+      if (stale) return stale;
+      const patch = await body();
+      const errors: { path: string; message: string }[] = [];
+      const next = { ...d.settings } as Record<string, unknown>;
+      for (const [key, value] of Object.entries(patch)) {
+        const shape = (
+          orgSettingsSchema.shape as Record<
+            string,
+            {
+              safeParse: (v: unknown) => {
+                success: boolean;
+                error?: { issues: { message: string }[] };
+              };
+            }
+          >
+        )[key];
+        const parsed = shape?.safeParse(value);
+        if (!parsed?.success) {
+          errors.push({
+            path: `/${key}`,
+            message: parsed?.error?.issues[0]?.message ?? 'Unknown setting',
+          });
+        } else next[key] = value;
+      }
+      if (errors.length > 0) return validationFailed(errors);
+      d.settings = next as OrgSettings;
+      d.settingsUpdatedAt = stamp();
+      return HttpResponse.json(
+        { settings: d.settings, updatedAt: d.settingsUpdatedAt },
+        { headers: etagHeaders(d.settingsUpdatedAt) },
+      );
+    },
+    { allow: 'admin' },
+  ),
 
   // --- identity providers --------------------------------------------------------------------------------------
-  route.get('/idp-connections', ({ url }) => {
-    if (!isAdmin()) return forbidden();
-    return HttpResponse.json(pageOf(data().idpConnections, url));
-  }),
-  route.post('/idp-connections', async ({ body }) => {
-    if (!isAdmin()) return forbidden();
-    const b = await body();
-    const errors = [
-      ...requireFields(b, ['name', 'issuer', 'discoveryUrl', 'clientId', 'clientSecret']),
-      ...(b.scopes?.length ? [] : [{ path: '/scopes', message: 'Give at least one scope' }]),
-    ];
-    if (errors.length > 0) return invalid(errors);
-    const now = stamp();
-    const row: Schemas['IdpConnection'] = {
-      id: newId('idp'),
-      name: b.name,
-      issuer: b.issuer,
-      discoveryUrl: b.discoveryUrl,
-      clientId: b.clientId,
-      clientSecretId: newId('secret'),
-      scopes: b.scopes ?? ['openid', 'email', 'profile'],
-      claimMap: b.claimMap ?? {},
-      emailDomains: b.emailDomains ?? [],
-      storeRefreshToken: b.storeRefreshToken ?? false,
-      apiScope: b.apiScope ?? null,
-      enterpriseManagedAuth: b.enterpriseManagedAuth ?? false,
-      redirectToRoot: b.redirectToRoot ?? false,
-      enabled: b.enabled ?? true,
-      createdAt: now,
-      updatedAt: now,
-    };
-    data().idpConnections.push(row);
-    return HttpResponse.json(row, { status: 201, headers: etagHeaders(now) });
-  }),
-  route.get('/idp-connections/{id}', ({ params }) => {
-    if (!isAdmin()) return forbidden();
-    const row = data().idpConnections.find((x) => x.id === params.id);
-    return row
-      ? HttpResponse.json(row, { headers: etagHeaders(row.updatedAt) })
-      : notFound('Connection');
-  }),
-  route.patch('/idp-connections/{id}', async ({ params, body }) => {
-    if (!isAdmin()) return forbidden();
-    const row = data().idpConnections.find((x) => x.id === params.id);
-    if (!row) return notFound('Connection');
-    const { clientSecret: _secret, ...patch } = await body();
-    Object.assign(row, patch, { updatedAt: stamp() });
-    return HttpResponse.json(row, { headers: etagHeaders(row.updatedAt) });
-  }),
-  route.delete('/idp-connections/{id}', ({ params }) => {
-    if (!isAdmin()) return forbidden();
-    const d = data();
-    if (!d.idpConnections.some((x) => x.id === params.id)) return notFound('Connection');
-    d.idpConnections = d.idpConnections.filter((x) => x.id !== params.id);
-    return noContent();
-  }),
-  route.post('/idp-connections/{id}/test', ({ params }) => {
-    if (!isAdmin()) return forbidden();
-    const row = data().idpConnections.find((x) => x.id === params.id);
-    if (!row) return notFound('Connection');
-    const ok = row.issuer.startsWith('https://');
-    return HttpResponse.json(
-      ok
-        ? {
-            ok,
-            issuer: row.issuer,
-            issuerMatches: true,
-            endpoints: {
-              authorization: `${row.issuer}/oauth2/v1/authorize`,
-              token: `${row.issuer}/oauth2/v1/token`,
-              jwks: `${row.issuer}/oauth2/v1/keys`,
-            },
-          }
-        : { ok, error: 'The issuer must use https' },
-    );
-  }),
+  route.get(
+    '/idp-connections',
+    ({ url }) => {
+      return HttpResponse.json(pageOf(data().idpConnections, url));
+    },
+    { allow: 'admin' },
+  ),
+  route.post(
+    '/idp-connections',
+    async ({ body }) => {
+      const b = await body();
+      const errors = [
+        ...requireFields(b, ['name', 'issuer', 'discoveryUrl', 'clientId', 'clientSecret']),
+        ...(b.scopes?.length ? [] : [{ path: '/scopes', message: 'Give at least one scope' }]),
+      ];
+      if (errors.length > 0) return validationFailed(errors);
+      const now = stamp();
+      const row: Schemas['IdpConnection'] = {
+        id: newId('idp'),
+        name: b.name,
+        issuer: b.issuer,
+        discoveryUrl: b.discoveryUrl,
+        clientId: b.clientId,
+        clientSecretId: newId('secret'),
+        scopes: b.scopes ?? ['openid', 'email', 'profile'],
+        claimMap: b.claimMap ?? {},
+        emailDomains: b.emailDomains ?? [],
+        storeRefreshToken: b.storeRefreshToken ?? false,
+        apiScope: b.apiScope ?? null,
+        enterpriseManagedAuth: b.enterpriseManagedAuth ?? false,
+        redirectToRoot: b.redirectToRoot ?? false,
+        enabled: b.enabled ?? true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      data().idpConnections.push(row);
+      return HttpResponse.json(row, { status: 201, headers: etagHeaders(now) });
+    },
+    { allow: 'admin' },
+  ),
+  route.get(
+    '/idp-connections/{id}',
+    ({ params }) => {
+      const row = data().idpConnections.find((x) => x.id === params.id);
+      return row
+        ? HttpResponse.json(row, { headers: etagHeaders(row.updatedAt) })
+        : notFound('Connection');
+    },
+    { allow: 'admin' },
+  ),
+  route.patch(
+    '/idp-connections/{id}',
+    async ({ request, params, body }) => {
+      const row = data().idpConnections.find((x) => x.id === params.id);
+      if (!row) return notFound('Connection');
+      const stale = checkVersion(request, row);
+      if (stale) return stale;
+      const { clientSecret: _secret, ...patch } = await body();
+      Object.assign(row, patch, { updatedAt: stamp() });
+      return HttpResponse.json(row, { headers: etagHeaders(row.updatedAt) });
+    },
+    { allow: 'admin' },
+  ),
+  route.delete(
+    '/idp-connections/{id}',
+    ({ request, params }) => {
+      const d = data();
+      const row = d.idpConnections.find((x) => x.id === params.id);
+      if (!row) return notFound('Connection');
+      const stale = checkVersion(request, row);
+      if (stale) return stale;
+      d.idpConnections = d.idpConnections.filter((x) => x.id !== params.id);
+      return noContent();
+    },
+    { allow: 'admin' },
+  ),
+  route.post(
+    '/idp-connections/{id}/test',
+    ({ params }) => {
+      const row = data().idpConnections.find((x) => x.id === params.id);
+      if (!row) return notFound('Connection');
+      const ok = row.issuer.startsWith('https://');
+      return HttpResponse.json(
+        ok
+          ? {
+              ok,
+              issuer: row.issuer,
+              issuerMatches: true,
+              endpoints: {
+                authorization: `${row.issuer}/oauth2/v1/authorize`,
+                token: `${row.issuer}/oauth2/v1/token`,
+                jwks: `${row.issuer}/oauth2/v1/keys`,
+              },
+            }
+          : { ok, error: 'The issuer must use https' },
+      );
+    },
+    { allow: 'admin' },
+  ),
 
   // --- model guards --------------------------------------------------------------------------------------------
-  route.get('/settings/model-guards', () => {
-    if (!['admin', 'manager', 'auditor'].includes(getDb().role)) return forbidden();
-    const guards = data().modelGuards;
-    return HttpResponse.json(guards, {
-      headers: guards.updatedAt ? etagHeaders(guards.updatedAt) : {},
-    });
-  }),
-  route.put('/settings/model-guards', async ({ body }) => {
-    if (!isAdmin()) return forbidden();
-    const b = await body();
-    const literal = Object.entries(b).flatMap(([guard, cfg]) =>
-      cfg && typeof cfg.apiKeySecret === 'string' && !cfg.apiKeySecret.startsWith('secret:')
-        ? [
-            {
-              path: `/${guard}/apiKeySecret`,
-              message: 'Reference the secret by name (secret:NAME)',
-            },
-          ]
-        : [],
-    );
-    if (literal.length > 0) return invalid(literal);
-    const next = { jev: b.jev, llmJudge: b.llmJudge, classifier: b.classifier, updatedAt: stamp() };
-    data().modelGuards = next as Schemas['ModelGuards'];
-    return HttpResponse.json(data().modelGuards, { headers: etagHeaders(next.updatedAt) });
-  }),
+  route.get(
+    '/settings/model-guards',
+    () => {
+      const guards = data().modelGuards;
+      return HttpResponse.json(guards, {
+        headers: guards.updatedAt ? etagHeaders(guards.updatedAt) : {},
+      });
+    },
+    { allow: 'readConfig' },
+  ),
+  route.put(
+    '/settings/model-guards',
+    async ({ request, body, waiveVersion }) => {
+      const current = data().modelGuards.updatedAt;
+      // The first save creates the document: there is no version to name yet (17.1).
+      if (!current) waiveVersion();
+      const stale = current ? checkVersion(request, { updatedAt: current }) : null;
+      if (stale) return stale;
+      const b = await body();
+      const literal = Object.entries(b).flatMap(([guard, cfg]) =>
+        cfg && typeof cfg.apiKeySecret === 'string' && !cfg.apiKeySecret.startsWith('secret:')
+          ? [
+              {
+                path: `/${guard}/apiKeySecret`,
+                message: 'Reference the secret by name (secret:NAME)',
+              },
+            ]
+          : [],
+      );
+      if (literal.length > 0) return validationFailed(literal);
+      const next = {
+        jev: b.jev,
+        llmJudge: b.llmJudge,
+        classifier: b.classifier,
+        updatedAt: stamp(),
+      };
+      data().modelGuards = next as Schemas['ModelGuards'];
+      return HttpResponse.json(data().modelGuards, { headers: etagHeaders(next.updatedAt) });
+    },
+    { allow: 'admin' },
+  ),
 
   // --- limit rules ---------------------------------------------------------------------------------------------
   route.get('/limit-rules', ({ url }) => HttpResponse.json(pageOf(data().limitRules, url))),
-  route.post('/limit-rules', async ({ body }) => {
-    if (!isAdmin()) return forbidden();
-    const b = await body();
-    const errors = [
-      ...requireFields(b, ['name', 'subject', 'kind']),
-      ...limitParamErrors(b.kind, b.params),
-    ];
-    if (errors.length > 0) return invalid(errors);
-    const now = stamp();
-    const row: Schemas['LimitRule'] = {
-      id: newId('lr'),
-      name: b.name,
-      ownerTeamId: b.ownerTeamId ?? null,
-      subject: b.subject,
-      subjectMatch: b.subjectMatch ?? 'each',
-      scope: b.scope ?? {},
-      kind: b.kind,
-      params: b.params,
-      metric: b.metric ?? 'calls',
-      cost: b.cost ?? null,
-      action: b.action ?? 'reject',
-      enabled: b.enabled ?? true,
-      createdAt: now,
-      updatedAt: now,
-    };
-    data().limitRules.push(row);
-    return HttpResponse.json(row, { status: 201, headers: etagHeaders(now) });
-  }),
-  route.patch('/limit-rules/{id}', async ({ params, body }) => {
-    if (!isAdmin()) return forbidden();
-    const row = data().limitRules.find((x) => x.id === params.id);
-    if (!row) return notFound('Rule');
-    const b = await body();
-    const merged = { ...row, ...b };
-    const errors = limitParamErrors(row.kind, merged.params);
-    if (errors.length > 0) return invalid(errors);
-    Object.assign(row, b, { updatedAt: stamp() });
-    return HttpResponse.json(row, { headers: etagHeaders(row.updatedAt) });
-  }),
-  route.delete('/limit-rules/{id}', ({ params }) => {
-    if (!isAdmin()) return forbidden();
-    const d = data();
-    if (!d.limitRules.some((x) => x.id === params.id)) return notFound('Rule');
-    d.limitRules = d.limitRules.filter((x) => x.id !== params.id);
-    return noContent();
-  }),
+  route.post(
+    '/limit-rules',
+    async ({ body }) => {
+      const b = await body();
+      const errors = [
+        ...requireFields(b, ['name', 'subject', 'kind']),
+        ...limitParamErrors(b.kind, b.params),
+      ];
+      if (errors.length > 0) return validationFailed(errors);
+      const now = stamp();
+      const row: Schemas['LimitRule'] = {
+        id: newId('lr'),
+        name: b.name,
+        ownerTeamId: b.ownerTeamId ?? null,
+        subject: b.subject,
+        subjectMatch: b.subjectMatch ?? 'each',
+        scope: b.scope ?? {},
+        kind: b.kind,
+        params: b.params,
+        metric: b.metric ?? 'calls',
+        cost: b.cost ?? null,
+        action: b.action ?? 'reject',
+        enabled: b.enabled ?? true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      data().limitRules.push(row);
+      return HttpResponse.json(row, { status: 201, headers: etagHeaders(now) });
+    },
+    { allow: 'admin' },
+  ),
+  route.patch(
+    '/limit-rules/{id}',
+    async ({ request, params, body }) => {
+      const row = data().limitRules.find((x) => x.id === params.id);
+      if (!row) return notFound('Rule');
+      const stale = checkVersion(request, row);
+      if (stale) return stale;
+      const b = await body();
+      const merged = { ...row, ...b };
+      const errors = limitParamErrors(row.kind, merged.params);
+      if (errors.length > 0) return validationFailed(errors);
+      Object.assign(row, b, { updatedAt: stamp() });
+      return HttpResponse.json(row, { headers: etagHeaders(row.updatedAt) });
+    },
+    { allow: 'admin' },
+  ),
+  route.delete(
+    '/limit-rules/{id}',
+    ({ request, params }) => {
+      const d = data();
+      const row = d.limitRules.find((x) => x.id === params.id);
+      if (!row) return notFound('Rule');
+      const stale = checkVersion(request, row);
+      if (stale) return stale;
+      d.limitRules = d.limitRules.filter((x) => x.id !== params.id);
+      return noContent();
+    },
+    { allow: 'admin' },
+  ),
 
   // --- system ----------------------------------------------------------------------------------------------------
-  route.get('/system/status', () => {
-    if (!['admin', 'manager', 'auditor'].includes(getDb().role)) return forbidden();
-    return HttpResponse.json(data().system);
-  }),
-  route.post('/system/kms/rotate', () => {
-    if (!isAdmin()) return forbidden();
-    const kms = data().system.kms;
-    const version = Number(kms.kekRef?.match(/versions\/(\d+)$/)?.[1] ?? 0) + 1;
-    kms.kekRef = `${kms.kekRef?.replace(/versions\/\d+$/, '') ?? 'kek/'}versions/${version}`;
-    kms.lastRotatedAt = stamp();
-    return HttpResponse.json({ kekRef: kms.kekRef, rewrapped: 128 });
-  }),
+  route.get(
+    '/system/status',
+    () => {
+      return HttpResponse.json(data().system);
+    },
+    { allow: 'readConfig' },
+  ),
+  route.post(
+    '/system/kms/rotate',
+    () => {
+      const kms = data().system.kms;
+      const version = Number(kms.kekRef?.match(/versions\/(\d+)$/)?.[1] ?? 0) + 1;
+      kms.kekRef = `${kms.kekRef?.replace(/versions\/\d+$/, '') ?? 'kek/'}versions/${version}`;
+      kms.lastRotatedAt = stamp();
+      return HttpResponse.json({ kekRef: kms.kekRef, rewrapped: 128 });
+    },
+    { allow: 'admin' },
+  ),
 ];
 
 /** One valid call per operation of this domain (checked against the OpenAPI document by route-contract.test.ts). */

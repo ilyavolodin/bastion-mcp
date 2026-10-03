@@ -1,8 +1,14 @@
 import { PAT_SCOPES } from '@bastion-mcp/auth';
 import { z } from 'zod';
 import { listQuerySchema, pageSchema } from '../framework/conventions';
-import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
-import { idParams } from '../schemas/common';
+import {
+  authz,
+  defineDelete,
+  defineMutation,
+  defineRoute,
+  type RouteDefinition,
+} from '../framework/route';
+import { idParams, nameSchema } from '../schemas/common';
 import { asRow, notificationRow, oauthGrantRow, pageOf } from '../schemas/rows';
 import {
   createToken,
@@ -93,7 +99,7 @@ export const selfRoutes: RouteDefinition[] = [
     tag: TAG,
     summary: 'Update your profile',
     schema: {
-      body: z.object({ displayName: z.string().trim().min(1).max(200).optional() }),
+      body: z.object({ displayName: nameSchema.optional() }),
       response: meSchema,
     },
     authz: authz.self(),
@@ -140,19 +146,14 @@ export const selfRoutes: RouteDefinition[] = [
     authz: authz.self(),
     handler: (ctx) => listGrants(ctx, ctx.query),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/me/oauth-grants/{id}',
     tag: TAG,
     summary: 'Revoke an OAuth grant',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.self(),
-    status: 204,
     version: (input) => grantVersion(input, input.params.id ?? ''),
-    handler: async (ctx) => {
-      await revokeGrant(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => revokeGrant(ctx, ctx.params.id),
   }),
   defineRoute({
     method: 'GET',
@@ -180,18 +181,13 @@ export const selfRoutes: RouteDefinition[] = [
     authz: authz.self(),
     handler: (ctx) => createToken(ctx, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/tokens/{id}',
     tag: 'Service accounts and tokens',
     summary: 'Revoke a personal access token',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.self(),
-    status: 204,
     version: (input) => tokenVersion(input, input.params.id ?? ''),
-    handler: async (ctx) => {
-      await revokeToken(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => revokeToken(ctx, ctx.params.id),
   }),
 ];

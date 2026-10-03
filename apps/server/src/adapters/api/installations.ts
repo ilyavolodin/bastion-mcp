@@ -1,16 +1,22 @@
 import type { ApiDeps, TryRequest } from '@bastion-mcp/api';
-import { buildPrincipal, type Principal } from '@bastion-mcp/auth';
-import { BastionError, effectiveTeamSlug, PROTOCOL_VERSIONS } from '@bastion-mcp/core';
+import type { Principal } from '@bastion-mcp/auth';
+import {
+  BastionError,
+  effectiveTeamSlug,
+  PROTOCOL_VERSIONS,
+  UI_CLIENT_ID,
+} from '@bastion-mcp/core';
 import { createRouterRepository } from '@bastion-mcp/db';
 import { EndpointResolver, type ResolvedEndpoint } from '@bastion-mcp/mcp-downstream';
 import { type OverridesDocument, overridesSchema } from '@bastion-mcp/overrides';
 import type { EndpointPolicy, InstallationInfo } from '@bastion-mcp/router';
-import { SERVER_VERSION } from '../../config';
+import { serverVersion } from '../../config';
 import type { AuthServices, PolicyService, WorkerServices } from '../../contracts';
 import type { Infra } from '../../infra';
+import { API_UPSTREAM_CALL_TIMEOUT_MS } from '../../timing';
 import { createInstallationLookup } from '../auth';
 import { createEndpointData, createPrincipalProfiles } from '../downstream/endpoint-data';
-import { connectAsPrincipal } from '../gateway-client';
+import { connectAsPrincipal, principalFor } from '../gateway-client';
 import { readStderrTail } from '../upstream/stderr';
 import { createUpstreamAccess, type UpstreamAccess } from '../upstream-access';
 
@@ -71,16 +77,7 @@ export const createInstallationApiPorts = (
     parseOverrides: (raw) => overridesSchema.parse(raw),
   });
 
-  const principalOf = async (principalId: string): Promise<Principal> => {
-    const record = await auth.principalStore.getPrincipal(principalId);
-    if (!record?.active)
-      throw new BastionError('POLICY_DENIED', 'the principal is not active', { httpStatus: 403 });
-    return buildPrincipal(record, {
-      authMethod: 'session',
-      clientId: 'bastion-ui',
-      scopes: ['mcp'],
-    });
-  };
+  const principalOf = (principalId: string): Promise<Principal> => principalFor(auth, principalId);
 
   const infoOf = async (installationId: string, principal: Principal) => {
     const info = (await router.getInfo(installationId, {
@@ -105,8 +102,8 @@ export const createInstallationApiPorts = (
       toPolicyPrincipal,
       profiles: createPrincipalProfiles(infra),
       org: { displayName: 'Bastion' },
-      serverVersion: SERVER_VERSION,
-      clock: { now: () => Date.now() },
+      serverVersion: serverVersion(infra.config),
+      clock: infra.clock,
       logger: noopLogger,
     });
     return resolver;
@@ -123,7 +120,7 @@ export const createInstallationApiPorts = (
       principal,
       { kind: 'installation', slug },
       {
-        clientId: 'bastion-ui',
+        clientId: UI_CLIENT_ID,
         clientName: 'Bastion try',
         ip: '127.0.0.1',
         authMethod: 'session',
@@ -168,9 +165,9 @@ export const createInstallationApiPorts = (
         era: 'modern',
         protocolVersion: PROTOCOL_VERSIONS.modern[0],
         clientCapabilities: {},
-        clientInfo: { name: 'bastion-ui', version: SERVER_VERSION },
+        clientInfo: { name: UI_CLIENT_ID, version: serverVersion(infra.config) },
         trace: INVALID_SPAN,
-        signal: input.signal ?? AbortSignal.timeout(60_000),
+        signal: input.signal ?? AbortSignal.timeout(API_UPSTREAM_CALL_TIMEOUT_MS),
         emit: () => undefined,
         resolved,
         origin: 'client',

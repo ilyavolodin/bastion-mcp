@@ -1,3 +1,4 @@
+import { type FakeRegistry, startFakeRegistry } from '@bastion-mcp/testkit';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildSearchDocument,
@@ -13,7 +14,6 @@ import {
   syncSource,
   UPDATED_SINCE_OVERLAP_MS,
 } from '../src';
-import { type FakeRegistry, startFakeRegistry } from './fake-registry';
 import * as fx from './fixtures/server-json';
 
 let fake: FakeRegistry;

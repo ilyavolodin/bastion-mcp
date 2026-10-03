@@ -5,9 +5,10 @@
  * column that may embed a secret id, `marketplaces.mirror`, is scrubbed). Users, teams, installations and tokens are not
  * part of it. Import is an idempotent upsert by id inside one transaction with an audit event.
  */
-import { appendAuditEvent, bumpConfigVersion, Prisma } from '@bastion-mcp/db';
+import { appendAuditEvent, bumpConfigVersion, NIL_UUID, Prisma } from '@bastion-mcp/db';
 import { z } from 'zod';
 import type { Infra } from '../infra';
+import { CONFIG_IMPORT_TX_OPTIONS } from '../timing';
 
 export const CONFIG_FORMAT = 1;
 
@@ -304,44 +305,41 @@ export const importConfig = async (
   if (options.dryRun) return { counts, dryRun: true };
 
   const events: { scope: string; id: string; version: bigint }[] = [];
-  await infra.db.prisma.$transaction(
-    async (tx) => {
-      for (const { spec, rows } of plans) {
-        const delegate = delegateOf(tx, spec.delegate);
-        if (spec.key === 'marketplaceItems') {
-          const marketplaces = [...new Set(rows.map((r) => r.marketplaceId as string))];
-          if (marketplaces.length > 0) {
-            await delegate.deleteMany({ where: { marketplaceId: { in: marketplaces } } });
-            await delegate.createMany({ data: rows });
-          }
-          continue;
+  await infra.db.prisma.$transaction(async (tx) => {
+    for (const { spec, rows } of plans) {
+      const delegate = delegateOf(tx, spec.delegate);
+      if (spec.key === 'marketplaceItems') {
+        const marketplaces = [...new Set(rows.map((r) => r.marketplaceId as string))];
+        if (marketplaces.length > 0) {
+          await delegate.deleteMany({ where: { marketplaceId: { in: marketplaces } } });
+          await delegate.createMany({ data: rows });
         }
-        for (const row of rows) {
-          const where =
-            spec.id.length === 1
-              ? { [spec.id[0] as string]: row[spec.id[0] as string] }
-              : { [spec.id.join('_')]: Object.fromEntries(spec.id.map((f) => [f, row[f]])) };
-          await delegate.upsert({ where, create: row, update: row });
-        }
+        continue;
       }
-      events.push({
-        scope: 'org',
-        id: '00000000-0000-0000-0000-000000000000',
-        version: await bumpConfigVersion(tx, 'org'),
-      });
-      for (const row of plans.find((p) => p.spec.key === 'catalogEntries')?.rows ?? []) {
-        const id = row.id as string;
-        events.push({ scope: 'catalog', id, version: await bumpConfigVersion(tx, 'catalog', id) });
+      for (const row of rows) {
+        const where =
+          spec.id.length === 1
+            ? { [spec.id[0] as string]: row[spec.id[0] as string] }
+            : { [spec.id.join('_')]: Object.fromEntries(spec.id.map((f) => [f, row[f]])) };
+        await delegate.upsert({ where, create: row, update: row });
       }
-      await appendAuditEvent(tx, {
-        actorType: 'system',
-        action: 'config.import',
-        targetType: 'config',
-        diff: { counts },
-      });
-    },
-    { timeout: 120_000, maxWait: 10_000 },
-  );
+    }
+    events.push({
+      scope: 'org',
+      id: NIL_UUID,
+      version: await bumpConfigVersion(tx, 'org'),
+    });
+    for (const row of plans.find((p) => p.spec.key === 'catalogEntries')?.rows ?? []) {
+      const id = row.id as string;
+      events.push({ scope: 'catalog', id, version: await bumpConfigVersion(tx, 'catalog', id) });
+    }
+    await appendAuditEvent(tx, {
+      actorType: 'system',
+      action: 'config.import',
+      targetType: 'config',
+      diff: { counts },
+    });
+  }, CONFIG_IMPORT_TX_OPTIONS);
   for (const event of events) {
     await infra.publish('bastion:config', {
       topic: event.scope,

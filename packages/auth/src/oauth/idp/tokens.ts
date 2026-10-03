@@ -1,5 +1,6 @@
 import * as client from 'openid-client';
 import { z } from 'zod';
+import { TOKEN_SKEW_MS } from '../constants';
 import { toProtocolError } from '../http';
 import {
   type Clock,
@@ -70,8 +71,6 @@ export class IdpTokenVault {
   }
 }
 
-const SKEW_MS = 60_000;
-
 /**
  * Returns usable IdP tokens for the user, refreshing with the stored refresh token when the access token
  * is close to expiry or when `forceRefresh` is set (an ID token is only available right after a refresh
@@ -88,7 +87,7 @@ export const refreshIdpTokens = async (input: {
   const clock = input.clock ?? systemClock;
   const current = await input.vault.load(input.userId, input.connectionId);
   if (!current) throw new IdpRefreshError('no stored IdP session', 'no_session');
-  const fresh = current.expiresAt === null || current.expiresAt - clock.now() > SKEW_MS;
+  const fresh = current.expiresAt === null || current.expiresAt - clock.now() > TOKEN_SKEW_MS;
   if (fresh && !input.forceRefresh) return current;
   if (!current.refreshToken)
     throw new IdpRefreshError('IdP session has no refresh token', 'no_session');

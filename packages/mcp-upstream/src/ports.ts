@@ -43,8 +43,8 @@ export interface RedisLike {
   publish(channel: string, message: string): Promise<number>;
 }
 
-export type Clock = { now(): number };
-export const systemClock: Clock = { now: () => Date.now() };
+export type { Clock } from '@bastion-mcp/core';
+export { systemClock } from '@bastion-mcp/core';
 
 export type Logger = {
   debug(message: string, fields?: Record<string, unknown>): void;

@@ -34,6 +34,7 @@ import { InternalRpcClient } from './rpc/client';
 import { createInternalRpcServer } from './rpc/server';
 import { RemotePool } from './service/pool';
 import { UpstreamService } from './service/service';
+import { UPSTREAM_TIMEOUTS_MS } from './timeouts';
 
 export type UpstreamRuntimeOptions = {
   redis: RedisLike;
@@ -138,7 +139,7 @@ export const createUpstreamRuntime = (options: UpstreamRuntimeOptions) => {
     stderrSink: options.stderrSink,
     stderrLogger: options.stderrLogger,
     ...(options.logger ? { logger: options.logger } : {}),
-    idleSweepMs: 30_000,
+    idleSweepMs: UPSTREAM_TIMEOUTS_MS.instanceIdleSweep,
   });
   const eraCache = new EraCache(options.redis);
   const pool = new RemotePool({

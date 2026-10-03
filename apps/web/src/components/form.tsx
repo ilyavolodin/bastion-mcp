@@ -2,10 +2,38 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as React from 'react';
 import { type FieldValues, type UseFormReturn, useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { ApiError } from '@/api/client';
 import type { InstallFieldDef as FieldDef } from '@/api/views/servers';
 import { cn } from '@/lib/cn';
+import { serverFieldErrors } from '@/lib/form-errors';
 import { Input, Select } from './ui/input';
 import { Label } from './ui/label';
+
+/** Field errors by field name; `form` holds a message that belongs to no field. */
+export type FieldErrors = Record<string, string>;
+
+/** Keeps the field errors of a failed submit: the form's own, then the server's. */
+export function useFormErrors() {
+  const [errors, setErrors] = React.useState<FieldErrors>({});
+  return {
+    errors,
+    clear: () => setErrors({}),
+    set: setErrors,
+    fromServer: (e: Error) => {
+      if (e instanceof ApiError && e.errors.length > 0) setErrors(serverFieldErrors(e.errors));
+      else setErrors({ form: e.message });
+    },
+  };
+}
+
+/** The message of a failed submit that belongs to no single field. */
+export function FormError({ message }: { message: string | undefined }) {
+  return message ? (
+    <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
+      {message}
+    </p>
+  ) : null;
+}
 
 /** Label, control, help and error text wired with ids so screen readers get all of them. */
 export function Field({

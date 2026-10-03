@@ -7,6 +7,7 @@ import { AuthenticationError, buildPrincipal, InsufficientScopeError } from '@ba
 import { loadConfig } from '@bastion-mcp/core';
 import { guardProfileSchema, ORG_DEFAULT_PROFILE } from '@bastion-mcp/guards';
 import { exportZip, saveVersionFiles, textFile } from '@bastion-mcp/plugins';
+import { type FakeRegistry, startFakeRegistry } from '@bastion-mcp/testkit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createGuardApiPorts } from '../src/adapters/api/guards';
@@ -21,7 +22,6 @@ import { registerPluginRoutes } from '../src/http/ui/plugins';
 import { registerSubregistryRoutes } from '../src/http/ui/registry';
 import { createInfra, type Infra } from '../src/infra';
 import { createTestEnv, haveDocker, type TestEnv } from './helpers/env';
-import { type FakeRegistry, startFakeRegistry } from './helpers/fake-registry';
 import { freePort } from './helpers/worker-harness';
 
 const SKILL_MD = `---

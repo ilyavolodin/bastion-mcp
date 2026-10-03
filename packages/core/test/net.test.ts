@@ -10,6 +10,8 @@ import {
   normalizeIpLiteral,
   parseEgressRule,
   pinnedLookup,
+  resolveAndCheckUrl,
+  UrlCheckError,
 } from '../src/net';
 
 describe('8.8 / 23.3 SSRF address classification', () => {
@@ -144,5 +146,55 @@ describe('blockedAddressMessage', () => {
     const message = blockedAddressMessage('x', '169.254.169.254');
     expect(message).toContain('never allowed');
     expect(message).not.toContain('BASTION_PRIVATE_UPSTREAM_CIDRS');
+  });
+});
+
+describe('8.8 resolveAndCheckUrl', () => {
+  const lookup = (map: Record<string, string[]>) => async (host: string) => {
+    const found = map[host];
+    if (!found) throw new Error('nxdomain');
+    return found;
+  };
+  const reasonOf = async (raw: string, options?: Parameters<typeof resolveAndCheckUrl>[1]) => {
+    try {
+      await resolveAndCheckUrl(raw, options);
+    } catch (error) {
+      return error instanceof UrlCheckError ? error.reason : 'other';
+    }
+    return 'ok';
+  };
+
+  it('returns the single resolved address for a public https host', async () => {
+    const checked = await resolveAndCheckUrl('https://a.example/x', {
+      lookup: lookup({ 'a.example': ['93.184.216.34'] }),
+    });
+    expect(checked).toMatchObject({ address: '93.184.216.34', family: 4, hostname: 'a.example' });
+  });
+
+  it('refuses bad schemes, credentials, private and encoded literals and unresolvable hosts', async () => {
+    const opts = { lookup: lookup({ 'p.example': ['10.0.0.1'] }) };
+    expect(await reasonOf('nope', opts)).toBe('invalid-url');
+    expect(await reasonOf('ftp://a.example', opts)).toBe('scheme');
+    expect(await reasonOf('https://u:p@a.example', opts)).toBe('credentials');
+    expect(await reasonOf('https://p.example', opts)).toBe('blocked-address');
+    expect(await reasonOf('https://2130706433', opts)).toBe('blocked-address');
+    expect(await reasonOf('https://[::1]/', opts)).toBe('blocked-address');
+    expect(await reasonOf('https://gone.example', opts)).toBe('unresolvable');
+  });
+
+  it('refuses plain http unless a hook allows it, and honours allowCidrs', async () => {
+    const opts = { lookup: lookup({ 'p.example': ['10.0.0.1'], 'a.example': ['93.184.216.34'] }) };
+    expect(await reasonOf('http://a.example', opts)).toBe('insecure');
+    expect(await reasonOf('http://a.example', { ...opts, allowHttp: () => true })).toBe('ok');
+    const internal = { ...opts, addressPolicy: { allowCidrs: ['10.0.0.0/8'] } };
+    expect(await reasonOf('http://p.example', internal)).toBe('insecure');
+    const internalOnly = (addresses: readonly string[]) =>
+      addresses.every((a) => isAddressDenied(a, {}));
+    expect(
+      await reasonOf('http://p.example', { ...internal, allowHttpAddresses: internalOnly }),
+    ).toBe('ok');
+    expect(await reasonOf('http://a.example', { ...opts, allowHttpAddresses: internalOnly })).toBe(
+      'insecure',
+    );
   });
 });

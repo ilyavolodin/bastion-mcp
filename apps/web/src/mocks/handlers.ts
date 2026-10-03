@@ -1,4 +1,4 @@
-import { http, sse } from 'msw';
+import { sse } from 'msw';
 import type { Schemas } from '@/api/schema';
 import { accessHandlers } from './domains/access';
 import { catalogHandlers } from './domains/catalog';
@@ -8,12 +8,10 @@ import { registryHandlers } from './domains/registry';
 import { serversHandlers } from './domains/servers';
 import { sessionHandlers } from './domains/session';
 import { settingsHandlers } from './domains/settings';
-import { P, problem } from './http';
-import { getDb } from './state';
+import { csrfMiddleware, P } from './http';
+import { getDb, type SseClient, sseStreams } from './state';
 
-// The typed SSE client only knows the default 'message' event; named events are sent as-is.
-type SseClient = { send: (m: never) => void };
-const SSE_CLIENTS = new Set<SseClient>();
+const SSE_CLIENTS = sseStreams();
 const sendNamed = (c: SseClient, event: string, data: string) =>
   (c.send as (m: { event: string; data: string }) => void)({ event, data });
 
@@ -32,16 +30,7 @@ export const emitMockEvent = (event: string, data: unknown): void => {
 
 /** Every route is answered by a domain handler typed by the generated OpenAPI types (`./domains/*`). */
 export const handlers = [
-  // CSRF double-submit on every state-changing call (9.2).
-  http.all(P('/*'), ({ request }) => {
-    if (
-      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) &&
-      !request.headers.get('x-bastion-csrf')
-    ) {
-      return problem(403, 'csrf_missing', 'Missing CSRF token', 'Reload the page and try again.');
-    }
-    return undefined;
-  }),
+  csrfMiddleware,
   ...sessionHandlers,
   ...accessHandlers,
   ...settingsHandlers,

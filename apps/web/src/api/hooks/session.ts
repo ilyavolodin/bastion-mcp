@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../client';
 import { toMe } from '../me';
 import type { BodyOf } from '../schema';
+import { STALE_LONG_MS } from '../timing';
+import type { CallViewer } from '../views/observability';
 import { toNotification, toQuota } from '../views/session';
 import { keys, pagedQuery, useApiMutation } from './base';
 
@@ -10,9 +12,15 @@ export const useMe = () =>
   useQuery({
     queryKey: keys.me,
     queryFn: ({ signal }) => api.get('/me', { signal }).then(toMe),
-    staleTime: 5 * 60_000,
+    staleTime: STALE_LONG_MS,
     retry: false,
   });
+
+/** The caller as the call log and the marketplaces authorize them, once `GET /me` has answered. */
+export const useViewer = (): CallViewer | undefined => {
+  const me = useMe().data;
+  return me ? { id: me.id, orgRole: me.orgRole, teams: me.teams } : undefined;
+};
 
 /** `PATCH /me` edits the display name only (17.2); the theme stays in the browser. */
 export const useUpdateMe = () =>

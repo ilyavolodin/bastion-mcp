@@ -1,5 +1,8 @@
-import { FLOOD_LIMITS } from '@bastion-mcp/core';
+import { FLOOD_LIMITS, SECONDS } from '@bastion-mcp/core';
 import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
+
+/** The flood limits are per minute. */
+const FLOOD_WINDOW_SECONDS = SECONDS.MINUTE;
 
 export type FloodBucket = 'mcp' | 'oauth';
 export type FloodResult = { ok: true; retryAfterSec: 0 } | { ok: false; retryAfterSec: number };
@@ -20,17 +23,15 @@ export class FloodLimiter {
   private readonly limiters: Record<FloodBucket, RateLimiterMemory>;
 
   constructor(limits: { mcpPerMinute: number; oauthPerMinute: number } = FLOOD_LIMITS) {
+    const bucket = (name: FloodBucket, points: number) =>
+      new RateLimiterMemory({
+        keyPrefix: `flood:${name}`,
+        points,
+        duration: FLOOD_WINDOW_SECONDS,
+      });
     this.limiters = {
-      mcp: new RateLimiterMemory({
-        keyPrefix: 'flood:mcp',
-        points: limits.mcpPerMinute,
-        duration: 60,
-      }),
-      oauth: new RateLimiterMemory({
-        keyPrefix: 'flood:oauth',
-        points: limits.oauthPerMinute,
-        duration: 60,
-      }),
+      mcp: bucket('mcp', limits.mcpPerMinute),
+      oauth: bucket('oauth', limits.oauthPerMinute),
     };
   }
 

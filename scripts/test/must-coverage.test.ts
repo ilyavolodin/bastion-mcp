@@ -1,5 +1,14 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { extractMustSections, extractTestTitles, findUncoveredSections } from '../must-coverage';
+import {
+  collectCoveredIds,
+  extractMustSections,
+  extractTestTitles,
+  findUncoveredSections,
+  testFiles,
+} from '../must-coverage';
 
 const doc = `
 # Title
@@ -57,5 +66,38 @@ describe('23.5 must coverage tooling', () => {
       '1.1',
       '6.5',
     ]);
+  });
+});
+
+describe('23.5 collectCoveredIds', () => {
+  const tree = () => {
+    const root = mkdtempSync(join(tmpdir(), 'must-cov-'));
+    mkdirSync(join(root, 'packages', 'a', 'test'), { recursive: true });
+    mkdirSync(join(root, 'packages', 'a', 'node_modules', 'x'), { recursive: true });
+    writeFileSync(join(root, 'packages', 'a', 'test', 'a.test.ts'), "it('6.5 works', () => {});");
+    writeFileSync(
+      join(root, 'packages', 'a', 'node_modules', 'x', 'skip.test.ts'),
+      "it('9.9 ignored', () => {});",
+    );
+    return root;
+  };
+
+  it('23.5 collects ids from packages and apps, treating a missing base as empty', () => {
+    const root = tree();
+    try {
+      expect([...collectCoveredIds(root)]).toEqual(['6.5']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('23.5 does not swallow errors other than a missing directory', () => {
+    const root = tree();
+    try {
+      const file = join(root, 'packages', 'a', 'test', 'a.test.ts');
+      expect(() => testFiles(file)).toThrow(); // ENOTDIR, not ENOENT
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

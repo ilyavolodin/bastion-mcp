@@ -2,24 +2,23 @@ import { isValidSlug, MEMBERSHIP_SOURCES, newId, ORG_ROLES, TEAM_ROLES } from '@
 import { z } from 'zod';
 import type { RoleMappingRule, Team } from '../generated/client';
 import {
-  afterStringAsc,
+  afterKey,
   assertIfMatch,
   assertSwapped,
-  clampLimit,
   compact,
   etagOf,
   mutate,
   NotFoundError,
-  nextUpdatedAt,
   orConflict,
   type Paged,
   type PrismaLike,
+  paginate,
   type RepoContext,
   type RepoOptions,
   toContext,
   toJson,
-  toPage,
   ValidationError,
+  versionedUpdate,
   versionGuard,
 } from './support';
 import type { IfMatchOptions, WriteOptions } from './users';
@@ -86,26 +85,29 @@ export const createTeamRepository = (arg: PrismaLike | RepoContext, options?: Re
     async list(
       filter: { q?: string; userId?: string; limit?: number; cursor?: string } = {},
     ): Promise<Paged<TeamView>> {
-      const limit = clampLimit(filter.limit);
       const q = filter.q?.trim();
-      const rows = await db.team.findMany({
-        where: {
-          ...(filter.userId ? { teamMemberships: { some: { userId: filter.userId } } } : {}),
-          ...(q
-            ? {
-                OR: [
-                  { slug: { contains: q, mode: 'insensitive' } },
-                  { displayName: { contains: q, mode: 'insensitive' } },
-                ],
-              }
-            : {}),
-          ...afterStringAsc('slug', filter.cursor),
-        },
-        orderBy: { slug: 'asc' },
-        take: limit + 1,
-      });
-      const page = toPage(rows, limit, (r) => [r.slug]);
-      return { items: page.items.map(toTeamView), nextCursor: page.nextCursor };
+      return paginate(
+        filter,
+        (take) =>
+          db.team.findMany({
+            where: {
+              ...(filter.userId ? { teamMemberships: { some: { userId: filter.userId } } } : {}),
+              ...(q
+                ? {
+                    OR: [
+                      { slug: { contains: q, mode: 'insensitive' } },
+                      { displayName: { contains: q, mode: 'insensitive' } },
+                    ],
+                  }
+                : {}),
+              ...afterKey('slug', 'asc', filter.cursor),
+            },
+            orderBy: { slug: 'asc' },
+            take,
+          }),
+        (r) => [r.slug],
+        toTeamView,
+      );
     },
 
     async create(input: CreateTeamInput, opts: WriteOptions = {}): Promise<TeamView> {
@@ -140,16 +142,19 @@ export const createTeamRepository = (arg: PrismaLike | RepoContext, options?: Re
       opts: IfMatchOptions,
     ): Promise<TeamView> {
       return mutate(ctx, async (tx, unit) => {
-        const current = await tx.team.findUnique({ where: { id } });
-        if (!current) throw new NotFoundError('team', id);
-        assertIfMatch(current, opts.ifMatch);
-        assertSwapped(
-          await tx.team.updateMany({
-            where: { id, ...versionGuard(current) },
-            data: { ...patch, updatedAt: nextUpdatedAt(current) },
-          }),
-        );
-        const row = await tx.team.findUniqueOrThrow({ where: { id } });
+        const { current, row } = await versionedUpdate({
+          what: 'team',
+          id,
+          ifMatch: opts.ifMatch,
+          find: () => tx.team.findUnique({ where: { id } }),
+          write: async (_current, where, updatedAt) => {
+            return tx.team.updateMany({
+              where,
+              data: { ...patch, updatedAt },
+            });
+          },
+          reload: () => tx.team.findUniqueOrThrow({ where: { id } }),
+        });
         unit.bump('team', id);
         unit.audit(opts.audit, {
           action: 'team.update',
@@ -366,21 +371,24 @@ export const createRoleMappingRuleRepository = (
     ): Promise<RoleMappingRuleView> {
       const mapsTo = patch.mapsTo === undefined ? undefined : parseMapsTo(patch.mapsTo);
       return mutate(ctx, async (tx, unit) => {
-        const current = await tx.roleMappingRule.findUnique({ where: { id } });
-        if (!current) throw new NotFoundError('role mapping rule', id);
-        assertIfMatch(current, opts.ifMatch);
-        assertSwapped(
-          await tx.roleMappingRule.updateMany({
-            where: { id, ...versionGuard(current) },
-            data: {
-              ...(patch.groupPattern === undefined ? {} : { groupPattern: patch.groupPattern }),
-              ...(patch.priority === undefined ? {} : { priority: patch.priority }),
-              ...(mapsTo === undefined ? {} : { mapsTo: toJson(mapsTo) }),
-              updatedAt: nextUpdatedAt(current),
-            },
-          }),
-        );
-        const row = await tx.roleMappingRule.findUniqueOrThrow({ where: { id } });
+        const { current, row } = await versionedUpdate({
+          what: 'role mapping rule',
+          id,
+          ifMatch: opts.ifMatch,
+          find: () => tx.roleMappingRule.findUnique({ where: { id } }),
+          write: async (_current, where, updatedAt) => {
+            return tx.roleMappingRule.updateMany({
+              where,
+              data: {
+                ...(patch.groupPattern === undefined ? {} : { groupPattern: patch.groupPattern }),
+                ...(patch.priority === undefined ? {} : { priority: patch.priority }),
+                ...(mapsTo === undefined ? {} : { mapsTo: toJson(mapsTo) }),
+                updatedAt,
+              },
+            });
+          },
+          reload: () => tx.roleMappingRule.findUniqueOrThrow({ where: { id } }),
+        });
         unit.bump('org');
         unit.audit(opts.audit, {
           action: 'role_mapping_rule.update',

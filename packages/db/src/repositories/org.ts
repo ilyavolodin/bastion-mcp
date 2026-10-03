@@ -11,20 +11,20 @@ import { getConfigVersion } from '../config-version';
 import type { Notification } from '../generated/client';
 import {
   type AuditContext,
-  afterIdDesc,
+  afterKey,
   assertIfMatch,
-  clampLimit,
   etagOf,
   idCursorOf,
   jsonObjectSchema,
   mutate,
+  nextUpdatedAt,
   type Paged,
   type PrismaLike,
+  paginate,
   type RepoContext,
   type RepoOptions,
   toContext,
   toJson,
-  toPage,
   ValidationError,
 } from './support';
 
@@ -100,7 +100,9 @@ export const createOrgSettingsRepository = (
           );
         }
         const before = existing ? existing.value : ORG_SETTING_DEFAULTS[key];
-        const now = new Date(Math.max(Date.now(), (existing?.updatedAt.getTime() ?? 0) + 1));
+        const now = existing
+          ? nextUpdatedAt({ createdAt: existing.updatedAt, updatedAt: existing.updatedAt })
+          : new Date();
         await tx.orgSetting.upsert({
           where: { key },
           create: {
@@ -184,18 +186,21 @@ export const createNotificationRepository = (
       userId: string,
       filter: { unreadOnly?: boolean; limit?: number; cursor?: string } = {},
     ): Promise<Paged<NotificationView>> {
-      const limit = clampLimit(filter.limit);
-      const rows = await db.notification.findMany({
-        where: {
-          userId,
-          ...(filter.unreadOnly ? { readAt: null } : {}),
-          ...afterIdDesc(filter.cursor),
-        },
-        orderBy: { id: 'desc' },
-        take: limit + 1,
-      });
-      const page = toPage(rows, limit, idCursorOf);
-      return { items: page.items.map(toNotification), nextCursor: page.nextCursor };
+      return paginate(
+        filter,
+        (take) =>
+          db.notification.findMany({
+            where: {
+              userId,
+              ...(filter.unreadOnly ? { readAt: null } : {}),
+              ...afterKey('id', 'desc', filter.cursor),
+            },
+            orderBy: { id: 'desc' },
+            take,
+          }),
+        idCursorOf,
+        toNotification,
+      );
     },
     async unreadCount(userId: string): Promise<number> {
       return db.notification.count({ where: { userId, readAt: null } });

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import {
-  newId,
+  MS,
   type PackageSpec,
   RateLimitedError,
   redisKeys,
@@ -11,46 +11,39 @@ import {
 import { planSandboxStart, type SandboxInstanceInfo } from '@bastion-mcp/limits';
 import {
   buildProxyUrl,
-  captureLockfileVia,
+  CLOSE_CODE_REPLACED,
   crashCountsAsFailure,
-  type InstanceEvent,
   type InstanceStartPhase,
-  type InstanceState,
   instanceStateMachine,
-  isInstallationError,
-  recordFailure,
   retryDecision,
-  type SandboxDriver,
   type SandboxHandle,
   type SandboxSpec,
-  type StderrLogger,
   StderrPipeline,
-  type StderrSink,
   startAndWait,
 } from '@bastion-mcp/sandbox';
-import type { BastionMetrics } from '@bastion-mcp/telemetry';
-import type { CloseInfo, UpstreamConnector, UpstreamSession } from '../connectors/types';
+import type { CloseInfo, UpstreamSession } from '../connectors/types';
 import { ContinuationRegistry } from '../input-required/registry';
-import type { LeaseManager } from '../ownership/lease';
-import type { WorkerRegistry } from '../ownership/registry';
 import {
-  type CallPrincipal,
   type Clock,
-  type EgressPolicyWriter,
-  type InstallationStatusSink,
   type InstanceRecord,
-  type InstanceRepository,
   type Logger,
   noopLogger,
-  type RedisLike,
-  type ResolvedCredential,
   type ResolvedInstallation,
-  type RunnerTokenStore,
   systemClock,
 } from '../ports';
+import { failureRecord, swallow } from './failure';
 import { InflightCounter } from './inflight';
+import { captureLockfileIn } from './lockfile';
+import { isSharedPackage, newInstanceRecord, pickSharedReplica } from './rows';
+import { StartProgress } from './start';
 import { buildStartRequest } from './start-request';
-import { type AcquireEvents, type InstanceTelemetry, noopInstanceTelemetry } from './telemetry';
+import {
+  type AcquireEvents,
+  type InstanceTelemetry,
+  noopInstanceTelemetry,
+  SPAN_ATTRS,
+} from './telemetry';
+import type { EnsureArgs, EnsureResult, InstanceManagerDeps, LiveInstance } from './types';
 
 /**
  * The instance lifecycle of 8.6, on the owner worker:
@@ -58,73 +51,16 @@ import { type AcquireEvents, type InstanceTelemetry, noopInstanceTelemetry } fro
  * with `failed` (backoff) -> absent.
  */
 
-export type LiveInstance = {
-  id: string;
-  record: InstanceRecord;
-  installation: ResolvedInstallation;
-  session: UpstreamSession;
-  continuations: ContinuationRegistry;
-  handle?: SandboxHandle | undefined;
-  stderr?: StderrPipeline | undefined;
-  state: InstanceState;
-  startedAt: number;
-  /** Catalog version the process runs (version change, 8.6). */
-  versionId: string;
-  /** The credential and principal this connection was opened for (list cache keys, notifications, 6.6). */
-  credentialHash: string;
-  principalId: string;
-  inflight: number;
-  lastUsedAt: number;
-  idleTimer?: ReturnType<typeof setTimeout> | undefined;
-  stopping: boolean;
-  drainWaiters: (() => void)[];
-  lastPersistedAt: number;
-};
-
-export type EnsureArgs = {
-  record: InstanceRecord;
-  installation: ResolvedInstallation;
-  principal: CallPrincipal;
-  credential: ResolvedCredential;
-  signal: AbortSignal;
-};
-
-export type EnsureResult =
-  | { kind: 'local'; live: LiveInstance }
-  | { kind: 'forward'; workerId: string; address: string };
-
-export type InstanceManagerDeps = {
-  redis: RedisLike;
-  repo: InstanceRepository;
-  tokens: RunnerTokenStore;
-  driver: SandboxDriver;
-  egress: EgressPolicyWriter;
-  status: InstallationStatusSink;
-  leases: LeaseManager;
-  registry: WorkerRegistry;
-  connectors: { http: UpstreamConnector; sse: UpstreamConnector; sandbox: UpstreamConnector };
-  /** `BASTION_MAX_RUNNING_INSTANCES_PER_USER` (default 10) and `BASTION_MAX_RUNNING_SANDBOXES` (default 500). */
-  limits: { maxRunningPerUser: number; maxRunningTotal: number };
-  /** `<worker Service ClusterIP>:3128` or the per-instance unix socket address the runner proxies through (8.8). */
-  egressAddress: string;
-  npmRegistry?: string | undefined;
-  pypiIndexUrl?: string | undefined;
-  telemetry?: InstanceTelemetry;
-  metrics?:
-    | Pick<BastionMetrics, 'sandboxStarts' | 'sandboxStartDuration' | 'instancesActive'>
-    | undefined;
-  stderrSink?: StderrSink | undefined;
-  stderrLogger?: StderrLogger | undefined;
-  clock?: Clock;
-  logger?: Logger;
-  /** How often idle instances are looked for. */
-  idleSweepMs?: number;
-  /** Persist `lastUsedAt` at most this often. */
-  touchPersistMs?: number;
-};
+export type {
+  EnsureArgs,
+  EnsureResult,
+  InstanceManagerDeps,
+  LiveInstance,
+} from './types';
 
 const START_WAIT_POLL_MS = 250;
 const DEFAULT_IDLE_MINUTES = 15;
+const DEFAULT_TOUCH_PERSIST_MS = 30 * MS.SECOND;
 
 export class InstanceManager {
   private readonly live = new Map<string, LiveInstance>();
@@ -157,54 +93,37 @@ export class InstanceManager {
    * the fewest in-flight calls, growing the pool up to the catalog's replica count.
    */
   async instanceFor(installation: ResolvedInstallation): Promise<InstanceRecord> {
-    const spec = installation.spec;
-    const kind = spec.type === 'package' ? 'sandbox' : 'remote-legacy';
-    if (spec.type === 'package' && spec.instanceScope === 'shared') {
+    const kind = installation.spec.type === 'package' ? 'sandbox' : 'remote-legacy';
+    if (isSharedPackage(installation)) {
       const rows = await this.deps.repo.listShared(installation.catalogVersionId);
       const loads = await Promise.all(
         rows.map(async (row) => ({ row, load: await this.inflightCounter.get(row.id) })),
       );
-      loads.sort((a, b) => a.load - b.load);
-      const best = loads[0];
-      const maxReplicas = Math.min(10, Math.max(1, installation.replicas));
-      if (best && (best.load === 0 || rows.length >= maxReplicas)) return best.row;
-      const created = this.newRecord(installation, kind, rows.length);
-      await this.deps.repo.save(created);
-      return created;
+      const picked = pickSharedReplica(loads, installation.replicas);
+      if (picked) return picked;
+      return this.createRecord(installation, kind, rows.length);
     }
     const existing = await this.deps.repo.getForInstallation(installation.installationId);
     if (existing) return existing;
-    const created = this.newRecord(installation, kind, 0);
+    return this.createRecord(installation, kind, 0);
+  }
+
+  private async createRecord(
+    installation: ResolvedInstallation,
+    kind: InstanceRecord['kind'],
+    replica: number,
+  ): Promise<InstanceRecord> {
+    const created = newInstanceRecord(installation, kind, replica, this.clock.now());
     await this.deps.repo.save(created);
     return created;
   }
 
   /** The existing row of an installation (or the first shared pool member) without creating one. */
   async getRecord(installation: ResolvedInstallation): Promise<InstanceRecord | null> {
-    const spec = installation.spec;
-    if (spec.type === 'package' && spec.instanceScope === 'shared') {
+    if (isSharedPackage(installation)) {
       return (await this.deps.repo.listShared(installation.catalogVersionId))[0] ?? null;
     }
     return this.deps.repo.getForInstallation(installation.installationId);
-  }
-
-  private newRecord(
-    installation: ResolvedInstallation,
-    kind: InstanceRecord['kind'],
-    replica: number,
-  ): InstanceRecord {
-    const shared =
-      installation.spec.type === 'package' && installation.spec.instanceScope === 'shared';
-    return {
-      id: newId(),
-      installationId: shared ? null : installation.installationId,
-      catalogVersionId: installation.catalogVersionId,
-      userId: shared ? null : installation.ownerUserId,
-      kind,
-      replica,
-      lastUsedAt: this.clock.now(),
-      failures: [],
-    };
   }
 
   // --- ensuring a live connection --------------------------------------------------------------------------------
@@ -312,12 +231,12 @@ export class InstanceManager {
   // --- sandbox start and attach -----------------------------------------------------------------------------------
 
   private async startSandbox(args: EnsureArgs, spec: PackageSpec): Promise<void> {
-    const { installation, principal, signal } = args;
+    const { installation } = args;
     let { record } = args;
     const attributes = {
-      'bastion.instance.id': record.id,
-      'bastion.installation.id': installation.installationId,
-      'bastion.sandbox.driver': this.deps.driver.name,
+      [SPAN_ATTRS.instanceId]: record.id,
+      [SPAN_ATTRS.installationId]: installation.installationId,
+      [SPAN_ATTRS.sandboxDriver]: this.deps.driver.name,
     };
     await this.telemetry.acquire(attributes, async (events) => {
       if (record.sandbox) {
@@ -328,8 +247,6 @@ export class InstanceManager {
       }
       await this.startFresh({ ...args, record }, spec, events);
     });
-    void principal;
-    void signal;
   }
 
   private async tryAttach(
@@ -357,16 +274,37 @@ export class InstanceManager {
   }
 
   private async discardSandbox(record: InstanceRecord): Promise<InstanceRecord> {
-    if (record.sandbox) {
-      const token = (await this.deps.tokens.load(record.id)) ?? '';
+    const ref = record.sandbox
+      ? { ...record.sandbox, runnerToken: (await this.deps.tokens.load(record.id)) ?? '' }
+      : undefined;
+    return this.releaseSandboxArtifacts(record, ref, 'as-is');
+  }
+
+  /**
+   * Destroys the sandbox (when there is one) and forgets everything kept for it: runner token, egress policy and the
+   * `sandbox` mark on the row. `reload` re-reads the row first and swallows save errors (cleanup after a failure);
+   * `as-is` saves `record` and lets errors through.
+   */
+  private async releaseSandboxArtifacts(
+    record: InstanceRecord,
+    ref: SandboxHandle['ref'] | undefined,
+    mode: 'reload' | 'as-is',
+  ): Promise<InstanceRecord> {
+    if (ref) {
       await this.deps.driver
-        .destroy({ ...record.sandbox, runnerToken: token })
+        .destroy(ref)
         .catch((error) => this.logger.warn('destroy failed', { error: String(error) }));
     }
-    await this.deps.tokens.delete(record.id).catch(() => undefined);
-    await this.deps.egress.delete(record.id).catch(() => undefined);
-    const cleared = { ...record, sandbox: undefined };
-    await this.deps.repo.save(cleared);
+    await swallow(this.deps.tokens.delete(record.id));
+    await swallow(this.deps.egress.delete(record.id));
+    if (mode === 'as-is') {
+      const cleared = { ...record, sandbox: undefined };
+      await this.deps.repo.save(cleared);
+      return cleared;
+    }
+    const latest = (await this.deps.repo.get(record.id)) ?? record;
+    const cleared = { ...latest, sandbox: undefined };
+    await swallow(this.deps.repo.save(cleared));
     return cleared;
   }
 
@@ -375,183 +313,161 @@ export class InstanceManager {
     spec: PackageSpec,
     events: AcquireEvents,
   ): Promise<void> {
-    const { installation, principal, credential, signal } = args;
-    const { record } = args;
-    let state: InstanceState = { kind: 'absent' };
-    const apply = (event: InstanceEvent): void => {
-      const next = instanceStateMachine(state, event);
-      if (next.ok) state = next.state;
-    };
+    const { installation, principal, credential, signal, record } = args;
+    const progress = new StartProgress();
     const started = this.clock.now();
-    let phase: InstanceStartPhase = 'claiming';
-    let handle: SandboxHandle | undefined;
     const egressToken = randomBytes(32).toString('hex');
-    apply({ type: 'start' });
     try {
       // Resolve every template first: a bad setting must not cost a sandbox claim.
-      const startRequest = buildStartRequest(installation, principal, credential, {
-        proxyUrl: 'http://placeholder.invalid:0',
-        npmRegistry: this.deps.npmRegistry,
-        pypiIndexUrl: this.deps.pypiIndexUrl,
-      });
-      void startRequest;
-      await this.makeRoom(record, installation);
-      const sandboxSpec: SandboxSpec = {
-        instanceId: record.id,
-        installationId: record.installationId,
-        userId: record.userId,
-        size: spec.size,
-        workspace: spec.workspace,
-      };
-      handle = await this.deps.driver.create(sandboxSpec, signal);
-      events.add('claimed');
-      phase = 'binding';
-      apply({ type: 'phase', phase: 'binding' });
-      events.add('bound');
-      await this.deps.tokens.save(record.id, handle.ref.runnerToken);
-      const { runnerToken: _token, ...refWithoutToken } = handle.ref;
-      void _token;
-      const updated: InstanceRecord = {
-        ...record,
-        sandbox: {
-          driver: refWithoutToken.driver,
-          id: refWithoutToken.id,
-          address: refWithoutToken.address,
-        },
-        startedAt: started,
-        runningVersionId: installation.catalogVersionId,
-      };
-      await this.deps.repo.save(updated);
-      const policy = { tokenSha256: sha256Hex(egressToken), allow: spec.egress.allow };
-      await this.deps.egress.set(record.id, { ...policy, phase: 'installing' });
-      phase = 'installing';
-      apply({ type: 'phase', phase: 'installing' });
       const request = buildStartRequest(installation, principal, credential, {
         proxyUrl: buildProxyUrl(record.id, egressToken, this.deps.egressAddress),
         npmRegistry: this.deps.npmRegistry,
         pypiIndexUrl: this.deps.pypiIndexUrl,
       });
-      await startAndWait(
-        handle.runner,
-        request,
-        { installation: installation.slug },
-        (event) => {
-          if (event.phase === 'starting') {
-            events.add('installed');
-            phase = 'spawning';
-            apply({ type: 'phase', phase: 'spawning' });
-            void this.deps.egress.set(record.id, { ...policy, phase: 'starting' });
-          } else if (event.phase === 'ready') {
-            events.add('spawned');
-            phase = 'connecting';
-            apply({ type: 'phase', phase: 'connecting' });
-            void this.deps.egress.set(record.id, { ...policy, phase: 'running' });
-          }
-        },
-        signal,
+      await this.makeRoom(record);
+      const handle = await this.claimSandbox(args, spec, progress, events);
+      const updated = await this.bindSandbox(
+        record,
+        installation,
+        handle,
+        started,
+        events,
+        progress,
       );
-      phase = 'connecting';
+      await this.installAndSpawn(
+        { record: updated, installation, spec, handle, request, egressToken, signal },
+        progress,
+        events,
+      );
+      progress.setPhase('connecting');
       const live = await this.connectSandbox(args, updated, handle, events, started);
-      apply({ type: 'connected' });
-      live.state = state;
+      progress.apply({ type: 'connected' });
+      live.state = progress.state;
       this.register(live);
-      this.deps.metrics?.sandboxStarts.add(1, {
-        driver: this.deps.driver.name,
-        outcome: 'ok',
-        warm: false,
-      });
-      this.deps.metrics?.sandboxStartDuration.record((this.clock.now() - started) / 1000, {
-        driver: this.deps.driver.name,
-        phase: 'total',
-      });
+      this.recordStartMetrics('ok', started);
       await this.clearErrorIfAny(updated);
     } catch (error) {
-      apply({ type: 'fail' });
+      progress.apply({ type: 'fail' });
       // A cap is not a failure of the server: no backoff, the caller sees -32011 (8.6).
       if (error instanceof RateLimitedError) throw error;
-      await this.onStartFailed(record, installation, phase, error, handle);
-      this.deps.metrics?.sandboxStarts.add(1, {
-        driver: this.deps.driver.name,
-        outcome: 'failed',
-        warm: false,
-      });
+      await this.onStartFailed(record, progress.phase, error, progress.handle);
+      this.recordStartMetrics('failed', started);
       throw new SandboxStartFailedError(
         error instanceof Error ? error.message : String(error),
-        { installation: installation.slug, phase },
+        { installation: installation.slug, phase: progress.phase },
         error,
       );
     }
   }
 
-  /**
-   * The one-off sandbox of 8.7: resolves the dependency tree of `identifier@version` into a lockfile (`npm install
-   * --package-lock-only`, `uv pip compile --generate-hashes`) with the registry mirrors reachable through the egress
-   * proxy, then destroys the sandbox. Used by the catalog TEST flow; nothing is installed or started.
-   */
-  async captureLockfile(
+  private recordStartMetrics(outcome: 'ok' | 'failed', startedAt: number): void {
+    const driver = this.deps.driver.name;
+    this.deps.metrics?.sandboxStarts.add(1, { driver, outcome, warm: false });
+    if (outcome === 'ok') {
+      this.deps.metrics?.sandboxStartDuration.record((this.clock.now() - startedAt) / MS.SECOND, {
+        driver,
+        phase: 'total',
+      });
+    }
+  }
+
+  /** Claiming: the driver creates the sandbox. `progress.handle` is set at once so a failure can destroy it. */
+  private async claimSandbox(
+    args: EnsureArgs,
+    spec: PackageSpec,
+    progress: StartProgress,
+    events: AcquireEvents,
+  ): Promise<SandboxHandle> {
+    const { record } = args;
+    const sandboxSpec: SandboxSpec = {
+      instanceId: record.id,
+      installationId: record.installationId,
+      userId: record.userId,
+      size: spec.size,
+      workspace: spec.workspace,
+    };
+    const handle = await this.deps.driver.create(sandboxSpec, args.signal);
+    progress.handle = handle;
+    events.add('claimed');
+    return handle;
+  }
+
+  /** Binding: the runner token and the sandbox reference are persisted so another worker can attach (21.2). */
+  private async bindSandbox(
+    record: InstanceRecord,
+    installation: ResolvedInstallation,
+    handle: SandboxHandle,
+    startedAt: number,
+    events: AcquireEvents,
+    progress: StartProgress,
+  ): Promise<InstanceRecord> {
+    progress.enter('binding');
+    events.add('bound');
+    await this.deps.tokens.save(record.id, handle.ref.runnerToken);
+    const updated: InstanceRecord = {
+      ...record,
+      sandbox: { driver: handle.ref.driver, id: handle.ref.id, address: handle.ref.address },
+      startedAt,
+      runningVersionId: installation.catalogVersionId,
+    };
+    await this.deps.repo.save(updated);
+    return updated;
+  }
+
+  /** Installing and spawning: the runner installs the package and starts the server; the egress phase follows it. */
+  private async installAndSpawn(
+    run: {
+      record: InstanceRecord;
+      installation: ResolvedInstallation;
+      spec: PackageSpec;
+      handle: SandboxHandle;
+      request: Parameters<typeof startAndWait>[1];
+      egressToken: string;
+      signal: AbortSignal;
+    },
+    progress: StartProgress,
+    events: AcquireEvents,
+  ): Promise<void> {
+    const { record, installation, spec, handle, request, egressToken, signal } = run;
+    const policy = { tokenSha256: sha256Hex(egressToken), allow: spec.egress.allow };
+    await this.deps.egress.set(record.id, { ...policy, phase: 'installing' });
+    progress.enter('installing');
+    await startAndWait(
+      handle.runner,
+      request,
+      { installation: installation.slug },
+      (event) => {
+        if (event.phase === 'starting') {
+          events.add('installed');
+          progress.enter('spawning');
+          void this.deps.egress.set(record.id, { ...policy, phase: 'starting' });
+        } else if (event.phase === 'ready') {
+          events.add('spawned');
+          progress.enter('connecting');
+          void this.deps.egress.set(record.id, { ...policy, phase: 'running' });
+        }
+      },
+      signal,
+    );
+  }
+
+  /** The one-off lockfile sandbox of 8.7: see `captureLockfileIn`. */
+  captureLockfile(
     spec: PackageSpec,
     context: { userId: string | null; label: string; signal?: AbortSignal },
-  ): Promise<{ kind: 'npm-shrinkwrap' | 'uv-requirements'; content: string; sha256: string }> {
-    const instanceId = newId();
-    const signal = context.signal ?? new AbortController().signal;
-    const egressToken = randomBytes(32).toString('hex');
-    let handle: SandboxHandle | undefined;
-    try {
-      handle = await this.deps.driver.create(
-        {
-          instanceId,
-          installationId: null,
-          userId: context.userId,
-          size: spec.size,
-          workspace: { persistent: false, sizeMiB: 256 },
-        },
-        signal,
-      );
-      await this.deps.egress.set(instanceId, {
-        tokenSha256: sha256Hex(egressToken),
-        allow: spec.egress.allow,
-        phase: 'installing',
-      });
-      const lockfile = await captureLockfileVia(
-        handle.runner,
-        {
-          runtime: spec.runtime,
-          identifier: spec.identifier,
-          version: spec.version,
-          ...(this.deps.npmRegistry || this.deps.pypiIndexUrl
-            ? {
-                registry: {
-                  ...(this.deps.npmRegistry ? { npm: this.deps.npmRegistry } : {}),
-                  ...(this.deps.pypiIndexUrl ? { pypi: this.deps.pypiIndexUrl } : {}),
-                },
-              }
-            : {}),
-          egress: { proxyUrl: buildProxyUrl(instanceId, egressToken, this.deps.egressAddress) },
-        },
-        { installation: context.label },
-        undefined,
-        signal,
-      );
-      return { ...lockfile, sha256: sha256Hex(lockfile.content) };
-    } finally {
-      if (handle) await this.deps.driver.destroy(handle.ref).catch(() => undefined);
-      await this.deps.egress.delete(instanceId).catch(() => undefined);
-    }
+  ): ReturnType<typeof captureLockfileIn> {
+    return captureLockfileIn(this.deps, spec, context);
   }
 
   private async clearErrorIfAny(record: InstanceRecord): Promise<void> {
     if (record.error === undefined && record.failures.length === 0) return;
     const cleared: InstanceRecord = { ...record, error: undefined, failures: record.failures };
     await this.deps.repo.save(cleared);
-    if (record.installationId)
-      await this.deps.status.clearError(record.installationId).catch(() => undefined);
+    if (record.installationId) await swallow(this.deps.status.clearError(record.installationId));
   }
 
   /** Per-user and org caps (8.6): stop the least recently used idle-eligible instance, else `-32011`. */
-  private async makeRoom(
-    record: InstanceRecord,
-    installation: ResolvedInstallation,
-  ): Promise<void> {
+  private async makeRoom(record: InstanceRecord): Promise<void> {
     const check = async (userId: string | undefined, max: number): Promise<void> => {
       const rows = await this.deps.repo.listRunning(userId);
       const infos: SandboxInstanceInfo[] = await Promise.all(
@@ -570,7 +486,6 @@ export class InstanceManager {
     };
     if (record.userId) await check(record.userId, this.deps.limits.maxRunningPerUser);
     await check(undefined, this.deps.limits.maxRunningTotal);
-    void installation;
   }
 
   private async connectSandbox(
@@ -630,8 +545,8 @@ export class InstanceManager {
     const connector =
       installation.spec.transport === 'sse' ? this.deps.connectors.sse : this.deps.connectors.http;
     const attributes = {
-      'bastion.instance.id': record.id,
-      'bastion.installation.id': installation.installationId,
+      [SPAN_ATTRS.instanceId]: record.id,
+      [SPAN_ATTRS.installationId]: installation.installationId,
     };
     await this.telemetry.acquire(attributes, async (events) => {
       const continuations = new ContinuationRegistry({
@@ -655,7 +570,7 @@ export class InstanceManager {
           ...(record.remoteSession ? { remoteSession: record.remoteSession } : {}),
         });
       } catch (error) {
-        await this.recordFailureOf(record, installation, 'connecting', error);
+        await this.recordFailureOf(record, 'connecting', error);
         throw error;
       }
       events.add('connected');
@@ -722,7 +637,7 @@ export class InstanceManager {
       live.installation.spec.type === 'package'
         ? live.installation.spec.idleTimeoutMinutes
         : DEFAULT_IDLE_MINUTES;
-    return minutes * 60_000;
+    return minutes * MS.MINUTE;
   }
 
   private armIdle(live: LiveInstance): void {
@@ -780,7 +695,7 @@ export class InstanceManager {
 
   private async persistUse(live: LiveInstance): Promise<void> {
     const now = this.clock.now();
-    if (now - live.lastPersistedAt < (this.deps.touchPersistMs ?? 30_000)) return;
+    if (now - live.lastPersistedAt < (this.deps.touchPersistMs ?? DEFAULT_TOUCH_PERSIST_MS)) return;
     live.lastPersistedAt = now;
     live.record = { ...live.record, lastUsedAt: now };
     await this.deps.repo.save(live.record).catch(() => undefined);
@@ -795,47 +710,34 @@ export class InstanceManager {
 
   private async recordFailureOf(
     record: InstanceRecord,
-    installation: ResolvedInstallation,
     phase: string,
     error: unknown,
     stderrTail: string[] = [],
   ): Promise<void> {
-    const now = this.clock.now();
-    const failures = [...recordFailure(record.failures, now)];
-    const marked = isInstallationError(failures, now);
-    const message = error instanceof Error ? error.message : String(error);
-    const updated: InstanceRecord = {
-      ...record,
-      failures,
-      // The latest failure is always kept (the TEST flow and the UI show phase and message); only repeated failures
-      // mark the installation itself as errored.
-      error: { phase, message, stderrTail, at: now },
-    };
-    await this.deps.repo.save(updated).catch(() => undefined);
-    if (marked && record.installationId) {
-      await this.deps.status
-        .markError(record.installationId, { phase, message, stderrTail })
-        .catch(() => undefined);
+    const { updated, message, markInstallation } = failureRecord(
+      record,
+      phase,
+      error,
+      stderrTail,
+      this.clock.now(),
+    );
+    await swallow(this.deps.repo.save(updated));
+    if (markInstallation && record.installationId) {
+      await swallow(
+        this.deps.status.markError(record.installationId, { phase, message, stderrTail }),
+      );
     }
-    void installation;
   }
 
   private async onStartFailed(
     record: InstanceRecord,
-    installation: ResolvedInstallation,
     phase: InstanceStartPhase,
     error: unknown,
     handle: SandboxHandle | undefined,
   ): Promise<void> {
     const latest = (await this.deps.repo.get(record.id)) ?? record;
-    await this.recordFailureOf(latest, installation, phase, error);
-    if (handle) {
-      await this.deps.driver.destroy(handle.ref).catch(() => undefined);
-    }
-    await this.deps.tokens.delete(record.id).catch(() => undefined);
-    await this.deps.egress.delete(record.id).catch(() => undefined);
-    const after = (await this.deps.repo.get(record.id)) ?? latest;
-    await this.deps.repo.save({ ...after, sandbox: undefined }).catch(() => undefined);
+    await this.recordFailureOf(latest, phase, error);
+    await this.releaseSandboxArtifacts(record, handle?.ref, 'reload');
   }
 
   /** The server exited, the socket closed, or another owner took over (8.6, 21.2). */
@@ -845,7 +747,7 @@ export class InstanceManager {
     if (live.idleTimer) clearTimeout(live.idleTimer);
     await live.continuations.closeAll().catch(() => undefined);
     for (const waiter of live.drainWaiters.splice(0)) waiter();
-    if (info.closeCode === 4001) {
+    if (info.closeCode === CLOSE_CODE_REPLACED) {
       // Replaced by a newer owner (21.2): nothing to clean up here.
       this.logger.info('instance taken over by another owner', { instanceId: live.id });
       await this.deps.leases.release(live.id);
@@ -857,19 +759,12 @@ export class InstanceManager {
       if (crashCountsAsFailure(live.startedAt, now)) {
         await this.recordFailureOf(
           live.record,
-          live.installation,
           'spawning',
           new Error(`server exited (code ${info.exit.code})`),
           live.stderr?.tail.tail(50) ?? [],
         );
       }
-      if (live.handle) {
-        await this.deps.driver.destroy(live.handle.ref).catch(() => undefined);
-        await this.deps.tokens.delete(live.id).catch(() => undefined);
-        await this.deps.egress.delete(live.id).catch(() => undefined);
-        const latest = (await this.deps.repo.get(live.id)) ?? live.record;
-        await this.deps.repo.save({ ...latest, sandbox: undefined }).catch(() => undefined);
-      }
+      if (live.handle) await this.releaseSandboxArtifacts(live.record, live.handle.ref, 'reload');
     }
     await this.deps.leases.release(live.id);
   }
@@ -904,14 +799,11 @@ export class InstanceManager {
       await live.handle.runner.stop().catch(() => undefined);
       const spec = live.installation.spec;
       if (spec.type === 'package' && spec.workspace.persistent) {
-        await this.deps.driver.suspend(ref).catch(() => undefined);
+        await swallow(this.deps.driver.suspend(ref));
+        await swallow(this.deps.egress.delete(instanceId));
       } else {
-        await this.deps.driver.destroy(ref).catch(() => undefined);
-        await this.deps.tokens.delete(instanceId).catch(() => undefined);
-        const latest = (await this.deps.repo.get(instanceId)) ?? live.record;
-        await this.deps.repo.save({ ...latest, sandbox: undefined }).catch(() => undefined);
+        await this.releaseSandboxArtifacts(live.record, ref, 'reload');
       }
-      await this.deps.egress.delete(instanceId).catch(() => undefined);
     }
     this.live.delete(instanceId);
     const done = instanceStateMachine(live.state, { type: 'stopped' });
@@ -926,11 +818,7 @@ export class InstanceManager {
     const record = await this.deps.repo.get(instanceId);
     if (!record?.sandbox) return;
     const token = (await this.deps.tokens.load(instanceId)) ?? '';
-    const ref = { ...record.sandbox, runnerToken: token };
-    await this.deps.driver.destroy(ref).catch(() => undefined);
-    await this.deps.tokens.delete(instanceId).catch(() => undefined);
-    await this.deps.egress.delete(instanceId).catch(() => undefined);
-    await this.deps.repo.save({ ...record, sandbox: undefined });
+    await this.releaseSandboxArtifacts(record, { ...record.sandbox, runnerToken: token }, 'as-is');
   }
 
   /** The user clicked Restart: clears failures and the `error` mark, then stops (8.6). */

@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { SandboxStartFailedError } from '@bastion-mcp/core';
 import { HttpRunnerClient, parseRunnerAddress } from '../runner-client';
+import { SANDBOX_TIMEOUTS_MS } from '../timeouts';
 import type {
   IsolationLevel,
   RunnerClient,
@@ -201,7 +202,9 @@ export class BubblewrapDriver implements SandboxDriver {
 
       const address = `unix:${dirs.run}/runner.sock`;
       const runner = this.makeRunner(address);
-      const deadline = AbortSignal.timeout(this.options.readyTimeoutMs ?? 30_000);
+      const deadline = AbortSignal.timeout(
+        this.options.readyTimeoutMs ?? SANDBOX_TIMEOUTS_MS.bwrapReady,
+      );
       const stop = AbortSignal.any([signal, deadline]);
       let ready = false;
       while (!stop.aborted && !exitInfo) {
@@ -301,7 +304,10 @@ export class BubblewrapDriver implements SandboxDriver {
     this.jails.delete(instanceId);
     jail.monitor?.stop();
     jail.child.kill('SIGKILL');
-    await Promise.race([jail.exited, new Promise<void>((r) => setTimeout(r, 5_000).unref())]);
+    await Promise.race([
+      jail.exited,
+      new Promise<void>((r) => setTimeout(r, SANDBOX_TIMEOUTS_MS.bwrapExitGrace).unref()),
+    ]);
     await jail.egress.close().catch(() => {});
     await jail.cgroup?.remove();
   }

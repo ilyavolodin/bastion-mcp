@@ -31,6 +31,8 @@ export type AuditInput = {
   ip?: string | null;
   userAgent?: string | null;
   requestId?: string | null;
+  /** The event time; defaults to the system clock. */
+  now?: Date;
 };
 
 export const computeAuditHash = (prevHash: Buffer, row: AuditFields): Buffer => {
@@ -91,7 +93,7 @@ export const appendAuditEvent = async (
   const prevHash = last ? Buffer.from(last.hash) : GENESIS_HASH;
   const fields: AuditFields = {
     id: newId(),
-    ts: new Date(),
+    ts: input.now ?? new Date(),
     actorType: input.actorType,
     actorId: input.actorId ?? null,
     action: input.action,

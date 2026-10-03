@@ -105,3 +105,13 @@ export const hasJsonResponse = (op: OperationRef): boolean => {
   const code = Object.keys(responses).find((c) => c.startsWith('2'));
   return code !== undefined && jsonSchemaOf(responses[code]?.content) !== undefined;
 };
+
+/** The `limit` query parameter of a list operation, as the OpenAPI document states it (`/me/notifications`). */
+export const listLimitRules = (): { default: number; minimum: number; maximum: number } => {
+  type Param = { name: string; schema: { default: number; minimum: number; maximum: number } };
+  const params = (doc.paths['/me/notifications']?.get as { parameters?: Param[] } | undefined)
+    ?.parameters;
+  const limit = params?.find((p) => p.name === 'limit');
+  if (!limit) throw new Error('/me/notifications has no limit parameter');
+  return limit.schema;
+};

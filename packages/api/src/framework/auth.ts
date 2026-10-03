@@ -2,6 +2,7 @@ import {
   assertCsrf,
   buildChallenge,
   CSRF_HEADER,
+  CsrfError,
   InsufficientScopeError,
   isStateChanging,
   type Principal,
@@ -39,12 +40,23 @@ export const authenticate = async (req: FastifyRequest, deps: ApiDeps): Promise<
   if (sid) {
     const principal = await deps.auth.sessions.authenticate(sid);
     if (principal) {
-      if (mutating) assertCsrf(header(req, 'cookie'), header(req, CSRF_HEADER));
+      if (mutating) await assertSessionCsrf(req, deps, sid);
       return principal;
     }
   }
   // No usable credential: the verifier raises the 401 with the exact challenge (6.9).
   return deps.auth.tokens.verify(undefined, url);
+};
+
+/** 9.2: double submit (cookie equals header) and the token must be the one issued with this session. */
+const assertSessionCsrf = async (
+  req: FastifyRequest,
+  deps: ApiDeps,
+  sid: string,
+): Promise<void> => {
+  const presented = header(req, CSRF_HEADER);
+  assertCsrf(header(req, 'cookie'), presented);
+  if (!(await deps.auth.sessions.checkCsrf(sid, presented))) throw new CsrfError();
 };
 
 const assertScope = (principal: Principal, mutating: boolean, url: string, deps: ApiDeps): void => {

@@ -1,9 +1,5 @@
-import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
-import type { Keyring } from '@bastion-mcp/core';
-import type { Clock } from './types';
-import { systemClock } from './types';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { type Clock, type Keyring, MS, sha256Hex, systemClock } from '@bastion-mcp/core';
 
 export type KeyringPurpose = 'as' | 'upstream-client' | 'state';
 
@@ -16,9 +12,9 @@ export type RotationPolicy = {
 
 /** 22.3 / 9.3: as 30 d (+7 d verify), upstream-client 90 d (+7 d), state daily (previous two days accepted). */
 export const ROTATION_POLICIES: Record<KeyringPurpose, RotationPolicy> = {
-  as: { rotateEveryMs: 30 * DAY_MS, graceMs: 7 * DAY_MS },
-  'upstream-client': { rotateEveryMs: 90 * DAY_MS, graceMs: 7 * DAY_MS },
-  state: { rotateEveryMs: DAY_MS, graceMs: 2 * DAY_MS },
+  as: { rotateEveryMs: 30 * MS.DAY, graceMs: 7 * MS.DAY },
+  'upstream-client': { rotateEveryMs: 90 * MS.DAY, graceMs: 7 * MS.DAY },
+  state: { rotateEveryMs: MS.DAY, graceMs: 2 * MS.DAY },
 };
 
 export type KeyTimes = { kid: string; activeFrom: Date; retireAfter: Date };
@@ -74,7 +70,7 @@ export const generateEs256KeyPair = (): Es256KeyPair => {
   const pub = jwkStrings(publicKey.export({ format: 'jwk' }));
   const priv = jwkStrings(privateKey.export({ format: 'jwk' }));
   const thumbprint = JSON.stringify({ crv: pub.crv, kty: pub.kty, x: pub.x, y: pub.y });
-  const kid = createHash('sha256').update(thumbprint).digest('base64url');
+  const kid = Buffer.from(sha256Hex(thumbprint), 'hex').toString('base64url');
   return {
     kid,
     alg: 'ES256',

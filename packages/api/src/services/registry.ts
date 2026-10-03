@@ -1,5 +1,5 @@
 import type { Principal } from '@bastion-mcp/auth';
-import { slugify } from '@bastion-mcp/core';
+import { SECONDS, slugify } from '@bastion-mcp/core';
 import {
   type ApprovalContext,
   approveRequest,
@@ -59,7 +59,7 @@ export const sourceOf = (row: Row): RegistrySource => ({
   authHeaderName: typeof row.authHeaderName === 'string' ? row.authHeaderName : null,
   trust: TRUST.find((t) => t === row.trust) ?? 'community',
   enabled: row.enabled !== false,
-  syncIntervalS: typeof row.syncIntervalS === 'number' ? row.syncIntervalS : 3600,
+  syncIntervalS: typeof row.syncIntervalS === 'number' ? row.syncIntervalS : SECONDS.HOUR,
   lastUpdatedSince: asDate(row.lastUpdatedSince),
   lastSync: (row.lastSync ?? null) as SyncStats | null,
 });
@@ -157,7 +157,7 @@ export const deleteSource = async (ctx: WriteCtx, id: string): Promise<void> => 
 export const syncNow = async (ctx: WriteCtx, id: string, full: boolean) => {
   const source = sourceOf(await registrySources.require(ctx, id));
   if (!source.enabled) {
-    throw new ConflictApiError('this registry source is disabled', 'source_disabled');
+    throw new ConflictApiError('this registry source is disabled', { code: 'source_disabled' });
   }
   syncAfterCommit(ctx, source, full);
   await ctx.tx.audit({
@@ -167,22 +167,11 @@ export const syncNow = async (ctx: WriteCtx, id: string, full: boolean) => {
     diff: { queued: true, full },
   });
   ctx.tx.configChanged('registry');
-  const at = new Date().toISOString();
+  // The walk runs after commit; its stats land in `last_sync`, so none are reported here.
   return {
     ok: true,
     queued: true,
-    stats: {
-      startedAt: at,
-      finishedAt: at,
-      ok: true,
-      full,
-      pages: 0,
-      fetched: 0,
-      upserted: 0,
-      invalid: 0,
-      deleted: 0,
-      deprecated: 0,
-    } satisfies SyncStats,
+    stats: null,
     deletedNames: [] as string[],
     deprecatedNames: [] as string[],
   };
@@ -389,10 +378,9 @@ const planFor = async (
 ): Promise<Planned> => {
   const row = await findServer(deps, sourceId, name, version);
   if (row.status === 'deleted') {
-    throw new ConflictApiError(
-      'this registry entry was deleted upstream',
-      'registry_entry_deleted',
-    );
+    throw new ConflictApiError('this registry entry was deleted upstream', {
+      code: 'registry_entry_deleted',
+    });
   }
   const mapping = safeMap(row, prefer);
   if (!mapping.installable) {
@@ -581,7 +569,7 @@ export const installFromRegistry = async (
 ): Promise<InstallOutcome> => {
   const source = sourceOf(await registrySources.require(ctx, body.sourceId));
   if (!source.enabled)
-    throw new ConflictApiError('this registry source is disabled', 'source_disabled');
+    throw new ConflictApiError('this registry source is disabled', { code: 'source_disabled' });
   const planned = await planFor(ctx.deps, body.sourceId, body.name, body.version, body.prefer);
   const policy = await loadPolicy(ctx.deps, body.sourceId);
   const evaluation: InstallEvaluation = evaluateInstall({
@@ -683,10 +671,9 @@ export const submitRequest = async (
     status: 'open',
   });
   if (open.length > 0) {
-    throw new ConflictApiError(
-      'you already have an open request for this server',
-      'request_exists',
-    );
+    throw new ConflictApiError('you already have an open request for this server', {
+      code: 'request_exists',
+    });
   }
   const transition = createInstallRequest({
     id: ctx.deps.newId(),

@@ -1,3 +1,4 @@
+import { isRecord } from '@bastion-mcp/core';
 /**
  * Path addressing for text segments and regex rule scopes (13.3, 13.4).
  * Segment paths look like `content[2].text`, `arguments.query`, `arguments.rows[0]["a.b"]`.
@@ -109,9 +110,6 @@ export const compilePathPattern = (pattern: string): ((segmentPath: string) => b
     return result;
   };
 };
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const step = (node: unknown, token: PathToken): unknown => {
   if (token.kind === 'key' && isRecord(node)) {

@@ -1,4 +1,5 @@
 import type { Principal } from '@bastion-mcp/auth';
+import { MS, TtlCache } from '@bastion-mcp/core';
 import {
   createEndpointRepository,
   createRouterRepository,
@@ -11,7 +12,9 @@ import type { EndpointDefinition, InstallationInfo } from '@bastion-mcp/router';
 import type { Infra } from '../../infra';
 import { watchConfig } from '../config-watch';
 
-const REFRESH_FALLBACK_MS = 30_000;
+const REFRESH_FALLBACK_MS = 30 * MS.SECOND;
+const PROFILE_TTL_MS = MS.MINUTE;
+const MAX_PROFILES_CACHED = 10_000;
 
 /**
  * `EndpointDataPort` (4.3, 7.1): what a worker loads on an endpoint-cache miss. The installations come from the db
@@ -78,20 +81,23 @@ export const createEndpointData = (
 /** `PrincipalProfilePort`: email and email domain for templates and Cedar (`principal.emailDomain`). */
 export const createPrincipalProfiles = (infra: Infra): PrincipalProfilePort => {
   type Profile = { email?: string; emailDomain?: string };
-  const cache = new Map<string, { at: number; value: Profile }>();
+  const cache = new TtlCache<string, Profile>({
+    ttlMs: PROFILE_TTL_MS,
+    max: MAX_PROFILES_CACHED,
+    clock: infra.clock,
+  });
   return {
     async profile(principal) {
       if (principal.type !== 'user') return {};
       const hit = cache.get(principal.id);
-      if (hit && Date.now() - hit.at < 60_000) return hit.value;
+      if (hit) return hit;
       const user = await infra.repos.users.get(principal.id);
       const email = user?.email;
       const at = email ? email.lastIndexOf('@') : -1;
       const value: Profile = email
         ? { email, ...(at >= 0 ? { emailDomain: email.slice(at + 1).toLowerCase() } : {}) }
         : {};
-      if (cache.size > 10_000) cache.clear();
-      cache.set(principal.id, { at: Date.now(), value });
+      cache.set(principal.id, value);
       return value;
     },
   };

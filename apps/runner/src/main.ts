@@ -1,20 +1,18 @@
-/* v8 ignore file */
 import { parseArgs } from './args';
 import { startEgressForwarder } from './egress-forward';
+import { pickEnv } from './env';
 import { createInstaller } from './install';
 import { createRunner } from './server';
+
+/** Environment copied into installer subprocesses only. */
+const INSTALL_PASSTHROUGH = ['UV_PYTHON_INSTALL_DIR', 'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS'];
 
 /** `bastion-runner` entrypoint, bundled to `runner.mjs` (8.3). */
 const main = async (): Promise<void> => {
   const args = parseArgs(process.argv.slice(2));
-  const passthrough: Record<string, string> = {};
-  for (const name of ['UV_PYTHON_INSTALL_DIR', 'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS']) {
-    const value = process.env[name];
-    if (value) passthrough[name] = value;
-  }
   const runner = createRunner({
     installer: createInstaller(),
-    installPassthrough: passthrough,
+    installPassthrough: pickEnv(INSTALL_PASSTHROUGH, process.env),
   });
   const forwarder = args.egress
     ? await startEgressForwarder({ socketPath: args.egress.socketPath })

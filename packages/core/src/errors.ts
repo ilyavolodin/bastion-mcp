@@ -49,7 +49,10 @@ export class PolicyDeniedError extends ToolResultError {
 }
 
 export class RateLimitedError extends ToolResultError {
-  constructor(message: string, data: { retryAfterMs: number; limit: string }) {
+  constructor(
+    message: string,
+    data: { retryAfterMs: number; limit: string; kind?: 'rate' | 'concurrency' },
+  ) {
     super('RATE_LIMITED', message, { httpStatus: 429, mcpCode: ERROR_CODES.RATE_LIMITED, data });
   }
 }

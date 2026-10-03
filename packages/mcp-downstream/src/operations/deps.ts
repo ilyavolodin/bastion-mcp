@@ -1,5 +1,5 @@
 import type { Principal } from '@bastion-mcp/auth';
-import { DEFAULT_LIMIT_RULES, type Keyring } from '@bastion-mcp/core';
+import type { DEFAULT_LIMIT_RULES, Keyring } from '@bastion-mcp/core';
 import type { GuardPipeline } from '@bastion-mcp/guards';
 import { ORG_DEFAULT_PROFILE } from '@bastion-mcp/guards';
 import { compileRulesFor, defaultRules, type Limiter } from '@bastion-mcp/limits';
@@ -8,19 +8,19 @@ import type { PrincipalData } from '@bastion-mcp/policy';
 import type { SeenUriStore } from '@bastion-mcp/router';
 import { type BastionMetrics, createMetrics } from '@bastion-mcp/telemetry';
 import { metrics as otelMetrics, type Tracer, trace } from '@opentelemetry/api';
-import {
-  type CallLogPort,
-  type Clock,
-  type GuardProfilePort,
-  type LimitRulesPort,
-  type Logger,
+import type {
+  CallLogPort,
+  Clock,
+  GuardProfilePort,
+  LimitRulesPort,
+  Logger,
   noopLogger,
-  type PolicyPort,
-  type PrincipalProfilePort,
-  type SkillsProvider,
+  PolicyPort,
+  PrincipalProfilePort,
+  SkillsProvider,
   systemClock,
-  type ToPolicyPrincipal,
-  type UpstreamPort,
+  ToPolicyPrincipal,
+  UpstreamPort,
 } from '../ports';
 
 /** Cached public reads (6.7): `UpstreamLists.reads` of `mcp-upstream` implements this. */
@@ -63,9 +63,12 @@ export type OperationDeps = {
   settings: OperationSettings;
 };
 
+/** Items per list page unless the server is configured otherwise. */
+export const DEFAULT_LIST_PAGE_SIZE = 1000;
+
 export const DEFAULT_SETTINGS: OperationSettings = {
   serverVersion: '0.0.0',
-  listPageSize: 1000,
+  listPageSize: DEFAULT_LIST_PAGE_SIZE,
   captureContent: false,
   orgId: 'org',
 };
@@ -105,4 +108,4 @@ export const noopMetrics = (): BastionMetrics =>
   createMetrics(otelMetrics.getMeter('bastion-mcp-downstream'));
 export const defaultTracer = (): Tracer => trace.getTracer('bastion-mcp-downstream');
 
-export { DEFAULT_LIMIT_RULES, noopLogger, systemClock };
+export type { DEFAULT_LIMIT_RULES, noopLogger, systemClock };

@@ -1,11 +1,13 @@
-import { redisKeys } from '@bastion-mcp/core';
+import { redisKeys, SECONDS } from '@bastion-mcp/core';
 import { BurstyRateLimiter, RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
+import { memoize } from './memoize';
 import { type PeriodWindow, periodWindow } from './period';
 import type { ConcurrencyRule, QuotaRule, RateRule, Rule } from './rules';
 import type { LimiterBackend, QuotaOutcome, RateOutcome, Usage } from './types';
+import { concurrencyUsage, quotaUsage, rateUsage } from './usage';
 
 /** Node timers overflow beyond about 24.8 days; memory counters live at most this long. */
-const MAX_MEMORY_DURATION_SECONDS = 24 * 86_400;
+const MAX_MEMORY_DURATION_SECONDS = 24 * SECONDS.DAY;
 
 type RateCounter = {
   /** Sustained limiter, used for reads. */
@@ -32,9 +34,7 @@ export class MemoryBackend implements LimiterBackend {
 
   private rateLimiter(rule: RateRule): RateCounter {
     const { points, perSeconds, burst } = rule.params;
-    const id = `${rule.id}:${points}:${perSeconds}:${burst}`;
-    let limiter = this.rateLimiters.get(id);
-    if (!limiter) {
+    return memoize(this.rateLimiters, `${rule.id}:${points}:${perSeconds}:${burst}`, () => {
       const sustained = new RateLimiterMemory({
         keyPrefix: '',
         points: this.scale(points),
@@ -51,24 +51,21 @@ export class MemoryBackend implements LimiterBackend {
               }),
             )
           : sustained;
-      limiter = { sustained, consume: (k, n) => bursty.consume(k, n) };
-      this.rateLimiters.set(id, limiter);
-    }
-    return limiter;
+      return { sustained, consume: (k, n) => bursty.consume(k, n) };
+    });
   }
 
   private quotaLimiter(rule: QuotaRule): RateLimiterMemory {
-    const id = `${rule.id}:${rule.params.points}`;
-    let limiter = this.quotaLimiters.get(id);
-    if (!limiter) {
-      limiter = new RateLimiterMemory({
-        keyPrefix: '',
-        points: this.scale(rule.params.points),
-        duration: 86_400,
-      });
-      this.quotaLimiters.set(id, limiter);
-    }
-    return limiter;
+    return memoize(
+      this.quotaLimiters,
+      `${rule.id}:${rule.params.points}`,
+      () =>
+        new RateLimiterMemory({
+          keyPrefix: '',
+          points: this.scale(rule.params.points),
+          duration: SECONDS.DAY,
+        }),
+    );
   }
 
   async acquire(
@@ -145,47 +142,25 @@ export class MemoryBackend implements LimiterBackend {
   }
 
   async usage(rule: Rule, subjectId: string, now: Date, timeZone: string): Promise<Usage> {
-    const base = { ruleId: rule.id, kind: rule.kind, subjectId } as const;
     switch (rule.kind) {
       case 'rate': {
-        const limit = this.scale(rule.params.points);
-        const res = await this.rateLimiter(rule).sustained.get(redisKeys.rate(rule.id, subjectId));
-        const consumed = Math.min(res?.consumedPoints ?? 0, limit);
-        return {
-          ...base,
-          limit,
-          consumed,
-          remaining: limit - consumed,
-          resetsAt: res ? new Date(now.getTime() + res.msBeforeNext).toISOString() : null,
-        };
+        const state = await this.rateLimiter(rule).sustained.get(
+          redisKeys.rate(rule.id, subjectId),
+        );
+        return rateUsage(rule, subjectId, this.scale(rule.params.points), state, now);
       }
       case 'quota': {
-        const limit = this.scale(rule.params.points);
         const window = periodWindow(rule.params.period, now, timeZone);
-        const res = await this.quotaLimiter(rule).get(
+        const state = await this.quotaLimiter(rule).get(
           redisKeys.quota(rule.id, subjectId, window.key),
         );
-        const consumed = Math.min(res?.consumedPoints ?? 0, limit);
-        return {
-          ...base,
-          limit,
-          consumed,
-          remaining: limit - consumed,
-          resetsAt: window.resetsAt.toISOString(),
-        };
+        return quotaUsage(rule, subjectId, this.scale(rule.params.points), state, window);
       }
       case 'concurrency': {
-        const limit = this.scale(rule.params.max);
         const held = this.leases.get(redisKeys.concurrency(rule.id, subjectId));
         const nowMs = now.getTime();
-        const consumed = held ? [...held.values()].filter((e) => e > nowMs).length : 0;
-        return {
-          ...base,
-          limit,
-          consumed,
-          remaining: Math.max(0, limit - consumed),
-          resetsAt: null,
-        };
+        const live = held ? [...held.values()].filter((e) => e > nowMs).length : 0;
+        return concurrencyUsage(rule, subjectId, this.scale(rule.params.max), live);
       }
     }
   }

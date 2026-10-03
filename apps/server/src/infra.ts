@@ -1,6 +1,12 @@
 import { join } from 'node:path';
 import { ScimStoreConflictError } from '@bastion-mcp/auth';
-import { type BastionConfig, newId, REDIS_CHANNELS } from '@bastion-mcp/core';
+import {
+  type BastionConfig,
+  type Clock,
+  newId,
+  REDIS_CHANNELS,
+  systemClock,
+} from '@bastion-mcp/core';
 import {
   createDb,
   createRepositories,
@@ -23,7 +29,7 @@ import { Redis } from 'ioredis';
 import type { Logger } from 'pino';
 import { RedisPubSub } from './adapters/redis';
 import { createSecretStore } from './adapters/secret-store';
-import { defaultWorkerId, type ServerOptions } from './config';
+import { defaultWorkerId, readServerEnv, type ServerEnv, type ServerOptions } from './config';
 
 export type AppLogger = Logger;
 
@@ -31,6 +37,8 @@ export type AppLogger = Logger;
 export type Infra = {
   config: BastionConfig;
   options: ServerOptions;
+  /** Process settings outside `BastionConfig` (sandbox paths, egress host, static dir). */
+  env: ServerEnv;
   workerId: string;
   logger: AppLogger;
   metrics: BastionMetrics;
@@ -49,7 +57,7 @@ export type Infra = {
   publish: (channel: string, message: unknown) => Promise<void>;
   /** A fresh Redis connection (subscribers, blocking commands). */
   duplicateRedis: () => Redis;
-  clock: { now(): number };
+  clock: Clock;
   close: () => Promise<void>;
 };
 
@@ -61,8 +69,12 @@ export const configMessage = (event: { scope: string; id: string; version?: bigi
     ...(event.version === undefined ? {} : { version: String(event.version) }),
   });
 
-export const createInfra = (config: BastionConfig, options: ServerOptions = {}): Infra => {
-  const workerId = options.workerId ?? defaultWorkerId(process.env);
+export const createInfra = (
+  config: BastionConfig,
+  options: ServerOptions = {},
+  env: Record<string, string | undefined> = process.env,
+): Infra => {
+  const workerId = options.workerId ?? defaultWorkerId(env);
   const logger = createLogger({
     level: config.logLevel,
     base: { service: 'bastion', role: config.role, worker: workerId },
@@ -120,6 +132,7 @@ export const createInfra = (config: BastionConfig, options: ServerOptions = {}):
   return {
     config,
     options,
+    env: readServerEnv(env),
     workerId,
     logger,
     metrics,
@@ -138,7 +151,7 @@ export const createInfra = (config: BastionConfig, options: ServerOptions = {}):
       r.on('error', () => undefined);
       return r;
     },
-    clock: { now: () => Date.now() },
+    clock: systemClock,
     async close() {
       await pubsub.close();
       await redis.quit().catch(() => undefined);

@@ -18,7 +18,9 @@ const loadOpen = async (ctx: WriteCtx, id: string): Promise<Row> => {
   const review = await ctx.tx.store.get('drift_reviews', id);
   if (!review) throw new NotFoundApiError('drift review');
   if (review.status !== 'open') {
-    throw new ConflictApiError(`the review is already ${String(review.status)}`, 'review_closed');
+    throw new ConflictApiError(`the review is already ${String(review.status)}`, {
+      code: 'review_closed',
+    });
   }
   return review;
 };

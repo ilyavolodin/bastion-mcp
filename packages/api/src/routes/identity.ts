@@ -3,11 +3,12 @@ import { listQuerySchema } from '../framework/conventions';
 import {
   type AuthzInput,
   authz,
+  defineDelete,
   defineMutation,
   defineRoute,
   type RouteDefinition,
 } from '../framework/route';
-import { idParams, itemSchema } from '../schemas/common';
+import { idParams } from '../schemas/common';
 import {
   credentialsBodySchema,
   credentialsResponseSchema,
@@ -66,12 +67,6 @@ const accountTeamOfRow = async (input: AuthzInput) => {
   return typeof row?.teamId === 'string' ? teamResource(row.teamId) : orgResource();
 };
 
-const _serviceAccountCreated = itemSchema.extend({
-  clientId: z.string(),
-  authMethod: z.enum(['client_secret_basic', 'private_key_jwt']),
-  clientSecret: z.string().optional(),
-});
-
 export const identityRoutes: RouteDefinition[] = [
   // --- service accounts -------------------------------------------------------------------------------
   defineRoute({
@@ -114,19 +109,14 @@ export const identityRoutes: RouteDefinition[] = [
     version: versionOf('service_accounts'),
     handler: (ctx) => serviceAccounts.update(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/service-accounts/{id}',
     tag: SA,
     summary: 'Delete a service account and revoke its tokens',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('service-accounts.write', accountTeamOfRow),
-    status: 204,
     version: versionOf('service_accounts'),
-    handler: async (ctx) => {
-      await deleteServiceAccount(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => deleteServiceAccount(ctx, ctx.params.id),
   }),
   defineMutation({
     method: 'POST',
@@ -177,19 +167,14 @@ export const identityRoutes: RouteDefinition[] = [
     version: versionOf('idp_connections'),
     handler: (ctx) => updateIdp(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/idp-connections/{id}',
     tag: IDP,
     summary: 'Delete an identity provider connection',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('idp.write', org),
-    status: 204,
     version: versionOf('idp_connections'),
-    handler: async (ctx) => {
-      await deleteIdp(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => deleteIdp(ctx, ctx.params.id),
   }),
   defineRoute({
     method: 'POST',
@@ -219,19 +204,14 @@ export const identityRoutes: RouteDefinition[] = [
     authz: authz.on('idp.write', org),
     handler: (ctx) => createScimToken(ctx, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/scim-tokens/{id}',
     tag: IDP,
     summary: 'Revoke a SCIM token',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('idp.write', org),
-    status: 204,
     version: versionOf('scim_tokens'),
-    handler: async (ctx) => {
-      await revokeScimToken(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => revokeScimToken(ctx, ctx.params.id),
   }),
 
   // --- OAuth clients ----------------------------------------------------------------------------------

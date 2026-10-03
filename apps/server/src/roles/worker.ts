@@ -16,7 +16,7 @@ import { createInstallationRegistry } from '../adapters/upstream/installations';
 import { createPinChecker } from '../adapters/upstream/pin-checker';
 import { createRunnerTokenStore } from '../adapters/upstream/runner-tokens';
 import { createStderrLogger, createStderrSink } from '../adapters/upstream/stderr';
-import { publicOrigin, SERVER_VERSION } from '../config';
+import { publicOrigin, serverVersion } from '../config';
 import type {
   AuthServices,
   GuardService,
@@ -25,6 +25,7 @@ import type {
   WorkerServices,
 } from '../contracts';
 import type { Infra } from '../infra';
+import { DRAIN_GRACE_MS } from '../timing';
 
 type Optional<T> = T & { ready?: () => Promise<void>; watch?: () => () => void };
 
@@ -82,7 +83,7 @@ export const createWorker = async (
     workerId: infra.workerId,
     address,
     role: config.role,
-    version: SERVER_VERSION,
+    version: serverVersion(config),
     internalSecret: config.internalSecret,
     previousInternalSecret: config.internalSecretPrevious,
     stateKeyring: auth.stateKeyring,
@@ -131,7 +132,7 @@ export const createWorker = async (
     config: {
       publicUrl: config.publicUrl,
       authorizationServers: [config.urls.issuer],
-      serverVersion: SERVER_VERSION,
+      serverVersion: serverVersion(config),
       orgDisplayName: settings.get().org.displayName,
       legacyMaxSessionsPerPrincipal: config.legacyMaxSessionsPerPrincipal,
       listPageSize: config.listPageSize,
@@ -214,7 +215,7 @@ export const createWorker = async (
         'worker started',
       );
     },
-    async stop(graceMs = 25_000) {
+    async stop(graceMs = DRAIN_GRACE_MS) {
       if (stopped) return;
       stopped = true;
       for (const stop of unsubscribe.splice(0)) stop();

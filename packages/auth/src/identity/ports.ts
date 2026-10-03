@@ -1,9 +1,8 @@
+import { type Clock, systemClock } from '@bastion-mcp/core';
 import type { SigningKeyMeta } from '@bastion-mcp/secrets';
 import type { PrincipalRecord, PrincipalType } from './principal';
 
-/** Injectable time source (fake clocks in tests). Same shape as the one in `@bastion-mcp/secrets`. */
-export type Clock = { now(): number };
-export const systemClock: Clock = { now: () => Date.now() };
+export { type Clock, systemClock };
 
 /** The subset of a Redis client the identity layer uses. Values are strings; TTLs are seconds. */
 export interface RedisLike {

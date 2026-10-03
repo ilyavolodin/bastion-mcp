@@ -1,3 +1,4 @@
+import { MS, SECONDS } from '@bastion-mcp/core';
 import type { QuotaPeriod } from './rules';
 
 /**
@@ -47,8 +48,8 @@ const normalise = (y: number, m: number, d: number): YMD => {
 const startOfLocalDate = (target: YMD, timeZone: string): number => {
   const guess = Date.UTC(target.y, target.m - 1, target.d);
   // Zone offsets are within +-14h and DST shifts are at most a few hours.
-  let lo = Math.floor((guess - 36 * 3_600_000) / 1000);
-  let hi = Math.floor((guess + 36 * 3_600_000) / 1000);
+  let lo = Math.floor((guess - 36 * MS.HOUR) / 1000);
+  let hi = Math.floor((guess + 36 * MS.HOUR) / 1000);
   const goal = ordinal(target);
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2);
@@ -68,7 +69,7 @@ const isoWeek = (v: YMD): { year: number; week: number } => {
   const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
   return {
     year: date.getUTCFullYear(),
-    week: Math.ceil(((date.getTime() - yearStart) / 86_400_000 + 1) / 7),
+    week: Math.ceil(((date.getTime() - yearStart) / MS.DAY + 1) / 7),
   };
 };
 
@@ -112,8 +113,6 @@ export const periodEnd = (period: QuotaPeriod, now: Date, timeZone: string): Dat
 export const secondsToPeriodEnd = (period: QuotaPeriod, now: Date, timeZone: string): number =>
   Math.max(1, Math.ceil((periodEnd(period, now, timeZone).getTime() - now.getTime()) / 1000));
 
-const ONE_DAY_SECONDS = 86_400;
-
 export type PeriodWindow = {
   /** Period label inside the Redis key. */
   key: string;
@@ -130,6 +129,6 @@ export const periodWindow = (period: QuotaPeriod, now: Date, timeZone: string): 
     key: quotaPeriodKey(period, now, timeZone),
     resetsAt,
     secondsToEnd,
-    durationSeconds: secondsToEnd + ONE_DAY_SECONDS,
+    durationSeconds: secondsToEnd + SECONDS.DAY,
   };
 };

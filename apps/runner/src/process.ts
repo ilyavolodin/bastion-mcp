@@ -2,6 +2,9 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import type { JsonObject } from '@bastion-mcp/sandbox/protocol';
 import { classifyStdoutLine, LineSplitter } from './lines';
 
+/** SIGTERM to SIGKILL grace for the server process (8.3: 5 s). */
+export const DEFAULT_KILL_GRACE_MS = 5000;
+
 export type SpawnSpec = {
   command: string;
   args: readonly string[];
@@ -102,7 +105,7 @@ export class ServerProcess {
   }
 
   /** SIGTERM, then SIGKILL after `graceMs` (8.3: 5 s). Resolves once the process is gone. */
-  stop(graceMs = 5000): Promise<void> {
+  stop(graceMs = DEFAULT_KILL_GRACE_MS): Promise<void> {
     const child = this.child;
     if (!child || this.exited) return Promise.resolve();
     return new Promise((resolve) => {

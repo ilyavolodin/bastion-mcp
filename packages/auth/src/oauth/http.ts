@@ -1,3 +1,4 @@
+import { omitUndefined } from '@bastion-mcp/core';
 import * as client from 'openid-client';
 import type { FetchFn } from './ports';
 
@@ -43,13 +44,22 @@ export const withRedirectUriAsSent =
   };
 
 /** Builds an openid-client Configuration bound to the injected fetch. */
+/** Metadata as zod parses it: optional members may be present with value undefined. */
+type LooseServerMetadata = {
+  [K in keyof client.ServerMetadata]: client.ServerMetadata[K] | undefined;
+};
+
+/** Drops undefined members (openid-client runs under exactOptionalPropertyTypes). The one narrowing cast lives here. */
+const strictMetadata = (metadata: LooseServerMetadata): client.ServerMetadata =>
+  omitUndefined(metadata) as client.ServerMetadata;
+
 export const buildConfiguration = (
-  metadata: client.ServerMetadata,
+  metadata: LooseServerMetadata,
   clientId: string,
   auth: client.ClientAuth,
   options: OAuthHttpOptions,
 ): client.Configuration => {
-  const config = new client.Configuration(metadata, clientId, undefined, auth);
+  const config = new client.Configuration(strictMetadata(metadata), clientId, undefined, auth);
   config[client.customFetch] = toCustomFetch(options.fetch);
   if (options.allowInsecureHttp) client.allowInsecureRequests(config);
   return config;

@@ -1,8 +1,8 @@
 import type { ResourceData } from '@bastion-mcp/policy';
-import { z } from 'zod';
 import { listQuerySchema, pageSchema } from '../framework/conventions';
 import {
   authz,
+  defineDelete,
   defineMutation,
   defineRoute,
   type RouteDefinition,
@@ -102,19 +102,14 @@ export const registryRoutes: RouteDefinition[] = [
     version: versionOf('registry_sources'),
     handler: (ctx) => updateSource(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/registry-sources/{id}',
     tag: TAG,
     summary: 'Remove a registry source and its policy',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('registry.sources.write', org),
-    status: 204,
     version: versionOf('registry_sources'),
-    handler: async (ctx) => {
-      await deleteSource(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => deleteSource(ctx, ctx.params.id),
   }),
   defineMutation({
     method: 'POST',

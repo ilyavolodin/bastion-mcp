@@ -1,10 +1,10 @@
-import net from 'node:net';
 import {
   BastionError,
   blockedAddressMessage,
-  isAddressDenied,
   isMetadataAddress,
   pinnedLookup,
+  resolveAndCheckUrl,
+  UrlCheckError,
 } from '@bastion-mcp/core';
 import { canonicalHost } from './policy';
 import { type Resolver, systemResolver } from './proxy';
@@ -53,46 +53,46 @@ export const assertSafeRemoteUrl = async (
   raw: string,
   options: RemoteUrlOptions,
 ): Promise<SafeRemoteUrl> => {
-  let url: URL;
+  const resolver = options.resolver ?? systemResolver;
+  const insecure = options.insecureHosts.map((h) => h.toLowerCase());
   try {
-    url = new URL(raw);
-  } catch {
-    return fail('invalid-url', 'remote URL is not a valid URL');
+    const checked = await resolveAndCheckUrl(raw, {
+      addressPolicy: { allowCidrs: options.privateCidrsAllowed },
+      lookup: (host) => resolver(canonicalHost(host)),
+      allowHttp: (url, hostname) =>
+        insecure.includes(hostname.toLowerCase()) || insecure.includes(url.host.toLowerCase()),
+    });
+    const { url } = checked;
+    const port = url.port ? Number(url.port) : url.protocol === 'https:' ? 443 : 80;
+    return { url, address: checked.address, family: checked.family, port };
+  } catch (error) {
+    if (!(error instanceof UrlCheckError)) throw error;
+    return failFrom(error, raw);
   }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    return fail('scheme', `remote URL scheme ${url.protocol} is not allowed`);
-  }
-  if (url.username || url.password)
-    return fail('credentials', 'remote URL must not embed credentials');
-  const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (url.protocol === 'http:') {
-    const allowed = options.insecureHosts.map((h) => h.toLowerCase());
-    if (!allowed.includes(hostname) && !allowed.includes(url.host.toLowerCase())) {
+};
+
+const failFrom = (error: UrlCheckError, raw: string): never => {
+  const host = error.detail?.host ?? '';
+  switch (error.reason) {
+    case 'invalid-url':
+      return fail('invalid-url', 'remote URL is not a valid URL');
+    case 'scheme':
+
+    case 'credentials':
+      return fail('credentials', 'remote URL must not embed credentials');
+    case 'insecure':
       return fail(
         'insecure',
-        `remote URL must use HTTPS. To use plain HTTP for ${hostname}, an administrator must add it to BASTION_INSECURE_UPSTREAM_HOSTS and restart Bastion (only for networks you trust)`,
+        `remote URL must use HTTPS. To use plain HTTP for ${host}, an administrator must add it to BASTION_INSECURE_UPSTREAM_HOSTS and restart Bastion (only for networks you trust)`,
       );
-    }
+    case 'unresolvable':
+      return fail('unresolvable', `remote host ${host} did not resolve`);
+    case 'blocked-address':
+      return fail(
+        'blocked-address',
+        remoteBlockedMessage(host, error.detail?.address ?? new URL(raw).hostname),
+      );
   }
-  const host = canonicalHost(hostname);
-  const port = url.port ? Number(url.port) : url.protocol === 'https:' ? 443 : 80;
-  let addresses: string[];
-  if (net.isIP(host)) addresses = [host];
-  else {
-    try {
-      addresses = await (options.resolver ?? systemResolver)(host);
-    } catch {
-      return fail('unresolvable', `remote host ${hostname} did not resolve`);
-    }
-  }
-  const first = addresses[0];
-  if (first === undefined) return fail('unresolvable', `remote host ${hostname} did not resolve`);
-  for (const address of addresses) {
-    if (isAddressDenied(address, { allowCidrs: options.privateCidrsAllowed })) {
-      return fail('blocked-address', remoteBlockedMessage(hostname, address));
-    }
-  }
-  return { url, address: first, family: net.isIPv6(first) ? 6 : 4, port };
 };
 
 export { pinnedLookup };

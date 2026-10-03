@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto';
-import type { SandboxSize } from '@bastion-mcp/core';
+import { MS, type SandboxSize, sha256Hex } from '@bastion-mcp/core';
 import { z } from 'zod';
 import type { SandboxSpec } from '../types';
 
@@ -27,8 +26,8 @@ export const LABELS = {
 } as const;
 
 export const RUNNER_PORT = 8080;
-export const SHUTDOWN_AFTER_MS = 24 * 60 * 60 * 1000;
-export const SHUTDOWN_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+export const SHUTDOWN_AFTER_MS = MS.DAY;
+export const SHUTDOWN_REFRESH_INTERVAL_MS = MS.HOUR;
 
 const hex = (id: string): string => id.replace(/-/g, '').toLowerCase();
 
@@ -49,8 +48,7 @@ export const persistentClaimName = (installationId: string): string =>
 export const isPersistentClaimName = (name: string): boolean => name.startsWith('bsp-');
 
 /** SHA-256 of the user id, first 16 hex characters (label value, 8.4). */
-export const userHash = (userId: string): string =>
-  createHash('sha256').update(userId).digest('hex').slice(0, 16);
+export const userHash = (userId: string): string => sha256Hex(userId).slice(0, 16);
 
 /** Warm pool of a size; persistent workspaces use the `-pvc` pool with `replicas: 0` (8.4). */
 export const warmPoolName = (size: SandboxSize, persistent: boolean): string =>
@@ -206,7 +204,7 @@ export const installationSelector = (installationId: string): string =>
   `${LABELS.installation}=${installationId}`;
 
 // --- garbage collection (8.4) --------------------------------------------------------------------------------------
-export const GC_LEASE_GRACE_MS = 10 * 60 * 1000;
+export const GC_LEASE_GRACE_MS = 10 * MS.MINUTE;
 
 export type GcKnownState = {
   /** instance id -> epoch ms at which its lease expired; null while a lease is live or never expired. */

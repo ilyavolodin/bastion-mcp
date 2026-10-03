@@ -10,13 +10,13 @@ import {
   jsonObjectSchema,
   mutate,
   NotFoundError,
-  nextUpdatedAt,
   orConflict,
   type PrismaLike,
   type RepoContext,
   type RepoOptions,
   toContext,
   toJson,
+  versionedUpdate,
   versionGuard,
 } from './support';
 
@@ -217,25 +217,28 @@ export const createIdpConnectionRepository = (
       opts: { ifMatch: string; audit?: AuditContext },
     ): Promise<IdpConnectionRecord> {
       return mutate(ctx, async (tx, unit) => {
-        const current = await tx.idpConnection.findUnique({ where: { id } });
-        if (!current) throw new NotFoundError('identity provider', id);
-        assertIfMatch(current, opts.ifMatch);
-        const { claimMap, scopes, emailDomains, ...rest } = patch;
-        assertSwapped(
-          await tx.idpConnection.updateMany({
-            where: { id, ...versionGuard(current) },
-            data: {
-              ...rest,
-              ...(scopes === undefined ? {} : { scopes: [...scopes] }),
-              ...(emailDomains === undefined ? {} : { emailDomains: [...emailDomains] }),
-              ...(claimMap === undefined
-                ? {}
-                : { claimMap: toJson(claimMapSchema.parse(claimMap)) }),
-              updatedAt: nextUpdatedAt(current),
-            },
-          }),
-        );
-        const row = await tx.idpConnection.findUniqueOrThrow({ where: { id } });
+        const { current, row } = await versionedUpdate({
+          what: 'identity provider',
+          id,
+          ifMatch: opts.ifMatch,
+          find: () => tx.idpConnection.findUnique({ where: { id } }),
+          write: async (_current, where, updatedAt) => {
+            const { claimMap, scopes, emailDomains, ...rest } = patch;
+            return tx.idpConnection.updateMany({
+              where,
+              data: {
+                ...rest,
+                ...(scopes === undefined ? {} : { scopes: [...scopes] }),
+                ...(emailDomains === undefined ? {} : { emailDomains: [...emailDomains] }),
+                ...(claimMap === undefined
+                  ? {}
+                  : { claimMap: toJson(claimMapSchema.parse(claimMap)) }),
+                updatedAt,
+              },
+            });
+          },
+          reload: () => tx.idpConnection.findUniqueOrThrow({ where: { id } }),
+        });
         unit.bump('org');
         unit.audit(opts.audit, {
           action: 'idp.update',

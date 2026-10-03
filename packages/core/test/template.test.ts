@@ -3,8 +3,10 @@ import {
   assertNoPerUserReferences,
   extractReferences,
   resolveTemplate,
+  secretRef,
   TemplateError,
   validateTemplate,
+  varRef,
 } from '../src/template';
 
 const ctx = {
@@ -53,5 +55,13 @@ describe('8.1 value templates', () => {
     expect(() => assertNoPerUserReferences(['{{var.A}}', '{{secret.B}}'])).not.toThrow();
     expect(() => assertNoPerUserReferences(['x {{user.email}}'])).toThrow(TemplateError);
     expect(() => assertNoPerUserReferences(['{{oauth.accessToken}}'])).toThrow(TemplateError);
+  });
+});
+
+describe('8.1 reference builders', () => {
+  it('secretRef and varRef build references that validate and resolve', () => {
+    expect(secretRef('API_KEY')).toBe('{{secret.API_KEY}}');
+    expect(varRef('REGION')).toBe('{{var.REGION}}');
+    expect(resolveTemplate(`${varRef('REGION')}-${secretRef('API_KEY')}`, ctx)).toBe('eu-s3cr3t');
   });
 });

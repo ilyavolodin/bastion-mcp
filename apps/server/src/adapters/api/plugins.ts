@@ -1,4 +1,5 @@
 import type { ApiDeps } from '@bastion-mcp/api';
+import { MS } from '@bastion-mcp/core';
 import type { Infra } from '../../infra';
 import { createPluginServices } from '../plugin-services';
 import { syncPluginSource } from '../plugin-sync';
@@ -21,8 +22,8 @@ export const createPluginApiPorts = (
     host: infra.config.publicUrl,
     ...(options.credentialHelperPath ? { credentialHelperPath: options.credentialHelperPath } : {}),
     async usage(marketplaceId, range) {
-      const from = range.from ? new Date(range.from) : new Date(Date.now() - 30 * 86_400_000);
-      const to = range.to ? new Date(range.to) : new Date();
+      const from = range.from ? new Date(range.from) : new Date(infra.clock.now() - 30 * MS.DAY);
+      const to = range.to ? new Date(range.to) : new Date(infra.clock.now());
       const rows = await infra.db.prisma.$queryRaw<
         { ts: Date; channel: string; action: string; count: bigint }[]
       >`

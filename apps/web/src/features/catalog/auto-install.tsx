@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { DEBOUNCE_TYPING_MS, useDebounced } from '@/hooks/use-debounced-value';
 import {
   emptyPolicyForm,
   formOf,
@@ -92,22 +93,20 @@ export function PolicyDialog({
   // The API previews a stored policy with unsaved changes, so only an existing policy has a live preview.
   const { mutate: runPreview } = preview;
   const policyId = policy?.id;
+  const settledForm = useDebounced(form, DEBOUNCE_TYPING_MS);
   React.useEffect(() => {
-    if (!open || !policyId || form.targets.length === 0) return;
-    const t = setTimeout(() => {
-      const body = toPolicyPatchBody(form);
-      runPreview({
-        id: policyId,
-        changes: {
-          target: body.target,
-          mode: body.mode,
-          scope: body.scope,
-          applyToExisting: body.applyToExisting,
-        },
-      });
-    }, 250);
-    return () => clearTimeout(t);
-  }, [open, form, policyId, runPreview]);
+    if (!open || !policyId || settledForm !== form || form.targets.length === 0) return;
+    const body = toPolicyPatchBody(form);
+    runPreview({
+      id: policyId,
+      changes: {
+        target: body.target,
+        mode: body.mode,
+        scope: body.scope,
+        applyToExisting: body.applyToExisting,
+      },
+    });
+  }, [open, form, settledForm, policyId, runPreview]);
 
   const set = (patch: Partial<PolicyForm>) => setForm((f) => ({ ...f, ...patch }));
   const add = (c: TargetChip) =>

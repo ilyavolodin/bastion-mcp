@@ -62,7 +62,12 @@ export class ApiProblemError extends Error {
     return this.problem.errors ?? [];
   }
 
-  /** True when the change lost an optimistic-concurrency race (412): re-read and retry. */
+  /** True when the change lost an optimistic-concurrency race (412 stale `If-Match`): re-read and retry. */
+  get isStale(): boolean {
+    return this.status === 412;
+  }
+
+  /** True for 412 (stale `If-Match`) or 409 (state conflict): re-read and retry, or surface the clash. */
   get isConflict(): boolean {
     return this.status === 412 || this.status === 409;
   }

@@ -7,6 +7,7 @@ import {
   useApproveRequest,
   useCreateInstallRequest,
   useInstallRequests,
+  useIsSyncing,
   useRegistryInstall,
   useRegistryServers,
   useRegistrySources,
@@ -15,13 +16,13 @@ import {
 } from '@/api/hooks';
 import {
   type InstallRequestView,
-  isSyncing,
   type RegistryServerView,
   reasonsText,
   runtimeLabel,
   serverKey,
   syncInfo,
   TRUST_LABEL,
+  trustTone,
 } from '@/api/views/registry';
 import { useAuth } from '@/auth/auth';
 import { EmptyState } from '@/components/empty-state';
@@ -33,7 +34,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fieldErrors } from '@/features/access/forms';
+import { DEBOUNCE_SEARCH_MS, useDebounced } from '@/hooks/use-debounced-value';
+import { fieldErrors } from '@/lib/form-errors';
 import { formatRelative } from '@/lib/format';
 import {
   installToBody,
@@ -319,9 +321,6 @@ function Requests() {
 
 type RuntimeFilter = 'all' | 'remote' | 'npm' | 'pypi';
 
-const trustTone = (trust: string) =>
-  trust === 'official' ? 'ok' : trust === 'internal' ? 'info' : 'neutral';
-
 /** An install hit a source that is disabled: an admin is sent to the setting, everyone else to their admin. */
 function SourceDisabledDialog({
   server,
@@ -361,6 +360,7 @@ function SourceDisabledDialog({
 /** Which registries feed this screen: the enabled sources, when they last synced and how many entries they hold. */
 function SourcesStrip({ isAdmin }: { isAdmin: boolean }) {
   const sources = useRegistrySources();
+  const isSyncing = useIsSyncing(sources.data);
   const active = (sources.data ?? []).filter((s) => s.enabled);
   return (
     <section
@@ -409,16 +409,12 @@ export function RegistryPage() {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
   const [q, setQ] = React.useState('');
-  const [debounced, setDebounced] = React.useState('');
   const [sourceId, setSourceId] = React.useState('');
   const [runtime, setRuntime] = React.useState<RuntimeFilter>('all');
   const [requesting, setRequesting] = React.useState<Pending | null>(null);
   const [disabledSource, setDisabledSource] = React.useState<RegistryServerView | null>(null);
   const [blocked, setBlocked] = React.useState<ReadonlySet<string>>(new Set());
-  React.useEffect(() => {
-    const t = setTimeout(() => setDebounced(q.trim()), 300);
-    return () => clearTimeout(t);
-  }, [q]);
+  const debounced = useDebounced(q.trim(), DEBOUNCE_SEARCH_MS);
   const sources = useRegistrySources();
   const enabledSources = (sources.data ?? []).filter((s) => s.enabled);
   const servers = useRegistryServers({

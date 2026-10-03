@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPreviewPolicy,
+  BACKOFF_INITIAL_MS,
+  BACKOFF_MAX_MS,
   buildPreview,
   type CallLogRow,
   CallLogWriter,
@@ -258,5 +260,24 @@ describe('15.5 CallLogWriter', () => {
     on.writer.append(row({ argsPreview: { b: 2 } }));
     await on.writer.flush();
     expect(on.batches[0]?.[0]?.argsPreview).toEqual({ b: 2 });
+  });
+});
+
+describe('15.5 default backoff', () => {
+  it('15.5 starts at the initial delay, doubles, and never exceeds the maximum', async () => {
+    const errors: number[] = [];
+    const writer = new CallLogWriter({
+      sink: async () => {
+        throw new Error('down');
+      },
+      onDropped: () => undefined,
+      onSinkError: (_e, retryInMs) => errors.push(retryInMs),
+    });
+    writer.append(row());
+    for (let i = 0; i < 9; i++) await writer.flush();
+    expect(errors[0]).toBe(BACKOFF_INITIAL_MS);
+    expect(errors[1]).toBe(BACKOFF_INITIAL_MS * 2);
+    expect(Math.max(...errors)).toBe(BACKOFF_MAX_MS);
+    await writer.close();
   });
 });

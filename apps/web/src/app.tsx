@@ -3,6 +3,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/api/client';
+import { STALE_DEFAULT_MS } from '@/api/timing';
 import { AuthProvider } from '@/auth/auth';
 import { createAppRouter } from './router';
 
@@ -15,7 +16,7 @@ export const createQueryClient = (): QueryClient =>
   new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 15_000,
+        staleTime: STALE_DEFAULT_MS,
         retry: (count, error) =>
           !(error instanceof ApiError && error.status >= 400 && error.status < 500) && count < 2,
         refetchOnWindowFocus: false,

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { gitEnv } from './git-env';
 import type { GitProvider, MirrorPushResult, MirrorTarget } from './ports';
 
 type RunResult = { code: number; stdout: string; stderr: string };
@@ -45,13 +46,12 @@ export const createGitBinaryProvider = (options: GitBinaryProviderOptions = {}):
   const envFor = (target: MirrorTarget, token: string): NodeJS.ProcessEnv => {
     const user = target.provider === 'github' ? 'x-access-token' : 'oauth2';
     const basic = Buffer.from(`${user}:${token}`).toString('base64');
-    return {
-      ...process.env,
+    return gitEnv(process.env, {
       GIT_TERMINAL_PROMPT: '0',
       GIT_CONFIG_COUNT: '1',
       GIT_CONFIG_KEY_0: 'http.extraHeader',
       GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
-    };
+    });
   };
   return {
     async getBranchHead(target, token) {

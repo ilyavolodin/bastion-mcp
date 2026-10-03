@@ -1,5 +1,4 @@
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { readJsonBody, startHttp } from '@bastion-mcp/testkit';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -34,31 +33,14 @@ export const startPoisonedServer = async (): Promise<{
     { legacy: 'reject' },
   );
   const node = toNodeHandler(handler);
-  const server = http.createServer((req, res) => {
-    void (async () => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(chunk as Buffer);
-      const raw = Buffer.concat(chunks);
-      let body: unknown;
-      try {
-        body = raw.length > 0 ? JSON.parse(raw.toString('utf8')) : undefined;
-      } catch {
-        body = undefined;
-      }
-      await node(req as never, res, body);
-    })().catch(() => {
-      if (!res.headersSent) res.writeHead(500);
-      res.end();
-    });
+  const server = await startHttp(async (req, res) => {
+    await node(req as never, res, await readJsonBody(req));
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
   return {
-    url: `http://127.0.0.1:${port}/mcp`,
+    url: `${server.url}/mcp`,
     close: async () => {
       await handler.close();
-      server.closeAllConnections();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await server.close();
     },
   };
 };

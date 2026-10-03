@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bastionSelector,
+  boundSandboxName,
   buildClaim,
   type CoreApiLike,
   type CustomApiLike,
@@ -7,6 +9,7 @@ import {
   createKubeApi,
   decideClaimGc,
   type GcKnownState,
+  installationSelector,
   instanceClaimName,
   isPersistentClaimName,
   type KubeApi,
@@ -16,6 +19,7 @@ import {
   KubernetesDriver,
   LABELS,
   needsShutdownRefresh,
+  operatingModePatch,
   parseClaimStatus,
   persistentClaimName,
   type RunnerClient,
@@ -23,6 +27,7 @@ import {
   runnerAddressOf,
   type SandboxSpec,
   selectClaimsToDelete,
+  shutdownTimeFrom,
   userHash,
   warmPoolName,
 } from '../src';
@@ -574,5 +579,33 @@ describe('8.4 client-node adapter (fake clients)', () => {
     t.finish()?.(null);
     await run;
     expect(out).toEqual([]);
+  });
+});
+
+describe('8.4 claim helpers', () => {
+  const claim = (status?: Record<string, unknown>): KubeObject => ({
+    metadata: { name: 'bst-1' },
+    ...(status ? { status } : {}),
+  });
+
+  it('8.4 shutdownTimeFrom is 24 hours after now, as an ISO string', () => {
+    expect(shutdownTimeFrom(NOW)).toBe('2026-10-02T12:00:00.000Z');
+  });
+
+  it('8.4 boundSandboxName reads status.sandbox.name or null', () => {
+    expect(boundSandboxName(claim({ sandbox: { name: 'sb-1' } }))).toBe('sb-1');
+    expect(boundSandboxName(claim({ sandbox: {} }))).toBeNull();
+    expect(boundSandboxName(claim())).toBeNull();
+    expect(boundSandboxName(claim({ sandbox: 'bad' }))).toBeNull();
+  });
+
+  it('8.4 operatingModePatch sets spec.operatingMode', () => {
+    expect(operatingModePatch('Suspended')).toEqual({ spec: { operatingMode: 'Suspended' } });
+    expect(operatingModePatch('Running')).toEqual({ spec: { operatingMode: 'Running' } });
+  });
+
+  it('8.4 selectors address Bastion objects and one installation', () => {
+    expect(bastionSelector).toBe(LABELS.instance);
+    expect(installationSelector(INSTALL)).toBe(`${LABELS.installation}=${INSTALL}`);
   });
 });

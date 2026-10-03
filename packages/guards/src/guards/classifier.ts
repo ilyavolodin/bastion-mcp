@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { CHUNK_SIZES } from '../extract';
-import { type Guard, GuardError, type GuardInput } from '../types';
+import {
+  DEFAULT_CLASSIFIER_TIMEOUT_MS,
+  type Guard,
+  GuardError,
+  type GuardInput,
+  MAX_GUARD_TIMEOUT_MS,
+} from '../types';
 import {
   type ChunkVerdict,
   type ModelGuardDeps,
@@ -24,7 +30,12 @@ export const classifierConfigSchema = z.object({
   /** Labels that mean "malicious", for example `["MALICIOUS", "LABEL_1"]`. */
   maliciousLabels: z.array(z.string().min(1)).min(1),
   threshold: z.number().min(0).max(1).default(0.5),
-  timeoutMs: z.number().int().positive().max(60_000).default(500),
+  timeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .max(MAX_GUARD_TIMEOUT_MS)
+    .default(DEFAULT_CLASSIFIER_TIMEOUT_MS),
 });
 export type ClassifierConfig = z.infer<typeof classifierConfigSchema>;
 

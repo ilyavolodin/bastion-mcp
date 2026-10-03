@@ -716,7 +716,7 @@ describe('9.1 revocation on deactivation (RFC 7009)', () => {
     await x.upstream.close();
     await x.broker.disconnect(USER, x.installation, 'inst-1');
     expect(x.tokens.rows.size).toBe(0);
-    x.upstream = await (await import('./fake-upstream')).startFakeUpstream();
+    x.upstream = await (await import('@bastion-mcp/testkit')).startFakeUpstream();
   });
 
   it('9.1 disconnectAll removes every installation token of the principal', async () => {

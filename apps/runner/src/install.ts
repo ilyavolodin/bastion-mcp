@@ -7,6 +7,13 @@ import type { StartRequest } from '@bastion-mcp/sandbox/protocol';
 /** Package installation (8.3 "Install"). Plans are pure data; execution goes through an injected runner. */
 
 export const MCP_ROOT = '/opt/mcp';
+export const PYTHON_VERSION = '3.13';
+export const NPM_CACHE_DIR = '/tmp/npm-cache';
+export const UV_CACHE_DIR = '/tmp/uv-cache';
+export const DEFAULT_NPM_REGISTRY = 'https://registry.npmjs.org';
+export const DEFAULT_PYPI_INDEX = 'https://pypi.org/simple';
+/** Flags every npm invocation shares: no dev dependencies, no audit or funding round trips. */
+const NPM_COMMON_FLAGS = ['--omit=dev', '--no-audit', '--no-fund'];
 
 export type PlannedCommand = { command: string; args: string[] };
 export type InstallPlan = {
@@ -32,10 +39,9 @@ export const assertLockfileIntegrity = (lockfile: NonNullable<StartRequest['lock
   }
 };
 
-export const buildNpmPlan = (req: StartRequest, root: string = MCP_ROOT): InstallPlan => {
-  const flags = ['--prefix', root, '--omit=dev', '--no-audit', '--no-fund'];
-  if (!req.allowInstallScripts) flags.push('--ignore-scripts');
-  const packageJson = JSON.stringify(
+/** The `package.json` that pins the one package an instance runs. */
+export const instancePackageJson = (req: Pick<StartRequest, 'identifier' | 'version'>): string =>
+  JSON.stringify(
     {
       name: 'bastion-mcp-instance',
       version: '0.0.0',
@@ -45,6 +51,11 @@ export const buildNpmPlan = (req: StartRequest, root: string = MCP_ROOT): Instal
     null,
     2,
   );
+
+export const buildNpmPlan = (req: StartRequest, root: string = MCP_ROOT): InstallPlan => {
+  const flags = ['--prefix', root, ...NPM_COMMON_FLAGS];
+  if (!req.allowInstallScripts) flags.push('--ignore-scripts');
+  const packageJson = instancePackageJson(req);
   if (req.lockfile) {
     if (req.lockfile.kind !== 'npm-shrinkwrap')
       throw new InstallError('npm needs an npm-shrinkwrap lockfile');
@@ -65,7 +76,10 @@ export const buildNpmPlan = (req: StartRequest, root: string = MCP_ROOT): Instal
 export const buildUvPlan = (req: StartRequest, root: string = MCP_ROOT): InstallPlan => {
   const venv = `${root}/.venv`;
   const python = `${venv}/bin/python`;
-  const venvCmd: PlannedCommand = { command: 'uv', args: ['venv', venv, '--python', '3.13'] };
+  const venvCmd: PlannedCommand = {
+    command: 'uv',
+    args: ['venv', venv, '--python', PYTHON_VERSION],
+  };
   if (req.lockfile) {
     if (req.lockfile.kind !== 'uv-requirements')
       throw new InstallError('pypi needs a uv-requirements lockfile');
@@ -109,21 +123,7 @@ export const buildCapturePlan = (
     return {
       kind: 'npm-shrinkwrap',
       outputFile: 'package-lock.json',
-      files: [
-        {
-          path: 'package.json',
-          content: JSON.stringify(
-            {
-              name: 'bastion-mcp-instance',
-              version: '0.0.0',
-              private: true,
-              dependencies: { [req.identifier]: req.version },
-            },
-            null,
-            2,
-          ),
-        },
-      ],
+      files: [{ path: 'package.json', content: instancePackageJson(req) }],
       commands: [
         {
           command: 'npm',
@@ -131,9 +131,7 @@ export const buildCapturePlan = (
             'install',
             '--package-lock-only',
             '--ignore-scripts',
-            '--omit=dev',
-            '--no-audit',
-            '--no-fund',
+            ...NPM_COMMON_FLAGS,
             '--prefix',
             root,
           ],
@@ -160,7 +158,7 @@ export const buildCapturePlan = (
           '--generate-hashes',
           '--no-header',
           '--python-version',
-          '3.13',
+          PYTHON_VERSION,
           `${root}/requirements.in`,
           '-o',
           `${root}/requirements.txt`,
@@ -253,11 +251,11 @@ export const buildInstallEnv = (
   HTTPS_PROXY: req.egress.proxyUrl,
   HTTP_PROXY: req.egress.proxyUrl,
   NO_PROXY: '',
-  npm_config_registry: req.registry.npm ?? 'https://registry.npmjs.org',
-  npm_config_cache: '/tmp/npm-cache',
+  npm_config_registry: req.registry.npm ?? DEFAULT_NPM_REGISTRY,
+  npm_config_cache: NPM_CACHE_DIR,
   npm_config_update_notifier: 'false',
-  UV_INDEX_URL: req.registry.pypi ?? 'https://pypi.org/simple',
-  UV_CACHE_DIR: '/tmp/uv-cache',
+  UV_INDEX_URL: req.registry.pypi ?? DEFAULT_PYPI_INDEX,
+  UV_CACHE_DIR: UV_CACHE_DIR,
   UV_PYTHON_DOWNLOADS: 'never',
 });
 

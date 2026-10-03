@@ -74,7 +74,9 @@ const assertSlug = async (ctx: WriteCtx, slug: string, exceptId?: string): Promi
     slug,
   });
   if (clash.some((r) => r.id !== exceptId)) {
-    throw new ConflictApiError('you already have an endpoint with this slug', 'slug_collision');
+    throw new ConflictApiError('you already have an endpoint with this slug', {
+      code: 'slug_collision',
+    });
   }
 };
 

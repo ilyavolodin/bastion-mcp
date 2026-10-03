@@ -157,7 +157,7 @@ add({
     if (items > 0) {
       throw new ConflictApiError(
         `this entry is part of ${items} marketplace${items === 1 ? '' : 's'}. Remove it from the marketplace first, or deprecate it to hide it from the Store.`,
-        'entry_in_use',
+        { code: 'entry_in_use' },
       );
     }
   },

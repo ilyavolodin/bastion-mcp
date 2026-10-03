@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
+import { authMethodSchema } from './common';
 
 const atLeastOne = (v: object) => Object.keys(v).length > 0;
 const jwkSchema = z.record(z.string(), z.string());
@@ -8,7 +9,7 @@ export const serviceAccountCreateSchema = z.object({
   teamId: z.string().min(1),
   slug: z.string().min(1).max(63),
   displayName: z.string().trim().min(1).max(100),
-  authMethod: z.enum(['client_secret_basic', 'private_key_jwt']).default('client_secret_basic'),
+  authMethod: authMethodSchema.default('client_secret_basic'),
   jwks: z.array(jwkSchema).optional(),
 });
 
@@ -27,7 +28,7 @@ export const credentialsBodySchema = z.object({ jwks: z.array(jwkSchema).min(1).
 
 export const credentialsResponseSchema = z.object({
   clientId: z.string(),
-  authMethod: z.enum(['client_secret_basic', 'private_key_jwt']),
+  authMethod: authMethodSchema,
   clientSecret: z.string().optional(),
 });
 

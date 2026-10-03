@@ -109,7 +109,7 @@ export const buildApiHarness = async (
           return principalOf(token, ['api:read', 'api:write']);
         },
       },
-      sessions: { authenticate: async () => null },
+      sessions: { authenticate: async () => null, checkCsrf: async () => false },
     },
     principals,
     policy: {

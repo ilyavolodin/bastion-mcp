@@ -1,3 +1,4 @@
+import { isRecord } from '@bastion-mcp/core';
 import type {
   DetailedError,
   EntityJson,
@@ -111,9 +112,6 @@ const findMatcher = (policy: PolicyJson): AttrMatcher | null => {
 };
 
 type Json = unknown;
-
-const isRecord = (value: Json): value is Record<string, Json> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const isResourceVar = (node: Json): boolean => isRecord(node) && node.Var === 'resource';
 

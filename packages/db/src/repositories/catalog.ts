@@ -16,7 +16,7 @@ import { z } from 'zod';
 import type { CatalogEntry, CatalogVersion, Prisma } from '../generated/client';
 import {
   type AuditContext,
-  afterIdDesc,
+  afterKey,
   assertIfMatch,
   assertSwapped,
   bytesToHex,
@@ -30,10 +30,10 @@ import {
   jsonObjectSchema,
   mutate,
   NotFoundError,
-  nextUpdatedAt,
   orConflict,
   type Paged,
   type PrismaLike,
+  paginate,
   type RepoContext,
   type RepoOptions,
   type Tx,
@@ -41,8 +41,8 @@ import {
   toContext,
   toJson,
   toJsonOrNull,
-  toPage,
   ValidationError,
+  versionedUpdate,
   versionGuard,
 } from './support';
 
@@ -320,14 +320,17 @@ export const createCatalogEntryRepository = (
     },
 
     async list(filter: CatalogListFilter = {}): Promise<Paged<CatalogEntryView>> {
-      const limit = clampLimit(filter.limit);
-      const rows = await db.catalogEntry.findMany({
-        where: { AND: [baseWhere(filter), afterIdDesc(filter.cursor)] },
-        orderBy: { id: 'desc' },
-        take: limit + 1,
-      });
-      const page = toPage(rows, limit, idCursorOf);
-      return { items: page.items.map(toEntryView), nextCursor: page.nextCursor };
+      return paginate(
+        filter,
+        (take) =>
+          db.catalogEntry.findMany({
+            where: { AND: [baseWhere(filter), afterKey('id', 'desc', filter.cursor)] },
+            orderBy: { id: 'desc' },
+            take,
+          }),
+        idCursorOf,
+        toEntryView,
+      );
     },
 
     /**
@@ -416,24 +419,29 @@ export const createCatalogEntryRepository = (
       const visibility =
         patch.visibility === undefined ? undefined : visibilitySchema.parse(patch.visibility);
       return mutate(ctx, async (tx, unit) => {
-        const current = await tx.catalogEntry.findUnique({ where: { id } });
-        if (!current) throw new NotFoundError('catalog entry', id);
-        assertIfMatch(current, opts.ifMatch);
-        const { icon, visibility: _v, source, ...rest } = patch;
-        assertSwapped(
-          await tx.catalogEntry.updateMany({
-            where: { id, ...versionGuard(current) },
-            data: {
-              ...rest,
-              ...(icon === undefined ? {} : { iconBlob: icon === null ? null : toBytes(icon) }),
-              ...(visibility === undefined ? {} : { visibility: toJson(visibility) }),
-              ...(source === undefined ? {} : { source: toJson(source) }),
-              updatedAt: nextUpdatedAt(current),
-            },
-          }),
-        );
-        await reindexCatalogSearch(tx, id);
-        const row = await tx.catalogEntry.findUniqueOrThrow({ where: { id } });
+        const { current, row } = await versionedUpdate({
+          what: 'catalog entry',
+          id,
+          ifMatch: opts.ifMatch,
+          find: () => tx.catalogEntry.findUnique({ where: { id } }),
+          write: async (_current, where, updatedAt) => {
+            const { icon, visibility: _v, source, ...rest } = patch;
+            return tx.catalogEntry.updateMany({
+              where,
+              data: {
+                ...rest,
+                ...(icon === undefined ? {} : { iconBlob: icon === null ? null : toBytes(icon) }),
+                ...(visibility === undefined ? {} : { visibility: toJson(visibility) }),
+                ...(source === undefined ? {} : { source: toJson(source) }),
+                updatedAt,
+              },
+            });
+          },
+          afterSwap: async () => {
+            await reindexCatalogSearch(tx, id);
+          },
+          reload: () => tx.catalogEntry.findUniqueOrThrow({ where: { id } }),
+        });
         unit.bump('catalog', id);
         unit.audit(opts.audit, {
           action: patch.status ? `catalog.entry.${patch.status}` : 'catalog.entry.update',

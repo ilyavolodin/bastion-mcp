@@ -3,6 +3,7 @@
  * `title` and a free-form `data` object; the bell also needs a line of text and a place to go, which are derived
  * here from `type` and `data`. A quota row becomes a labelled bar.
  */
+import { asRecord, asString } from '@/lib/json';
 import type { OrgRole, Res, Schemas, TeamRole } from '../schema';
 
 export type NotificationRow = Schemas['Notification'];
@@ -15,12 +16,9 @@ export type NotificationView = NotificationRow & {
   href: string | null;
 };
 
-const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+const text = asString;
 
-const dataOf = (row: NotificationRow): Record<string, unknown> =>
-  typeof row.data === 'object' && row.data !== null && !Array.isArray(row.data)
-    ? (row.data as Record<string, unknown>)
-    : {};
+const dataOf = (row: NotificationRow): Record<string, unknown> => asRecord(row.data);
 
 /** Where a notification leads, from its type (18.1): requests, drift and setup have a screen of their own. */
 export const notificationHref = (row: NotificationRow): string | null => {

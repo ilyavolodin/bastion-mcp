@@ -22,8 +22,8 @@ import type { ListenTarget } from './args';
 import { verifyBearer } from './auth';
 import { OutputBuffer } from './buffer';
 import { buildInstallEnv, type Installer, redactSecrets } from './install';
-import { ServerProcess } from './process';
-import { decideRequest, type RunnerState, transition } from './state';
+import { DEFAULT_KILL_GRACE_MS, ServerProcess } from './process';
+import { decideRequest, decideUpgrade, type RunnerState, transition } from './state';
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
@@ -99,8 +99,11 @@ export const createRunner = (options: RunnerOptions): Runner => {
     return result.ok;
   };
 
+  const isOpen = (ws: WebSocket | undefined): ws is WebSocket =>
+    ws !== undefined && ws.readyState === ws.OPEN;
+
   const emit = (frame: string): void => {
-    if (socket && socket.readyState === socket.OPEN) socket.send(frame);
+    if (isOpen(socket)) socket.send(frame);
     else buffer.push(frame);
   };
 
@@ -115,7 +118,7 @@ export const createRunner = (options: RunnerOptions): Runner => {
   const attachSocket = (ws: WebSocket): void => {
     const previous = socket;
     socket = ws;
-    if (previous && previous.readyState === previous.OPEN) {
+    if (isOpen(previous)) {
       previous.close(CLOSE_CODE_REPLACED, 'replaced by a newer connection');
     }
     ws.on('message', (data: Buffer) => {
@@ -143,7 +146,7 @@ export const createRunner = (options: RunnerOptions): Runner => {
 
   const onServerExit = (exit: { code: number | null; signal: string | null }): void => {
     const frame = exitFrame(exit.code, exit.signal);
-    if (socket && socket.readyState === socket.OPEN) socket.send(frame);
+    if (isOpen(socket)) socket.send(frame);
     else pendingExit = frame;
     server = undefined;
     apply('stopped');
@@ -203,7 +206,6 @@ export const createRunner = (options: RunnerOptions): Runner => {
         if (!options.installer.capture) throw new Error('this runner cannot capture lockfiles');
         const lockfile = await options.installer.capture(parsed, installContext);
         if (abort.signal.aborted) throw new Error('start aborted');
-        apply('stopped');
         event('ready', 'lockfile captured', lockfile);
         return;
       }
@@ -235,20 +237,22 @@ export const createRunner = (options: RunnerOptions): Runner => {
       event('ready', 'server process spawned');
     } catch (error) {
       server = undefined;
-      apply('stopped');
       event(
         'failed',
         redactSecrets(error instanceof Error ? error.message : String(error), secrets),
       );
     } finally {
       starting = undefined;
+      // The one place a failed or capture-only start returns to `bound`; a running server's exit goes
+      // through `onServerExit`, which clears `server` first.
+      if (!server) apply('stopped');
       res.end();
     }
   };
 
   const handleStop = async (res: http.ServerResponse): Promise<void> => {
     const proc = server;
-    await proc?.stop(options.killGraceMs ?? 5000);
+    await proc?.stop(options.killGraceMs ?? DEFAULT_KILL_GRACE_MS);
     res.writeHead(204).end();
   };
 
@@ -294,23 +298,17 @@ export const createRunner = (options: RunnerOptions): Runner => {
   });
 
   httpServer.on('upgrade', (req, upgradeSocket: Duplex, head) => {
-    const url = new URL(req.url ?? '/', 'http://runner');
     const reject = (status: number, reason: string): void => {
       upgradeSocket.write(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\n\r\n`);
       upgradeSocket.destroy();
     };
-    const decision = decideRequest(
+    const decision = decideUpgrade(
       state,
-      { method: 'GET', path: url.pathname },
+      req.url ?? '/',
+      req.headers,
       verifyBearer(req.headers.authorization, token),
     );
-    if (!decision.allow)
-      return reject(decision.status, decision.reason.replace(/[^\x20-\x7e]/g, ''));
-    if (url.pathname !== '/v1/stdio') return reject(404, 'Not Found');
-    const offered = String(req.headers['sec-websocket-protocol'] ?? '')
-      .split(',')
-      .map((p) => p.trim());
-    if (!offered.includes(STDIO_SUBPROTOCOL)) return reject(400, 'Bad Request');
+    if (!decision.allow) return reject(decision.status, decision.reason);
     droppedForNextConnection = buffer.dropped;
     wss.handleUpgrade(req, upgradeSocket, head, (ws) => attachSocket(ws));
   });
@@ -339,7 +337,7 @@ export const createRunner = (options: RunnerOptions): Runner => {
     },
     async close() {
       starting?.abort();
-      await server?.stop(options.killGraceMs ?? 5000);
+      await server?.stop(options.killGraceMs ?? DEFAULT_KILL_GRACE_MS);
       for (const client of wss.clients) client.terminate();
       wss.close();
       httpServer.closeAllConnections();

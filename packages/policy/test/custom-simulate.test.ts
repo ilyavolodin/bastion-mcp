@@ -9,6 +9,9 @@ import {
 } from '../src';
 import { admin, data, instMember, member, tool } from './fixtures';
 
+/** The fixed clock every simulation in this file runs on. */
+const NOW = new Date('2026-10-01T12:00:00Z');
+
 const memberToolRequest = (extra: Record<string, unknown> = {}) => ({
   principal: member,
   action: 'callTool',
@@ -24,7 +27,7 @@ describe('10.4 simulate (POST /policies/simulate)', () => {
   const engine = PolicyEngine.create(data());
 
   it('10.4 returns the decision, reasons and the determining policy text for any principal and context', () => {
-    const result = simulate(engine, memberToolRequest());
+    const result = simulate(engine, memberToolRequest(), NOW);
     expect(result.decision).toBe('allow');
     expect(result.reasons).toEqual(['use-inst-mem']);
     expect(result.determiningPolicies[0]?.text).toContain('use-inst-mem');
@@ -35,7 +38,7 @@ describe('10.4 simulate (POST /policies/simulate)', () => {
     const withRule = PolicyEngine.create(
       data({ rules: [{ id: 'r9', effect: 'forbid', what: { toolName: 'delete_*' } }] }),
     );
-    const result = simulate(withRule, memberToolRequest({ action: 'seeTool' }));
+    const result = simulate(withRule, memberToolRequest({ action: 'seeTool' }), NOW);
     expect(result).toMatchObject({ decision: 'deny', reasons: ['rule-r9.see'] });
     expect(result.determiningPolicies).toHaveLength(1);
   });
@@ -44,24 +47,28 @@ describe('10.4 simulate (POST /policies/simulate)', () => {
     const request = memberToolRequest({ context: undefined, call: { owner: 'x' } });
     const parsed = simulateRequestSchema.parse(request);
     expect(parsed.context).toEqual({});
-    expect(simulate(engine, request).decision).toBe('allow');
+    expect(simulate(engine, request, NOW).decision).toBe('allow');
     const ctx = simulationContext({}, new Date('2026-10-01T10:00:00Z'));
     expect(ctx).toMatchObject({ clientId: 'simulator', ip: '127.0.0.1', hour: 10, weekday: 4 });
-    expect(simulationContext({ hour: 1, weekday: 0, ip: '1.1.1.1' }).hour).toBe(1);
+    expect(simulationContext({ hour: 1, weekday: 0, ip: '1.1.1.1' }, NOW).hour).toBe(1);
   });
 
   it('10.4 management actions simulate without a context', () => {
-    const result = simulate(engine, {
-      principal: admin,
-      action: 'settings.edit',
-      resource: { type: 'Org' },
-    });
+    const result = simulate(
+      engine,
+      {
+        principal: admin,
+        action: 'settings.edit',
+        resource: { type: 'Org' },
+      },
+      NOW,
+    );
     expect(result.decision).toBe('allow');
   });
 
   it('17.1 untrusted simulate input is rejected by the zod boundary', () => {
-    expect(() => simulate(engine, { principal: { kind: 'user' }, action: 'nope' })).toThrow();
-    expect(() => simulate(engine, null)).toThrow();
+    expect(() => simulate(engine, { principal: { kind: 'user' }, action: 'nope' }, NOW)).toThrow();
+    expect(() => simulate(engine, null, NOW)).toThrow();
   });
 });
 
@@ -81,7 +88,7 @@ describe('10.3 validateCustomPolicy (POST /policies/validate)', () => {
   const base = data();
 
   it('10.3 accepts a strict-valid policy with passing tests', () => {
-    const report = validateCustomPolicy(FORBID_NIGHT, nightTests, base);
+    const report = validateCustomPolicy(FORBID_NIGHT, nightTests, base, NOW);
     expect(report.errors).toEqual([]);
     expect(report.ok).toBe(true);
     expect(report.tests.map((t) => t.passed)).toEqual([true, true]);
@@ -89,7 +96,7 @@ describe('10.3 validateCustomPolicy (POST /policies/validate)', () => {
   });
 
   it('10.3 requires at least one test case', () => {
-    const report = validateCustomPolicy(FORBID_NIGHT, [], base);
+    const report = validateCustomPolicy(FORBID_NIGHT, [], base, NOW);
     expect(report).toMatchObject({ ok: false });
     expect(report.errors.join()).toContain('At least one test case');
   });
@@ -99,14 +106,15 @@ describe('10.3 validateCustomPolicy (POST /policies/validate)', () => {
       'permit (principal, action == Bastion::Action::"callTool", resource) when { resource.nope == 1 };',
       nightTests,
       base,
+      NOW,
     );
     expect(report.ok).toBe(false);
     expect(report.errors.join()).toMatch(/nope/);
   });
 
   it('10.3 rejects text that does not parse and text with no policy', () => {
-    expect(validateCustomPolicy('forbid (', nightTests).ok).toBe(false);
-    const empty = validateCustomPolicy('// just a comment', nightTests);
+    expect(validateCustomPolicy('forbid (', nightTests, {}, NOW).ok).toBe(false);
+    const empty = validateCustomPolicy('// just a comment', nightTests, {}, NOW);
     expect(empty.ok).toBe(false);
     expect(empty.errors.join()).toContain('no policy');
   });
@@ -115,6 +123,8 @@ describe('10.3 validateCustomPolicy (POST /policies/validate)', () => {
     const report = validateCustomPolicy(
       'permit (principal == ?principal, action, resource);',
       nightTests,
+      {},
+      NOW,
     );
     expect(report.ok).toBe(false);
   });
@@ -124,6 +134,7 @@ describe('10.3 validateCustomPolicy (POST /policies/validate)', () => {
       FORBID_NIGHT,
       [{ name: 'wrongly expects allow at night', request: memberToolRequest(), expect: 'allow' }],
       base,
+      NOW,
     );
     expect(report.ok).toBe(false);
     expect(report.errors[0]).toContain('wrongly expects allow at night');
@@ -135,18 +146,20 @@ describe('10.3 validateCustomPolicy (POST /policies/validate)', () => {
       FORBID_NIGHT,
       [{ ...nightTests[0], expectReasons: ['no-nights'] }],
       base,
+      NOW,
     );
     expect(good.ok).toBe(true);
     const bad = validateCustomPolicy(
       FORBID_NIGHT,
       [{ ...nightTests[0], expectReasons: ['other'] }],
       base,
+      NOW,
     );
     expect(bad.ok).toBe(false);
   });
 
   it('10.3 malformed test cases are reported, and a test whose request cannot be evaluated fails', () => {
-    expect(validateCustomPolicy(FORBID_NIGHT, [{ name: 'x' }], base).ok).toBe(false);
+    expect(validateCustomPolicy(FORBID_NIGHT, [{ name: 'x' }], base, NOW).ok).toBe(false);
     const report = validateCustomPolicy(
       FORBID_NIGHT,
       [
@@ -157,6 +170,7 @@ describe('10.3 validateCustomPolicy (POST /policies/validate)', () => {
         },
       ],
       base,
+      NOW,
     );
     expect(report.ok).toBe(false);
     expect(report.tests[0]).toMatchObject({ actual: 'error', passed: false });
@@ -173,6 +187,8 @@ describe('10.3 validateCustomPolicy (POST /policies/validate)', () => {
           expect: 'deny',
         },
       ],
+      {},
+      NOW,
     );
     expect(report.ok).toBe(true);
   });

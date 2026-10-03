@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { FONT_CACHE_CONTROL, IMMUTABLE_CACHE_CONTROL } from '../../timing';
 import { PAGES_CSS, PAGES_THEME_JS } from './css';
 import { POPPINS_WOFF2_BASE64 } from './fonts.generated';
 
@@ -17,13 +18,13 @@ export const registerPageAssets = async (app: FastifyInstance): Promise<void> =>
   app.get('/assets/pages.css', async (_req, reply) =>
     reply
       .type('text/css; charset=utf-8')
-      .header('cache-control', 'public, max-age=31536000, immutable')
+      .header('cache-control', IMMUTABLE_CACHE_CONTROL)
       .send(PAGES_CSS),
   );
   app.get('/assets/pages-theme.js', async (_req, reply) =>
     reply
       .type('text/javascript; charset=utf-8')
-      .header('cache-control', 'public, max-age=31536000, immutable')
+      .header('cache-control', IMMUTABLE_CACHE_CONTROL)
       .send(PAGES_THEME_JS),
   );
   app.get<{ Params: { file: string } }>('/assets/fonts/:file', async (req, reply) => {
@@ -31,7 +32,7 @@ export const registerPageAssets = async (app: FastifyInstance): Promise<void> =>
     if (!font) return reply.code(404).type('application/json').send({ error: 'not_found' });
     return reply
       .type('font/woff2')
-      .header('cache-control', 'public, max-age=604800')
+      .header('cache-control', FONT_CACHE_CONTROL)
       .header('access-control-allow-origin', '*')
       .send(font);
   });

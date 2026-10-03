@@ -3,10 +3,9 @@ name: nightly
 # tdd 23.1 and 23.3: security suites, fuzzing, the sandbox suite on a kind cluster with agent-sandbox (runc), and the
 # same on gVisor. Action versions are pinned to commit SHAs (see release.yml for how they were resolved).
 #
-# Honest status: the kind and gVisor jobs build the images from apps/server, which does not exist yet, and call test
-# files (`*.kind.test.ts`) that arrive with the M3 live verification (docs/spikes/m3-agent-sandbox.md). Until then those
-# two jobs fail at the image build or run no tests (`--passWithNoTests`); they are wired so the first real run is the
-# only missing step.
+# Honest status: the kind and gVisor jobs build the images from apps/server and call test files (`*.kind.test.ts`)
+# that arrive with the M3 live verification (docs/spikes/m3-agent-sandbox.md). Until those exist the jobs run no tests
+# (`--passWithNoTests`); they are wired so the first real run is the only missing step.
 
 on:
   schedule:
@@ -34,13 +33,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm db:generate
+      - uses: ./.github/actions/setup
       # MUST tests are named "<section> ..." (23.5), so the 23.3 suites are the tests whose title starts with 23.3.
       # Integration tests need Docker (available on the runner).
       - name: Security suites
@@ -52,13 +45,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm db:generate
+      - uses: ./.github/actions/setup
       # The runner frame parser (apps/runner/test/fuzz.test.ts) and the sandbox frame decoder
       # (packages/sandbox/test/frames.test.ts) read FUZZ_RUNS. The legacy adapter fuzz arrives with mcp-downstream.
       - name: Fuzz
@@ -70,16 +57,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
+      - uses: ./.github/actions/setup
       - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
         with:
           install_only: true
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm db:generate
       - name: Cluster, agent-sandbox v1.0.2, Postgres, Valkey, images, chart
         run: deploy/kind/setup.sh
       - name: Sandbox suite against the cluster
@@ -100,16 +81,10 @@ jobs:
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
+      - uses: ./.github/actions/setup
       - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
         with:
           install_only: true
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm db:generate
       # setup.sh --gvisor copies runsc and containerd-shim-runsc-v1 into every kind node, registers the runtime in
       # containerd and creates RuntimeClass "gvisor" (handler runsc). The containerd config edit is version-detected
       # but has never run; docs/spikes/m3-agent-sandbox.md item 7 (runner reachable on 0.0.0.0:8080 under runsc) is

@@ -1,5 +1,5 @@
-import { randomBytes } from 'node:crypto';
-import { redisKeys, SCOPES, TTL } from '@bastion-mcp/core';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { MS, redisKeys, SCOPES, sha256Hex, TTL } from '@bastion-mcp/core';
 import {
   type Clock,
   type PrincipalStore,
@@ -45,12 +45,16 @@ export class SessionService {
     // password reset) starts in the next one instead of being born revoked.
     const watermark = await this.deps.revocations.getWatermark(input.principalId);
     const createdAt =
-      watermark !== null && Math.floor(now / 1000) <= watermark ? (watermark + 1) * 1000 : now;
+      watermark !== null && Math.floor(now / MS.SECOND) <= watermark
+        ? (watermark + 1) * MS.SECOND
+        : now;
     const key = redisKeys.uiSession(id);
     await this.deps.redis.hset(key, {
       principalId: input.principalId,
       createdAt: String(createdAt),
       lastSeenAt: String(now),
+      // Only a hash of the CSRF token is kept: the token is bound to this session, not just to the browser.
+      csrfSha256: sha256Hex(csrfToken),
     });
     await this.deps.redis.expire(key, TTL.uiSession);
     return { id, csrfToken, ttlSeconds: TTL.uiSession };
@@ -64,12 +68,12 @@ export class SessionService {
     const createdAt = Number(fields.createdAt);
     if (!fields.principalId || !Number.isFinite(createdAt)) return null;
     const now = this.clock.now();
-    const remainingMs = createdAt + TTL.uiSessionAbsolute * 1000 - now;
+    const remainingMs = createdAt + TTL.uiSessionAbsolute * MS.SECOND - now;
     if (remainingMs <= 0) {
       await this.deps.redis.del(key);
       return null;
     }
-    await this.deps.redis.expire(key, Math.min(TTL.uiSession, Math.ceil(remainingMs / 1000)));
+    await this.deps.redis.expire(key, Math.min(TTL.uiSession, Math.ceil(remainingMs / MS.SECOND)));
     return { principalId: fields.principalId, createdAt, lastSeenAt: now };
   }
 
@@ -80,7 +84,7 @@ export class SessionService {
     const record = await this.deps.principals.getPrincipal(session.principalId);
     if (!record?.active) return null;
     const watermark = await this.deps.revocations.getWatermark(record.id);
-    if (watermark !== null && Math.floor(session.createdAt / 1000) <= watermark) return null;
+    if (watermark !== null && Math.floor(session.createdAt / MS.SECOND) <= watermark) return null;
     return buildPrincipal(record, {
       authMethod: 'session',
       scopes: [SCOPES.apiRead, SCOPES.apiWrite],
@@ -93,16 +97,26 @@ export class SessionService {
    * to start in the next second, because the watermark compares whole seconds.
    */
   async revokeAll(principalId: string, options: { keep?: string } = {}): Promise<void> {
-    const nowS = Math.floor(this.clock.now() / 1000);
+    const nowS = Math.floor(this.clock.now() / MS.SECOND);
     await this.deps.revocations.setWatermark(principalId, nowS);
     if (options.keep && SESSION_ID_PATTERN.test(options.keep)) {
       const key = redisKeys.uiSession(options.keep);
       const fields = await this.deps.redis.hgetall(key);
       if (fields.principalId === principalId) {
-        await this.deps.redis.hset(key, { createdAt: String((nowS + 1) * 1000) });
+        await this.deps.redis.hset(key, { createdAt: String((nowS + 1) * MS.SECOND) });
       }
     }
     await this.deps.revocations.publish({ kind: 'principal', principalId, at: nowS });
+  }
+
+  /** 9.2: the presented token must be the one issued with THIS session (constant-time compare of hashes). */
+  async checkCsrf(id: string, presented: string | undefined): Promise<boolean> {
+    if (!presented || !SESSION_ID_PATTERN.test(id)) return false;
+    const stored = (await this.deps.redis.hgetall(redisKeys.uiSession(id))).csrfSha256;
+    if (!stored) return false;
+    const a = Buffer.from(sha256Hex(presented), 'hex');
+    const b = Buffer.from(stored, 'hex');
+    return a.length === b.length && timingSafeEqual(a, b);
   }
 
   async destroy(id: string): Promise<void> {

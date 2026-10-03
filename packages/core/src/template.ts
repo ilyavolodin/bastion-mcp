@@ -28,6 +28,12 @@ export type TemplateContext = {
   sandbox?: { workspace?: string };
 };
 
+/** `{{secret.NAME}}` reference text. */
+export const secretRef = (name: string): string => `{{secret.${name}}}`;
+
+/** `{{var.NAME}}` reference text. */
+export const varRef = (name: string): string => `{{var.${name}}}`;
+
 const parseReference = (raw: string): { namespace: string; field: string } => {
   const ref = raw.trim();
   const dot = ref.indexOf('.');

@@ -6,9 +6,11 @@
 import type { HttpHandler } from 'msw';
 import type { Body, Res, Schemas } from '@/api/schema';
 import {
+  checkVersion,
   etagHeaders,
   forbidden,
   HttpResponse,
+  noContent,
   notFound,
   pageOf,
   problem,
@@ -16,7 +18,10 @@ import {
   type Sample,
   type SampleFactory,
 } from '../http';
+import { can } from '../roles';
+import { INTERNAL_REGISTRY_NAME } from '../seed';
 import { getDb, nextId } from '../state';
+import { DAY, HOUR, iso, nowIso, validationFailed } from '../util';
 
 type Source = Schemas['RegistrySource'];
 type Server = Schemas['RegistryServer'];
@@ -41,10 +46,6 @@ export type RegistryData = {
   /** The stored policy of each source, with the version it was stored at (its `updatedAt`, the ETag). */
   policies: Record<string, { policy: Policy; updatedAt: string }>;
 };
-
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
-const iso = (ms: number) => new Date(ms).toISOString();
 
 const POLICY_STORED_AT = '2026-09-20T09:00:00.000Z';
 const DEFAULT_POLICY: Policy = {
@@ -106,7 +107,7 @@ export const buildRegistryData = (now: number): RegistryData => ({
     },
     {
       id: 'rs-acme',
-      name: 'Acme internal registry',
+      name: INTERNAL_REGISTRY_NAME,
       baseUrl: 'https://registry.acme.dev',
       authSecretId: null,
       authHeaderName: null,
@@ -246,10 +247,9 @@ function request(
 // --- handlers -----------------------------------------------------------------------------------------------------
 
 const data = () => getDb().data.registry;
-const nowIso = () => new Date().toISOString();
 
 /** Admins and Auditors see every server; everybody else only what the namespace lists of the policy let through. */
-const seesAll = () => getDb().role === 'admin' || getDb().role === 'auditor';
+const seesAll = () => can('seeAll');
 const matchesName = (patterns: readonly string[], name: string) =>
   patterns.some(
     (p) =>
@@ -267,18 +267,12 @@ const isShown = (sourceId: string, name: string): boolean => {
     !matchesName(policy.blockedNamespaces, name) && matchesName(policy.allowedNamespaces, name)
   );
 };
-const canDecide = () => getDb().role === 'admin' || getDb().role === 'manager';
+const canDecide = () => can('manage');
 /** The registry is hidden from auditors (`capabilities.registry`). */
-const hasRegistry = () => getDb().role !== 'auditor';
+const hasRegistry = () => can('registry');
 
 const invalid = (errors: { path: string; message: string }[]) =>
-  problem(
-    422,
-    'validation_failed',
-    'Some fields need attention',
-    'The request is not valid.',
-    errors,
-  );
+  validationFailed(errors, 'The request is not valid.');
 
 const find = (sourceId: string, name: string, version: string) =>
   data().servers.find(
@@ -309,17 +303,22 @@ export const registryHandlers: HttpHandler[] = [
     data().sources.push(created);
     return HttpResponse.json(created, { status: 201 });
   }),
-  route.patch('/registry-sources/{id}', async ({ params, body }) => {
+  route.patch('/registry-sources/{id}', async ({ request, params, body }) => {
     const source = data().sources.find((x) => x.id === params.id);
     if (!source) return notFound('Registry source');
+    const stale = checkVersion(request, source);
+    if (stale) return stale;
     Object.assign(source, await body(), { updatedAt: nowIso() });
-    return HttpResponse.json(source);
+    return HttpResponse.json(source, { headers: etagHeaders(source.updatedAt) });
   }),
-  route.delete('/registry-sources/{id}', ({ params }) => {
+  route.delete('/registry-sources/{id}', ({ request, params }) => {
     const i = data().sources.findIndex((x) => x.id === params.id);
-    if (i < 0) return notFound('Registry source');
+    const source = data().sources[i];
+    if (!source) return notFound('Registry source');
+    const stale = checkVersion(request, source);
+    if (stale) return stale;
     data().sources.splice(i, 1);
-    return new HttpResponse(null, { status: 204 });
+    return noContent();
   }),
   route.post('/registry-sources/{id}/sync', ({ params }) => {
     const source = data().sources.find((x) => x.id === params.id);
@@ -356,7 +355,12 @@ export const registryHandlers: HttpHandler[] = [
       stored ? { headers: etagHeaders(stored.updatedAt) } : {},
     );
   }),
-  route.put('/registry-sources/{id}/policy', async ({ params, body }) => {
+  route.put('/registry-sources/{id}/policy', async ({ request, params, body, waiveVersion }) => {
+    // A source without a stored policy takes the first PUT without a version (17.1).
+    const stored = data().policies[params.id];
+    if (!stored) waiveVersion();
+    const stale = stored ? checkVersion(request, stored) : null;
+    if (stale) return stale;
     const updatedAt = nowIso();
     const policy = (await body()) as Policy;
     data().policies[params.id] = { policy, updatedAt };
@@ -491,35 +495,43 @@ export const registryHandlers: HttpHandler[] = [
     data().requests.push(created);
     return HttpResponse.json(created, { status: 201 });
   }),
-  route.post('/install-requests/{id}/approve', ({ params }) => {
-    if (!canDecide()) return forbidden();
-    const r = data().requests.find((x) => x.id === params.id);
-    if (!r) return notFound('Install request');
-    if (r.status !== 'open') return problem(409, 'conflict', 'Conflict', 'the request is decided');
-    Object.assign(r, {
-      status: 'approved' as const,
-      decidedBy: getDb().me.id,
-      decidedAt: nowIso(),
-      updatedAt: nowIso(),
-    });
-    return HttpResponse.json(r);
-  }),
-  route.post('/install-requests/{id}/reject', async ({ params, body }) => {
-    if (!canDecide()) return forbidden();
-    const input = await body();
-    if (!input.reason?.trim()) return invalid([{ path: '/reason', message: 'required' }]);
-    const r = data().requests.find((x) => x.id === params.id);
-    if (!r) return notFound('Install request');
-    if (r.status !== 'open') return problem(409, 'conflict', 'Conflict', 'the request is decided');
-    Object.assign(r, {
-      status: 'rejected' as const,
-      decidedBy: getDb().me.id,
-      decidedAt: nowIso(),
-      reason: input.reason.trim(),
-      updatedAt: nowIso(),
-    });
-    return HttpResponse.json(r);
-  }),
+  route.post(
+    '/install-requests/{id}/approve',
+    ({ params }) => {
+      const r = data().requests.find((x) => x.id === params.id);
+      if (!r) return notFound('Install request');
+      if (r.status !== 'open')
+        return problem(409, 'conflict', 'Conflict', 'the request is decided');
+      Object.assign(r, {
+        status: 'approved' as const,
+        decidedBy: getDb().me.id,
+        decidedAt: nowIso(),
+        updatedAt: nowIso(),
+      });
+      return HttpResponse.json(r);
+    },
+    { allow: 'manage' },
+  ),
+  route.post(
+    '/install-requests/{id}/reject',
+    async ({ params, body }) => {
+      const input = await body();
+      if (!input.reason?.trim()) return invalid([{ path: '/reason', message: 'required' }]);
+      const r = data().requests.find((x) => x.id === params.id);
+      if (!r) return notFound('Install request');
+      if (r.status !== 'open')
+        return problem(409, 'conflict', 'Conflict', 'the request is decided');
+      Object.assign(r, {
+        status: 'rejected' as const,
+        decidedBy: getDb().me.id,
+        decidedAt: nowIso(),
+        reason: input.reason.trim(),
+        updatedAt: nowIso(),
+      });
+      return HttpResponse.json(r);
+    },
+    { allow: 'manage' },
+  ),
 ];
 
 /** One valid call per operation of this domain (checked against the OpenAPI document by route-contract.test.ts). */

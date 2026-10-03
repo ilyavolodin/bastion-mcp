@@ -2,6 +2,7 @@ import { DESKTOP_INSTALLATION_MODES, MARKETPLACE_ITEM_POLICIES } from '@bastion-
 import { ROLLOUT_CLIENTS } from '@bastion-mcp/plugins';
 import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
+import { nameSchema } from './common';
 
 const atLeastOne = (v: object) => Object.keys(v).length > 0;
 
@@ -13,7 +14,7 @@ export const audienceSchema = z.object({
 
 export const marketplaceCreateSchema = z.object({
   slug: z.string().min(1).max(63),
-  displayName: z.string().trim().min(1).max(200),
+  displayName: nameSchema,
   description: z.string().max(2000).nullable().default(null),
   /** Null: an org-owned marketplace (admins only); a team id: that team's managers administer it. */
   ownerTeamId: z.string().min(1).nullable().default(null),
@@ -23,7 +24,7 @@ export const marketplaceCreateSchema = z.object({
 
 export const marketplacePatchSchema = z
   .object({
-    displayName: z.string().trim().min(1).max(200),
+    displayName: nameSchema,
     description: z.string().max(2000).nullable(),
     audience: audienceSchema,
     desktopInstallation: z.enum(DESKTOP_INSTALLATION_MODES),

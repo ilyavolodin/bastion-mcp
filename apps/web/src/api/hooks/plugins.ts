@@ -1,5 +1,5 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { api, fetchAll } from '../client';
+import { api, fetchAll, LOOKUP_PAGES } from '../client';
 import type { Schemas } from '../schema';
 import {
   type ClientSetup,
@@ -10,7 +10,8 @@ import {
   toReleaseViews,
 } from '../views/plugins';
 import { keys, useApiMutation } from './base';
-import { useMe } from './session';
+import { fetchTeamNames, orNoNames } from './lookups';
+import { useViewer } from './session';
 
 type RolloutClient = Schemas['RolloutConfig']['client'];
 
@@ -27,27 +28,11 @@ type EntryRef = Pick<Schemas['CatalogEntry'], 'id' | 'slug' | 'displayName' | 'd
 /** Plugin entries of the catalog by slug (the plugin name of a release). Names only: a failure leaves the slugs. */
 const pluginEntries = async (signal: AbortSignal): Promise<Map<string, EntryRef>> => {
   try {
-    const rows = await fetchAll('/catalog', { kind: 'plugin' }, 5, signal);
+    const rows = await fetchAll('/catalog', { kind: 'plugin' }, LOOKUP_PAGES, signal);
     return new Map(rows.map((e) => [e.slug, e]));
   } catch {
     return new Map();
   }
-};
-
-/** Team names by id; members cannot list teams, so a failure only costs the owner name. */
-const teamNames = async (signal: AbortSignal): Promise<Map<string, string>> => {
-  try {
-    return new Map(
-      (await fetchAll('/teams', undefined, 5, signal)).map((t) => [t.id, t.displayName]),
-    );
-  } catch {
-    return new Map();
-  }
-};
-
-const useViewer = () => {
-  const me = useMe();
-  return me.data ? { orgRole: me.data.orgRole, teams: me.data.teams } : undefined;
 };
 
 /** Marketplaces with the plugins of their latest release (a release lists name, version and policy per plugin). */
@@ -59,9 +44,9 @@ export const useMarketplaces = () => {
     queryFn: async ({ signal }): Promise<MarketplaceView[]> => {
       if (!viewer) return [];
       const [rows, entries, names] = await Promise.all([
-        fetchAll('/marketplaces', undefined, 5, signal),
+        fetchAll('/marketplaces', undefined, LOOKUP_PAGES, signal),
         pluginEntries(signal),
-        teamNames(signal),
+        orNoNames(fetchTeamNames(signal)),
       ]);
       return Promise.all(
         rows.map(async (row) => {
@@ -90,7 +75,7 @@ export const useMarketplace = (id: string | undefined) => {
         api.get(`/marketplaces/${id}`, { signal }),
         api.get(`/marketplaces/${id}/releases`, { query: { limit: 1 }, signal }),
         pluginEntries(signal),
-        teamNames(signal),
+        orNoNames(fetchTeamNames(signal)),
       ]);
       return toMarketplaceView(row, {
         teamNames: names,

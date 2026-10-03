@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocketServer } from 'ws';
 import {
   CLOSE_CODE_REPLACED,
+  captureLockfileVia,
   DROPPED_HEADER,
   exitFrame,
   HttpRunnerClient,
@@ -11,6 +12,7 @@ import {
   type JsonObject,
   messageFrame,
   parseRunnerAddress,
+  type RunnerClient,
   RunnerHttpError,
   SandboxStdioTransport,
   STDIO_SUBPROTOCOL,
@@ -292,5 +294,74 @@ describe('8.5 probe against the real system', () => {
   it('8.5 reports unavailable with the error text when the bwrap binary does not exist', async () => {
     const result = await probeBwrap(undefined, 'definitely-not-bwrap-binary');
     expect(result.status).toBe('unavailable');
+  });
+});
+
+describe('8.7 captureLockfileVia', () => {
+  const runnerOf = (events: StartEvent[]): RunnerClient =>
+    ({
+      start: async function* () {
+        for (const event of events) yield event;
+      },
+    }) as unknown as RunnerClient;
+  const ev = (phase: StartEvent['phase'], extra: Partial<StartEvent> = {}): StartEvent => ({
+    phase,
+    detail: `${phase} detail`,
+    elapsedMs: 1,
+    ...extra,
+  });
+  const request = {
+    runtime: 'npm',
+    identifier: 'x',
+    version: '1.0.0',
+    egress: { proxyUrl: 'http://p:1' },
+  } as const;
+  const ctx = { installation: 'inst-1' };
+
+  it('8.7 returns the lockfile of the ready event and reports every event', async () => {
+    const lockfile = { kind: 'npm-shrinkwrap', content: '{}' } as const;
+    const seen: string[] = [];
+    const result = await captureLockfileVia(
+      runnerOf([ev('installing'), ev('ready', { lockfile })]),
+      request,
+      ctx,
+      (e) => seen.push(e.phase),
+    );
+    expect(result).toEqual(lockfile);
+    expect(seen).toEqual(['installing', 'ready']);
+  });
+
+  it('8.7 a failed event throws SandboxStartFailedError with its detail', async () => {
+    await expect(
+      captureLockfileVia(runnerOf([ev('failed', { detail: 'npm exploded' })]), request, ctx),
+    ).rejects.toMatchObject({
+      code: 'SANDBOX_START_FAILED',
+      message: expect.stringContaining('npm exploded'),
+    });
+  });
+
+  it('8.7 a ready event without a lockfile is an error', async () => {
+    await expect(captureLockfileVia(runnerOf([ev('ready')]), request, ctx)).rejects.toThrow(
+      /without a lockfile/,
+    );
+  });
+
+  it('8.7 a stream that ends early names the last phase', async () => {
+    await expect(captureLockfileVia(runnerOf([ev('installing')]), request, ctx)).rejects.toThrow(
+      /ended after phase installing/,
+    );
+    await expect(captureLockfileVia(runnerOf([]), request, ctx)).rejects.toThrow(/phase none/);
+  });
+
+  it('8.7 sends captureLockfile: true', async () => {
+    let sent: unknown;
+    const runner = {
+      start: async function* (req: unknown) {
+        sent = req;
+        yield ev('ready', { lockfile: { kind: 'uv-requirements', content: 'a==1' } });
+      },
+    } as unknown as RunnerClient;
+    await captureLockfileVia(runner, request, ctx);
+    expect(sent).toMatchObject({ captureLockfile: true });
   });
 });

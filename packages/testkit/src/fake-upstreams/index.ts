@@ -1,4 +1,7 @@
 export * from './everything-server';
+export * from './fake-idp';
+export * from './fake-registry';
+export * from './fake-upstream';
 export * from './legacy-http-server';
 export * from './legacy-sse-server';
 export * from './modern-server';

@@ -137,7 +137,15 @@ export const pollForToken = async (
   }
 };
 
-/** Refresh-token grant. Returns `undefined` when the refresh token is no longer valid. */
+/** Only `invalid_grant` (RFC 6749 5.2) says the refresh token itself is dead; everything else is not the token's fault. */
+export const isTerminalRefreshError = (error: string | undefined): boolean =>
+  error === 'invalid_grant';
+
+/**
+ * Refresh-token grant. Returns `undefined` only when the refresh token is no longer valid
+ * (`invalid_grant`); any other failure, including `invalid_request`/`invalid_client` (a configuration
+ * problem), throws so the caller keeps the stored credential.
+ */
 export const refreshAccessToken = async (
   endpoints: OAuthEndpoints,
   refreshToken: string,
@@ -152,12 +160,6 @@ export const refreshAccessToken = async (
   const token = tokenSchema.safeParse(json);
   if (ok && token.success) return token.data;
   const error = errorSchema.safeParse(json);
-  if (error.success && error.data.error === 'invalid_grant') return undefined;
-  if (
-    error.success &&
-    (error.data.error === 'invalid_request' || error.data.error === 'invalid_client')
-  ) {
-    return undefined;
-  }
+  if (isTerminalRefreshError(error.success ? error.data.error : undefined)) return undefined;
   throw new CredentialError('the authorization server could not refresh the token');
 };

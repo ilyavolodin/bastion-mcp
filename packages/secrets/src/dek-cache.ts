@@ -1,7 +1,7 @@
-import { sha256Hex } from '@bastion-mcp/core';
-import { type Clock, type KmsProvider, systemClock } from './types';
+import { type Clock, MS, sha256Hex, systemClock } from '@bastion-mcp/core';
+import type { KmsProvider } from './types';
 
-export const DEK_CACHE_TTL_MS = 15 * 60 * 1000;
+export const DEK_CACHE_TTL_MS = 15 * MS.MINUTE;
 export const DEK_CACHE_MAX_KEYS = 1000;
 
 type Entry = { dek: Buffer; expiresAt: number };

@@ -1,4 +1,5 @@
 import type { ServerResponse } from 'node:http';
+import { sseCommentFrame, sseMessageFrame } from '../shared';
 
 /** One SSE response (6.2). No event ids are ever written and `Last-Event-ID` is ignored. */
 export class SseStream {
@@ -33,12 +34,12 @@ export class SseStream {
 
   write(message: unknown): void {
     if (this.closed) return;
-    this.res.write(`event: message\ndata: ${JSON.stringify(message)}\n\n`);
+    this.res.write(sseMessageFrame(message));
   }
 
   comment(text: string): void {
     if (this.closed) return;
-    this.res.write(`: ${text}\n\n`);
+    this.res.write(sseCommentFrame(text));
   }
 
   end(): void {

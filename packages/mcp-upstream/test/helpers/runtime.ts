@@ -1,6 +1,6 @@
-import net from 'node:net';
 import type { Keyring } from '@bastion-mcp/core';
 import type { StderrSink } from '@bastion-mcp/sandbox';
+import { freePort } from '@bastion-mcp/testkit';
 import type { ListChangedPublisher, RedisLike } from '../../src/ports';
 import {
   createUpstreamRuntime,
@@ -19,15 +19,7 @@ import {
 export const keyring: Keyring = { activeKid: 'k1', keys: new Map([['k1', Buffer.alloc(32, 9)]]) };
 export const SECRET = 's'.repeat(40);
 
-export const freePort = (): Promise<number> =>
-  new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, '127.0.0.1', () => {
-      const port = (server.address() as net.AddressInfo).port;
-      server.close(() => resolve(port));
-    });
-    server.on('error', reject);
-  });
+export { freePort };
 
 export type TestWorld = {
   shared: Shared;

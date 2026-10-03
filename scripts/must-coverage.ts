@@ -2,6 +2,8 @@
  * `scripts/check-must-coverage.ts` support (tdd.md 23.5): every section of the specification that
  * contains a MUST needs at least one test whose title starts with that section number.
  */
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 export type MustSection = { id: string; heading: string };
 
@@ -57,4 +59,36 @@ export const findUncoveredSections = (
     for (let n = 1; n <= parts.length; n++) coveredOrParent.add(parts.slice(0, n).join('.'));
   }
   return sections.filter((section) => !coveredOrParent.has(section.id));
+};
+
+const SKIPPED_DIRS = new Set(['node_modules', 'generated', 'dist']);
+
+/** Every `*.test.ts(x)` below `dir`; a missing `dir` is an empty list, any other error propagates. */
+export const testFiles = (dir: string): string[] => {
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  const out: string[] = [];
+  for (const name of names) {
+    if (SKIPPED_DIRS.has(name)) continue;
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) out.push(...testFiles(path));
+    else if (/\.test\.tsx?$/.test(name)) out.push(path);
+  }
+  return out;
+};
+
+/** Section ids cited by test titles under `<root>/packages` and `<root>/apps`. */
+export const collectCoveredIds = (root: string): Set<string> => {
+  const covered = new Set<string>();
+  for (const base of ['packages', 'apps']) {
+    for (const file of testFiles(join(root, base))) {
+      for (const id of extractTestTitles(readFileSync(file, 'utf8'))) covered.add(id);
+    }
+  }
+  return covered;
 };

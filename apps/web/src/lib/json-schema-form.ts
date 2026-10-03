@@ -3,6 +3,7 @@
  * invents values: a field starts empty, or with what the schema itself says (`default`, `const`, the first `enum`
  * value, the first `examples` entry). Whatever the form cannot express (objects, unions, tuples) is edited as JSON.
  */
+import { isRecord } from './json';
 
 export type JsonSchema = {
   type?: string | string[];
@@ -39,9 +40,6 @@ export type FormField = {
   /** The schema of this one property, for the JSON editor of a `json` field. */
   schema: JsonSchema;
 };
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** The one concrete type of a schema (`["string","null"]` is a string), or `undefined` when it is open. */
 const typeOf = (schema: JsonSchema): string | undefined => {

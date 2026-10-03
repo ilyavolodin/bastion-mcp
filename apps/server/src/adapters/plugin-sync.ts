@@ -144,14 +144,18 @@ export const syncPluginSource = async (
     }
     await infra.repos.pluginSources.recordSync(source.id, {
       lastCommit: tree.commit,
-      lastSync: { at: new Date().toISOString(), ...result, ok: result.errors.length === 0 },
+      lastSync: {
+        at: new Date(infra.clock.now()).toISOString(),
+        ...result,
+        ok: result.errors.length === 0,
+      },
     });
   } catch (error) {
     result.errors.push(error instanceof Error ? error.message : String(error));
     await infra.repos.pluginSources
       .recordSync(source.id, {
         lastCommit: source.lastCommit,
-        lastSync: { at: new Date().toISOString(), ...result, ok: false },
+        lastSync: { at: new Date(infra.clock.now()).toISOString(), ...result, ok: false },
       })
       .catch(() => undefined);
   }

@@ -4,6 +4,8 @@
  * operations. Header validation (`MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`, `Mcp-Param-*`), `_meta` parsing and
  * `server/discover` are the SDK's.
  */
+
+import { isRecord } from '@bastion-mcp/core';
 import { extractTraceContext } from '@bastion-mcp/telemetry';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import {
@@ -23,7 +25,6 @@ import { context, trace } from '@opentelemetry/api';
 import { currentRequestContext } from '../../context';
 import { serverCapabilities, tasksDeclared } from '../../operations/basic';
 import type { OperationDeps } from '../../operations/deps';
-import { isRecord } from '../../operations/support';
 import { MethodNotFoundError, toRpcErrorBody } from '../../rpc';
 import type {
   ClientCaps,
@@ -34,8 +35,13 @@ import type {
   OpOutcome,
 } from '../../types';
 import type { OpRunner } from '../contracts';
-
-export const DEFAULT_KEEPALIVE_MS = 25_000;
+import {
+  baseOpContext,
+  inputRequiredPayload,
+  KEEPALIVE_MS,
+  LATEST_MODERN_VERSION,
+  ROOT_SPAN_CONTEXT,
+} from '../shared';
 
 /** Methods served through the SDK's request handlers (everything else goes to the fallback or `direct.ts`). */
 const SDK_METHODS = [
@@ -97,34 +103,21 @@ export const modernOpContext = (
   const envelope = (c.mcpReq.envelope ?? {}) as Record<string, unknown>;
   const meta = (c.mcpReq._meta ?? {}) as JsonObject;
   const parent = extractTraceContext(meta, rc.headers, context.active());
-  const spanContext = trace.getSpanContext(parent) ?? {
-    traceId: '0'.repeat(32),
-    spanId: '0'.repeat(16),
-    traceFlags: 0,
-  };
+  const spanContext = trace.getSpanContext(parent) ?? ROOT_SPAN_CONTEXT;
   const logLevel = envelope[LOG_LEVEL_META_KEY];
-  return {
-    principal: rc.principal,
-    endpoint: rc.resolved.endpoint,
+  const version = envelope[PROTOCOL_VERSION_META_KEY];
+  return baseOpContext(rc, {
     era: 'modern',
-    protocolVersion:
-      typeof envelope[PROTOCOL_VERSION_META_KEY] === 'string'
-        ? (envelope[PROTOCOL_VERSION_META_KEY] as string)
-        : '2026-07-28',
+    protocolVersion: typeof version === 'string' ? version : LATEST_MODERN_VERSION,
     clientCapabilities: asCaps(envelope[CLIENT_CAPABILITIES_META_KEY]),
     clientInfo: asInfo(envelope[CLIENT_INFO_META_KEY]),
     ...(typeof logLevel === 'string' ? { logLevel: logLevel as LoggingLevel } : {}),
     trace: spanContext,
     signal: c.mcpReq.signal,
     emit,
-    resolved: rc.resolved,
     requestId: c.mcpReq.id,
-    origin: rc.origin,
-    ip: rc.ip,
-    authMethod: rc.principal.authMethod,
     requestMeta: meta,
-    path: rc.path,
-  };
+  });
 };
 
 /** Maps an operation outcome onto what an SDK handler returns. */
@@ -133,12 +126,7 @@ export const toSdkResult = (outcome: OpOutcome<unknown>): JsonObject => {
     case 'complete':
       return (isRecord(outcome.result) ? outcome.result : {}) as JsonObject;
     case 'input_required':
-      return inputRequired({
-        ...(outcome.inputRequests === undefined
-          ? {}
-          : { inputRequests: outcome.inputRequests as never }),
-        requestState: outcome.requestState,
-      }) as unknown as JsonObject;
+      return inputRequired(inputRequiredPayload(outcome) as never) as unknown as JsonObject;
     case 'task':
       return outcome.task;
   }
@@ -230,7 +218,7 @@ export type ModernAdapter = {
 export const createModernAdapter = (deps: ModernAdapterDeps): ModernAdapter => {
   const handler = createMcpHandler(() => buildLowLevelServer(deps), {
     legacy: 'reject',
-    keepAliveMs: deps.keepAliveMs ?? DEFAULT_KEEPALIVE_MS,
+    keepAliveMs: deps.keepAliveMs ?? KEEPALIVE_MS,
     bus: deps.bus ?? new InMemoryServerEventBus(),
     onerror: (error) =>
       deps.operationDeps.logger.debug('mcp handler error', { error: String(error) }),

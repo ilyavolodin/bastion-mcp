@@ -9,6 +9,7 @@ import {
 import { extractTraceContext, SPAN_NAMES } from '@bastion-mcp/telemetry';
 import { context, SpanKind, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api';
 import { type Clock, type Logger, noopLogger, systemClock } from '../ports';
+import { UPSTREAM_TIMEOUTS_MS } from '../timeouts';
 import type { UpstreamOutcome } from '../types';
 import {
   matchRoute,
@@ -273,7 +274,7 @@ export const createInternalRpcServer = (options: InternalRpcServerOptions) => {
     host = '0.0.0.0',
   ): Promise<{ port: number; close: () => Promise<void> }> => {
     const server = http.createServer(nodeHandler);
-    server.keepAliveTimeout = 60_000;
+    server.keepAliveTimeout = UPSTREAM_TIMEOUTS_MS.rpcKeepAlive;
     await new Promise<void>((resolve) => server.listen(port, host, resolve));
     return {
       port: (server.address() as AddressInfo).port,

@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 
 type Action = { label: string; href?: string; onClick?: () => void };
 
-const describe = (
+const describeProblem = (
   error: unknown,
 ): { title: string; detail: string; Icon: typeof CircleAlert; fields: string[] } => {
   if (error instanceof ApiError) {
@@ -43,7 +43,7 @@ const describe = (
 
 /** Inline problem+json display with the one next action (retry). */
 export function ProblemAlert({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
-  const { title, detail, Icon, fields } = describe(error);
+  const { title, detail, Icon, fields } = describeProblem(error);
   return (
     <div role="alert" className="flex items-start gap-3 rounded-lg bg-coral-soft p-4 text-ink">
       <Icon className="mt-0.5 size-5 shrink-0 text-coral-ink" aria-hidden="true" />
@@ -79,7 +79,7 @@ export function ProblemScreen({
   onRetry?: () => void;
   action?: Action | undefined;
 }) {
-  const d = describe(error);
+  const d = describeProblem(error);
   return (
     <main className="flex min-h-screen items-center justify-center bg-canvas p-6">
       <div className="flex max-w-md flex-col items-center gap-3 text-center">

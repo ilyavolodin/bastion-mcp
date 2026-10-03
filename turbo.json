@@ -1,19 +1,38 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["vitest.shared.ts", "tsconfig.base.json", "biome.json"],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "^generate", "generate"],
       "outputs": ["dist/**"]
     },
     "typecheck": {
       "dependsOn": ["^generate", "generate"]
     },
     "test": {
-      "dependsOn": ["^generate", "generate"]
+      "dependsOn": ["^generate", "generate"],
+      "env": ["FUZZ_RUNS", "BASTION_SKIP_DOCKER", "BASTION_TEST_IMAGE", "BASTION_PERF_STRICT"],
+      "passThroughEnv": [
+        "UPDATE_GOLDEN",
+        "API_TEST_LOG",
+        "BASTION_WEB_DIST",
+        "BASTION_TEST_KEYCHAIN",
+        "DOCKER_HOST",
+        "TESTCONTAINERS_*"
+      ]
     },
     "test:coverage": {
       "dependsOn": ["^generate", "generate"],
-      "outputs": ["coverage/**"]
+      "outputs": ["coverage/**"],
+      "env": ["FUZZ_RUNS", "BASTION_SKIP_DOCKER", "BASTION_TEST_IMAGE", "BASTION_PERF_STRICT"],
+      "passThroughEnv": [
+        "UPDATE_GOLDEN",
+        "API_TEST_LOG",
+        "BASTION_WEB_DIST",
+        "BASTION_TEST_KEYCHAIN",
+        "DOCKER_HOST",
+        "TESTCONTAINERS_*"
+      ]
     },
     "generate": {
       "outputs": ["src/generated/**"]

@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import { CHUNK_SIZES } from '../extract';
 import {
+  DEFAULT_JEV_TIMEOUT_MS,
   type FetchLike,
   type Guard,
   GuardError,
   type GuardInput,
   type GuardPhase,
+  MAX_GUARD_TIMEOUT_MS,
   type SecretResolver,
 } from '../types';
 import {
@@ -68,7 +70,12 @@ export const jevConfigSchema = z
         warn: z.number().min(0).max(1).default(0.4),
       })
       .default({ block: 0.85, quarantine: 0.6, warn: 0.4 }),
-    timeoutMs: z.number().int().positive().max(60_000).default(1500),
+    timeoutMs: z
+      .number()
+      .int()
+      .positive()
+      .max(MAX_GUARD_TIMEOUT_MS)
+      .default(DEFAULT_JEV_TIMEOUT_MS),
   })
   .refine(
     (c) =>

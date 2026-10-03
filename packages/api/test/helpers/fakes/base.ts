@@ -81,7 +81,13 @@ export const fakeTokens = () => ({
   },
 });
 
+/** The CSRF token the fake session store issued with session `sid`. */
+export const sessionCsrfToken = (sid: string): string => `csrf-of-${sid}`;
+
 export const fakeSessions = () => ({
+  async checkCsrf(sid: string, presented: string | undefined): Promise<boolean> {
+    return presented !== undefined && presented === sessionCsrfToken(sid);
+  },
   async authenticate(sid: string): Promise<Principal | null> {
     const actor = ACTORS.find((a) => a !== 'anonymous' && `sid-${a}` === sid);
     if (!actor || actor === 'anonymous') return null;

@@ -1,7 +1,8 @@
-import { redisKeys } from '@bastion-mcp/core';
+import { redisKeys, SECONDS } from '@bastion-mcp/core';
 import { BurstyRateLimiter, RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import { z } from 'zod';
 import { ACQUIRE_LUA } from './acquire-script';
+import { memoize } from './memoize';
 import { type PeriodWindow, periodWindow } from './period';
 import type { ConcurrencyRule, QuotaRule, RateRule, Rule } from './rules';
 import {
@@ -12,6 +13,7 @@ import {
   type RedisLike,
   type Usage,
 } from './types';
+import { concurrencyUsage, quotaUsage, rateUsage } from './usage';
 
 const AcquireReplySchema = z.tuple([z.number(), z.number()]);
 
@@ -41,46 +43,40 @@ export class RedisBackend implements LimiterBackend {
 
   private rateLimiter(rule: RateRule): RateCounter {
     const { points, perSeconds, burst } = rule.params;
-    const id = `${rule.id}:${points}:${perSeconds}:${burst}`;
-    let limiter = this.rateLimiters.get(id);
-    if (!limiter) {
+    return memoize(this.rateLimiters, `${rule.id}:${points}:${perSeconds}:${burst}`, () => {
       const sustained = new RateLimiterRedis({
         storeClient: this.redis,
         keyPrefix: '',
         points,
         duration: perSeconds,
       });
-      if (burst > 0) {
-        const burstLimiter = new RateLimiterRedis({
+      if (burst <= 0) return { sustained, consume: (k, n) => sustained.consume(k, n) };
+      const bursty = new BurstyRateLimiter(
+        sustained,
+        new RateLimiterRedis({
           storeClient: this.redis,
           keyPrefix: 'burst',
           points: burst,
           duration: perSeconds,
-        });
-        const bursty = new BurstyRateLimiter(sustained, burstLimiter);
-        limiter = { sustained, consume: (k, n) => bursty.consume(k, n) };
-      } else {
-        limiter = { sustained, consume: (k, n) => sustained.consume(k, n) };
-      }
-      this.rateLimiters.set(id, limiter);
-    }
-    return limiter;
+        }),
+      );
+      return { sustained, consume: (k, n) => bursty.consume(k, n) };
+    });
   }
 
   private quotaLimiter(rule: QuotaRule): RateLimiterRedis {
-    const id = `${rule.id}:${rule.params.points}`;
-    let limiter = this.quotaLimiters.get(id);
-    if (!limiter) {
-      limiter = new RateLimiterRedis({
-        storeClient: this.redis,
-        keyPrefix: '',
-        points: rule.params.points,
-        // Overridden per call with the exact seconds to the period end plus one day (14.2).
-        duration: 86_400,
-      });
-      this.quotaLimiters.set(id, limiter);
-    }
-    return limiter;
+    return memoize(
+      this.quotaLimiters,
+      `${rule.id}:${rule.params.points}`,
+      () =>
+        new RateLimiterRedis({
+          storeClient: this.redis,
+          keyPrefix: '',
+          points: rule.params.points,
+          // Overridden per call with the exact seconds to the period end plus one day (14.2).
+          duration: SECONDS.DAY,
+        }),
+    );
   }
 
   async acquire(
@@ -170,37 +166,17 @@ export class RedisBackend implements LimiterBackend {
     try {
       switch (rule.kind) {
         case 'rate': {
-          const res = await this.rateLimiter(rule).sustained.get(
+          const state = await this.rateLimiter(rule).sustained.get(
             redisKeys.rate(rule.id, subjectId),
           );
-          const limit = rule.params.points;
-          const consumed = Math.min(res?.consumedPoints ?? 0, limit);
-          return {
-            ruleId: rule.id,
-            kind: 'rate',
-            subjectId,
-            limit,
-            consumed,
-            remaining: limit - consumed,
-            resetsAt: res ? new Date(now.getTime() + res.msBeforeNext).toISOString() : null,
-          };
+          return rateUsage(rule, subjectId, rule.params.points, state, now);
         }
         case 'quota': {
           const window = periodWindow(rule.params.period, now, timeZone);
-          const res = await this.quotaLimiter(rule).get(
+          const state = await this.quotaLimiter(rule).get(
             redisKeys.quota(rule.id, subjectId, window.key),
           );
-          const limit = rule.params.points;
-          const consumed = Math.min(res?.consumedPoints ?? 0, limit);
-          return {
-            ruleId: rule.id,
-            kind: 'quota',
-            subjectId,
-            limit,
-            consumed,
-            remaining: limit - consumed,
-            resetsAt: window.resetsAt.toISOString(),
-          };
+          return quotaUsage(rule, subjectId, rule.params.points, state, window);
         }
         case 'concurrency': {
           const inFlight = await this.redis.zcount(
@@ -208,15 +184,7 @@ export class RedisBackend implements LimiterBackend {
             `(${now.getTime()}`,
             '+inf',
           );
-          return {
-            ruleId: rule.id,
-            kind: 'concurrency',
-            subjectId,
-            limit: rule.params.max,
-            consumed: inFlight,
-            remaining: Math.max(0, rule.params.max - inFlight),
-            resetsAt: null,
-          };
+          return concurrencyUsage(rule, subjectId, rule.params.max, inFlight);
         }
       }
     } catch (error) {

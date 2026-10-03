@@ -28,7 +28,12 @@ export type GuardType = (typeof GUARD_TYPES)[number];
 /** Guards that send content to a model (13.5): off by default, run in parallel under a budget. */
 export const MODEL_GUARD_TYPES: readonly string[] = ['classifier', 'jev', 'llmJudge'];
 
+/** Upper bound of every guard timeout and of the pipeline latency budget. */
+export const MAX_GUARD_TIMEOUT_MS = 60_000;
 export const DEFAULT_LATENCY_BUDGET_MS = 1500;
+export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 500;
+export const DEFAULT_JEV_TIMEOUT_MS = 1500;
+export const DEFAULT_JUDGE_TIMEOUT_MS = 3000;
 export const DEFAULT_MAX_SCAN_BYTES = 256 * 1024;
 
 export type PrincipalRef = { principalId: string; clientId?: string };
@@ -148,7 +153,12 @@ export type GuardInstanceInput = z.input<typeof guardInstanceSchema>;
 export const guardProfileSchema = z.object({
   profileId: z.string().min(1).optional(),
   guards: z.array(guardInstanceSchema),
-  latencyBudgetMs: z.number().int().min(1).max(60_000).default(DEFAULT_LATENCY_BUDGET_MS),
+  latencyBudgetMs: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_GUARD_TIMEOUT_MS)
+    .default(DEFAULT_LATENCY_BUDGET_MS),
   maxScanBytes: z.number().int().min(1).default(DEFAULT_MAX_SCAN_BYTES),
   onOversize: z.enum(['scanPrefix', 'block']).default('scanPrefix'),
   onDrift: z.enum(DRIFT_POLICIES).default('hideChanged'),

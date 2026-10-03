@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Prisma } from '../src/generated/client';
 import {
-  afterIdAsc,
-  afterIdDesc,
-  afterStringAsc,
+  afterKey,
   assertIfMatch,
   assertSwapped,
   bytesToHex,
@@ -102,15 +100,15 @@ describe('17.1 keyset pagination cursors', () => {
 
   it('builds keyset conditions for id and string orders', () => {
     const cursor = encodeCursor(['id1']);
-    expect(afterIdDesc(cursor)).toEqual({ id: { lt: 'id1' } });
-    expect(afterIdAsc(cursor)).toEqual({ id: { gt: 'id1' } });
-    expect(afterIdDesc(undefined)).toEqual({});
-    expect(afterIdAsc(undefined)).toEqual({});
-    expect(afterStringAsc('slug', encodeCursor(['b']))).toEqual({ slug: { gt: 'b' } });
-    expect(afterStringAsc('slug', undefined)).toEqual({});
-    expect(() => afterStringAsc('slug', encodeCursor([5]))).toThrow(InvalidCursorError);
-    expect(() => afterIdDesc(encodeCursor([5]))).toThrow(InvalidCursorError);
-    expect(() => afterIdAsc(encodeCursor([5]))).toThrow(InvalidCursorError);
+    expect(afterKey('id', 'desc', cursor)).toEqual({ id: { lt: 'id1' } });
+    expect(afterKey('id', 'asc', cursor)).toEqual({ id: { gt: 'id1' } });
+    expect(afterKey('id', 'desc', undefined)).toEqual({});
+    expect(afterKey('id', 'asc', undefined)).toEqual({});
+    expect(afterKey('slug', 'asc', encodeCursor(['b']))).toEqual({ slug: { gt: 'b' } });
+    expect(afterKey('slug', 'asc', undefined)).toEqual({});
+    expect(() => afterKey('slug', 'asc', encodeCursor([5]))).toThrow(InvalidCursorError);
+    expect(() => afterKey('id', 'desc', encodeCursor([5]))).toThrow(InvalidCursorError);
+    expect(() => afterKey('id', 'asc', encodeCursor([5]))).toThrow(InvalidCursorError);
   });
 });
 

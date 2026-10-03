@@ -1,17 +1,18 @@
 import { orgSettingsSchema } from '@bastion-mcp/core';
 import { guardProfileSchema } from '@bastion-mcp/guards';
 import { z } from 'zod';
+import { nameSchema } from './common';
 
 const profileBody = guardProfileSchema.omit({ profileId: true });
 
 export const guardProfileCreateSchema = profileBody.extend({
-  name: z.string().trim().min(1).max(200),
+  name: nameSchema,
   isOrgDefault: z.boolean().default(false),
 });
 
 export const guardProfilePatchSchema = z
   .object({
-    name: z.string().trim().min(1).max(200),
+    name: nameSchema,
     isOrgDefault: z.boolean(),
     guards: guardProfileSchema.shape.guards,
     latencyBudgetMs: guardProfileSchema.shape.latencyBudgetMs,

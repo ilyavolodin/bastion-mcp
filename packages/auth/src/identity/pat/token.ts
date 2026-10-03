@@ -1,5 +1,5 @@
-import { createHash, randomBytes } from 'node:crypto';
-import { TOKEN_PREFIXES } from '@bastion-mcp/core';
+import { randomBytes } from 'node:crypto';
+import { sha256Hex, TOKEN_PREFIXES } from '@bastion-mcp/core';
 
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 /** 32 random bytes encode to at most 43 base62 characters; shorter results are left-padded. */
@@ -23,7 +23,6 @@ export const generatePatToken = (random: (n: number) => Uint8Array = randomBytes
   `${TOKEN_PREFIXES.pat}${base62Encode(random(32), PAT_BODY_LENGTH)}`;
 
 /** Lowercase hex SHA-256 of the full token, the lookup key stored in `token_sha256` (9.3). */
-export const hashPatToken = (token: string): string =>
-  createHash('sha256').update(token).digest('hex');
+export const hashPatToken = (token: string): string => sha256Hex(token);
 
 export const looksLikePat = (token: string): boolean => token.startsWith(TOKEN_PREFIXES.pat);

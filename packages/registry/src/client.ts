@@ -1,6 +1,10 @@
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
-import { isAddressDenied, normalizeIpLiteral } from '@bastion-mcp/core';
+import {
+  isAddressDenied,
+  resolveAndCheckUrl,
+  UrlCheckError,
+  type UrlCheckReason,
+} from '@bastion-mcp/core';
+import { MAX_BODY_BYTES, readBodyCapped } from './body';
 import {
   RegistryInvalidResponseError,
   RegistryNotFoundError,
@@ -19,21 +23,27 @@ import {
 
 export const DEFAULT_PAGE_SIZE = 100;
 export const DEFAULT_TIMEOUT_MS = 20_000;
-const MAX_BODY_CHARS = 32 * 1024 * 1024;
+export const DEFAULT_RETRY_DELAY_MS = 750;
 const MAX_PAGES = 5_000;
 
 // --- Base URL guard (8.8, 11.6) ------------------------------------------------------------------------------------
 
 export type ResolveHost = (host: string) => Promise<string[]>;
 
-const defaultResolveHost: ResolveHost = async (host) =>
-  (await lookup(host, { all: true, verbatim: true })).map((r) => r.address);
-
 export type BaseUrlPolicy = {
   /** Private ranges an admin explicitly allows for self-hosted subregistries (`allowCidrs` of 8.8). */
   allowCidrs?: readonly string[];
   clusterCidrs?: readonly string[];
   resolveHost?: ResolveHost;
+};
+
+const DENIED_MESSAGES: Record<UrlCheckReason, string> = {
+  'invalid-url': 'registry base URL is not a valid URL',
+  scheme: 'registry base URL must use https',
+  credentials: 'registry base URL must not contain credentials',
+  insecure: 'registry base URL must use https',
+  unresolvable: 'registry host does not resolve',
+  'blocked-address': 'registry host resolves to a denied address',
 };
 
 /**
@@ -46,37 +56,25 @@ export const assertRegistryBaseUrl = async (
   raw: string,
   policy: BaseUrlPolicy = {},
 ): Promise<string> => {
-  let url: URL;
   try {
-    url = new URL(raw);
-  } catch {
-    throw new RegistryUrlDeniedError('registry base URL is not a valid URL');
+    const { url } = await resolveAndCheckUrl(raw, {
+      addressPolicy: {
+        ...(policy.allowCidrs ? { allowCidrs: policy.allowCidrs } : {}),
+        ...(policy.clusterCidrs ? { clusterCidrs: policy.clusterCidrs } : {}),
+      },
+      ...(policy.resolveHost ? { lookup: policy.resolveHost } : {}),
+      allowHttpAddresses: (addresses) => addresses.every((a) => isAddressDenied(a, {})),
+    });
+    if (url.search || url.hash) {
+      throw new RegistryUrlDeniedError('registry base URL must not contain a query or fragment');
+    }
+    return url.toString().replace(/\/+$/, '');
+  } catch (error) {
+    if (!(error instanceof UrlCheckError)) throw error;
+    // The thrown RegistryUrlDeniedError for query/fragment is raised in the try and passes through above.
+    const detail = error.reason === 'blocked-address' ? ` (${error.detail?.address})` : '';
+    throw new RegistryUrlDeniedError(`${DENIED_MESSAGES[error.reason]}${detail}`);
   }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new RegistryUrlDeniedError('registry base URL must use https');
-  }
-  if (url.username || url.password) {
-    throw new RegistryUrlDeniedError('registry base URL must not contain credentials');
-  }
-  if (url.search || url.hash) {
-    throw new RegistryUrlDeniedError('registry base URL must not contain a query or fragment');
-  }
-  const host = url.hostname.replace(/^\[|\]$/g, '');
-  const literal = isIP(host) ? host : normalizeIpLiteral(host);
-  const addresses = literal ? [literal] : await (policy.resolveHost ?? defaultResolveHost)(host);
-  if (addresses.length === 0) throw new RegistryUrlDeniedError('registry host does not resolve');
-  const addressPolicy = {
-    ...(policy.allowCidrs ? { allowCidrs: policy.allowCidrs } : {}),
-    ...(policy.clusterCidrs ? { clusterCidrs: policy.clusterCidrs } : {}),
-  };
-  const denied = addresses.find((a) => isAddressDenied(a, addressPolicy));
-  if (denied)
-    throw new RegistryUrlDeniedError(`registry host resolves to a denied address (${denied})`);
-  const isPublic = addresses.every((a) => !isAddressDenied(a, {}));
-  if (url.protocol === 'http:' && isPublic) {
-    throw new RegistryUrlDeniedError('registry base URL must use https');
-  }
-  return url.toString().replace(/\/+$/, '');
 };
 
 // --- Client ---------------------------------------------------------------------------------------------------------
@@ -94,6 +92,8 @@ export type RegistryClientOptions = {
    */
   retries?: number;
   retryDelayMs?: number;
+  /** Largest response body accepted, in bytes (default 32 MiB). */
+  maxBodyBytes?: number;
 };
 
 export type ListServersOptions = {
@@ -128,9 +128,10 @@ export const createRegistryClient = (options: RegistryClientOptions): RegistryCl
   const base = options.baseUrl.replace(/\/+$/, '');
   const fetchFn = options.fetch ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxBodyBytes = options.maxBodyBytes ?? MAX_BODY_BYTES;
 
   const retries = options.retries ?? 0;
-  const retryDelayMs = options.retryDelayMs ?? 750;
+  const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
 
   const getJson = async (path: string, signal?: AbortSignal): Promise<unknown> => {
     for (let attempt = 0; ; attempt += 1) {
@@ -174,12 +175,11 @@ export const createRegistryClient = (options: RegistryClientOptions): RegistryCl
     }
     let text: string;
     try {
-      text = await response.text();
+      text = await readBodyCapped(response, maxBodyBytes);
     } catch (error) {
+      if (error instanceof RegistryInvalidResponseError) throw error;
       throw new RegistryUnavailableError('registry response could not be read', { cause: error });
     }
-    if (text.length > MAX_BODY_CHARS)
-      throw new RegistryInvalidResponseError('registry response too large');
     try {
       return JSON.parse(text);
     } catch (error) {

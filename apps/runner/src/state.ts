@@ -1,4 +1,5 @@
 /** Runner state machine (8.3): unbound -> bound -> running -> bound. Pure. */
+import { STDIO_SUBPROTOCOL } from '@bastion-mcp/sandbox/protocol';
 
 export type RunnerState = 'unbound' | 'bound' | 'running';
 export type RunnerEvent = 'bind' | 'start' | 'stopped';
@@ -69,4 +70,33 @@ export const decideRequest = (
   return state === required
     ? { allow: true }
     : { allow: false, status: 409, reason: `runner state is ${state}, ${required} required` };
+};
+
+export type UpgradeDecision =
+  | { allow: true }
+  | { allow: false; status: 400 | 401 | 404 | 409; reason: string };
+
+/**
+ * Decides one WebSocket upgrade: the same gate as a `GET` (token, state `running`), then the path must be
+ * `/v1/stdio` and the client must offer the stdio subprotocol. `reason` is safe for an HTTP status line.
+ */
+export const decideUpgrade = (
+  state: RunnerState,
+  url: string,
+  headers: { 'sec-websocket-protocol'?: string | string[] | undefined },
+  authorized: boolean,
+): UpgradeDecision => {
+  const pathname = new URL(url, 'http://runner').pathname;
+  const decision = decideRequest(state, { method: 'GET', path: pathname }, authorized);
+  if (!decision.allow) {
+    return { ...decision, reason: decision.reason.replace(/[^ -~]/g, '') };
+  }
+  if (pathname !== '/v1/stdio') return { allow: false, status: 404, reason: 'Not Found' };
+  const offered = String(headers['sec-websocket-protocol'] ?? '')
+    .split(',')
+    .map((p) => p.trim());
+  if (!offered.includes(STDIO_SUBPROTOCOL)) {
+    return { allow: false, status: 400, reason: 'Bad Request' };
+  }
+  return { allow: true };
 };

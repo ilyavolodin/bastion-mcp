@@ -4,12 +4,15 @@ export type ListenTarget =
 
 export type RunnerArgs = { listen: ListenTarget; egress: { socketPath: string } | undefined };
 
+export const DEFAULT_LISTEN_HOST = '0.0.0.0';
+export const DEFAULT_LISTEN_PORT = 8080;
+
 const parseUnix = (value: string): string | undefined =>
   value.startsWith('unix:') ? value.slice(5) : undefined;
 
 /** Parses `--listen unix:<path>` (default `0.0.0.0:8080`) and `--egress unix:<path>` (8.3, 8.5). */
 export const parseArgs = (argv: readonly string[]): RunnerArgs => {
-  let listen: ListenTarget = { kind: 'tcp', host: '0.0.0.0', port: 8080 };
+  let listen: ListenTarget = { kind: 'tcp', host: DEFAULT_LISTEN_HOST, port: DEFAULT_LISTEN_PORT };
   let egress: RunnerArgs['egress'];
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];

@@ -3,7 +3,6 @@
  * because SDK bus events carry no audience and would reach every user's stream. The wire behavior mirrors the SDK's
  * own listen router: acknowledged-first, subscription-id stamping, SSE keepalive comments, graceful `complete`.
  */
-import type { ServerResponse } from 'node:http';
 import { JSONRPC_CODES } from '@bastion-mcp/core';
 import type { CallPrincipal } from '@bastion-mcp/mcp-upstream';
 import type { BastionMetrics } from '@bastion-mcp/telemetry';
@@ -13,10 +12,10 @@ import type { BastionRequestContext } from '../../context';
 import { notificationFor } from '../../notify-hub';
 import { type Logger, noopLogger, type UpstreamPort } from '../../ports';
 import type { Exchange, ListenAdapter, NotifyEvent, NotifyHubPort } from '../contracts';
+import { first, KEEPALIVE_MS, sendResponse, sseCommentFrame, sseMessageFrame } from '../shared';
 
 export const SUBSCRIPTION_ID_KEY = 'io.modelcontextprotocol/subscriptionId';
 const SERVER_INFO_KEY = 'io.modelcontextprotocol/serverInfo';
-export const DEFAULT_LISTEN_KEEPALIVE_MS = 25_000;
 export const DEFAULT_MAX_LISTEN_STREAMS = 1024;
 
 export type ListenAdapterDeps = {
@@ -51,17 +50,7 @@ const bodySchema = z.object({
   params: z.looseObject({ notifications: z.unknown().optional() }).optional(),
 });
 
-const headerValue = (v: string | string[] | undefined): string | undefined =>
-  Array.isArray(v) ? v[0] : v;
-
-const writeJson = (res: ServerResponse, status: number, payload: unknown): void => {
-  const text = JSON.stringify(payload);
-  res.writeHead(status, {
-    'content-type': 'application/json',
-    'content-length': Buffer.byteLength(text),
-  });
-  res.end(text);
-};
+const writeJson = sendResponse;
 
 const rpcError = (id: unknown, code: number, message: string, data?: unknown) => ({
   jsonrpc: '2.0',
@@ -79,7 +68,7 @@ type Stream = { close: (graceful: boolean) => void };
 
 export const createListenAdapter = (deps: ListenAdapterDeps): ListenAdapter => {
   const logger = deps.logger ?? noopLogger;
-  const keepAliveMs = deps.keepAliveMs ?? DEFAULT_LISTEN_KEEPALIVE_MS;
+  const keepAliveMs = deps.keepAliveMs ?? KEEPALIVE_MS;
   const maxStreams = deps.maxStreams ?? DEFAULT_MAX_LISTEN_STREAMS;
   const open = new Set<Stream>();
 
@@ -136,15 +125,15 @@ export const createListenAdapter = (deps: ListenAdapterDeps): ListenAdapter => {
     const bodyId = (body as { id?: unknown } | null)?.id;
     const classified = classifyInboundRequest({
       httpMethod: req.method ?? 'POST',
-      ...(headerValue(req.headers['mcp-protocol-version']) === undefined
+      ...(first(req.headers['mcp-protocol-version']) === undefined
         ? {}
-        : { protocolVersionHeader: headerValue(req.headers['mcp-protocol-version']) as string }),
-      ...(headerValue(req.headers['mcp-method']) === undefined
+        : { protocolVersionHeader: first(req.headers['mcp-protocol-version']) as string }),
+      ...(first(req.headers['mcp-method']) === undefined
         ? {}
-        : { mcpMethodHeader: headerValue(req.headers['mcp-method']) as string }),
-      ...(headerValue(req.headers['mcp-name']) === undefined
+        : { mcpMethodHeader: first(req.headers['mcp-method']) as string }),
+      ...(first(req.headers['mcp-name']) === undefined
         ? {}
-        : { mcpNameHeader: headerValue(req.headers['mcp-name']) as string }),
+        : { mcpNameHeader: first(req.headers['mcp-name']) as string }),
       body,
     });
     if (classified.kind === 'reject') {
@@ -160,7 +149,7 @@ export const createListenAdapter = (deps: ListenAdapterDeps): ListenAdapter => {
       classified.kind !== 'modern' ||
       classified.messageKind !== 'request' ||
       !parsed.success ||
-      headerValue(req.headers['mcp-method']) !== 'subscriptions/listen'
+      first(req.headers['mcp-method']) !== 'subscriptions/listen'
     ) {
       writeJson(
         res,
@@ -217,7 +206,7 @@ export const createListenAdapter = (deps: ListenAdapterDeps): ListenAdapter => {
       params: { ...params, _meta: { [SUBSCRIPTION_ID_KEY]: subscriptionId } },
     });
     const writeMessage = (message: unknown): void => {
-      writeFrame(`event: message\ndata: ${JSON.stringify(message)}\n\n`);
+      writeFrame(sseMessageFrame(message));
     };
 
     let unregister: (() => void) | undefined;
@@ -285,7 +274,7 @@ export const createListenAdapter = (deps: ListenAdapterDeps): ListenAdapter => {
         writeMessage(stamped(note.method, note.params));
       },
     );
-    timer = setInterval(() => writeFrame(': keepalive\n\n'), keepAliveMs);
+    timer = setInterval(() => writeFrame(sseCommentFrame('keepalive')), keepAliveMs);
     timer.unref();
     const onGone = (): void => stream.close(false);
     req.on('close', onGone);

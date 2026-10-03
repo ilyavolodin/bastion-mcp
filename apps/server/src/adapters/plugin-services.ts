@@ -37,8 +37,8 @@ export const createPluginServices = (infra: Infra): PluginServices => {
       const settings = await infra.repos.orgSettings.getAll();
       return settings.org.displayName;
     },
-  }) as unknown as MarketplaceStore;
-  const releases = infra.repos.releases as unknown as ReleaseStore;
+  });
+  const releases = infra.repos.releases;
   const releaseService = new ReleaseService({ host: baseUrl, marketplaces, releases });
   const repositories = new GitRepositoryCache({
     cacheDir: infra.config.gitCacheDir,

@@ -2,6 +2,7 @@
  * Settings and system: what the screens derive from the generated API types (`Schemas[...]`, `Res<...>`).
  * Nothing here restates a body; these are pure mappers between API rows and the values forms edit.
  */
+import { formatNumber } from '@/lib/format';
 import type { Body, Res, Schemas } from '../schema';
 
 export type OrgSettings = Res<'get', '/settings'>['settings'];
@@ -32,13 +33,12 @@ const num = (v: unknown): number => (typeof v === 'number' ? v : 0);
 /** `5,000 per day`, `60 per minute (burst 10)` or `8 at once`: the parameters of a rule in words. */
 export const describeLimit = (rule: LimitRule): string => {
   const p = rule.params;
-  if (rule.kind === 'quota')
-    return `${num(p.points).toLocaleString('en-US')} per ${String(p.period)}`;
-  if (rule.kind === 'concurrency') return `${num(p.max).toLocaleString('en-US')} at once`;
+  if (rule.kind === 'quota') return `${formatNumber(num(p.points))} per ${String(p.period)}`;
+  if (rule.kind === 'concurrency') return `${formatNumber(num(p.max))} at once`;
   const secs = num(p.perSeconds);
   const per = secs === 60 ? 'minute' : secs === 3600 ? 'hour' : secs === 1 ? 'second' : `${secs} s`;
   const burst = num(p.burst) > 0 ? ` (burst ${num(p.burst)})` : '';
-  return `${num(p.points).toLocaleString('en-US')} per ${per}${burst}`;
+  return `${formatNumber(num(p.points))} per ${per}${burst}`;
 };
 
 /** Who and what a rule covers: `Each user · github__*`. */
@@ -436,7 +436,8 @@ export const rollingOutReplicas = (replicas: SystemStatus['replicas']): Set<stri
   return new Set(replicas.filter((r) => r.version === newest).map((r) => r.id));
 };
 
-const compareVersions = (a: string, b: string): number => {
+/** Orders dotted versions numerically (`1.10.0` after `1.9.0`); a part that is not a number counts as 0. */
+export const compareVersions = (a: string, b: string): number => {
   const pa = a.split('.').map((n) => Number.parseInt(n, 10) || 0);
   const pb = b.split('.').map((n) => Number.parseInt(n, 10) || 0);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {

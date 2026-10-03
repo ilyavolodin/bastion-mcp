@@ -1,4 +1,11 @@
-import { type CALL_OUTCOMES, newId, type PRINCIPAL_TYPES } from '@bastion-mcp/core';
+import {
+  type CALL_OUTCOMES,
+  MS,
+  newId,
+  PARTITION_DAYS_AHEAD,
+  type PRINCIPAL_TYPES,
+  SECONDS,
+} from '@bastion-mcp/core';
 import { NIL_UUID } from '../config-version';
 import { Prisma } from '../generated/client';
 import {
@@ -34,7 +41,7 @@ export const withPartitionRetry = async <T>(
     return await fn();
   } catch (error) {
     if (!/no partition of relation/i.test(String(error))) throw error;
-    await ensurePartitions(db, table, 7);
+    await ensurePartitions(db, table, PARTITION_DAYS_AHEAD);
     return fn();
   }
 };
@@ -206,7 +213,11 @@ const callCursor = (cursor: string | undefined): { ts: Date; id: string } | unde
 
 export type StatsTier = 'minute' | 'hour' | 'day';
 
-const TIER_SECONDS: Record<StatsTier, number> = { minute: 60, hour: 3600, day: 86_400 };
+const TIER_SECONDS: Record<StatsTier, number> = {
+  minute: SECONDS.MINUTE,
+  hour: SECONDS.HOUR,
+  day: SECONDS.DAY,
+};
 const TIER_TABLE: Record<StatsTier, string> = {
   minute: 'call_stats_minute',
   hour: 'call_stats_hour',
@@ -218,15 +229,58 @@ const TIER_SOURCE: Record<Exclude<StatsTier, 'minute'>, StatsTier> = {
 };
 /** Rows are recomputed this far behind the newest rolled bucket so late call-log rows still land (15.5). */
 const DEFAULT_LOOKBACK_BUCKETS: Record<StatsTier, number> = { minute: 10, hour: 3, day: 2 };
-const MAX_CATCHUP_MS = 7 * 86_400_000;
+const MAX_CATCHUP_MS = 7 * MS.DAY;
 
 /** Minute 7 days, hour 90 days, day 2 years (15.5). */
 export const STATS_RETENTION_DAYS: Record<StatsTier, number> = { minute: 7, hour: 90, day: 730 };
 
 export type RollupResult = { tier: StatsTier; from: Date; to: Date; buckets: number };
 
-const floorTo = (d: Date, seconds: number): Date =>
-  new Date(Math.floor(d.getTime() / (seconds * 1000)) * seconds * 1000);
+export const floorTo = (d: Date, seconds: number): Date =>
+  new Date(Math.floor(d.getTime() / (seconds * MS.SECOND)) * seconds * MS.SECOND);
+
+/**
+ * The `[from, to)` span a rollup recomputes: from `lookback` buckets before the watermark (or the first source
+ * row when nothing is rolled yet; minutes never reach back past `MAX_CATCHUP_MS`) up to the last finished bucket.
+ * Null when there is nothing to roll.
+ */
+export const rollupWindow = (input: {
+  tier: StatsTier;
+  now: Date;
+  lookback: number;
+  watermark: Date | null;
+  firstSource: Date | null;
+}): { from: Date; to: Date } | null => {
+  const { tier, now, lookback } = input;
+  const seconds = TIER_SECONDS[tier];
+  const to = floorTo(now, seconds);
+  const earliest = new Date(now.getTime() - MAX_CATCHUP_MS);
+  let from: Date;
+  if (input.watermark) {
+    from = new Date(input.watermark.getTime() - lookback * seconds * MS.SECOND);
+  } else {
+    if (!input.firstSource) return null;
+    from = floorTo(input.firstSource, seconds);
+  }
+  from = floorTo(
+    from.getTime() < earliest.getTime() && tier === 'minute' ? earliest : from,
+    seconds,
+  );
+  return from.getTime() >= to.getTime() ? null : { from, to };
+};
+
+/** Column list shared by every `call_stats_*` insert. */
+const STATS_COLUMNS = Prisma.raw(
+  '(bucket, installation_id, catalog_entry_id, item_name, outcome, "count", error_count, bytes_out, latency_buckets)',
+);
+
+/** Idempotent recompute: the conflict clause shared by every `call_stats_*` insert. */
+const STATS_UPSERT = Prisma.raw(
+  `ON CONFLICT (bucket, installation_id, item_name, outcome) DO UPDATE SET
+        catalog_entry_id = EXCLUDED.catalog_entry_id, "count" = EXCLUDED."count",
+        error_count = EXCLUDED.error_count, bytes_out = EXCLUDED.bytes_out,
+        latency_buckets = EXCLUDED.latency_buckets`,
+);
 
 const tierBucketSql = (seconds: number, column: Prisma.Sql) =>
   Prisma.sql`to_timestamp(floor(extract(epoch FROM ${column}) / ${seconds}) * ${seconds})`;
@@ -271,9 +325,8 @@ const GROUP_COLUMNS = {
 export const chooseTier = (from: Date, to: Date, now: Date = new Date()): StatsTier => {
   const rangeMs = to.getTime() - from.getTime();
   const ageMs = now.getTime() - from.getTime();
-  const day = 86_400_000;
-  if (rangeMs <= 6 * 3_600_000 && ageMs <= STATS_RETENTION_DAYS.minute * day) return 'minute';
-  if (rangeMs <= 60 * day && ageMs <= STATS_RETENTION_DAYS.hour * day) return 'hour';
+  if (rangeMs <= 6 * MS.HOUR && ageMs <= STATS_RETENTION_DAYS.minute * MS.DAY) return 'minute';
+  if (rangeMs <= 60 * MS.DAY && ageMs <= STATS_RETENTION_DAYS.hour * MS.DAY) return 'hour';
   return 'day';
 };
 
@@ -313,30 +366,20 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
     now: Date,
     lookback: number,
   ): Promise<{ from: Date; to: Date } | null> => {
-    const seconds = TIER_SECONDS[tier];
-    const to = floorTo(now, seconds);
     const wm = await watermark(tier);
-    const earliest = new Date(now.getTime() - MAX_CATCHUP_MS);
-    let from: Date;
-    if (wm) {
-      from = new Date(wm.getTime() - lookback * seconds * 1000);
-    } else {
+    let firstSource: Date | null = null;
+    if (!wm) {
       const src = tier === 'minute' ? null : TIER_SOURCE[tier];
+      const earliest = new Date(now.getTime() - MAX_CATCHUP_MS);
       const rows =
         src === null
           ? await db.$queryRaw<{ min: Date | null }[]>`
               SELECT min(ts) AS min FROM call_log WHERE ts >= ${earliest}`
           : await db.$queryRaw<{ min: Date | null }[]>`
               SELECT min(bucket) AS min FROM ${Prisma.raw(TIER_TABLE[src])}`;
-      const first = rows[0]?.min;
-      if (!first) return null;
-      from = floorTo(first, seconds);
+      firstSource = rows[0]?.min ?? null;
     }
-    from = floorTo(
-      from.getTime() < earliest.getTime() && tier === 'minute' ? earliest : from,
-      seconds,
-    );
-    return from.getTime() >= to.getTime() ? null : { from, to };
+    return rollupWindow({ tier, now, lookback, watermark: wm, firstSource });
   };
 
   /**
@@ -374,7 +417,7 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
         FROM src GROUP BY bucket, installation_id, item_name, outcome, bi
       )
       INSERT INTO call_stats_minute
-        (bucket, installation_id, catalog_entry_id, item_name, outcome, "count", error_count, bytes_out, latency_buckets)
+        ${STATS_COLUMNS}
       SELECT a.bucket, a.installation_id, a.catalog_entry_id, a.item_name, a.outcome, a.cnt, a.error_count, a.bytes_out,
              ARRAY(
                SELECT COALESCE(h.c, 0)::int
@@ -383,10 +426,7 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
                  AND h.item_name = a.item_name AND h.outcome = a.outcome AND h.bi = g.bi
                ORDER BY g.bi)
       FROM agg a
-      ON CONFLICT (bucket, installation_id, item_name, outcome) DO UPDATE SET
-        catalog_entry_id = EXCLUDED.catalog_entry_id, "count" = EXCLUDED."count",
-        error_count = EXCLUDED.error_count, bytes_out = EXCLUDED.bytes_out,
-        latency_buckets = EXCLUDED.latency_buckets`;
+      ${STATS_UPSERT}`;
     return { tier: 'minute', ...win, buckets };
   };
 
@@ -417,7 +457,7 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
         GROUP BY s.hb, s.installation_id, s.item_name, s.outcome, u.ord
       )
       INSERT INTO ${dst}
-        (bucket, installation_id, catalog_entry_id, item_name, outcome, "count", error_count, bytes_out, latency_buckets)
+        ${STATS_COLUMNS}
       SELECT a.hb, a.installation_id, a.catalog_entry_id, a.item_name, a.outcome, a.cnt, a.error_count, a.bytes_out,
              ARRAY(
                SELECT COALESCE(h.v, 0)::int
@@ -426,10 +466,7 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
                  AND h.item_name = a.item_name AND h.outcome = a.outcome AND h.ord = g.ord
                ORDER BY g.ord)
       FROM agg a
-      ON CONFLICT (bucket, installation_id, item_name, outcome) DO UPDATE SET
-        catalog_entry_id = EXCLUDED.catalog_entry_id, "count" = EXCLUDED."count",
-        error_count = EXCLUDED.error_count, bytes_out = EXCLUDED.bytes_out,
-        latency_buckets = EXCLUDED.latency_buckets`;
+      ${STATS_UPSERT}`;
     return { tier, ...win, buckets };
   };
 
@@ -629,7 +666,7 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
       statsRows: Record<StatsTier, number>;
       partitions: Record<PartitionedTable, number>;
     }> {
-      const day = 86_400_000;
+      const day = MS.DAY;
       const statsRows: Record<StatsTier, number> = { minute: 0, hour: 0, day: 0 };
       statsRows.minute = (
         await db.callStatsMinute.deleteMany({
@@ -656,7 +693,7 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
     },
 
     /** Creates the daily partitions the scheduler keeps 7 days ahead (15.5). */
-    async ensurePartitionsAhead(daysAhead = 7): Promise<void> {
+    async ensurePartitionsAhead(daysAhead = PARTITION_DAYS_AHEAD): Promise<void> {
       for (const table of ['call_log', 'egress_events', 'distribution_events'] as const) {
         await ensurePartitions(db, table, daysAhead);
       }

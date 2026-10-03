@@ -6,10 +6,14 @@
  */
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type FakeModernServer, startFakeModernServer } from '@bastion-mcp/testkit';
+import {
+  type FakeIdp,
+  type FakeModernServer,
+  startFakeIdp,
+  startFakeModernServer,
+} from '@bastion-mcp/testkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestEnv, haveDocker, type TestEnv } from './helpers/env';
-import { type FakeIdp, startFakeIdp } from './helpers/fake-idp';
 import {
   api,
   connectWithOAuth,

@@ -233,7 +233,7 @@ export const putMirror = async (
 export const pushMirror = async (ctx: WriteCtx, id: string) => {
   const plugin = await requirePluginRow(ctx.deps, id);
   if (!plugin.mirror)
-    throw new ConflictApiError('no mirror is configured', 'mirror_not_configured');
+    throw new ConflictApiError('no mirror is configured', { code: 'mirror_not_configured' });
   const state = await ctx.deps.plugins.mirror.push(id, { force: true });
   await ctx.tx.audit({
     action: 'marketplace.mirror.push',
@@ -251,7 +251,8 @@ export const rollout = async (ctx: Pick<ReadCtx, 'deps'>, id: string, client: Ro
     client === 'claude-desktop-3p' && marketplace.promotedRelease !== null
       ? await ctx.deps.plugins.releases.get(id, marketplace.promotedRelease)
       : await ctx.deps.plugins.releases.latest(id);
-  if (!release) throw new ConflictApiError('the marketplace has no release yet', 'no_release');
+  if (!release)
+    throw new ConflictApiError('the marketplace has no release yet', { code: 'no_release' });
   return renderRollout(marketplace, release, client, {
     host: ctx.deps.plugins.host,
     ...(ctx.deps.plugins.credentialHelperPath

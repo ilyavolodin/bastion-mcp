@@ -1,4 +1,4 @@
-import { newId } from '@bastion-mcp/core';
+import { MS, newId } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { IdentityNotFoundError, IdentityValidationError } from '../errors';
 import {
@@ -12,7 +12,6 @@ import {
 import type { PrincipalType } from '../principal';
 import { generatePatToken, hashPatToken } from './token';
 
-const DAY_MS = 86_400_000;
 /** Default PAT lifetime (9.3, 22.5), further capped by the admin maximum. */
 export const DEFAULT_PAT_DAYS = 90;
 /** `offline_access` is never valid on a PAT (no refresh). */
@@ -77,7 +76,7 @@ export class PatService {
       tokenSha256: hashPatToken(token),
       scopes: [...new Set(parsed.data.scopes)],
       endpointId: parsed.data.endpointId ?? null,
-      expiresAt: new Date(now + days * DAY_MS),
+      expiresAt: new Date(now + days * MS.DAY),
       lastUsedAt: null,
       revokedAt: null,
       createdAt: new Date(now),
@@ -117,7 +116,7 @@ export class PatService {
    */
   async revokeAll(principalId: string): Promise<void> {
     const now = new Date(this.clock.now());
-    const at = Math.floor(now.getTime() / 1000);
+    const at = Math.floor(now.getTime() / MS.SECOND);
     await this.deps.revocations.setWatermark(principalId, at);
     const revoked = await this.deps.pats.revokeAllForPrincipal(principalId, now);
     for (const pat of revoked) {

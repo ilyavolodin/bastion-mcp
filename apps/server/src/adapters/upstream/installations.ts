@@ -1,8 +1,10 @@
+import { MS, TtlCache } from '@bastion-mcp/core';
 import type { InstallationRegistry, ResolvedInstallation } from '@bastion-mcp/mcp-upstream';
 import type { Infra } from '../../infra';
 import { watchConfig } from '../config-watch';
 
-const TTL_MS = 30_000;
+const TTL_MS = 30 * MS.SECOND;
+const MAX_CACHED = 10_000;
 
 /**
  * `InstallationRegistry` of mcp-upstream over `repos.installationRegistry` (port-matrix row), with a short cache
@@ -13,7 +15,11 @@ const TTL_MS = 30_000;
 export const createInstallationRegistry = (
   infra: Infra,
 ): InstallationRegistry & { watch(): () => void; invalidate(id?: string): void } => {
-  const cache = new Map<string, { at: number; value: ResolvedInstallation | null }>();
+  const cache = new TtlCache<string, ResolvedInstallation | null>({
+    ttlMs: TTL_MS,
+    max: MAX_CACHED,
+    clock: infra.clock,
+  });
   const registry = infra.repos.installationRegistry;
   if (!registry) throw new Error('installation registry is not configured (configHash missing)');
 
@@ -36,9 +42,9 @@ export const createInstallationRegistry = (
   return {
     async get(installationId) {
       const hit = cache.get(installationId);
-      if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
+      if (hit !== undefined) return hit;
       const value = await load(installationId);
-      cache.set(installationId, { at: Date.now(), value });
+      cache.set(installationId, value);
       return value;
     },
     invalidate(id) {

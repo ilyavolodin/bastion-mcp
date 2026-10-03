@@ -1,8 +1,9 @@
 import { Link } from '@tanstack/react-router';
 import { Lock, X } from 'lucide-react';
 import type * as React from 'react';
+import { avatarColor } from '@/lib/avatar';
 import { cn } from '@/lib/cn';
-import { avatarColor, initials } from '@/lib/format';
+import { initials } from '@/lib/format';
 import type { Tone } from './status';
 import { toneClasses } from './status';
 

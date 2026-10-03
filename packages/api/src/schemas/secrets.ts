@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { ownerScopeSchema } from './common';
 
-export const secretScopeSchema = z.enum(['org', 'team', 'user']);
+export const secretScopeSchema = ownerScopeSchema;
 
 export const secretNameSchema = z
   .string()

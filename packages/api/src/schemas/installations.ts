@@ -8,6 +8,7 @@ import {
 import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
 import { CLIENT_KINDS } from '../services/client-config';
+import { nameSchema, overrideKindSchema, ownerScopeSchema, prefixModeSchema } from './common';
 
 const atLeastOne = (v: object) => Object.keys(v).length > 0;
 const slug = z.string().min(2).max(40);
@@ -26,7 +27,7 @@ export const installationCreateSchema = z
     /** Required when `ownerType` is `team`. */
     teamId: z.string().min(1).optional(),
     slug: slug.optional(),
-    displayName: z.string().trim().min(1).max(200).optional(),
+    displayName: nameSchema.optional(),
     toolPrefix: z.string().min(1).max(40).optional(),
     variables: variables.default({}),
     pinnedVersion: z.boolean().default(false),
@@ -45,7 +46,7 @@ export const installationCreateSchema = z
 
 export const installationPatchSchema = z
   .object({
-    displayName: z.string().trim().min(1).max(200),
+    displayName: nameSchema,
     enabled: z.boolean(),
     toolPrefix: z.string().min(1).max(40),
     variables,
@@ -67,7 +68,7 @@ export const secretNameParams = z.object({
 export const secretPutSchema = z.object({ value: z.string().min(1).max(65_536) });
 export const secretMetaSchema = z.object({
   name: z.string(),
-  scope: z.enum(['org', 'team', 'user']),
+  scope: ownerScopeSchema,
   version: z.number().int(),
   updatedAt: z.string(),
 });
@@ -117,7 +118,7 @@ const definitionItem = z.looseObject({
 
 /** What the override engine decided for one item (7.3, 12). */
 const definitionMeta = z.looseObject({
-  kind: z.enum(['tool', 'prompt', 'resource', 'resourceTemplate']),
+  kind: overrideKindSchema,
   installationId: z.string(),
   upstreamKey: z.string(),
   finalKey: z.string(),
@@ -144,17 +145,17 @@ export const definitionsSchema = z
 
 export const endpointCreateSchema = z.object({
   slug,
-  displayName: z.string().trim().min(1).max(200),
+  displayName: nameSchema,
   installationIds: z.array(z.string().min(1)).max(50).default([]),
-  prefixMode: z.enum(['always', 'onCollision']).default('always'),
+  prefixMode: prefixModeSchema.default('always'),
   instructions: z.string().max(8000).optional(),
 });
 export const endpointPatchSchema = z
   .object({
     slug,
-    displayName: z.string().trim().min(1).max(200),
+    displayName: nameSchema,
     installationIds: z.array(z.string().min(1)).max(50),
-    prefixMode: z.enum(['always', 'onCollision']),
+    prefixMode: prefixModeSchema,
     instructions: z.string().max(8000).nullable(),
   })
   .partial()
@@ -210,7 +211,6 @@ export const previewBodySchema = z
   .refine((v) => v.installationId !== undefined || v.upstream !== undefined, {
     message: 'give installationId or upstream',
   });
-const overrideKind = z.enum(['tool', 'prompt', 'resource', 'resourceTemplate']);
 const overrideIssue = z.object({
   code: z.string(),
   message: z.string(),
@@ -219,7 +219,7 @@ const overrideIssue = z.object({
 
 /** What the override engine decided for one item, with the JSON-pointer changes against upstream (12.5). */
 const itemDiff = z.object({
-  kind: overrideKind,
+  kind: overrideKindSchema,
   key: z.string(),
   status: z.enum(['unchanged', 'modified', 'hidden', 'invalid']),
   /** Written in the override document and served by Bastion itself (12.2). */
@@ -246,8 +246,8 @@ export const previewResultSchema = z
       resourceTemplates: z.array(
         z.looseObject({ upstreamTemplate: z.string(), template: z.looseObject({}) }),
       ),
-      hidden: z.array(z.object({ kind: overrideKind, key: z.string() })),
-      invalid: z.array(z.object({ kind: overrideKind, key: z.string(), error: z.string() })),
+      hidden: z.array(z.object({ kind: overrideKindSchema, key: z.string() })),
+      invalid: z.array(z.object({ kind: overrideKindSchema, key: z.string(), error: z.string() })),
     }),
     diff: z.array(itemDiff),
     instructions: z

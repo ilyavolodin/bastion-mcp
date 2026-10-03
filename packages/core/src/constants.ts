@@ -170,6 +170,8 @@ export const redisKeys = {
   egress: (instanceId: string) => `egress:${instanceId}`,
   inflight: (instanceId: string) => `inflight:${instanceId}`,
   idempotency: (principalId: string, key: string) => `idem:${principalId}:${key}`,
+  upstreamStepUp: (principalId: string, installationId: string) =>
+    `ups:stepup:${principalId}:${installationId}`,
 } as const;
 
 export const REDIS_CHANNELS = {
@@ -222,3 +224,46 @@ export const PLUGIN_LIMITS = {
   maxFiles: 2000,
   maxFileBytes: 5 * 1024 * 1024,
 } as const;
+
+/** Duration units in milliseconds; use instead of re-deriving `60 * 60 * 1000`. */
+export const MS = {
+  SECOND: 1_000,
+  MINUTE: 60_000,
+  HOUR: 3_600_000,
+  DAY: 86_400_000,
+  WEEK: 604_800_000,
+} as const;
+
+/** Duration units in seconds. */
+export const SECONDS = { MINUTE: 60, HOUR: 3_600, DAY: 86_400, WEEK: 604_800 } as const;
+
+/** Client id of the first-party web UI. */
+export const UI_CLIENT_ID = 'bastion-ui';
+
+/** Auth methods a service account may use at the token endpoint. */
+export const AUTH_METHODS = ['client_secret_basic', 'private_key_jwt'] as const;
+export type AuthMethod = (typeof AUTH_METHODS)[number];
+
+/** Custom HTTP header names. */
+export const HEADERS = {
+  release: 'x-bastion-release',
+  signature: 'x-bastion-signature',
+  csrf: 'x-bastion-csrf',
+  dropped: 'x-bastion-dropped',
+} as const;
+
+/** Daily partitions kept ahead of today for call_log, egress_events and distribution_events (15.5). */
+export const PARTITION_DAYS_AHEAD = 7;
+
+/** `origin` of the hidden installations the catalog TEST flow creates (11.3). */
+export const TEST_ORIGIN = 'test';
+
+/** Name Bastion reports as `serverInfo.name` and uses for its own hosted items. */
+export const SERVER_NAME = 'bastion';
+
+/** Methods whose result may be `input_required` and that stream on the 2025 transport (6.5). */
+export const CONTINUABLE_METHODS: ReadonlySet<string> = new Set([
+  'tools/call',
+  'prompts/get',
+  'resources/read',
+]);

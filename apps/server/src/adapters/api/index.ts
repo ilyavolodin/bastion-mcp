@@ -3,7 +3,7 @@
  * domain ports of the catalog, installation, plugin and registry areas.
  */
 import type { ApiDeps } from '@bastion-mcp/api';
-import { newId } from '@bastion-mcp/core';
+import { dateClock, newId } from '@bastion-mcp/core';
 import type {
   AuthServices,
   GuardService,
@@ -73,10 +73,13 @@ export const buildApiDeps = async (
     installations: createInstallationApiPorts(infra, auth, { worker, policy, access }),
     registry: createRegistryApiPorts(infra),
     guards: createGuardApiPorts(infra, guards),
-    observability: { calls: createCallReader(obs), audit: createAuditReader(obs) },
+    observability: {
+      calls: createCallReader({ ...obs, clock: infra.clock }),
+      audit: createAuditReader(obs),
+    },
     plugins: createPluginApiPorts(infra),
     limits: limits.limiter,
-    clock: { now: () => new Date() },
+    clock: dateClock(infra.clock),
     newId,
   };
   return { deps, events, close: () => events.close() };

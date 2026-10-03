@@ -173,3 +173,23 @@ describe('9.2 cookies and CSRF', () => {
     for (const m of ['GET', 'HEAD', 'OPTIONS']) expect(isStateChanging(m)).toBe(false);
   });
 });
+
+describe('9.2 CSRF bound to the session', () => {
+  it('9.2 accepts the token issued with the session and rejects any other', async () => {
+    const { sessions } = setup();
+    const a = await sessions.create({ principalId: 'u1' });
+    const b = await sessions.create({ principalId: 'u1' });
+    expect(await sessions.checkCsrf(a.id, a.csrfToken)).toBe(true);
+    expect(await sessions.checkCsrf(a.id, b.csrfToken)).toBe(false);
+    expect(await sessions.checkCsrf(a.id, undefined)).toBe(false);
+    expect(await sessions.checkCsrf(a.id, '')).toBe(false);
+    expect(await sessions.checkCsrf('not-a-session', a.csrfToken)).toBe(false);
+  });
+
+  it('9.2 stores only a hash of the token server side', async () => {
+    const { sessions, redis } = setup();
+    const s = await sessions.create({ principalId: 'u1' });
+    const stored = JSON.stringify(redis.hashes.get(`uisess:${s.id}`));
+    expect(stored).not.toContain(s.csrfToken);
+  });
+});

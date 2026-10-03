@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -13,14 +16,8 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm db:generate
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
       - name: Lint (Biome)
         run: pnpm lint
       - name: Typecheck
@@ -31,10 +28,43 @@ jobs:
         run: pnpm test:coverage
       - name: Tooling tests
         run: pnpm test:scripts
-      - name: MUST coverage (23.5)
+      # Report only: sections with a MUST but no citing test are listed, never failing the build. `--strict` is
+      # not turned on yet (sections 1, 2, 22.4 and 23.5 still have no test titled with their number).
+      - name: MUST coverage report (23.5, report-only)
         run: pnpm must-coverage
       - name: Load harness tests (standalone deps)
         working-directory: packages/testkit/load
         run: pnpm install --ignore-workspace --frozen-lockfile
       - name: Load harness tests
         run: pnpm exec vitest run --root packages/testkit/load
+
+  # Same validation release.yml runs before publishing the chart, but only when the chart or its tooling changed.
+  helm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Did the chart change?
+        id: changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BASE" "$GITHUB_SHA" -- deploy/helm .github/workflows/ci.yml | grep -q .; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changes.outputs.run == 'true'
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - if: steps.changes.outputs.run == 'true'
+        uses: ./.github/actions/setup
+        with:
+          generate: "false"
+      - name: Validate the chart (lint, template, assertions, kubeconform with agent-sandbox CRDs)
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          deploy/helm/install-kubeconform.sh
+          deploy/helm/validate.sh

@@ -6,6 +6,7 @@
 import { ConfigError } from '@bastion-mcp/core';
 import { isCliCommand, runCli } from './cli';
 import { startServer } from './server';
+import { HARD_KILL_MS } from './timing';
 
 const main = async (): Promise<void> => {
   const argv = process.argv.slice(2);
@@ -30,8 +31,8 @@ const main = async (): Promise<void> => {
     if (signalled) return;
     signalled = true;
     server.infra.logger.info({ signal }, 'signal received');
-    // Hard stop after the drain budget plus slack (21.2 allows 25 s of in-flight work).
-    const hard = setTimeout(() => process.exit(1), 35_000);
+    // Hard stop after the drain budget plus slack (21.2).
+    const hard = setTimeout(() => process.exit(1), HARD_KILL_MS);
     hard.unref();
     server
       .stop()

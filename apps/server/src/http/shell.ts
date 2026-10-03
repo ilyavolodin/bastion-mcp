@@ -10,6 +10,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
+import { IMMUTABLE_CACHE_CONTROL, IMMUTABLE_MAX_AGE_SECONDS } from '../timing';
 
 /** Path prefixes owned by something other than the SPA: unknown paths below them answer 404, never index.html. */
 const API_PREFIXES = [
@@ -39,7 +40,6 @@ export const resolvePublicDir = (override?: string): string | undefined => {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     override,
-    process.env.BASTION_PUBLIC_DIR,
     join(here, '..', 'public'),
     join(here, '..', '..', 'public'),
     join(process.cwd(), 'public'),
@@ -86,7 +86,7 @@ export const registerSecurityHeaders = async (
   await app.register(helmet, {
     global: true,
     contentSecurityPolicy: { useDefaults: false, directives: CSP_DIRECTIVES },
-    hsts: { maxAge: 31_536_000, includeSubDomains: true },
+    hsts: { maxAge: IMMUTABLE_MAX_AGE_SECONDS, includeSubDomains: true },
     frameguard: { action: 'deny' },
     crossOriginEmbedderPolicy: false,
     referrerPolicy: { policy: 'no-referrer' },
@@ -147,7 +147,7 @@ export const registerSpa = async (
     setHeaders: (res, path) => {
       // Fingerprinted assets are immutable; the shell must always be revalidated.
       if (path.includes(`${join(root, 'assets')}`)) {
-        res.header('cache-control', 'public, max-age=31536000, immutable');
+        res.header('cache-control', IMMUTABLE_CACHE_CONTROL);
       } else if (path.endsWith('index.html')) {
         res.header('cache-control', 'no-cache');
       }

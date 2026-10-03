@@ -1,7 +1,7 @@
 /** Browser login (9.1, 9.2): IdP login and callback, break-glass local login, forgot-password page, logout. */
 import {
-  assertCsrf,
   CSRF_HEADER,
+  checkCsrf,
   clearSessionCookies,
   IdpClaimError,
   IdpLoginError,
@@ -375,12 +375,14 @@ export const registerLoginRoutes = async (
 
     // --- /auth/logout (SPA: header double submit) --------------------------------------------------------------
     scope.post('/auth/logout', async (req, reply) => {
-      try {
-        assertCsrf(req.headers.cookie, req.headers[CSRF_HEADER] as string | undefined);
-      } catch {
+      const sid = cookieValue(req, SESSION_COOKIE);
+      const presented = req.headers[CSRF_HEADER] as string | undefined;
+      if (
+        !checkCsrf(req.headers.cookie, presented) ||
+        (sid && !(await auth.sessions.checkCsrf(sid, presented)))
+      ) {
         return reply.code(403).send({ error: 'csrf' });
       }
-      const sid = cookieValue(req, SESSION_COOKIE);
       if (sid) await auth.sessions.destroy(sid);
       for (const cookie of clearSessionCookies({ secure })) addCookie(reply, cookie);
       return reply.code(204).send();

@@ -10,7 +10,7 @@
  * The same validation the SDK ladder performs applies: `Mcp-Method` and `Mcp-Name` against the body, the protocol
  * version header against the `_meta` envelope, the envelope itself.
  */
-import { PROTOCOL_VERSIONS } from '@bastion-mcp/core';
+import { isRecord, JSONRPC_CODES } from '@bastion-mcp/core';
 import { TASKS_EXTENSION } from '@bastion-mcp/mcp-upstream';
 import {
   CLIENT_CAPABILITIES_META_KEY,
@@ -18,10 +18,10 @@ import {
   PROTOCOL_VERSION_META_KEY,
 } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { isRecord } from '../../operations/support';
-import { toRpcErrorBody } from '../../rpc';
+import { TRANSPORT_CODES, toRpcErrorBody } from '../../rpc';
 import type { JsonObject, OpOutcome } from '../../types';
 import type { Exchange, OpRunner } from '../contracts';
+import { first, inputRequiredPayload, isModernVersion, sseMessageFrame } from '../shared';
 import { modernOpContext } from './server';
 
 export const TASK_METHODS: ReadonlySet<string> = new Set([
@@ -47,9 +47,6 @@ const requestSchema = z.looseObject({
   }),
 });
 
-const header = (value: string | string[] | undefined): string | undefined =>
-  Array.isArray(value) ? value[0] : value;
-
 const declaresTasks = (caps: unknown): boolean => {
   const extensions = isRecord(caps) ? caps.extensions : undefined;
   return isRecord(extensions) && TASKS_EXTENSION in extensions;
@@ -57,14 +54,12 @@ const declaresTasks = (caps: unknown): boolean => {
 
 /** True when this exchange is served here (decided from the `Mcp-Method` header and the declared extensions). */
 export const isDirectExchange = (exchange: Exchange): boolean => {
-  const method = header(exchange.req.headers['mcp-method']) ?? '';
+  const method = first(exchange.req.headers['mcp-method']) ?? '';
   if (TASK_METHODS.has(method)) return true;
   if (method !== 'tools/call') return false;
   const meta = exchange.rc.meta;
   return declaresTasks(meta?.[CLIENT_CAPABILITIES_META_KEY]);
 };
-
-const frame = (message: unknown): string => `event: message\ndata: ${JSON.stringify(message)}\n\n`;
 
 /** One JSON response, upgraded to an SSE stream when the operation emits notifications before it ends. */
 class Writer {
@@ -82,14 +77,14 @@ class Writer {
         connection: 'keep-alive',
       });
     }
-    res.write(frame({ jsonrpc: '2.0', method, ...(params ? { params } : {}) }));
+    res.write(sseMessageFrame({ jsonrpc: '2.0', method, ...(params ? { params } : {}) }));
   }
 
   finish(status: number, body: unknown): void {
     const { res } = this.exchange;
     if (res.writableEnded || res.destroyed) return;
     if (this.sse) {
-      res.write(frame(body));
+      res.write(sseMessageFrame(body));
       res.end();
       return;
     }
@@ -122,14 +117,7 @@ const toResult = (outcome: OpOutcome<unknown>, serverInfo: JsonObject): JsonObje
     case 'task':
       return withEnvelope(outcome.task, serverInfo, 'task');
     case 'input_required':
-      return withEnvelope(
-        {
-          ...(outcome.inputRequests === undefined ? {} : { inputRequests: outcome.inputRequests }),
-          requestState: outcome.requestState,
-        },
-        serverInfo,
-        'input_required',
-      );
+      return withEnvelope(inputRequiredPayload(outcome), serverInfo, 'input_required');
   }
 };
 
@@ -149,30 +137,41 @@ export const createDirectHandler = (deps: { run: OpRunner }) => ({
         error: { code, message, ...(data ? { data } : {}) },
       });
     const parsed = requestSchema.safeParse(exchange.body);
-    if (!parsed.success) return fail(null, 400, -32600, 'Invalid Request');
+    if (!parsed.success) return fail(null, 400, JSONRPC_CODES.INVALID_REQUEST, 'Invalid Request');
     const { id, method, params } = parsed.data;
     const headers = exchange.req.headers;
     const isTask = TASK_METHODS.has(method);
     const target = isTask ? params.taskId : params.name;
     if (target === undefined)
-      return fail(id, 400, -32602, `Invalid params: ${isTask ? 'taskId' : 'name'} is required`);
+      return fail(
+        id,
+        400,
+        JSONRPC_CODES.INVALID_PARAMS,
+        `Invalid params: ${isTask ? 'taskId' : 'name'} is required`,
+      );
     const mismatch = (headerValue: string | undefined, body: string) =>
-      fail(id, 400, -32020, 'Bad Request: the request headers and body disagree', {
-        mismatch: { header: headerValue ?? '(missing)', body },
-      });
-    if (header(headers['mcp-method']) !== method)
-      return mismatch(header(headers['mcp-method']), method);
-    if (header(headers['mcp-name']) !== target)
-      return mismatch(header(headers['mcp-name']), target);
+      fail(
+        id,
+        400,
+        TRANSPORT_CODES.headerMismatch,
+        'Bad Request: the request headers and body disagree',
+        {
+          mismatch: { header: headerValue ?? '(missing)', body },
+        },
+      );
+    if (first(headers['mcp-method']) !== method)
+      return mismatch(first(headers['mcp-method']), method);
+    if (first(headers['mcp-name']) !== target) return mismatch(first(headers['mcp-name']), target);
     const envelope = envelopeSchema.safeParse(params._meta);
-    if (!envelope.success) return fail(id, 400, -32602, 'Invalid params: _meta envelope');
-    const version = header(headers['mcp-protocol-version']);
+    if (!envelope.success)
+      return fail(id, 400, JSONRPC_CODES.INVALID_PARAMS, 'Invalid params: _meta envelope');
+    const version = first(headers['mcp-protocol-version']);
     const claimed = envelope.data[PROTOCOL_VERSION_META_KEY];
-    if (version !== claimed || !(PROTOCOL_VERSIONS.modern as readonly string[]).includes(claimed)) {
+    if (version !== claimed || !isModernVersion(claimed)) {
       return mismatch(version, claimed);
     }
     if (isTask && !declaresTasks(envelope.data[CLIENT_CAPABILITIES_META_KEY])) {
-      return fail(id, 404, -32601, 'Method not found');
+      return fail(id, 404, JSONRPC_CODES.METHOD_NOT_FOUND, 'Method not found');
     }
     const { _meta, ...rest } = params;
     const controller = new AbortController();

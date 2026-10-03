@@ -1,4 +1,4 @@
-import { GuardBlockedError, META_KEYS } from '@bastion-mcp/core';
+import { GuardBlockedError, META_KEYS, MS, TtlCache } from '@bastion-mcp/core';
 import picomatch from 'picomatch';
 import { mostSevere, resolveAction } from './actions';
 import { limitSegmentsToBytes, maskSegments, totalTextBytes } from './extract';
@@ -12,6 +12,7 @@ import {
 } from './risk';
 import {
   type Clock,
+  DEFAULT_LATENCY_BUDGET_MS,
   type FindingCategory,
   type GuardAction,
   GuardError,
@@ -101,6 +102,8 @@ export type AsyncGuardResult = {
 export type PipelineDeps = {
   guards: readonly RegisteredGuard[];
   clock: Clock;
+  /** Monotonic milliseconds for latency records; defaults to `performance.now`. */
+  timer?: () => number;
   metrics?: Metrics;
   riskStore?: RiskStore;
   /** Called after the response has been sent, with the findings of `async` guards (13.1). */
@@ -145,7 +148,7 @@ export const mergeProfiles = (layers: ProfileLayers): EffectiveProfile => {
   const enabled = ordered.filter((p) => p.riskEscalation.enabled);
   return {
     guards,
-    latencyBudgetMs: Math.min(...ordered.map((p) => p.latencyBudgetMs), 1500),
+    latencyBudgetMs: Math.min(...ordered.map((p) => p.latencyBudgetMs), DEFAULT_LATENCY_BUDGET_MS),
     maxScanBytes: Math.min(...ordered.map((p) => p.maxScanBytes), Number.MAX_SAFE_INTEGER),
     onOversize: ordered.some((p) => p.onOversize === 'block') ? 'block' : 'scanPrefix',
     riskEscalation: {
@@ -164,19 +167,26 @@ const costRank = (type: string): number => {
   return i < 0 ? COST_ORDER.length : i;
 };
 
-const matcherCache = new Map<string, (s: string) => boolean>();
-const globMatcher = (globs: readonly string[], nocase = false): ((s: string) => boolean) => {
-  const key = `${nocase ? 'i' : 's'}:${globs.join('\u0000')}`;
-  let m = matcherCache.get(key);
-  if (m === undefined) {
-    m = picomatch([...globs], { nocase, dot: true });
-    if (matcherCache.size > 1024) matcherCache.clear();
-    matcherCache.set(key, m);
-  }
-  return m;
-};
+const MATCHER_CACHE_MAX = 1024;
 
-const appliesTo = (g: GuardInstance, input: PipelineInput): boolean => {
+type Matcher = (s: string) => boolean;
+
+/** Compiled glob matchers, bounded and owned by one pipeline. */
+class MatcherCache {
+  private readonly cache = new TtlCache<string, Matcher>({ ttlMs: MS.DAY, max: MATCHER_CACHE_MAX });
+
+  get(globs: readonly string[], nocase = false): Matcher {
+    const key = `${nocase ? 'i' : 's'}:${globs.join('\u0000')}`;
+    let m = this.cache.get(key);
+    if (m === undefined) {
+      m = picomatch([...globs], { nocase, dot: true });
+      this.cache.set(key, m);
+    }
+    return m;
+  }
+}
+
+const appliesTo = (g: GuardInstance, input: PipelineInput, matchers: MatcherCache): boolean => {
   if (!g.enabled) return false;
   const f = g.filters;
   if (f.phases !== undefined && !f.phases.includes(input.phase)) return false;
@@ -187,11 +197,9 @@ const appliesTo = (g: GuardInstance, input: PipelineInput): boolean => {
   ) {
     return false;
   }
-  if (f.tools !== undefined && !globMatcher(f.tools)(input.item.name)) return false;
+  if (f.tools !== undefined && !matchers.get(f.tools)(input.item.name)) return false;
   return true;
 };
-
-const now = (): number => performance.now();
 
 const errorFinding = (g: GuardInstance, error: unknown): GuardFinding => {
   const reason =
@@ -216,12 +224,80 @@ const INJECTION_CATEGORIES: readonly (FindingCategory | undefined)[] = [
 
 type InstanceOutcome = { resolved: ResolvedFinding[]; record: GuardResultRecord };
 
+/** The result of the oversize check (13.3): a block finding, or the prefix model guards will see. */
+type OversizeOutcome = {
+  finding?: ResolvedFinding;
+  segments?: GuardInput['segments'];
+  truncated: boolean;
+};
+
+/** Pure: decides what happens when the text is over `maxScanBytes`; `undefined` when it fits. */
+export const oversizeOutcome = (
+  segments: GuardInput['segments'],
+  profile: Pick<EffectiveProfile, 'maxScanBytes' | 'onOversize'>,
+): OversizeOutcome | undefined => {
+  if (totalTextBytes(segments) <= profile.maxScanBytes) return undefined;
+  if (profile.onOversize === 'block') {
+    return {
+      truncated: false,
+      finding: {
+        guard: 'pipeline',
+        type: 'pipeline',
+        action: 'block',
+        finding: {
+          verdict: 'malicious',
+          label: 'max-scan-bytes',
+          ruleId: 'max-scan-bytes',
+          action: 'block',
+          category: 'policy',
+          reason: `content exceeds maxScanBytes (${profile.maxScanBytes})`,
+        },
+      },
+    };
+  }
+  const limited = limitSegmentsToBytes(segments, profile.maxScanBytes);
+  return { truncated: limited.truncated, segments: limited.segments };
+};
+
+/** Pure: the session-risk finding when the score warrants escalating this request (13.7). */
+export const escalationFinding = (
+  input: PipelineInput,
+  esc: EffectiveProfile['riskEscalation'],
+  score: number,
+): ResolvedFinding | undefined => {
+  if (
+    !esc.enabled ||
+    input.phase !== 'request' ||
+    !isEscalationTarget(input.item) ||
+    score < esc.threshold
+  ) {
+    return undefined;
+  }
+  return {
+    guard: 'session-risk',
+    type: 'session-risk',
+    action: esc.action,
+    finding: {
+      verdict: 'suspicious',
+      label: 'session-risk',
+      ruleId: 'session-risk',
+      action: esc.action,
+      category: 'policy',
+      score,
+      reason: `session risk score ${score.toFixed(1)} is at or above ${esc.threshold}`,
+    },
+  };
+};
+
 export class GuardPipeline {
   private readonly byType: Map<string, RegisteredGuard>;
   private readonly parsedConfigs = new WeakMap<object, unknown>();
+  private readonly matchers = new MatcherCache();
+  private readonly now: () => number;
 
   constructor(private readonly deps: PipelineDeps) {
     this.byType = new Map(deps.guards.map((g) => [g.type, g]));
+    this.now = deps.timer ?? (() => performance.now());
   }
 
   /**
@@ -235,7 +311,7 @@ export class GuardPipeline {
   ): Promise<GuardRunResult> {
     const profile = mergeProfiles(layers);
     const applicable = profile.guards
-      .filter((g) => appliesTo(g, input))
+      .filter((g) => appliesTo(g, input, this.matchers))
       .sort((a, b) => costRank(a.type) - costRank(b.type));
     const blocking = applicable.filter((g) => g.mode === 'blocking');
     const asyncGuards = applicable.filter((g) => g.mode === 'async');
@@ -253,91 +329,83 @@ export class GuardPipeline {
     for (const g of deterministic) collect(await this.evaluate(g, input, input.segments, external));
 
     // Oversize content (13.3): model guards see a prefix, or the call is blocked.
-    let truncated = false;
-    let modelSegments = input.segments;
     const modelGuardsPresent =
       models.length > 0 || asyncGuards.some((g) => MODEL_GUARD_TYPES.includes(g.type));
-    if (modelGuardsPresent && totalTextBytes(input.segments) > profile.maxScanBytes) {
-      if (profile.onOversize === 'block') {
-        resolved.push({
-          guard: 'pipeline',
-          type: 'pipeline',
-          action: 'block',
-          finding: {
-            verdict: 'malicious',
-            label: 'max-scan-bytes',
-            ruleId: 'max-scan-bytes',
-            action: 'block',
-            category: 'policy',
-            reason: `content exceeds maxScanBytes (${profile.maxScanBytes})`,
-          },
-        });
-      } else {
-        const limited = limitSegmentsToBytes(input.segments, profile.maxScanBytes);
-        modelSegments = limited.segments;
-        truncated = limited.truncated;
-      }
-    }
+    const oversize = modelGuardsPresent ? oversizeOutcome(input.segments, profile) : undefined;
+    if (oversize?.finding) resolved.push(oversize.finding);
+    const truncated = oversize?.truncated ?? false;
+    const modelSegments = oversize?.segments ?? input.segments;
 
     // A deterministic block already decides the outcome: nothing leaves for a model (13.5).
     const alreadyBlocked = resolved.some((r) => r.action === 'block');
     if (models.length > 0 && !alreadyBlocked) {
-      const budget = new AbortController();
-      const timer = setTimeout(() => {
-        budget.abort();
-      }, profile.latencyBudgetMs);
-      const signal = AbortSignal.any([budget.signal, external]);
-      try {
-        const outcomes = await Promise.all(
-          models.map((g) => this.evaluateWithin(g, input, modelSegments, signal, budget.signal)),
-        );
-        for (const o of outcomes) collect(o);
-      } finally {
-        clearTimeout(timer);
-      }
+      const outcomes = await this.runWithinBudget(
+        models,
+        input,
+        modelSegments,
+        profile.latencyBudgetMs,
+        external,
+      );
+      for (const o of outcomes) collect(o);
     }
 
     // Session risk (13.7).
-    let riskScore: number | undefined;
-    const { riskStore } = this.deps;
-    const clientId = input.principal.clientId;
-    if (riskStore !== undefined && clientId !== undefined) {
-      const state = await loadRisk(riskStore, input.principal.principalId, clientId);
-      riskScore = decayedScore(state, this.deps.clock.now());
-      const esc = profile.riskEscalation;
-      if (
-        esc.enabled &&
-        input.phase === 'request' &&
-        isEscalationTarget(input.item) &&
-        riskScore >= esc.threshold
-      ) {
-        resolved.push({
-          guard: 'session-risk',
-          type: 'session-risk',
-          action: esc.action,
-          finding: {
-            verdict: 'suspicious',
-            label: 'session-risk',
-            ruleId: 'session-risk',
-            action: esc.action,
-            category: 'policy',
-            score: riskScore,
-            reason: `session risk score ${riskScore.toFixed(1)} is at or above ${esc.threshold}`,
-          },
-        });
-      }
-      await recordRisk(
-        riskStore,
-        input.principal.principalId,
-        clientId,
-        this.deltaOf(records, resolved),
-        this.deps.clock.now(),
-      );
-    }
+    const risk = await this.sessionRisk(input, profile, records, resolved);
+    if (risk?.finding) resolved.push(risk.finding);
+    const riskScore = risk?.score;
 
     const result = this.assemble(input, resolved, records, truncated, riskScore);
     result.asyncSettled = this.runAsync(asyncGuards, input, modelSegments, profile, external);
     return result;
+  }
+
+  /** Runs guards in parallel; each one that outlives `budgetMs` fails with a `timeout` finding. */
+  private async runWithinBudget(
+    guards: readonly GuardInstance[],
+    input: PipelineInput,
+    segments: GuardInput['segments'],
+    budgetMs: number,
+    external: AbortSignal,
+  ): Promise<InstanceOutcome[]> {
+    const budget = new AbortController();
+    const timer = setTimeout(() => {
+      budget.abort();
+    }, budgetMs);
+    const signal = AbortSignal.any([budget.signal, external]);
+    try {
+      return await Promise.all(
+        guards.map((g) => this.evaluateWithin(g, input, segments, signal, budget.signal)),
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Reads the principal's decayed risk score, escalates when it is over the threshold (13.7), and records
+   * this evaluation's delta. `undefined` when no risk store or client id is available.
+   */
+  private async sessionRisk(
+    input: PipelineInput,
+    profile: EffectiveProfile,
+    records: readonly GuardResultRecord[],
+    resolved: readonly ResolvedFinding[],
+  ): Promise<{ score: number; finding?: ResolvedFinding } | undefined> {
+    const { riskStore } = this.deps;
+    const clientId = input.principal.clientId;
+    if (riskStore === undefined || clientId === undefined) return undefined;
+    const state = await loadRisk(riskStore, input.principal.principalId, clientId);
+    const score = decayedScore(state, this.deps.clock.now());
+    const finding = escalationFinding(input, profile.riskEscalation, score);
+    const all = finding === undefined ? resolved : [...resolved, finding];
+    await recordRisk(
+      riskStore,
+      input.principal.principalId,
+      clientId,
+      this.deltaOf(records, all),
+      this.deps.clock.now(),
+    );
+    return finding === undefined ? { score } : { score, finding };
   }
 
   private deltaOf(
@@ -424,14 +492,13 @@ export class GuardPipeline {
     if (guards.length === 0) return Promise.resolve();
     return (async () => {
       await Promise.resolve(); // after the response is on its way
-      const budget = new AbortController();
-      const timer = setTimeout(() => {
-        budget.abort();
-      }, profile.latencyBudgetMs);
-      const signal = AbortSignal.any([budget.signal, external]);
       try {
-        const outcomes = await Promise.all(
-          guards.map((g) => this.evaluateWithin(g, input, segments, signal, budget.signal)),
+        const outcomes = await this.runWithinBudget(
+          guards,
+          input,
+          segments,
+          profile.latencyBudgetMs,
+          external,
         );
         const findings = outcomes.flatMap((o) => o.resolved);
         const records = outcomes.map((o) => o.record);
@@ -449,8 +516,6 @@ export class GuardPipeline {
         await this.deps.onAsync?.({ input, findings, records });
       } catch {
         // Async evaluation is best effort and never affects the call.
-      } finally {
-        clearTimeout(timer);
       }
     })();
   }
@@ -470,7 +535,7 @@ export class GuardPipeline {
     signal: AbortSignal,
     budget: AbortSignal,
   ): Promise<InstanceOutcome> {
-    const started = now();
+    const started = this.now();
     const timedOut = new Promise<InstanceOutcome>((resolve) => {
       const fire = (): void => {
         resolve(
@@ -497,7 +562,7 @@ export class GuardPipeline {
       phase: input.phase,
       verdict: 'error',
       action,
-      latencyMs: now() - started,
+      latencyMs: this.now() - started,
       mode: g.mode,
       error: typeof finding.details?.reason === 'string' ? finding.details.reason : 'error',
     };
@@ -527,7 +592,7 @@ export class GuardPipeline {
     segments: GuardInput['segments'],
     signal: AbortSignal,
   ): Promise<InstanceOutcome> {
-    const started = now();
+    const started = this.now();
     const guard = this.byType.get(g.type);
     if (guard === undefined) {
       return this.failed(
@@ -578,7 +643,7 @@ export class GuardPipeline {
         phase: input.phase,
         verdict: worst,
         action: mostSevere(resolved.map((r) => r.action)),
-        latencyMs: now() - started,
+        latencyMs: this.now() - started,
         mode: g.mode,
         ...(scores.length > 0 ? { score: Math.max(...scores) } : {}),
         ...(version === undefined ? {} : { modelVersion: version }),
@@ -593,7 +658,7 @@ export class GuardPipeline {
   /** Content-type filters and MCP Apps HTML (6.8) hide segments from a guard without shifting indices. */
   private maskFor(g: GuardInstance, segments: GuardInput['segments']): GuardInput['segments'] {
     const types = g.filters.contentTypes;
-    const matchType = types === undefined ? undefined : globMatcher(types, true);
+    const matchType = types === undefined ? undefined : this.matchers.get(types, true);
     const skipAppHtml = g.type !== 'regex';
     if (matchType === undefined && !skipAppHtml) return segments;
     return maskSegments(

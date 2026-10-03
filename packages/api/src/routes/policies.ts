@@ -1,7 +1,12 @@
 import { simulateRequestSchema, validatePolicyRequestSchema } from '@bastion-mcp/policy';
-import { z } from 'zod';
 import { listQuerySchema } from '../framework/conventions';
-import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
+import {
+  authz,
+  defineDelete,
+  defineMutation,
+  defineRoute,
+  type RouteDefinition,
+} from '../framework/route';
 import { idParams } from '../schemas/common';
 import {
   customPolicyCreateSchema,
@@ -55,19 +60,14 @@ export const policiesRoutes: RouteDefinition[] = [
     version: versionOf('policy_rules'),
     handler: (ctx) => updateRule(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/policy-rules/{id}',
     tag: TAG,
     summary: 'Delete a tool policy rule',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('policies.write', org),
-    status: 204,
     version: versionOf('policy_rules'),
-    handler: async (ctx) => {
-      await policyRules.remove(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => policyRules.remove(ctx, ctx.params.id),
   }),
 
   defineRoute({
@@ -98,19 +98,14 @@ export const policiesRoutes: RouteDefinition[] = [
     version: versionOf('custom_policies'),
     handler: (ctx) => updateCustomPolicy(ctx, ctx.params.id, ctx.body),
   }),
-  defineMutation({
-    method: 'DELETE',
+  defineDelete({
     url: '/custom-policies/{id}',
     tag: TAG,
     summary: 'Delete a custom Cedar policy',
-    schema: { params: idParams, response: z.null() },
+    params: idParams,
     authz: authz.on('policies.write', org),
-    status: 204,
     version: versionOf('custom_policies'),
-    handler: async (ctx) => {
-      await customPolicies.remove(ctx, ctx.params.id);
-      return null;
-    },
+    remove: (ctx) => customPolicies.remove(ctx, ctx.params.id),
   }),
 
   defineRoute({

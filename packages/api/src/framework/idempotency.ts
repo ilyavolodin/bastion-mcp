@@ -1,10 +1,10 @@
 import type { RedisLike } from '@bastion-mcp/auth';
-import { canonicalJson, redisKeys, sha256Hex } from '@bastion-mcp/core';
+import { canonicalJson, redisKeys, sha256Hex, TTL } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { ApiError, IdempotencyKeyReuseError } from '../errors';
 
 /** 17.1: a replay within 24 hours returns the original response. */
-export const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+export const IDEMPOTENCY_TTL_SECONDS = TTL.idempotency;
 export const MAX_KEY_LENGTH = 255;
 
 const recordSchema = z.object({

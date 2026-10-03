@@ -17,13 +17,13 @@ import { hashPassword } from '@bastion-mcp/secrets';
 import {
   type FakeModernServer,
   startFakeModernServer,
+  startFakeRegistry,
   startPostgres,
   startRedis,
 } from '@bastion-mcp/testkit';
 import pg from 'pg';
 import { migrate } from '../../src/boot/migrate';
 import { startServer } from '../../src/server';
-import { startFakeRegistry } from '../helpers/fake-registry';
 import { LocalProcessDriver } from '../helpers/local-process-driver';
 
 const here = dirname(fileURLToPath(import.meta.url));

@@ -1,4 +1,4 @@
-import { redisKeys } from '@bastion-mcp/core';
+import { MS, redisKeys } from '@bastion-mcp/core';
 import type { UpstreamSubscription } from '../connectors/types';
 import type { UpstreamLists } from '../lists/source';
 import { LEASE_TTL_MS } from '../ownership/lease';
@@ -20,6 +20,7 @@ import {
 import type { InternalRpcClient } from '../rpc/client';
 import type { SubscriptionBody } from '../rpc/protocol';
 import type { SessionInfo, UpstreamService } from '../service/service';
+import { UPSTREAM_TIMEOUTS_MS } from '../timeouts';
 import { toWireContext, type UpstreamCallContext, type UpstreamNotification } from '../types';
 import { identityUriMapper, type NotifyPublisher, type UriMapper } from './events';
 
@@ -34,8 +35,8 @@ import { identityUriMapper, type NotifyPublisher, type UriMapper } from './event
  *   are published on `bastion:notify`.
  */
 
-export const LISTEN_CLOSE_GRACE_MS = 60_000;
-export const LISTEN_TICK_MS = 5_000;
+export const LISTEN_CLOSE_GRACE_MS = MS.MINUTE;
+export const LISTEN_TICK_MS = 5 * MS.SECOND;
 
 const NOTIFICATION_KIND: Record<string, ListKind> = {
   'notifications/tools/list_changed': 'tools',
@@ -252,7 +253,7 @@ export class ListenManager {
       installation,
       principal,
       credential,
-      AbortSignal.timeout(30_000),
+      AbortSignal.timeout(UPSTREAM_TIMEOUTS_MS.subscriptionRequest),
     );
     if (!session) {
       // Owned (legacy or sandbox) upstreams deliver notifications on their own stream: nothing to open.
@@ -316,14 +317,14 @@ export class ListenManager {
    */
   async subscribeResource(
     args: ListenArgs & { downstreamUri: string; endpointId?: string },
-    signal: AbortSignal = AbortSignal.timeout(30_000),
+    signal: AbortSignal = AbortSignal.timeout(UPSTREAM_TIMEOUTS_MS.subscriptionRequest),
   ): Promise<void> {
     await this.changeSubscription('add', args, signal);
   }
 
   async unsubscribeResource(
     args: ListenArgs & { downstreamUri: string; endpointId?: string },
-    signal: AbortSignal = AbortSignal.timeout(30_000),
+    signal: AbortSignal = AbortSignal.timeout(UPSTREAM_TIMEOUTS_MS.subscriptionRequest),
   ): Promise<void> {
     await this.changeSubscription('remove', args, signal);
   }
@@ -364,7 +365,7 @@ export class ListenManager {
         holder = await this.deps.redis.get(leaseKey);
       }
       if (holder === this.deps.registry.workerId || this.held.has(key)) {
-        await this.applyHolder(key, args, upstreamUri, action);
+        await this.applyHolder(key, upstreamUri, action);
         return;
       }
       const worker = holder ? await this.deps.registry.lookup(holder) : null;
@@ -386,19 +387,13 @@ export class ListenManager {
     await this.deps.rpc.forwardSubscription(target.address, target.instanceId, body, signal);
   }
 
-  private async applyHolder(
-    key: string,
-    args: ListenArgs,
-    uri: string,
-    action: 'add' | 'remove',
-  ): Promise<void> {
+  private async applyHolder(key: string, uri: string, action: 'add' | 'remove'): Promise<void> {
     const entry = this.held.get(key);
     if (!entry) return;
     const count = (entry.uris.get(uri) ?? 0) + (action === 'add' ? 1 : -1);
     if (count <= 0) entry.uris.delete(uri);
     else entry.uris.set(uri, count);
     await this.open(entry);
-    void args;
   }
 
   private async applyOwner(
@@ -440,14 +435,14 @@ export class ListenManager {
       // `installationId:credentialHash`: the modern remote listen holder.
       const entry = this.held.get(id);
       if (!entry) throw new Error('this worker does not hold the listen stream');
-      await this.applyHolder(id, { installation, principal, credential }, body.uri, body.action);
+      await this.applyHolder(id, body.uri, body.action);
       return;
     }
     const target = await this.deps.service.acquireOwned(
       installation,
       principal,
       credential,
-      AbortSignal.timeout(30_000),
+      AbortSignal.timeout(UPSTREAM_TIMEOUTS_MS.subscriptionRequest),
     );
     if (target.kind !== 'local') throw new Error('the instance moved to another worker; retry');
     await this.applyOwner(target.instanceId, target.live, body.uri, body.action, ctx);

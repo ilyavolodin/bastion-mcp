@@ -1,5 +1,5 @@
 import { AuthenticationError, InsufficientScopeError, type Principal } from '@bastion-mcp/auth';
-import { REDIS_CHANNELS } from '@bastion-mcp/core';
+import { MS, REDIS_CHANNELS, SECONDS } from '@bastion-mcp/core';
 import type {
   ManagementAction,
   PolicyEngine,
@@ -297,7 +297,7 @@ const stream = async (
       if (!closed) raw.write(': ping\n\n');
     }, deps.config.sseHeartbeatMs ?? 15_000),
   );
-  const max = setTimeout(end, (deps.config.sseMaxSeconds ?? 3600) * 1000);
+  const max = setTimeout(end, (deps.config.sseMaxSeconds ?? SECONDS.HOUR) * MS.SECOND);
   timers.push(max as unknown as NodeJS.Timeout);
   cleanup = source.subscribe(emit, end);
   if (closed) cleanup();

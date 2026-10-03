@@ -1,5 +1,4 @@
-import { createServer, type IncomingMessage, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { readBody, startHttp } from '@bastion-mcp/testkit';
 
 export type TokenScript = (
   form: URLSearchParams,
@@ -20,15 +19,10 @@ export const startFakeAuthServer = async (options: {
 }> => {
   const requests: { path: string; form: URLSearchParams }[] = [];
   let tokenCalls = 0;
-  const readBody = async (req: IncomingMessage): Promise<string> => {
-    const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(Buffer.from(chunk));
-    return Buffer.concat(chunks).toString('utf8');
-  };
   let origin = '';
-  const server: Server = createServer(async (req, res) => {
+  const server = await startHttp(async (req, res) => {
     const path = req.url ?? '';
-    const form = new URLSearchParams(await readBody(req));
+    const form = new URLSearchParams((await readBody(req)).toString('utf8'));
     requests.push({ path, form });
     const send = (status: number, body: unknown): void => {
       res.writeHead(status, { 'content-type': 'application/json' });
@@ -62,11 +56,6 @@ export const startFakeAuthServer = async (options: {
     }
     return send(404, {});
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return {
-    url: new URL(origin),
-    requests,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
-  };
+  origin = server.url;
+  return { url: new URL(origin), requests, close: server.close };
 };
