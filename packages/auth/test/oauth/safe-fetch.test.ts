@@ -17,7 +17,23 @@ describe('SSRF guard for OAuth endpoints (9.6, 23.3)', () => {
     'https://rebind.test/x',
     'https://[::ffff:127.0.0.1]/x',
   ])('23.3 denies %s', async (url) => {
-    await expect(assertOutboundUrl(url, { lookup })).rejects.toThrow(/not allowed|invalid/);
+    await expect(assertOutboundUrl(url, { lookup })).rejects.toThrow(/resolves to|invalid/);
+  });
+
+  it('9.1 the refusal says which name resolved to which address and how an administrator allows it', async () => {
+    const error = await assertOutboundUrl('https://sso.home.test/x', {
+      lookup: async () => ['192.168.1.2'],
+    }).catch((e: Error) => e);
+    expect((error as Error).message).toBe(
+      'sso.home.test resolves to 192.168.1.2, a private network address. Bastion only reaches private networks that an administrator allows: add 192.168.1.2/32 (or the network it belongs to) to BASTION_PRIVATE_UPSTREAM_CIDRS and restart Bastion',
+    );
+    // ...and that is the whole fix: with the address allowed the same URL passes.
+    await expect(
+      assertOutboundUrl('https://sso.home.test/x', {
+        lookup: async () => ['192.168.1.2'],
+        addressPolicy: { allowCidrs: ['192.168.1.2/32'] },
+      }),
+    ).resolves.toBeInstanceOf(URL);
   });
 
   it('9.6 requires https for public hosts', async () => {

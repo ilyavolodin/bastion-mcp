@@ -289,7 +289,7 @@ describe('21.3 / 23.3 SSRF guard on IdP endpoints', () => {
     const connection = connectionFor(idp);
     const strict = createSafeFetch(fetch, {});
     const { login } = setup(connection, strict);
-    await expect(login.startLogin(connection.id)).rejects.toThrow(/not allowed|https/);
+    await expect(login.startLogin(connection.id)).rejects.toThrow(/resolves to|https/);
   });
 });
 

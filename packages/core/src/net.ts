@@ -120,6 +120,30 @@ export type AddressPolicy = {
 
 const METADATA_ADDRESSES = ['169.254.169.254', 'fd00:ec2::254'] as const;
 
+const CLASS_WORDS: Partial<Record<AddressClass, string>> = {
+  loopback: 'this machine itself (loopback)',
+  'link-local': 'a link-local address',
+  private: 'a private network address',
+  cgnat: 'a carrier-grade NAT (shared) address',
+  ula: 'a private network address',
+};
+
+export const isMetadataAddress = (ip: string): boolean =>
+  METADATA_ADDRESSES.includes(unmap(ip) as (typeof METADATA_ADDRESSES)[number]);
+
+/**
+ * What a person needs to know when an outbound connection is refused: which name resolved to which address, why that
+ * is refused, and the one way out (`BASTION_PRIVATE_UPSTREAM_CIDRS`, set by an administrator).
+ */
+export const blockedAddressMessage = (label: string, address: string): string => {
+  if (isMetadataAddress(address)) {
+    return `${label} resolves to ${address}, the cloud metadata address, which is never allowed`;
+  }
+  const kind = CLASS_WORDS[classifyAddress(address)] ?? 'an address that is not publicly routable';
+  const mask = address.includes(':') ? 128 : 32;
+  return `${label} resolves to ${address}, ${kind}. Bastion only reaches private networks that an administrator allows: add ${address}/${mask} (or the network it belongs to) to BASTION_PRIVATE_UPSTREAM_CIDRS and restart Bastion`;
+};
+
 /** True when connecting to the resolved address must be refused (8.8). */
 export const isAddressDenied = (ip: string, policy: AddressPolicy): boolean => {
   const address = unmap(ip);

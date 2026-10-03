@@ -615,7 +615,20 @@ describe.skipIf(!haveDocker())('17 control-plane API over Postgres and Redis', (
         discoveryUrl: `${base}/.well-known/openid-configuration`,
       });
       expect(refused.ok).toBe(false);
-      expect(refused.error).toBeTruthy();
+      // The refusal names the address and the one setting that allows it.
+      expect(refused.error).toMatch(/127\.0\.0\.1 resolves to 127\.0\.0\.1/);
+      expect(refused.error).toMatch(/BASTION_PRIVATE_UPSTREAM_CIDRS/);
+      // 9.1: a network the administrator allowed is reachable for the test too (then only plain http is refused).
+      const allowed = createIdentityPorts({
+        options: {},
+        config: { privateUpstreamCidrs: ['127.0.0.0/8'], clusterCidrs: [] } as never,
+      });
+      const httpOnly = await allowed.testIdp({
+        issuer: base,
+        discoveryUrl: `${base}/.well-known/openid-configuration`,
+      });
+      expect(httpOnly.error).toMatch(/https is required/);
+      expect(httpOnly.error).not.toMatch(/BASTION_PRIVATE_UPSTREAM_CIDRS/);
     } finally {
       await new Promise<void>((r) => server.close(() => r()));
     }

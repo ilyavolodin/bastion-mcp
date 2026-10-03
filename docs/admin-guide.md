@@ -196,14 +196,16 @@ bubblewrap sandboxes it started; when it dies they die with it and restart elsew
 
 ### 3.1 Remote MCP servers on your own network
 
-By default Bastion only connects to remote MCP servers that are on the public internet and use HTTPS (8.9). A server on
-a home lab or office network, or one whose name resolves to a private address such as `192.168.x.x`, is refused with
-the message *"remote host ... resolves to 192.168.1.2, a private network address ..."* (the catalog TEST shows it).
-An administrator allows it with two settings, both read at start (restart Bastion after changing them):
+By default Bastion only connects to hosts that are on the public internet and use HTTPS (8.9, 23.3). That covers remote
+MCP servers, identity providers (the Test button on the Identity Provider page and the sign-in itself) and the sign-in
+service of an OAuth server. A host on a home lab or office network, or one whose name resolves to a private address
+such as `192.168.x.x` (an identity provider on a NAS, for example), is refused with the message *"sso.example.com
+resolves to 192.168.1.2, a private network address ..."*. An administrator allows it with two settings, both read at
+start (restart Bastion after changing them):
 
 | Variable | Meaning |
 | --- | --- |
-| `BASTION_PRIVATE_UPSTREAM_CIDRS` | Comma-separated CIDRs that administrator-authored catalog entries may reach, e.g. `192.168.1.2/32` or `192.168.1.0/24`. The cloud metadata address is never allowed, and personal installations never reach private networks. |
+| `BASTION_PRIVATE_UPSTREAM_CIDRS` | Comma-separated CIDRs that administrator-authored catalog entries, identity providers and OAuth sign-in services may reach, e.g. `192.168.1.2/32` or `192.168.1.0/24`. The cloud metadata address is never allowed, and personal installations never reach private networks. |
 | `BASTION_INSECURE_UPSTREAM_HOSTS` | Hosts that may be reached over plain HTTP (no TLS), e.g. `automations.lan`. Only for networks you trust. |
 
 With Docker Compose set them in `deploy/docker/.env`, then `docker compose up -d bastion`.

@@ -4,6 +4,7 @@ import {
   type AddressPolicy,
   addressFamily,
   BastionError,
+  blockedAddressMessage,
   isAddressDenied,
   normalizeIpLiteral,
   pinnedLookup,
@@ -60,7 +61,7 @@ export const resolveOutboundTarget = async (
   const addressPolicy = policy.addressPolicy ?? {};
   for (const address of addresses) {
     if (isAddressDenied(address, addressPolicy)) {
-      throw new OutboundDeniedError('destination address is not allowed');
+      throw new OutboundDeniedError(blockedAddressMessage(host, address));
     }
   }
   if (url.protocol === 'http:') {

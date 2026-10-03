@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type AddressClass,
   addressFamily,
+  blockedAddressMessage,
   classifyAddress,
   ipInCidr,
   isAddressDenied,
@@ -127,5 +128,21 @@ describe('pinnedLookup (8.8, 8.9)', () => {
   it('8.9 addressFamily reports 4 or 6', () => {
     expect(addressFamily('1.2.3.4')).toBe(4);
     expect(addressFamily('2001:db8::1')).toBe(6);
+  });
+});
+
+describe('blockedAddressMessage', () => {
+  it('names the host, the address, why it is refused and the setting that allows it', () => {
+    expect(blockedAddressMessage('sso.example.com', '192.168.1.2')).toBe(
+      'sso.example.com resolves to 192.168.1.2, a private network address. Bastion only reaches private networks that an administrator allows: add 192.168.1.2/32 (or the network it belongs to) to BASTION_PRIVATE_UPSTREAM_CIDRS and restart Bastion',
+    );
+    expect(blockedAddressMessage('x', 'fd12::1')).toContain('fd12::1/128');
+    expect(blockedAddressMessage('x', '127.0.0.1')).toContain('this machine itself');
+  });
+
+  it('never offers the setting for the cloud metadata address', () => {
+    const message = blockedAddressMessage('x', '169.254.169.254');
+    expect(message).toContain('never allowed');
+    expect(message).not.toContain('BASTION_PRIVATE_UPSTREAM_CIDRS');
   });
 });
