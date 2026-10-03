@@ -9,6 +9,7 @@ import {
   OAuthProtocolError,
   selectClientAuth,
   toProtocolError,
+  withRedirectUriAsSent,
 } from '../http';
 import {
   type Clock,
@@ -105,7 +106,7 @@ export class IdpClients {
   }
 
   async configuration(connection: IdpConnection): Promise<client.Configuration> {
-    const key = `${connection.discoveryUrl}|${connection.clientId}|${connection.clientSecretId}`;
+    const key = `${connection.discoveryUrl}|${connection.clientId}|${connection.clientSecretId}|${connection.redirectToRoot}`;
     const cached = this.cache.get(connection.id);
     if (cached && cached.key === key && this.clock.now() - cached.at < CONFIG_TTL_MS)
       return cached.config;
@@ -134,7 +135,15 @@ export class IdpClients {
       metadata,
       connection.clientId,
       selectClientAuth(metadata.token_endpoint_auth_methods_supported, secret),
-      this.deps,
+      connection.redirectToRoot
+        ? {
+            ...this.deps,
+            fetch: withRedirectUriAsSent(
+              this.deps.fetch,
+              idpRedirectUri(this.deps.host, connection),
+            ),
+          }
+        : this.deps,
     );
     this.cache.set(connection.id, { config, at: this.clock.now(), key });
     return config;

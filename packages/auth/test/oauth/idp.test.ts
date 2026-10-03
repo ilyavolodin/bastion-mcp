@@ -93,7 +93,7 @@ describe('9.1 OIDC login', () => {
     const start = await login.startLogin(connection.id, { returnTo: '/dashboard' });
     expect(start).toMatchObject({ connectionId: connection.id, redirectToRoot: true });
     expect(new URL(start.authorizationUrl).searchParams.get('redirect_uri')).toBe(
-      'https://bastion.test/',
+      'https://bastion.test',
     );
     // The IdP sends the person back to `/?code=...&state=...`; the code exchange repeats the same redirect URI.
     const query = await idp.authorize(start.authorizationUrl);
@@ -101,7 +101,26 @@ describe('9.1 OIDC login', () => {
     expect(result.profile.email).toBe('ada@acme.example');
     expect(result.returnTo).toBe('/dashboard');
     const exchange = idp.requests.find((r) => r.path === '/token');
-    expect(exchange?.params.redirect_uri).toBe('https://bastion.test/');
+    expect(exchange?.params.redirect_uri).toBe('https://bastion.test');
+  });
+
+  it('9.1 the code exchange sends the redirect URI exactly as registered, without the slash `new URL` adds', async () => {
+    const seen: string[] = [];
+    const spy: typeof fetch = async (input, init) => {
+      const body = init?.body;
+      if (body instanceof URLSearchParams && body.has('redirect_uri'))
+        seen.push(body.get('redirect_uri') ?? '');
+      return fetch(input, init);
+    };
+    const connection = connectionFor(idp, { redirectToRoot: true });
+    const { login } = setup(connection, safe(spy));
+    const start = await login.startLogin(connection.id);
+    await login.completeLogin(
+      connection.id,
+      await idp.authorize(start.authorizationUrl),
+      start.stateToken,
+    );
+    expect(seen).toEqual(['https://bastion.test']);
   });
 
   it('9.1 a path connection still redirects to /auth/callback/{id}', async () => {

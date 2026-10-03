@@ -189,7 +189,7 @@ describe.skipIf(!haveDocker())('9.1 / 9.2 browser login', () => {
       const start = await b.request(`${PUBLIC_ORIGIN}/auth/login?return_to=/servers`);
       expect(start.status).toBe(302);
       const authorize = new URL(start.headers.get('location') ?? '');
-      expect(authorize.searchParams.get('redirect_uri')).toBe(`${PUBLIC_ORIGIN}/`);
+      expect(authorize.searchParams.get('redirect_uri')).toBe(PUBLIC_ORIGIN);
       // The state cookie of this connection is sent to `/`, where the IdP returns.
       expect(start.headers.getSetCookie().join('\n')).toMatch(
         /bastion_login=[^;]+~[^;]+; Path=\/;/,

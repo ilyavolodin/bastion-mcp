@@ -37,13 +37,13 @@ export const idpCallbackUrl = (host: string, connectionId: string): string =>
   `${originOf(host)}/auth/callback/${connectionId}`;
 /**
  * The redirect URI of an IdP connection (9.1): `/auth/callback/{id}`, or the bare site origin for an IdP that registers
- * nothing but the origin (Synology SSO Server). The origin form ends in `/`, which is what `new URL` makes of it.
+ * nothing but the origin (Synology SSO Server). The origin form has NO trailing slash, exactly as such an IdP has it
+ * registered and compares it; `new URL(...)` would add one (see `withRedirectUriAsSent`).
  */
 export const idpRedirectUri = (
   host: string,
   connection: { id: string; redirectToRoot: boolean },
-): string =>
-  connection.redirectToRoot ? `${originOf(host)}/` : idpCallbackUrl(host, connection.id);
+): string => (connection.redirectToRoot ? originOf(host) : idpCallbackUrl(host, connection.id));
 
 /** Protected Resource Metadata for any exact path variant of /mcp (9.3, RFC 9728). */
 export const buildProtectedResourceMetadata = (input: {

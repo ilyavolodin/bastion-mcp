@@ -20,6 +20,28 @@ const toCustomFetch =
   (url, init) =>
     fetchFn(url, init as RequestInit);
 
+/**
+ * openid-client takes the `redirect_uri` of the code exchange from a parsed URL, and `new URL('https://host')` is
+ * `https://host/`. RFC 6749 4.1.3 wants the exchange to repeat the authorization request's value exactly, and an IdP
+ * that registers only the origin compares the text, so the slash is taken off again on the way out.
+ */
+export const withRedirectUriAsSent =
+  (fetchFn: FetchFn, redirectUri: string): FetchFn =>
+  (input, init) => {
+    const normalized = new URL(redirectUri).href;
+    const body = init?.body;
+    if (
+      normalized !== redirectUri &&
+      body instanceof URLSearchParams &&
+      body.get('redirect_uri') === normalized
+    ) {
+      const next = new URLSearchParams(body);
+      next.set('redirect_uri', redirectUri);
+      return fetchFn(input, { ...init, body: next });
+    }
+    return fetchFn(input, init);
+  };
+
 /** Builds an openid-client Configuration bound to the injected fetch. */
 export const buildConfiguration = (
   metadata: client.ServerMetadata,
