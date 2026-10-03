@@ -285,11 +285,13 @@ describe('Overrides and Try it send what the API requires (12.5)', () => {
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Tool' })).toHaveValue('pg_run_query'),
     );
+    // The arguments come from the tool's own input schema: sql is required, limit has a default of 100.
+    await user.type(await screen.findByLabelText('sql *'), 'select count(*) from orders');
     await user.click(screen.getByRole('button', { name: 'Run' }));
     expect(await expectSent(capture, 'post', '/installations/i-postgres/try')).toEqual({
       kind: 'tool',
       name: 'pg_run_query',
-      arguments: { query: 'orders' },
+      arguments: { sql: 'select count(*) from orders', limit: 100 },
     });
     capture.stop();
   });

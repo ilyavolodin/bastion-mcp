@@ -128,6 +128,7 @@ describe('My servers and Installation detail (18.3)', () => {
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Tool' })).toHaveValue('pg_run_query'),
     );
+    await user.type(await screen.findByLabelText('sql *'), 'select 1');
     await user.click(screen.getByRole('button', { name: 'Run' }));
     expect(await screen.findByLabelText('Result')).toHaveTextContent('"rows"');
   });
