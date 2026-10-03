@@ -194,6 +194,31 @@ export const isEgressRule = (raw: string): boolean => {
   return HOSTNAME.test(host) || /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
 };
 
+/**
+ * An IPv4 CIDR rule that is not a private, loopback, link-local or shared (CGNAT) range. A CIDR rule exists to allow
+ * what the SSRF check refuses (8.8), which are exactly those ranges, so a public one is almost always a typo
+ * (`192.16.1.2` for `192.168.1.2`). Anything that is not an IPv4 CIDR is not reported.
+ */
+export const isPublicIpv4Cidr = (raw: string): boolean => {
+  const [net = '', prefix = ''] = raw.trim().split('/');
+  const octets = net.split('.').map(Number);
+  if (
+    octets.length !== 4 ||
+    prefix === '' ||
+    octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)
+  )
+    return false;
+  const [a = 0, b = 0] = octets;
+  const private_ =
+    a === 10 ||
+    a === 127 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254) ||
+    (a === 100 && b >= 64 && b <= 127);
+  return !private_;
+};
+
 export const LIMITS = {
   displayName: 200,
   slug: 63,

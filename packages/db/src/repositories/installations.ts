@@ -597,6 +597,8 @@ export type InstallationInfoRow<L = Record<string, unknown>> = {
   displayName: string;
   owner: InstallationOwnerInfo;
   enabled: boolean;
+  /** `catalog`, `manual`, `test`...: a `test` installation is only served on its own endpoint. */
+  origin?: string;
   status: 'ready' | 'needs_setup' | 'reconnect_required' | 'error' | 'disabled';
   catalogEntryId: string;
   catalogVersionId?: string;
@@ -731,6 +733,7 @@ export const createRouterRepository = <L = Record<string, unknown>>(
         displayName: r.displayName,
         owner,
         enabled: r.enabled,
+        origin: r.origin,
         status: statusSchema.parse(r.status),
         catalogEntryId: r.catalogEntryId ?? r.id,
         ...(version ? { catalogVersionId: version.id } : {}),

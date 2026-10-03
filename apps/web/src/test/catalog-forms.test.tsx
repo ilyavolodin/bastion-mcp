@@ -199,6 +199,23 @@ describe('Catalog forms send what the API requires (17.2)', () => {
     ).toBeVisible();
   });
 
+  it('8.8 a CIDR that is not a private range is flagged as a likely typo (192.16.1.2 for 192.168.1.2)', async () => {
+    const { user } = await renderRoute('/catalog/new?step=network');
+    const card = await screen.findByLabelText('Network');
+    const input = within(card).getByLabelText('Add a host');
+    await user.type(input, '192.16.1.2/32');
+    await user.click(within(card).getByRole('button', { name: 'Add' }));
+    expect(await within(card).findByRole('note')).toHaveTextContent(
+      '192.16.1.2/32 is not on a private network',
+    );
+    // The right one is accepted without a warning.
+    await user.type(input, '192.168.1.2/32');
+    await user.click(within(card).getByRole('button', { name: 'Add' }));
+    const allowed = within(card).getByRole('group', { name: 'Allowed hosts' });
+    expect(await within(allowed).findByText('192.168.1.2/32')).toBeVisible();
+    expect(within(card).getAllByRole('note')).toHaveLength(1);
+  });
+
   it('11.1 a draft the API would refuse is not sent: a range instead of an exact version', async () => {
     const capture = captureRequests();
     const { user } = await renderRoute('/catalog/new');

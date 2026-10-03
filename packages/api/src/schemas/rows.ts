@@ -80,6 +80,17 @@ export const teamRow = row('Team', {
   createdAt: iso,
 });
 
+/** One consent of the caller to an OAuth client (an AI tool): what it may use and until when (9.3, 9.4). */
+export const oauthGrantRow = row('OAuthGrant', {
+  userId: z.string(),
+  /** The client id: a URL for client ID metadata documents, an opaque id for registered clients. */
+  clientId: z.string(),
+  scopes: z.array(z.string()),
+  resources: z.array(z.string()),
+  expiresAt: z.string().nullable(),
+  createdAt: iso,
+});
+
 export const teamMemberRow = row('TeamMember', {
   teamId: z.string(),
   userId: z.string(),

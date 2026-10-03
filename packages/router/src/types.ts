@@ -67,6 +67,11 @@ export type InstallationInfo = {
   needsAuth: boolean;
   /** Catalog layer rule (12.1): the user layer may not change catalog pins. Informational. */
   policy?: InstallationData;
+  /**
+   * How the installation came to be (`catalog`, `manual`, `test`...). The hidden installation a catalog TEST runs
+   * against (`test`) is only reachable on its own endpoint, never in a default, named or catalog endpoint.
+   */
+  origin?: string;
 };
 
 export type EndpointKind = 'default' | 'named' | 'installation' | 'catalog';

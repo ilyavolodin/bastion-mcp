@@ -53,6 +53,7 @@ export const keys = {
   registry: ['registry'] as const,
   requests: ['install-requests'] as const,
   users: ['users'] as const,
+  grants: ['oauth-grants'] as const,
   teams: ['teams'] as const,
   roleMapping: ['role-mapping'] as const,
   serviceAccounts: ['service-accounts'] as const,

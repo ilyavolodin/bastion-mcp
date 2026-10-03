@@ -32,6 +32,10 @@ Check all three: the tool acts as that account, and its calls appear in that acc
 is already signed in to Bastion as somebody else (an administrator account, say) would otherwise authorize your tool as
 that person.
 
+Your AI tool keeps its own stored sign-in, so removing and re-adding it in the tool does not make it ask again. To cut a
+tool off, or to make it start over as a different account, open **Account, Connected apps** and **Revoke** it. It loses
+its refresh token, so once its short access token (15 minutes) ends it signs in again and Bastion asks which account.
+
 ### Claude Code
 
 ```sh

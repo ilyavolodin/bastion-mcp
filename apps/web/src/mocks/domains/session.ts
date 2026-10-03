@@ -23,6 +23,8 @@ type Quota = Res<'get', '/me/quotas'>['items'][number];
 export type SessionData = {
   notifications: Schemas['Notification'][];
   quotas: Quota[];
+  /** The apps the signed-in person has authorized (9.4). */
+  grants: Schemas['OAuthGrant'][];
 };
 
 const HOUR = 3_600_000;
@@ -99,6 +101,18 @@ export const buildSessionData = (now: number): SessionData => ({
       resetsAt: null,
     },
   ],
+  grants: [
+    {
+      id: 'g-claude',
+      userId: ME,
+      clientId: 'https://claude.ai/oauth/client.json',
+      scopes: ['mcp', 'offline_access'],
+      resources: ['https://bastion.example.com/mcp'],
+      expiresAt: iso(now + 20 * 24 * HOUR),
+      createdAt: iso(now - 3 * 24 * HOUR),
+      updatedAt: iso(now - 3 * 24 * HOUR),
+    },
+  ],
 });
 
 const storedRole = () =>
@@ -153,6 +167,16 @@ export const sessionHandlers: HttpHandler[] = [
     return HttpResponse.json(n);
   }),
   route.get('/me/quotas', () => HttpResponse.json({ items: getDb().data.session.quotas })),
+  route.get('/me/oauth-grants', ({ url }) => {
+    const rows = getDb().data.session.grants;
+    return HttpResponse.json(pageOf(rows, url));
+  }),
+  route.delete('/me/oauth-grants/{id}', ({ params }) => {
+    const session = getDb().data.session;
+    if (!session.grants.some((g) => g.id === params.id)) return notFound('Grant');
+    session.grants = session.grants.filter((g) => g.id !== params.id);
+    return noContent();
+  }),
 ];
 
 export const sessionSamples: SampleFactory = (db) => [
@@ -169,6 +193,8 @@ export const sessionSamples: SampleFactory = (db) => [
     path: `/me/notifications/${db.data.session.notifications[0]?.id ?? 'n-1'}/read`,
   },
   { method: 'get', path: '/me/quotas' },
+  { method: 'get', path: '/me/oauth-grants' },
+  { method: 'delete', path: `/me/oauth-grants/${db.data.session.grants[0]?.id ?? 'g-claude'}` },
 ];
 
 export { noContent };

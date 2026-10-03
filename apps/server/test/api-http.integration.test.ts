@@ -688,4 +688,67 @@ describe.skipIf(!haveDocker())('17 control-plane API over Postgres and Redis', (
       await other.close();
     }
   });
+
+  it('9.4 connected apps: the grant list is typed, only yours is listed, and revoking one drops its tokens', async () => {
+    const prisma = infra.db.prisma;
+    const iat = Math.floor(Date.now() / 1000);
+    const soon = new Date(Date.now() + 3_600_000);
+    const grant = (id: string, accountId: string, clientId: string) =>
+      prisma.oidcModel.create({
+        data: {
+          type: 'Grant',
+          id,
+          expiresAt: soon,
+          payload: {
+            accountId,
+            clientId,
+            iat,
+            openid: { scope: 'openid offline_access' },
+            resources: { 'https://bastion.test/mcp': 'mcp' },
+          },
+        },
+      });
+    await grant('grant-mine', api.adminId, 'https://claude.ai/oauth/client.json');
+    await grant('grant-theirs', newId(), 'someone-elses-client');
+    // A refresh token issued under the grant: revoking the grant must remove it (the app has to sign in again).
+    await prisma.oidcModel.create({
+      data: {
+        type: 'RefreshToken',
+        id: 'rt-mine',
+        grantId: 'grant-mine',
+        expiresAt: soon,
+        payload: {},
+      },
+    });
+
+    const list = await api.call('GET', '/me/oauth-grants');
+    expect(list.status).toBe(200);
+    const items = list.body.items as Record<string, unknown>[];
+    expect(items.map((g) => g.id)).toEqual(['grant-mine']);
+    expect(items[0]).toMatchObject({
+      userId: api.adminId,
+      clientId: 'https://claude.ai/oauth/client.json',
+      resources: ['https://bastion.test/mcp'],
+    });
+    expect(items[0]?.scopes).toEqual(expect.arrayContaining(['openid', 'offline_access', 'mcp']));
+
+    const missing = await api.call('DELETE', '/me/oauth-grants/grant-mine');
+    expect(missing.status).toBe(428);
+    // The list names the row's version, which is what the console sends back.
+    const version = String(items[0]?.updatedAt);
+    const gone = await api.call('DELETE', '/me/oauth-grants/grant-mine', {
+      headers: { 'if-match': `"${version}"` },
+    });
+    expect(gone.status).toBe(204);
+    expect(await prisma.oidcModel.count({ where: { type: 'Grant', id: 'grant-mine' } })).toBe(0);
+    expect(await prisma.oidcModel.count({ where: { type: 'RefreshToken', id: 'rt-mine' } })).toBe(
+      0,
+    );
+    // Somebody else's grant is neither visible nor removable.
+    const foreign = await api.call('DELETE', '/me/oauth-grants/grant-theirs', {
+      headers: { 'if-match': '*' },
+    });
+    expect(foreign.status).toBe(404);
+    expect(await prisma.oidcModel.count({ where: { type: 'Grant', id: 'grant-theirs' } })).toBe(1);
+  });
 });

@@ -259,12 +259,18 @@ describe('17.2 OAuth grants (9.4)', () => {
       userId: W.memberA,
       clientId: 'claude',
       scopes: ['mcp'],
+      resources: ['https://bastion.test/mcp'],
+      expiresAt: null,
+      createdAt: '2026-10-03T06:00:00.000Z',
     });
     await api.store.seed('oauth_grants', {
       id: 'g-2',
       userId: W.memberB,
       clientId: 'cursor',
       scopes: ['mcp'],
+      resources: [],
+      expiresAt: null,
+      createdAt: '2026-10-03T06:00:00.000Z',
     });
     const list = await api.call('member', 'GET', '/me/oauth-grants');
     expect(items(list.body).map((g) => g.id)).toEqual(['g-1']);

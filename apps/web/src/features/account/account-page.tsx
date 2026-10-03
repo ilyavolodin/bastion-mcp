@@ -3,14 +3,18 @@ import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { useChangePassword } from '@/api/hooks/account';
+import { useChangePassword, useOAuthGrants, useRevokeOAuthGrant } from '@/api/hooks/account';
 import { useAuth } from '@/auth/auth';
+import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/form';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader } from '@/components/primitives';
+import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { formatDate } from '@/lib/format';
 import { roleLabel } from '@/lib/roles';
+import { ConfirmDialog } from '../catalog/entry-actions';
 import { applyServerErrors } from '../settings/form-errors';
 
 /** The same rules the server enforces (9.1); the server stays the authority. */
@@ -117,6 +121,88 @@ export function ChangePasswordCard() {
   );
 }
 
+const SCOPE_WORDS: Record<string, string> = {
+  mcp: 'Use your MCP servers',
+  'api:read': 'Read your Bastion data',
+  'api:write': 'Change your Bastion data',
+  'plugins:read': 'Download your plugins',
+  offline_access: 'Stay signed in',
+};
+
+/**
+ * Connected apps (9.4): the AI tools that were let in as the signed-in person. Revoking one takes away its refresh
+ * tokens, so when its short access token ends it signs in again and is asked which account it is for.
+ */
+export function ConnectedAppsCard() {
+  const grants = useOAuthGrants();
+  const revoke = useRevokeOAuthGrant();
+  const [target, setTarget] = React.useState<{ id: string; clientId: string } | null>(null);
+  return (
+    <Card aria-label="Connected apps" className="gap-3 lg:col-span-2">
+      <CardHeader title="Connected apps" subtitle="AI tools that can act as you" />
+      <QueryBoundary
+        query={grants}
+        label="Loading connected apps"
+        isEmpty={(items) => items.length === 0}
+        empty={
+          <EmptyState
+            title="No connected apps"
+            description="An AI tool you sign in to Bastion from appears here, and you can cut it off."
+          />
+        }
+      >
+        {(items) => (
+          <ul className="m-0 list-none p-0">
+            {items.map((g) => (
+              <li
+                key={g.id}
+                className="flex flex-wrap items-center gap-3 border-b border-line py-3 last:border-b-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-mono text-[13px]">{g.clientId}</div>
+                  <div className="text-caption text-muted">
+                    {g.scopes.map((s) => SCOPE_WORDS[s] ?? s).join(', ') || 'Sign-in only'} ·
+                    authorized {formatDate(g.createdAt)}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  aria-label={`Revoke ${g.clientId}`}
+                  onClick={() => setTarget({ id: g.id, clientId: g.clientId })}
+                >
+                  Revoke
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </QueryBoundary>
+      <ConfirmDialog
+        open={target !== null}
+        onOpenChange={(o) => {
+          if (!o) setTarget(null);
+        }}
+        title="Revoke this app?"
+        description={`${target?.clientId ?? 'The app'} will lose access as you. It has to sign in again, and you choose the account then.`}
+        confirmLabel="Revoke access"
+        destructive
+        pending={revoke.isPending}
+        error={revoke.error}
+        onConfirm={() => {
+          if (!target) return;
+          revoke.mutate(target.id, {
+            onSuccess: () => {
+              toast.success('Access revoked');
+              setTarget(null);
+            },
+          });
+        }}
+      />
+    </Card>
+  );
+}
+
 export function AccountPage() {
   const { me, role } = useAuth();
   return (
@@ -135,6 +221,7 @@ export function AccountPage() {
           </dl>
         </Card>
         <ChangePasswordCard />
+        <ConnectedAppsCard />
       </div>
     </>
   );

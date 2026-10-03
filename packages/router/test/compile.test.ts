@@ -82,6 +82,38 @@ describe('7.2 collecting installations', () => {
     expect(sel.map((i) => i.id)).toEqual(['a', 'b']);
   });
 
+  it('11.3 the hidden installation of a catalog test is served on its own endpoint only', () => {
+    const test = installation({ id: 'tt', slug: 'test-1a2b', displayName: 'Test of Alpha' });
+    const marked = { ...test, origin: 'test' };
+    const installations = [a, marked];
+    const pick = (endpoint: Parameters<typeof selectInstallations>[0]['endpoint']) =>
+      selectInstallations({ principal, endpoint, installations }).map((i) => i.id);
+    // Default, named and catalog endpoints never include it, even when it is enabled and asked for by id.
+    expect(pick(base([], {}).endpoint)).toEqual(['a']);
+    expect(
+      pick({ id: 'e', kind: 'named', prefixMode: 'always', installationIds: ['tt', 'a'] }),
+    ).toEqual(['a']);
+    expect(
+      pick({
+        id: 'c',
+        kind: 'catalog',
+        slug: 'alpha',
+        prefixMode: 'always',
+        installationIds: ['tt'],
+      }),
+    ).toEqual([]);
+    // Its own endpoint (what the Test step connects to) still serves it.
+    expect(
+      pick({
+        id: 'i',
+        kind: 'installation',
+        slug: 'test-1a2b',
+        prefixMode: 'onCollision',
+        installationIds: ['tt'],
+      }),
+    ).toEqual(['tt']);
+  });
+
   it('11.4 includes team installations the user belongs to, honoring installation_prefs.hidden', () => {
     const endpoint = base([], {}).endpoint;
     expect(

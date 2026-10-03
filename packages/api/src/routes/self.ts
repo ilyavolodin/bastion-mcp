@@ -2,8 +2,8 @@ import { PAT_SCOPES } from '@bastion-mcp/auth';
 import { z } from 'zod';
 import { listQuerySchema, pageSchema } from '../framework/conventions';
 import { authz, defineMutation, defineRoute, type RouteDefinition } from '../framework/route';
-import { idParams, itemPage } from '../schemas/common';
-import { asRow, notificationRow, pageOf } from '../schemas/rows';
+import { idParams } from '../schemas/common';
+import { asRow, notificationRow, oauthGrantRow, pageOf } from '../schemas/rows';
 import {
   createToken,
   getMe,
@@ -136,7 +136,7 @@ export const selfRoutes: RouteDefinition[] = [
     url: '/me/oauth-grants',
     tag: TAG,
     summary: 'OAuth clients you have granted access',
-    schema: { query: listQuerySchema, response: itemPage },
+    schema: { query: listQuerySchema, response: pageOf('OAuthGrantPage', oauthGrantRow) },
     authz: authz.self(),
     handler: (ctx) => listGrants(ctx, ctx.query),
   }),

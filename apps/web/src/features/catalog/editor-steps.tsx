@@ -21,6 +21,7 @@ import {
   type HeaderPreset,
   headerPreset,
   isEgressRule,
+  isPublicIpv4Cidr,
   LIMITS,
   needsClientSecret,
   type OAuthClientDraft,
@@ -1342,6 +1343,8 @@ export function NetworkStep({ draft, onChange, readOnly }: Props) {
   const [error, setError] = React.useState<string | undefined>();
   const hosts = draft.spec.egress;
   const remote = draft.spec.type === 'remote';
+  // A CIDR rule allows what the SSRF check refuses: private ranges. A public one is almost always a typo.
+  const publicCidrs = hosts.filter((h) => h.includes('/') && isPublicIpv4Cidr(h));
   const add = () => {
     const h = host.trim().toLowerCase();
     if (!h) return;
@@ -1398,6 +1401,13 @@ export function NetworkStep({ draft, onChange, readOnly }: Props) {
           Add
         </Button>
       </div>
+      {publicCidrs.map((c) => (
+        <p key={c} role="note" className="m-0 text-caption font-medium text-coral-ink">
+          {c} is not on a private network, so it allows nothing the server could not already reach.
+          Check the address: a machine on your network is usually 192.168.x.x, 10.x.x.x or
+          172.16-31.x.x.
+        </p>
+      ))}
       {remote ? (
         <p className="m-0 text-caption text-muted">
           A remote server is reached by its URL; the allowlist applies to packages that Bastion

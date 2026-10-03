@@ -103,6 +103,8 @@ export type CompileInput = {
 export const SERVER_NAME = 'bastion';
 const BAD_STATUSES: ReadonlySet<string> = new Set(['disabled', 'needs_setup']);
 const SINGLE_KINDS: ReadonlySet<string> = new Set(['installation', 'catalog']);
+/** `installations.origin` of the hidden installation a catalog TEST runs against (11.3). */
+const TEST_ORIGIN = 'test';
 
 const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -136,6 +138,7 @@ export const selectInstallations = (
       i.enabled &&
       !BAD_STATUSES.has(i.status) &&
       belongsTo(i, principal, teamIds) &&
+      (endpoint.kind === 'installation' || i.origin !== TEST_ORIGIN) &&
       (single || i.owner.kind !== 'team' || !hidden.has(i.id)),
   );
   if (endpoint.kind === 'default') {

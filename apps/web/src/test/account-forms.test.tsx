@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import { describe, expect, it } from 'vitest';
 import { MOCK_PASSWORD } from '@/mocks/domains/session';
@@ -64,5 +64,29 @@ describe('Account: change password (9.1)', () => {
     );
     expect(screen.getByLabelText(/^New password/)).toHaveAttribute('autocomplete', 'new-password');
     expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe('Account: connected apps (9.4)', () => {
+  it('9.4 lists the apps the person authorized, in words, and revoking one asks first and removes it', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/account');
+    const card = await screen.findByRole('region', { name: 'Connected apps' });
+    expect(await within(card).findByText('https://claude.ai/oauth/client.json')).toBeVisible();
+    expect(card).toHaveTextContent('Use your MCP servers, Stay signed in');
+
+    await user.click(within(card).getByRole('button', { name: /^Revoke https:\/\/claude\.ai/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Revoke this app?' });
+    // Nothing is sent until the person confirms; Cancel keeps the app.
+    expect(capture.calls.some((c) => c.method === 'delete')).toBe(false);
+    await user.click(within(dialog).getByRole('button', { name: 'Revoke access' }));
+
+    // The row's version from the list goes in If-Match (the test setup fails on a change without one, 17.1).
+    await capture.next('delete', '/me/oauth-grants/g-claude');
+    await waitFor(() =>
+      expect(within(card).queryByText('https://claude.ai/oauth/client.json')).toBeNull(),
+    );
+    expect(await within(card).findByText('No connected apps')).toBeVisible();
+    capture.stop();
   });
 });
