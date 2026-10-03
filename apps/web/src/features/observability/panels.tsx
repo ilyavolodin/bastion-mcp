@@ -1,15 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import {
-  Area,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Bar, BarChart, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis } from 'recharts';
 import { type StatsScope, useCallTotals, useLatency, useNames, useSandboxStats } from '@/api/hooks';
 import type { GroupTotal, StatsRange } from '@/api/views/observability';
 import { ChartCard } from '@/components/chart-card';
@@ -167,7 +157,7 @@ const OrgOnly = ({ title }: { title: string }) => (
 // --- Latency band ---------------------------------------------------------------------------------------
 export function LatencyPanel({ args, enabled = true }: { args: Args; enabled?: boolean }) {
   const q = useLatency(args, enabled);
-  const data = (q.data ?? []).map((b) => ({ ...b, band: [b.p50, b.p95] as [number, number] }));
+  const data = q.data ?? [];
   const fmt = axisLabel(args.range);
   if (!enabled) return <OrgOnly title="Latency" />;
   return (
@@ -177,7 +167,8 @@ export function LatencyPanel({ args, enabled = true }: { args: Args; enabled?: b
         <Legend
           items={[
             { label: 'Typical (p50)', color: 'var(--tangerine)', shape: 'line' },
-            { label: 'Slow tail (to p95)', color: 'var(--tangerine-soft)', shape: 'bar' },
+            { label: 'Slow (p95)', color: 'var(--coral)', shape: 'line' },
+            { label: 'Slowest (p99)', color: 'var(--berry)', shape: 'line' },
           ]}
         />
       }
@@ -210,12 +201,25 @@ export function LatencyPanel({ args, enabled = true }: { args: Args; enabled?: b
                   <ChartTooltip labelFormat={fmt} format={(v) => formatDuration(Number(v))} />
                 }
               />
-              <Area
-                dataKey="band"
-                name="p50 to p95"
-                stroke="none"
-                fill="var(--tangerine-soft)"
-                fillOpacity={1}
+              {/* Slowest first, so the typical line is drawn on top. A single point (one call) has no line: it gets a dot. */}
+              <Line
+                type="monotone"
+                dataKey="p99"
+                name="p99"
+                stroke="var(--berry)"
+                strokeWidth={1.5}
+                strokeDasharray="2 3"
+                dot={data.length === 1}
+                isAnimationActive={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="p95"
+                name="p95"
+                stroke="var(--coral)"
+                strokeWidth={1.75}
+                strokeDasharray="5 3"
+                dot={data.length === 1}
                 isAnimationActive={false}
               />
               <Line
@@ -224,7 +228,7 @@ export function LatencyPanel({ args, enabled = true }: { args: Args; enabled?: b
                 name="p50"
                 stroke="var(--tangerine)"
                 strokeWidth={2.5}
-                dot={false}
+                dot={data.length === 1}
                 isAnimationActive={false}
               />
             </ComposedChart>

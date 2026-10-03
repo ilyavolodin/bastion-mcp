@@ -182,6 +182,25 @@ describe('Activity (15.5, 18.3)', () => {
     expect(within(drawer).getByText('Cold start').nextElementSibling).toHaveTextContent('Yes');
   });
 
+  it('15.5 the calls-over-time strip has time labels, first and last bucket included', async () => {
+    await renderRoute('/activity', { role: 'member' });
+    const card = (await screen.findByRole('heading', { name: 'Calls over time' })).closest(
+      'section',
+    ) as HTMLElement;
+    await waitFor(() =>
+      expect(card.querySelectorAll('[title$=" calls"]').length).toBeGreaterThan(0),
+    );
+    const bars = [...card.querySelectorAll('[title$=" calls"]')].map((b) =>
+      (b.getAttribute('title') ?? '').split(':').slice(0, -1).join(':'),
+    );
+    // The axis under the bars shows the time of the first and of the last bar (clock times: `10:30`).
+    const axis = card.querySelector('.tabular-nums.text-muted') as HTMLElement;
+    expect(axis).toBeTruthy();
+    expect(axis.textContent).toContain(bars[0]?.trim());
+    expect(axis.textContent).toContain(bars[bars.length - 1]?.trim());
+    expect(axis.querySelectorAll('span').length).toBeGreaterThanOrEqual(2);
+  });
+
   it('10.1 members only see their own calls and no person filter', async () => {
     await renderRoute('/activity', { role: 'member' });
     await screen.findByText('Your calls');

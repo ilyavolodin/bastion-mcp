@@ -29,6 +29,22 @@ describe('Observability (15, 18.3)', () => {
     expect(within(table).getByText(errorRateOf('i-postgres'))).toBeInTheDocument();
   });
 
+  it('15.5 latency draws p50, p95 and p99 as lines of their own, and no value is NaN', async () => {
+    const { user } = await renderRoute('/observability');
+    const heading = await screen.findByRole('heading', { name: 'Latency' });
+    const card = heading.closest('section') ?? heading.parentElement?.parentElement;
+    expect(card).toBeTruthy();
+    const panel = within(card as HTMLElement);
+    // The legend names all three percentiles (before: a p50 line and a band that the tooltip printed as NaN).
+    expect(panel.getByText('Typical (p50)')).toBeVisible();
+    expect(panel.getByText('Slow (p95)')).toBeVisible();
+    expect(panel.getByText('Slowest (p99)')).toBeVisible();
+    await user.click(panel.getByRole('button', { name: 'View as table' }));
+    const table = await panel.findByRole('table', { name: 'Latency' });
+    expect(within(table).getByRole('columnheader', { name: 'p99 (ms)' })).toBeVisible();
+    expect((card as HTMLElement).textContent).not.toContain('NaN');
+  });
+
   it('colours health tiles and pairs them with a text label', async () => {
     await renderRoute('/observability');
     expect((await screen.findAllByText('Failing')).length).toBeGreaterThan(0);

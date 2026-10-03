@@ -50,37 +50,54 @@ function TimelineStrip({
   range: keyof typeof RANGE_LABEL;
 }) {
   const max = Math.max(1, ...buckets.map((b) => b.calls));
+  const label = (t: string) => (range === '7d' ? formatDate(t) : formatClock(t));
+  // Up to five evenly spaced labels, first and last included: the bars alone say nothing about when.
+  const ticks = axisTicks(buckets.map((b) => b.t));
   return (
-    <div className="flex h-16 items-end gap-0.5" aria-hidden="true">
-      {buckets.map((b) => {
-        const parts: [number, string][] = [
-          [b.ok, 'var(--mint)'],
-          [b.upstreamError, 'var(--sun)'],
-          [b.denied, 'var(--berry-ink)'],
-          [b.blocked, 'var(--coral-ink)'],
-        ];
-        return (
-          <div
-            key={b.t}
-            title={`${range === '7d' ? formatDate(b.t) : formatClock(b.t)}: ${b.calls} calls`}
-            className="flex flex-1 flex-col-reverse gap-px"
-            style={{ height: `${(b.calls / max) * 100}%` }}
-          >
-            {parts
-              .filter(([n]) => n > 0)
-              .map(([n, color]) => (
-                <span
-                  key={color}
-                  className="min-h-[2px] rounded-[2px]"
-                  style={{ flex: n, background: color }}
-                />
-              ))}
-          </div>
-        );
-      })}
+    <div aria-hidden="true">
+      <div className="flex h-16 items-end gap-0.5">
+        {buckets.map((b) => {
+          const parts: [number, string][] = [
+            [b.ok, 'var(--mint)'],
+            [b.upstreamError, 'var(--sun)'],
+            [b.denied, 'var(--berry-ink)'],
+            [b.blocked, 'var(--coral-ink)'],
+          ];
+          return (
+            <div
+              key={b.t}
+              title={`${range === '7d' ? formatDate(b.t) : formatClock(b.t)}: ${b.calls} calls`}
+              className="flex flex-1 flex-col-reverse gap-px"
+              style={{ height: `${(b.calls / max) * 100}%` }}
+            >
+              {parts
+                .filter(([n]) => n > 0)
+                .map(([n, color]) => (
+                  <span
+                    key={color}
+                    className="min-h-[2px] rounded-[2px]"
+                    style={{ flex: n, background: color }}
+                  />
+                ))}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex justify-between text-caption tabular-nums text-muted">
+        {ticks.map((t) => (
+          <span key={t}>{label(t)}</span>
+        ))}
+      </div>
     </div>
   );
 }
+
+/** Up to `max` evenly spaced values of `times`, the first and the last always among them. */
+export const axisTicks = (times: readonly string[], max = 5): string[] => {
+  if (times.length <= max) return [...times];
+  const last = times.length - 1;
+  return Array.from({ length: max }, (_, i) => times[Math.round((i * last) / (max - 1))] as string);
+};
 
 function CallListItem({
   call,
