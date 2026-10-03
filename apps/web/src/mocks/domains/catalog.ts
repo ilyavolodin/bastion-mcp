@@ -565,6 +565,12 @@ const entryOf = (id: string) => data().entries.find((e) => e.id === id);
 const versionOf = (entryId: string, versionId: string) =>
   data().versions.find((v) => v.entryId === entryId && v.id === versionId);
 
+/** The version installations get: the current one, else the newest published (a seeded draft entry: its only version). */
+const currentVersion = (e: NonNullable<ReturnType<typeof entryOf>>) =>
+  (e.currentVersionId ? versionOf(e.id, String(e.currentVersionId)) : undefined) ??
+  data().versions.findLast((v) => v.entryId === e.id && v.status === 'published') ??
+  data().versions.findLast((v) => v.entryId === e.id);
+
 const validation = (errors: { path: string; message: string }[]) =>
   problem(422, 'validation_failed', 'Some fields need attention', undefined, errors);
 
@@ -1039,6 +1045,31 @@ export const catalogHandlers: HttpHandler[] = [
     });
   }),
 
+  route.get('/catalog/{id}/default-overrides', ({ params }) => {
+    const e = entryOf(params.id);
+    const v = e ? currentVersion(e) : undefined;
+    if (!e) return notFound('Entry');
+    if (!v) return problem(409, 'no_published_version', 'The entry has no published version yet');
+    return HttpResponse.json(
+      { doc: v.overrides, updatedAt: v.updatedAt, rejected: [] },
+      { headers: etagHeaders(v.updatedAt) },
+    );
+  }),
+
+  route.put('/catalog/{id}/default-overrides', async ({ params, body }) => {
+    if (!isRole('admin', 'manager')) return forbidden();
+    const e = entryOf(params.id);
+    if (!e) return notFound('Entry');
+    const v = currentVersion(e);
+    if (!v) return problem(409, 'no_published_version', 'The entry has no published version yet');
+    v.overrides = await body();
+    v.updatedAt = now();
+    return HttpResponse.json(
+      { doc: v.overrides, updatedAt: v.updatedAt, rejected: [] },
+      { headers: etagHeaders(v.updatedAt) },
+    );
+  }),
+
   route.get('/catalog/{id}/versions/{vid}/files', ({ params }) => {
     if (!isRole('admin', 'manager', 'auditor')) return forbidden();
     const v = versionOf(params.id, params.vid);
@@ -1238,6 +1269,12 @@ export const catalogSamples: SampleFactory = (db) => {
     {
       method: 'put',
       path: `${v}/overrides`,
+      body: { version: 1, tools: { pg_run_query: { hidden: true } } },
+    },
+    { method: 'get', path: '/catalog/c-postgres/default-overrides' },
+    {
+      method: 'put',
+      path: '/catalog/c-postgres/default-overrides',
       body: { version: 1, tools: { pg_run_query: { hidden: true } } },
     },
     { method: 'get', path: `${k}/files` },

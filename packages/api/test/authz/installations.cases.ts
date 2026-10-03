@@ -157,6 +157,20 @@ export const installationsCases: AuthzCase[] = [
     }),
   },
   {
+    rule: 'overrides.catalog',
+    route: 'GET /catalog/{id}/default-overrides',
+    request: () => ({ method: 'GET', url: '/catalog/entry-team-a/default-overrides' }),
+  },
+  {
+    rule: 'overrides.catalog',
+    route: 'PUT /catalog/{id}/default-overrides',
+    request: () => ({
+      method: 'PUT',
+      url: '/catalog/entry-team-a/default-overrides',
+      body: { version: 1 },
+    }),
+  },
+  {
     rule: 'org.view',
     route: 'GET /drift-reviews',
     request: () => ({ method: 'GET', url: '/drift-reviews' }),

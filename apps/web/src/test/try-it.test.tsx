@@ -172,3 +172,19 @@ describe('The Overrides tab leads with what is shown (12.5)', () => {
     expect(screen.getByLabelText('Show pg_explain')).toBeInTheDocument();
   });
 });
+
+describe('Overrides for everyone who installs a server (12.5)', () => {
+  it('12.5 an Admin applies a change to every installation, saved on the catalog entry', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/servers/i-postgres?tab=overrides');
+    await user.click(
+      await screen.findByRole('button', { name: 'Everyone who installs this server' }),
+    );
+    const shown = await screen.findByLabelText('Show pg_explain');
+    await user.click(shown);
+    await user.click(screen.getByRole('button', { name: 'Save overrides' }));
+    const sent = await expectSent(capture, 'put', '/catalog/c-postgres/default-overrides');
+    expect(sent).toMatchObject({ tools: { pg_explain: { hidden: true } } });
+    capture.stop();
+  });
+});

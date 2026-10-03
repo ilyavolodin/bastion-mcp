@@ -91,7 +91,7 @@ function Body({ installation: i }: { installation: InstallationView }) {
           <CapabilitiesTab installationId={i.id} />
         </TabsContent>
         <TabsContent value="overrides">
-          <OverridesTab installationId={i.id} />
+          <OverridesTab installationId={i.id} catalogEntryId={i.catalogEntryId ?? null} />
         </TabsContent>
         <TabsContent value="connection">
           <ConnectionTab installation={i} />

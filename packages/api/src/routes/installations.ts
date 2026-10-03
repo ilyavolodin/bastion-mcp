@@ -83,10 +83,13 @@ import {
 } from '../services/installations';
 import {
   catalogOverridesVersion,
+  entryOverridesVersion,
   getCatalogOverrides,
+  getEntryOverrides,
   getInstallationOverrides,
   preview,
   putCatalogOverrides,
+  putEntryOverrides,
   putInstallationOverrides,
 } from '../services/overrides';
 import {
@@ -474,6 +477,34 @@ export const installationsRoutes: RouteDefinition[] = [
     version: (input) =>
       catalogOverridesVersion(input.deps, input.params.id ?? '', input.params.vid ?? ''),
     handler: (ctx) => putCatalogOverrides(ctx, ctx.params.id, ctx.params.vid, ctx.body),
+  }),
+  defineRoute({
+    method: 'GET',
+    url: '/catalog/{id}/default-overrides',
+    tag: OVERRIDES,
+    summary: 'Overrides every installation of the entry gets (those of its current version)',
+    schema: { params: idParams, response: overridesViewSchema },
+    authz: authz.on(
+      'overrides.catalog',
+      async ({ deps, params }) =>
+        (await loadCatalogEntryResource(deps, params.id ?? '')) ?? unownedEntry(params.id ?? ''),
+    ),
+    handler: (ctx) => getEntryOverrides(ctx, ctx.params.id),
+  }),
+  defineMutation({
+    method: 'PUT',
+    url: '/catalog/{id}/default-overrides',
+    tag: OVERRIDES,
+    summary: 'Replace the overrides every installation of the entry gets',
+    schema: { params: idParams, body: overridesDocSchema, response: overridesViewSchema },
+    authz: authz.on(
+      'overrides.catalog',
+      async ({ deps, params }) =>
+        (await loadCatalogEntryResource(deps, params.id ?? '')) ?? unownedEntry(params.id ?? ''),
+    ),
+    status: 200,
+    version: (input) => entryOverridesVersion(input.deps, input.params.id ?? ''),
+    handler: (ctx) => putEntryOverrides(ctx, ctx.params.id, ctx.body),
   }),
   defineRoute({
     method: 'GET',

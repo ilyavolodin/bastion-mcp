@@ -406,6 +406,14 @@ Settings.
 Bastion also serves a subregistry at `/registry/v0.1/servers` for MCP hosts with an enterprise registry setting (VS
 Code, GitHub Copilot), authenticated with a PAT or OAuth token scoped `api:read` (11.8).
 
+### 8.1 Hiding tools for everyone
+
+On a server's Overrides tab each tool, prompt and resource has a switch; hiding is the common change, customizing a
+definition is optional. An Admin or the owner of a catalog server can choose "Everyone who installs this server":
+the change is then saved on the server's current version (`PUT /catalog/{id}/default-overrides`) and applies to every
+installation on that version, before each person's own changes. Overrides never change what runs, so this does not
+need a new version; older, pinned versions keep theirs.
+
 ## 9. Guards
 
 Guard profiles run on three phases (request, response, definition). The org default profile ships enabled:

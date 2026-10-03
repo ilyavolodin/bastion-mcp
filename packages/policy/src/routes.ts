@@ -400,6 +400,8 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
     routes: [
       'GET /catalog/{id}/versions/{vid}/overrides',
       'PUT /catalog/{id}/versions/{vid}/overrides',
+      'GET /catalog/{id}/default-overrides',
+      'PUT /catalog/{id}/default-overrides',
     ],
     action: 'override.edit',
     resource: 'CatalogEntry',

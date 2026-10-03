@@ -250,12 +250,35 @@ export const useSaveOverrides = (id: string) =>
 
 export const usePreviewOverrides = () =>
   useApiMutation(
-    (input: { installationId: string; document: Body<'post', '/overrides/preview'>['doc'] }) =>
+    (input: {
+      installationId: string;
+      document: Body<'post', '/overrides/preview'>['doc'];
+      /** `catalog` previews what every installation of the entry gets; the default is this installation's own. */
+      layer?: 'catalog' | 'installation';
+    }) =>
       api.post('/overrides/preview', {
         doc: input.document,
-        layer: 'installation',
+        layer: input.layer ?? 'installation',
         installationId: input.installationId,
       }),
+  );
+
+/** The overrides every installation of a catalog entry gets (set by an Admin or the entry's owner). */
+export const useEntryOverrides = (entryId: string) =>
+  useQuery({
+    queryKey: ['catalog', entryId, 'default-overrides'],
+    queryFn: ({ signal }) => api.get(`/catalog/${entryId}/default-overrides`, { signal }),
+  });
+
+export const useSaveEntryOverrides = (entryId: string, installationId: string) =>
+  useApiMutation(
+    (document: Body<'put', '/catalog/{id}/default-overrides'>) =>
+      api.put(`/catalog/${entryId}/default-overrides`, document),
+    [
+      ['catalog', entryId, 'default-overrides'],
+      [...keys.installation(installationId), 'overrides'],
+      [...keys.installation(installationId), 'capabilities'],
+    ],
   );
 
 /**

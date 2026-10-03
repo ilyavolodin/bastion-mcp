@@ -113,6 +113,58 @@ export const putCatalogOverrides = async (
   return { doc, updatedAt: row.updatedAt, rejected: [] as Rejection[] };
 };
 
+const currentVersionOf = async (store: ReadCtx['deps']['store'], entryId: string) => {
+  const entry = await store.get('catalog_entries', entryId);
+  if (!entry) throw new NotFoundApiError('catalog entry');
+  const versionId = typeof entry.currentVersionId === 'string' ? entry.currentVersionId : null;
+  if (!versionId) {
+    throw new ConflictApiError('the entry has no published version yet', 'no_published_version');
+  }
+  return requireVersion(store, entryId, versionId);
+};
+
+export const entryOverridesVersion = async (
+  deps: ReadCtx['deps'],
+  entryId: string,
+): Promise<string | null> => {
+  const entry = await deps.store.get('catalog_entries', entryId);
+  const versionId = typeof entry?.currentVersionId === 'string' ? entry.currentVersionId : null;
+  return versionId ? catalogOverridesVersion(deps, entryId, versionId) : null;
+};
+
+/**
+ * Overrides for everyone who installs the entry: they are written to the entry's current published version. Overrides
+ * change what AI tools see, never what runs (the spec, content and pins stay frozen, 11.1), so an Admin or the entry's
+ * owner may change them without publishing a new version; installations on that version pick them up at once.
+ */
+export const putEntryOverrides = async (ctx: WriteCtx, entryId: string, input: unknown) => {
+  const version = await currentVersionOf(ctx.tx.store, entryId);
+  const doc = parseDoc(input);
+  const row = await ctx.tx.store.update('catalog_versions', version.id, { overrides: doc });
+  await ctx.tx.audit({
+    action: 'catalog.overrides.update',
+    targetType: 'catalog_version',
+    targetId: version.id,
+    diff: {
+      entryId,
+      published: true,
+      tools: Object.keys(doc.tools).length,
+      prompts: Object.keys(doc.prompts).length,
+    },
+  });
+  ctx.tx.configChanged('catalog');
+  return { doc, updatedAt: row.updatedAt, rejected: [] as Rejection[] };
+};
+
+export const getEntryOverrides = async (ctx: Pick<ReadCtx, 'deps'>, entryId: string) => {
+  const version = await currentVersionOf(ctx.deps.store, entryId);
+  return {
+    doc: asDoc(version.overrides),
+    updatedAt: version.updatedAt,
+    rejected: [] as Rejection[],
+  };
+};
+
 // --- installation layer -------------------------------------------------------------------------------
 
 export const getInstallationOverrides = async (ctx: Pick<ReadCtx, 'deps'>, id: string) => {

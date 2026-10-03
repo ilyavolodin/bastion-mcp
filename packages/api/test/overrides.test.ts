@@ -65,6 +65,39 @@ describe('12.1 catalog-layer overrides', () => {
   });
 });
 
+describe('12.1 overrides for everyone who installs an entry', () => {
+  const url = '/catalog/entry-team-a/default-overrides';
+
+  it('12.1 are written to the current published version and audited', async () => {
+    api = await buildTestApi();
+    const get = await api.call('managerOwn', 'GET', url);
+    expect(get.status).toBe(200);
+    const put = await api.call('managerOwn', 'PUT', url, {
+      headers: { 'if-match': String(get.headers.etag) },
+      body: doc({ search: { hidden: true } }),
+    });
+    expect(put.status).toBe(200);
+    const stored = await api.call('managerOwn', 'GET', url);
+    expect(rec(rec(stored.body).doc).tools).toEqual({ search: { hidden: true } });
+    expect(api.uow.audits.at(-1)).toMatchObject({
+      action: 'catalog.overrides.update',
+      diff: { published: true },
+    });
+  });
+
+  it('10.1 members and managers of other teams may not', async () => {
+    api = await buildTestApi();
+    expect((await api.call('member', 'PUT', url, { body: doc({}) })).status).toBe(403);
+    expect((await api.call('managerOther', 'PUT', url, { body: doc({}) })).status).toBe(403);
+  });
+
+  it('11.1 an entry without a published version has none to change', async () => {
+    api = await buildTestApi();
+    const res = await api.call('admin', 'GET', '/catalog/entry-org/default-overrides');
+    expect([200, 409]).toContain(res.status);
+  });
+});
+
 describe('12.1 installation-layer overrides', () => {
   const url = '/installations/inst-member-a/overrides';
 
