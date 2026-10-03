@@ -87,6 +87,10 @@
                 "overridden": {
                   "type": "boolean"
                 },
+                "added": {
+                  "type": "boolean",
+                  "const": true
+                },
                 "renamed": {
                   "type": "boolean"
                 },
@@ -363,6 +367,10 @@
                     "hidden",
                     "invalid"
                   ]
+                },
+                "added": {
+                  "type": "boolean",
+                  "const": true
                 },
                 "error": {
                   "type": "string"

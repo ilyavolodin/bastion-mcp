@@ -242,6 +242,10 @@ export const filterUserLayer = (
         reason: levelReason('instructions', 'cosmetic', level),
       });
   }
+  if (doc.added !== undefined) {
+    if (needs(level, 'full')) out.added = doc.added;
+    else rejected.push({ path: '/added', reason: levelReason('added', 'full', level) });
+  }
   if (doc.uriPrefix !== undefined) {
     if (needs(level, 'full')) out.uriPrefix = doc.uriPrefix;
     else rejected.push({ path: '/uriPrefix', reason: levelReason('uriPrefix', 'full', level) });

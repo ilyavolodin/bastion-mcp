@@ -674,3 +674,78 @@ describe('6.8 25.8 skills', () => {
     await expect(ops.run('skills/get', {}, ctx())).rejects.toMatchObject({ mcpCode: -32602 });
   });
 });
+
+describe('12.2 added prompts, resources and templates are answered by Bastion', () => {
+  const added = {
+    version: 1,
+    added: {
+      prompts: {
+        review: {
+          arguments: [{ name: 'repo', required: true }],
+          messages: [{ role: 'user', text: 'Review {{repo}} carefully.' }],
+        },
+      },
+      resources: { 'notes://welcome': { name: 'welcome', text: 'Hello there' } },
+      resourceTemplates: { 'notes://page/{id}': { name: 'page', text: 'Page {{id}}' } },
+    },
+  };
+
+  it('a prompt is rendered from its arguments without asking the upstream, and is logged', async () => {
+    const { ops, ctx } = await setup({ overrides: added });
+    const r = complete(
+      await ops.run(
+        'prompts/get',
+        { name: 'github__review', arguments: { repo: 'bastion' } },
+        ctx(),
+      ),
+    );
+    expect(r.messages).toEqual([
+      { role: 'user', content: { type: 'text', text: 'Review bastion carefully.' } },
+    ]);
+    expect(ops.upstream.calls).toHaveLength(0);
+    expect(ops.rows[0]).toMatchObject({ method: 'prompts/get', itemName: 'github__review' });
+  });
+
+  it('a prompt without its required argument is -32602', async () => {
+    const { ops, ctx } = await setup({ overrides: added });
+    await expect(
+      ops.run('prompts/get', { name: 'github__review', arguments: {} }, ctx()),
+    ).rejects.toMatchObject({ mcpCode: -32602 });
+  });
+
+  it('a resource and a template are read without asking the upstream', async () => {
+    const { ops, ctx } = await setup({ overrides: added });
+    const fixed = complete(await ops.run('resources/read', { uri: 'notes://welcome' }, ctx()));
+    expect(fixed.contents).toEqual([
+      { uri: 'notes://welcome', mimeType: 'text/plain', text: 'Hello there' },
+    ]);
+    const templated = complete(await ops.run('resources/read', { uri: 'notes://page/12' }, ctx()));
+    expect(templated.contents).toEqual([
+      { uri: 'notes://page/12', mimeType: 'text/plain', text: 'Page 12' },
+    ]);
+    expect(ops.upstream.calls).toHaveLength(0);
+  });
+
+  it('policy still decides: a denied read is -32010', async () => {
+    const { ops, ctx } = await setup({ overrides: added, policy: deny('readResource') });
+    await expect(
+      ops.run('resources/read', { uri: 'notes://welcome' }, ctx()),
+    ).rejects.toMatchObject({ mcpCode: -32010 });
+    const denied = await setup({ overrides: added, policy: deny('getPrompt') });
+    await expect(
+      denied.ops.run(
+        'prompts/get',
+        { name: 'github__review', arguments: { repo: 'x' } },
+        denied.ctx(),
+      ),
+    ).rejects.toMatchObject({ mcpCode: -32010 });
+  });
+
+  it('a hidden added prompt is not there to get', async () => {
+    const hidden = { ...added, prompts: { review: { hidden: true } } };
+    const { ops, ctx } = await setup({ overrides: hidden });
+    await expect(
+      ops.run('prompts/get', { name: 'github__review', arguments: { repo: 'x' } }, ctx()),
+    ).rejects.toMatchObject({ mcpCode: -32602 });
+  });
+});

@@ -1,7 +1,12 @@
 /** `prompts/get` (6.3): routed like a tool call, with prompt arguments and `messagesTransform` (12.4). */
 import { isBastionError, toToolErrorResult } from '@bastion-mcp/core';
 import { extractPromptSegments, extractRequestSegments } from '@bastion-mcp/guards';
-import { applyMessagesTransform, mapPromptGet } from '@bastion-mcp/overrides';
+import {
+  addedPromptResult,
+  applyMessagesTransform,
+  mapPromptGet,
+  missingPromptArguments,
+} from '@bastion-mcp/overrides';
 import { trace } from '@opentelemetry/api';
 import { CallRecord } from '../observability/call-log';
 import { InvalidParamsError, UnknownItemError } from '../rpc';
@@ -52,6 +57,13 @@ export const createPromptsGet = (deps: OperationDeps): Operation => ({
         templateContextOf(principal, resolved?.variables),
       );
       if (!mapped.ok) throw new InvalidParamsError(mapped.error);
+      const hosted = route.hosted;
+      if (hosted) {
+        const missing = missingPromptArguments(hosted, mapped.arguments);
+        if (missing.length > 0) {
+          throw new InvalidParamsError(`missing required argument: ${missing.join(', ')}`);
+        }
+      }
       return await runRouted(
         deps,
         ctx,
@@ -72,6 +84,12 @@ export const createPromptsGet = (deps: OperationDeps): Operation => ({
             bindArgs: (p) => p.arguments ?? {},
           },
           responseSegments: (result) => extractPromptSegments(result.messages),
+          ...(hosted
+            ? {
+                local: (p: JsonObject) =>
+                  addedPromptResult(hosted, stringArguments(p.arguments)) as unknown as JsonObject,
+              }
+            : {}),
           transform: (result) =>
             Array.isArray(result.messages)
               ? applyMessagesTransform(

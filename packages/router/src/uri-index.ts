@@ -1,6 +1,7 @@
 /** The per-endpoint URI index (7.4): Exact, Seen, Template and Rewritten routing for `resources/read`. */
 import { BastionError, JSONRPC_CODES, redisKeys } from '@bastion-mcp/core';
 import {
+  type HostedRead,
   mapResourceRead,
   matchUriTemplate,
   parseUriPrefix,
@@ -8,7 +9,12 @@ import {
 } from '@bastion-mcp/overrides';
 import { z } from 'zod';
 
-export type UriTarget = { installationId: string; upstreamUri: string };
+export type UriTarget = {
+  installationId: string;
+  upstreamUri: string;
+  /** Bastion answers this read itself (12.2 `added`). */
+  hosted?: HostedRead;
+};
 
 export type UriIndex = {
   /** Advertised URI (after any `bastion+slug:` prefix) to its owner. */
@@ -78,7 +84,14 @@ export const resolveResourceUri = (index: UriIndex, uri: string): ResolvedUri =>
   if (exact) {
     const mapped = mapResourceRead(uri, exact.route);
     return mapped.ok
-      ? { ok: true, target: { installationId: exact.installationId, upstreamUri: mapped.uri } }
+      ? {
+          ok: true,
+          target: {
+            installationId: exact.installationId,
+            upstreamUri: mapped.uri,
+            ...(exact.route.hosted ? { hosted: exact.route.hosted } : {}),
+          },
+        }
       : { ok: false };
   }
   const seen = index.seen.get(uri);
@@ -87,7 +100,14 @@ export const resolveResourceUri = (index: UriIndex, uri: string): ResolvedUri =>
     if (matchUriTemplate(t.advertised, uri) === null) continue;
     const mapped = mapResourceRead(uri, t.route);
     if (mapped.ok) {
-      return { ok: true, target: { installationId: t.installationId, upstreamUri: mapped.uri } };
+      return {
+        ok: true,
+        target: {
+          installationId: t.installationId,
+          upstreamUri: mapped.uri,
+          ...(t.route.hosted ? { hosted: t.route.hosted } : {}),
+        },
+      };
     }
     return { ok: false };
   }

@@ -4,6 +4,7 @@
  */
 import type { PrefixMode } from '@bastion-mcp/core';
 import type {
+  AddedPrompt,
   FinalPrompt,
   FinalTool,
   OverrideIssue,
@@ -118,6 +119,8 @@ export type PromptRoute = {
   upstreamName: string;
   finalName: string;
   plan?: PromptPlan | undefined;
+  /** Bastion answers this prompt itself (12.2 `added`). */
+  hosted?: AddedPrompt | undefined;
 };
 
 export type EndpointCapabilities = {
@@ -138,6 +141,8 @@ export type ItemMeta = {
   /** Final name, URI or URI template as the client sees it. */
   finalKey: string;
   overridden: boolean;
+  /** Written in the override document and served by Bastion (12.2 `added`). */
+  added?: true;
   renamed: boolean;
   collided: boolean;
   issues: OverrideIssue[];

@@ -78,6 +78,11 @@ export type RoutedSpec = {
   indexSeen?: ((result: JsonObject) => string[]) | undefined;
   /** Cached public reads (6.7). */
   readKey?: string | undefined;
+  /**
+   * Content Bastion serves itself (12.2 `added`): the answer is computed from the guarded request instead of asking
+   * the upstream. Cedar, limits, request and response guards and the call log all still apply.
+   */
+  local?: ((params: JsonObject) => JsonObject) | undefined;
 };
 
 const limitsPrincipal = (deps: OperationDeps, ctx: OpContext) => ({
@@ -337,6 +342,18 @@ const afterAdmission = async (
       }),
       installationId: installation.id,
     };
+  }
+
+  if (spec.local) {
+    return finishComplete(
+      deps,
+      ctx,
+      spec,
+      record,
+      spec.local(upstreamParams),
+      applied.meta,
+      limitsMeta,
+    );
   }
 
   // Cached public reads (6.7)

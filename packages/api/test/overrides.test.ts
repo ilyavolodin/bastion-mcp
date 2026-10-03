@@ -147,6 +147,28 @@ describe('12.1 installation-layer overrides', () => {
     ]);
   });
 
+  it('12.2 adding prompts and resources needs "full": a cosmetic entry rejects them, a full one keeps them', async () => {
+    api = await buildTestApi();
+    const added = {
+      version: 1,
+      added: { resources: { 'notes://welcome': { name: 'welcome', text: 'Hello' } } },
+    };
+    const cosmetic = await api.call('member', 'PUT', url, {
+      headers: { 'if-match': await tag(api, 'member', url) },
+      body: added,
+    });
+    expect(rec(cosmetic.body).rejected).toEqual([expect.objectContaining({ path: '/added' })]);
+    expect(rec(rec(cosmetic.body).doc).added).toBeUndefined();
+    await api.store.update('installations', 'inst-member-a', { catalogEntryId: 'entry-i-pub' });
+    await api.store.update('catalog_entries', 'entry-i-pub', { userOverrides: 'full' });
+    const full = await api.call('member', 'PUT', url, {
+      headers: { 'if-match': await tag(api, 'member', url) },
+      body: added,
+    });
+    expect(rec(full.body).rejected).toEqual([]);
+    expect(rec(rec(full.body).doc).added).toEqual(added.added);
+  });
+
   it('12.1 GET returns the stored layer with its level; PUT needs If-Match', async () => {
     api = await buildTestApi();
     const get = await api.call('member', 'GET', url);

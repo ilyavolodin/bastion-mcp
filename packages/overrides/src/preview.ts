@@ -4,6 +4,7 @@
  */
 import type { TemplateContext } from '@bastion-mcp/core';
 import { compare, getValueByPointer } from 'fast-json-patch';
+import { mergedAdded, withAdded } from './added';
 import {
   applyInstructions,
   applyToPrompt,
@@ -49,6 +50,8 @@ export type ItemDiff = {
   /** Upstream name (or URI / URI template). */
   key: string;
   status: 'unchanged' | 'modified' | 'hidden' | 'invalid';
+  /** Written in the override document and served by Bastion, not listed by the upstream. */
+  added?: true;
   /** Present for invalid items and for tools whose schema patch was not applied. */
   error?: string;
   issues: OverrideIssue[];
@@ -114,6 +117,23 @@ export const previewOverrides = (
     invalid: [],
   };
   const diff: ItemDiff[] = [];
+  const added = mergedAdded(layers);
+  const listing = withAdded(
+    {
+      prompts: upstream.prompts ?? [],
+      resources: upstream.resources ?? [],
+      resourceTemplates: upstream.resourceTemplates ?? [],
+    },
+    layers,
+  );
+  const isAdded = (kind: ItemKind, key: string): boolean =>
+    kind === 'prompt'
+      ? key in added.prompts
+      : kind === 'resource'
+        ? key in added.resources
+        : kind === 'resourceTemplate'
+          ? key in added.resourceTemplates
+          : false;
 
   const record = <D extends object, F extends { kind: string; issues: OverrideIssue[] }>(
     kind: ItemKind,
@@ -125,7 +145,14 @@ export const previewOverrides = (
   ): void => {
     if (isHidden(result)) {
       final.hidden.push({ kind, key });
-      diff.push({ kind, key, status: 'hidden', issues: [], changes: [] });
+      diff.push({
+        kind,
+        key,
+        status: 'hidden',
+        ...(isAdded(kind, key) ? { added: true as const } : {}),
+        issues: [],
+        changes: [],
+      });
       return;
     }
     if (isInvalid(result)) {
@@ -134,6 +161,7 @@ export const previewOverrides = (
         kind,
         key,
         status: 'invalid',
+        ...(isAdded(kind, key) ? { added: true as const } : {}),
         error: result.error,
         issues: result.issues,
         changes: [],
@@ -148,6 +176,7 @@ export const previewOverrides = (
       kind,
       key,
       status: changes.length > 0 ? 'modified' : 'unchanged',
+      ...(isAdded(kind, key) ? { added: true as const } : {}),
       ...(patchError === undefined ? {} : { error: patchError }),
       issues: item.issues,
       changes,
@@ -164,7 +193,7 @@ export const previewOverrides = (
       (f) => final.tools.push(f),
     );
   }
-  for (const prompt of upstream.prompts ?? []) {
+  for (const prompt of listing.prompts) {
     record(
       'prompt',
       prompt.name,
@@ -174,7 +203,7 @@ export const previewOverrides = (
       (f) => final.prompts.push(f),
     );
   }
-  for (const resource of upstream.resources ?? []) {
+  for (const resource of listing.resources) {
     record(
       'resource',
       resource.uri,
@@ -184,7 +213,7 @@ export const previewOverrides = (
       (f) => final.resources.push(f),
     );
   }
-  for (const template of upstream.resourceTemplates ?? []) {
+  for (const template of listing.resourceTemplates) {
     record(
       'resourceTemplate',
       template.uriTemplate,

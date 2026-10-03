@@ -802,3 +802,58 @@ describe('7.2 purity and providers', () => {
     expect(r.degraded).toEqual([{ installation: 'zz', code: 'list_failed' }]);
   });
 });
+
+describe('12.2 items Bastion hosts itself (added)', () => {
+  const layers = {
+    catalog: doc({
+      added: {
+        prompts: { review: { messages: [{ role: 'user', text: 'Review {{repo}}' }] } },
+        resources: { 'notes://welcome': { name: 'welcome', text: 'Hello' } },
+        resourceTemplates: { 'notes://page/{id}': { name: 'page', text: 'Page {{id}}' } },
+      },
+    }),
+  };
+  const inst = installation({ id: 'a', slug: 'alpha', layers });
+
+  it('are listed, routed to be answered by Bastion, and marked as added', async () => {
+    const r = await compileEndpoint(base([inst], { a: items({ tools: [tool('search')] }) }));
+    expect(r.prompts.map((p) => p.name)).toEqual(['alpha__review']);
+    expect(r.promptRoutes.get('alpha__review')?.hosted?.messages[0]?.text).toBe('Review {{repo}}');
+    expect(r.resources.map((x) => x.uri)).toEqual(['notes://welcome']);
+    expect(r.resourceTemplates.map((x) => x.uriTemplate)).toEqual(['notes://page/{id}']);
+    const hosted = resolveResourceUri(r.uriIndex, 'notes://welcome');
+    expect(hosted.ok && hosted.target.hosted?.kind).toBe('resource');
+    const templated = resolveResourceUri(r.uriIndex, 'notes://page/9');
+    expect(templated.ok && templated.target.hosted?.kind).toBe('template');
+    expect(r.items.filter((i) => i.added).map((i) => i.kind)).toEqual([
+      'prompt',
+      'resource',
+      'resourceTemplate',
+    ]);
+    expect(r.capabilities.prompts).toBeDefined();
+    expect(r.capabilities.resources).toBeDefined();
+  });
+
+  it('can be hidden like any other item, and an upstream item of the same key gives way', async () => {
+    const hidden = installation({
+      id: 'a',
+      slug: 'alpha',
+      layers: { ...layers, installation: doc({ prompts: { review: { hidden: true } } }) },
+    });
+    const r = await compileEndpoint(
+      base([hidden], { a: items({ prompts: [{ name: 'review', description: 'upstream' }] }) }),
+    );
+    expect(r.prompts).toEqual([]);
+    const shown = await compileEndpoint(
+      base([inst], { a: items({ prompts: [{ name: 'review', description: 'upstream' }] }) }),
+    );
+    expect(shown.prompts).toHaveLength(1);
+    expect(shown.promptRoutes.get('alpha__review')?.hosted).toBeDefined();
+  });
+
+  it('are not served while the upstream cannot be listed', async () => {
+    const r = await compileEndpoint(base([inst], {}));
+    expect(r.prompts).toEqual([]);
+    expect(r.degraded).toHaveLength(1);
+  });
+});

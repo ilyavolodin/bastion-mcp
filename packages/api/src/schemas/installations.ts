@@ -122,6 +122,7 @@ const definitionMeta = z.looseObject({
   upstreamKey: z.string(),
   finalKey: z.string(),
   overridden: z.boolean(),
+  added: z.literal(true).optional(),
   renamed: z.boolean(),
   collided: z.boolean(),
   issues: z.array(z.looseObject({})),
@@ -221,6 +222,8 @@ const itemDiff = z.object({
   kind: overrideKind,
   key: z.string(),
   status: z.enum(['unchanged', 'modified', 'hidden', 'invalid']),
+  /** Written in the override document and served by Bastion itself (12.2). */
+  added: z.literal(true).optional(),
   error: z.string().optional(),
   issues: z.array(overrideIssue),
   changes: z.array(

@@ -117,6 +117,57 @@ export const resourceTemplateOverrideSchema = z.strictObject({
 });
 export type ResourceTemplateOverride = z.infer<typeof resourceTemplateOverrideSchema>;
 
+export const ADDED_LIMITS = {
+  items: 50,
+  messages: 20,
+  textChars: 100_000,
+} as const;
+
+const uriKey = z
+  .string()
+  .regex(/^[A-Za-z][A-Za-z0-9+.-]*:/, 'must be a URI with a scheme, such as notes://welcome')
+  .refine((v) => !/^(skill|bastion\+[^:]*):/i.test(v), 'this scheme is reserved by Bastion');
+const addedText = z.string().max(ADDED_LIMITS.textChars);
+
+export const addedPromptArgumentSchema = z.strictObject({
+  name: z.string().regex(NAME_PATTERN, 'must match ^[A-Za-z0-9_.-]{1,128}$'),
+  description: z.string().optional(),
+  required: z.boolean().optional(),
+});
+
+/** A prompt Bastion itself serves: fixed messages in which `{{argument}}` is replaced by what the client passes. */
+export const addedPromptSchema = z.strictObject({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  arguments: z.array(addedPromptArgumentSchema).max(ADDED_LIMITS.items).optional(),
+  messages: z
+    .array(z.strictObject({ role: z.enum(['user', 'assistant']), text: addedText }))
+    .min(1)
+    .max(ADDED_LIMITS.messages),
+});
+export type AddedPrompt = z.infer<typeof addedPromptSchema>;
+
+/** A resource Bastion itself serves: fixed text. */
+export const addedResourceSchema = z.strictObject({
+  name: z.string().min(1),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  mimeType: z.string().min(1).optional(),
+  text: addedText,
+});
+export type AddedResource = z.infer<typeof addedResourceSchema>;
+
+/** A resource template Bastion itself serves: text in which `{{variable}}` is replaced by the URI's variables. */
+export const addedResourceTemplateSchema = addedResourceSchema;
+export type AddedResourceTemplate = AddedResource;
+
+export const addedSchema = z.strictObject({
+  prompts: z.record(z.string().regex(NAME_PATTERN), addedPromptSchema).optional(),
+  resources: z.record(uriKey, addedResourceSchema).optional(),
+  resourceTemplates: z.record(uriKey, addedResourceTemplateSchema).optional(),
+});
+export type AddedItems = z.infer<typeof addedSchema>;
+
 export const overridesSchema = z.strictObject({
   version: z.literal(1).default(1),
   uriPrefix: z.boolean().optional(),
@@ -125,6 +176,8 @@ export const overridesSchema = z.strictObject({
   prompts: z.record(z.string().min(1), promptOverrideSchema).default({}),
   resources: z.record(z.string().min(1), resourceOverrideSchema).default({}),
   resourceTemplates: z.record(z.string().min(1), resourceTemplateOverrideSchema).default({}),
+  /** Prompts and resources Bastion hosts itself, in addition to the upstream's. */
+  added: addedSchema.optional(),
 });
 export type OverridesDocument = z.output<typeof overridesSchema>;
 export type OverridesInput = z.input<typeof overridesSchema>;

@@ -3,6 +3,8 @@
  * definitions plus call-time plans out. The router stores the plans in its routing table.
  */
 import type {
+  AddedResource,
+  AddedResourceTemplate,
   JsonObject,
   JsonValue,
   MessagesTransform,
@@ -112,14 +114,20 @@ export type FinalPrompt = {
   issues: OverrideIssue[];
 };
 
+/** A resource or template Bastion answers itself (12.2 `added`): no upstream read happens. */
+export type HostedRead =
+  | { kind: 'resource'; def: AddedResource }
+  | { kind: 'template'; uriTemplate: string; def: AddedResourceTemplate };
+
 /** How a read is mapped back upstream. */
 export type ResourceRoute =
-  | { kind: 'resource'; prefixSlug?: string }
+  | { kind: 'resource'; prefixSlug?: string; hosted?: HostedRead }
   | {
       kind: 'template';
       upstreamTemplate: string;
       pinnedVariables: Record<string, string>;
       prefixSlug?: string;
+      hosted?: HostedRead;
     };
 
 export type FinalResource = {

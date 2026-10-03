@@ -20,6 +20,8 @@ import {
   type FinalResource,
   type FinalResourceTemplate,
   type FinalTool,
+  type MergedAdded,
+  mergedAdded,
   type OverrideIssue,
   type OverrideLayers,
   type OverridesDocument,
@@ -32,6 +34,7 @@ import {
   type UpstreamResource,
   type UpstreamResourceTemplate,
   type UpstreamTool,
+  withAdded,
 } from '@bastion-mcp/overrides';
 import type {
   AuthorizeRequest,
@@ -370,6 +373,8 @@ export const assembleEndpoint = (
   const needsAuth: NeedsAuthEntry[] = [];
   const warnings: EndpointWarning[] = [];
   const instData = new Map<string, InstallationData>();
+  /** What Bastion itself serves for each installation (12.2 `added`). */
+  const addedOf = new Map<string, MergedAdded>();
 
   const toolEntries: ToolEntry[] = [];
   const promptEntries: PromptEntry[] = [];
@@ -390,7 +395,8 @@ export const assembleEndpoint = (
       instructionParts.push({ installation, upstream: undefined });
       return;
     }
-    const src = listing.items;
+    addedOf.set(installation.id, mergedAdded(installation.layers));
+    const src = withAdded(listing.items, installation.layers);
     loadedItems.push(src);
     instructionParts.push({ installation, upstream: src.instructions });
     const layers = installation.layers;
@@ -611,11 +617,13 @@ export const assembleEndpoint = (
     keptPromptNames.push(name);
     finalPrompts.push({ ...e.prompt, name });
     const plan: PromptPlan | undefined = e.final?.plan;
+    const hosted = addedOf.get(e.installation.id)?.prompts[e.upstreamKey];
     promptRoutes.set(name, {
       installationId: e.installation.id,
       upstreamName: e.upstreamKey,
       finalName: name,
       plan,
+      ...(hosted ? { hosted } : {}),
     });
   });
 
@@ -658,6 +666,7 @@ export const assembleEndpoint = (
       upstreamKey: e.upstreamKey,
       finalKey: name,
       overridden: e.overridden,
+      ...(addedOf.get(e.installation.id)?.prompts[e.upstreamKey] ? { added: true as const } : {}),
       renamed: name !== e.upstreamKey,
       collided: isCollided('prompt', name, e),
       issues: e.issues,
@@ -670,7 +679,11 @@ export const assembleEndpoint = (
   resourceEntries.forEach((e, i) => {
     if (!visibleRes.has(resRes[i] as VisibilityResource)) return;
     keptResources.push(e);
-    const route: ResourceRoute = e.final?.route ?? { kind: 'resource' };
+    const hostedDef = addedOf.get(e.installation.id)?.resources[e.upstreamKey];
+    const base: ResourceRoute = e.final?.route ?? { kind: 'resource' };
+    const route: ResourceRoute = hostedDef
+      ? { ...base, hosted: { kind: 'resource', def: hostedDef } }
+      : base;
     uriInput.resources.push({
       installationId: e.installation.id,
       advertisedUri: e.resource.uri,
@@ -682,14 +695,18 @@ export const assembleEndpoint = (
   templateEntries.forEach((e, i) => {
     if (!visibleRes.has(resRes[resourceEntries.length + i] as VisibilityResource)) return;
     keptTemplates.push(e);
+    const hostedDef = addedOf.get(e.installation.id)?.resourceTemplates[e.upstreamKey];
+    const base: ResourceRoute = e.final?.route ?? {
+      kind: 'template',
+      upstreamTemplate: e.upstreamKey,
+      pinnedVariables: {},
+    };
     uriInput.templates.push({
       installationId: e.installation.id,
       advertised: e.template.uriTemplate,
-      route: e.final?.route ?? {
-        kind: 'template',
-        upstreamTemplate: e.upstreamKey,
-        pinnedVariables: {},
-      },
+      route: hostedDef
+        ? { ...base, hosted: { kind: 'template', uriTemplate: e.upstreamKey, def: hostedDef } }
+        : base,
     });
   });
   for (const e of keptTools) {
@@ -718,6 +735,7 @@ export const assembleEndpoint = (
       upstreamKey: e.upstreamKey,
       finalKey: e.resource.uri,
       overridden: e.overridden,
+      ...(addedOf.get(e.installation.id)?.resources[e.upstreamKey] ? { added: true as const } : {}),
       renamed: e.resource.uri !== e.upstreamKey,
       collided: false,
       issues: e.issues,
@@ -732,6 +750,9 @@ export const assembleEndpoint = (
       upstreamKey: e.upstreamKey,
       finalKey: e.template.uriTemplate,
       overridden: e.overridden,
+      ...(addedOf.get(e.installation.id)?.resourceTemplates[e.upstreamKey]
+        ? { added: true as const }
+        : {}),
       renamed: e.template.uriTemplate !== e.upstreamKey,
       collided: false,
       issues: e.issues,

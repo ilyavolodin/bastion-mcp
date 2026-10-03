@@ -1,5 +1,6 @@
 /** `resources/read` (6.3, 7.4): URI index routing, prefix stripping, Bastion-hosted `skill://` resources. */
 import { extractResourceContents, extractUriSegments } from '@bastion-mcp/guards';
+import { addedResourceContents, addedTemplateContents } from '@bastion-mcp/overrides';
 import { ResourceNotFoundError, resolveResourceUriWithSeen } from '@bastion-mcp/router';
 import { trace } from '@opentelemetry/api';
 import { CallRecord } from '../observability/call-log';
@@ -36,6 +37,7 @@ export const createResourcesRead = (deps: OperationDeps): Operation => ({
     const installation = ctx.resolved.installations.get(target.target.installationId);
     if (!installation) throw new ResourceNotFoundError(uri);
     const upstreamUri = target.target.upstreamUri;
+    const hosted = target.target.hosted;
     const record = new CallRecord('resources/read', deps.clock.now());
     const span = trace.getActiveSpan()?.spanContext() ?? ctx.trace;
     try {
@@ -59,7 +61,18 @@ export const createResourcesRead = (deps: OperationDeps): Operation => ({
             bindArgs: (p) => p.uri ?? '',
           },
           responseSegments: (result) => extractResourceContents(result.contents),
-          readKey: upstreamUri,
+          ...(hosted
+            ? {
+                local: () => {
+                  const served =
+                    hosted.kind === 'resource'
+                      ? addedResourceContents(uri, hosted.def)
+                      : addedTemplateContents(hosted.uriTemplate, hosted.def, upstreamUri);
+                  if (!served) throw new ResourceNotFoundError(uri);
+                  return { contents: served.contents.map((c) => ({ ...c, uri })) };
+                },
+              }
+            : { readKey: upstreamUri }),
         },
         retry,
         record,
