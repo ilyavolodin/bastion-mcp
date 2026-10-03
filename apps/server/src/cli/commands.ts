@@ -6,6 +6,7 @@ import pg from 'pg';
 import { bootstrapAdminUser } from '../boot/bootstrap-admin';
 import { migrate, migrationStatus } from '../boot/migrate';
 import { resetPassword } from '../boot/reset-password';
+import { setRole } from '../boot/set-role';
 import { loadServerConfig } from '../config';
 import { createInfra, type Infra } from '../infra';
 import { KEY_PURPOSES, publishKeyChange, rotateKeys } from '../scheduler/tasks/keys';
@@ -27,6 +28,7 @@ export const COMMANDS = [
   'check-config',
   'create-admin',
   'reset-password',
+  'set-role',
   'rotate-keys',
   'export-config',
   'import-config',
@@ -54,7 +56,7 @@ export const parseArgs = (argv: readonly string[]): Parsed => {
   return { command: positional[0] ?? 'serve', flags, positional: positional.slice(1) };
 };
 
-const VALUE_FLAGS = new Set(['email', 'purpose', 'file', 'out']);
+const VALUE_FLAGS = new Set(['email', 'purpose', 'file', 'out', 'role']);
 
 export const HELP = `bastion: self-hosted MCP gateway
 
@@ -67,6 +69,9 @@ Commands:
   create-admin --email <e>   Create a local admin (generated password printed once; --password-stdin to supply one)
   reset-password --email <e> Set a new password for a local account (generated and printed once; --password-stdin
                              to supply one). Signs the account out everywhere and revokes its tokens
+  set-role --email <e> --role <r>
+                             Give an existing account the organization role admin | auditor | member (for example to
+                             make an identity provider account an administrator when nobody can sign in as one)
   rotate-keys --purpose <p>  Rotate keys: as | state | upstream-client (--force creates a new key even if none is due)
   export-config [--out f]    Export catalog, policies, settings, guard profiles, limit rules, registry sources,
                              marketplaces as JSON (secrets are never exported)
@@ -265,6 +270,40 @@ export const execute = async (argv: readonly string[], env: Env, io: Io): Promis
               : `password of ${result.email} reset; new password (shown once): ${result.generatedPassword}`,
           );
           io.out('all sessions and tokens of this user were revoked');
+          return 0;
+        });
+      }
+      case 'set-role': {
+        const email = flagString(parsed, 'email');
+        const role = flagString(parsed, 'role');
+        if (!email || !role) {
+          io.err('set-role requires --email <address> and --role admin | auditor | member');
+          return 2;
+        }
+        return await withInfra(env, async (infra) => {
+          const result = await setRole(infra, { email, role });
+          if (!result.ok) {
+            io.err(
+              result.reason === 'invalid_role'
+                ? 'the role must be admin, auditor or member'
+                : result.reason === 'not_found'
+                  ? `no account with the email ${email} (it is created when the person first signs in)`
+                  : result.reason === 'deactivated'
+                    ? `${email} is deactivated`
+                    : 'this is the last active administrator: make somebody else an administrator first',
+            );
+            return 1;
+          }
+          io.out(
+            result.from === result.to
+              ? `${result.email} already is ${result.to}`
+              : `${result.email} is now ${result.to} (was ${result.from})`,
+          );
+          if (result.ruleManaged) {
+            io.out(
+              'note: IdP group mapping rules also set roles, at every sign-in; a role they set replaces this one',
+            );
+          }
           return 0;
         });
       }

@@ -331,4 +331,41 @@ describe('Access forms send what the API requires (17.2)', () => {
     );
     capture.stop();
   });
+
+  it('10.1 an Admin gives a person a role from the People list, and the request names only the role', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/access?tab=people');
+    const select = await screen.findByLabelText('Role of Raj Mehta');
+    await user.selectOptions(select, 'admin');
+    expect(await expectSent(capture, 'patch', '/users/u-raj')).toEqual({ orgRole: 'admin' });
+    await waitFor(() =>
+      expect(getDb().data.access.users.find((u) => u.id === 'u-raj')?.orgRole).toBe('admin'),
+    );
+    capture.stop();
+  });
+
+  it('10.1 the last administrator cannot be demoted: the refusal is shown next to the list', async () => {
+    const { user } = await renderRoute('/access?tab=people');
+    await user.selectOptions(await screen.findByLabelText('Role of Dana Whitfield'), 'member');
+    expect(await screen.findByRole('alert')).toHaveTextContent('last active administrator');
+    expect(getDb().data.access.users.find((u) => u.id === 'u-dana')?.orgRole).toBe('admin');
+  });
+
+  it('10.1 a team manager makes a member a manager, and back to a member', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/access?tab=teams');
+    await user.click(
+      await screen.findByRole('button', { name: 'Make Jo Okafor a manager of Data platform' }),
+    );
+    expect(await expectSent(capture, 'put', '/teams/t-data/members/u-jo')).toEqual({
+      role: 'manager',
+    });
+    await user.click(
+      await screen.findByRole('button', { name: 'Make Jo Okafor a member of Data platform' }),
+    );
+    expect(await expectSent(capture, 'put', '/teams/t-data/members/u-jo')).toEqual({
+      role: 'member',
+    });
+    capture.stop();
+  });
 });

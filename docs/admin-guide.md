@@ -293,6 +293,25 @@ example `bastion-admins` to Admin). Roles: Admin, Manager (of a team), Member, A
 **Break-glass.** `BASTION_BOOTSTRAP_ADMIN_EMAIL` creates a local admin on first start. Local password login stays
 enabled only while no IdP connection exists or while `BASTION_LOCAL_LOGIN=true`; keep the credentials sealed.
 
+### 5.1 Who is an administrator
+
+There are two kinds of role. The **organization role** is one of **Admin**, **Auditor** and **Member**; **Manager** is a
+role *within a team* (a Manager edits the team's membership and sees its traffic). A person who signs in through the
+identity provider for the first time is created as a Member with no teams, unless a group mapping rule says otherwise.
+To make an identity provider account an administrator, in this order of preference:
+
+1. **Group mapping rule.** Map an IdP group (for example `bastion-admins`) to the Admin role under Access, IdP group
+   mapping. The role is re-evaluated at every sign-in, so removing the person from the group removes the role.
+2. **By hand.** An Admin opens Access, People and chooses the role in the list. If any mapping rule names a role, it
+   also sets roles at every sign-in and replaces what was chosen by hand; the page says so. Without such rules a role
+   chosen by hand stays.
+3. **Command line**, for the case where nobody can sign in as an Admin (local password login is off once an identity
+   provider exists): `bastion set-role --email <email> --role admin`. The account must exist, so the person signs in
+   once first. The change is audited with the system as the actor.
+
+To make somebody a team Manager, an Admin or a Manager of that team opens Access, Teams and chooses **Make manager**
+next to the person. The last active Admin cannot be demoted or deactivated: make somebody else an Admin first.
+
 ## 6. KMS
 
 Secrets are envelope-encrypted: a random data key per row (AES-256-GCM), wrapped by the KMS key. Choose with
@@ -487,6 +506,7 @@ run on invalid configuration, printing every error.
 | `bastion migrate` | Apply database migrations (Prisma `migrate deploy`). Run by the Helm hook and the compose `migrate` service. |
 | `bastion check-config` | Validate the effective configuration (environment plus `BASTION_CONFIG_FILE`) without starting. |
 | `bastion create-admin --email <email>` | Create a local break-glass admin. |
+| `bastion set-role --email <email> --role admin\|auditor\|member` | Give an existing account an organization role (for example to make an identity provider account an administrator). Audited; refuses to demote the last active administrator. |
 | `bastion reset-password --email <email>` | Set a new password for a local account: a random one printed once, or yours with `--password-stdin`. Signs the account out everywhere and revokes its tokens. |
 | `bastion rotate-keys --purpose as\|state\|upstream-client` | Rotate one keyring (see [rotating keys](runbooks/rotating-keys.md)). |
 | `bastion export-config` | Write catalog and settings as portable configuration. |

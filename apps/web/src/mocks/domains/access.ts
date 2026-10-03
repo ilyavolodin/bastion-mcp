@@ -435,6 +435,29 @@ export const accessHandlers = [
     );
     return HttpResponse.json(pageOf(items, url));
   }),
+  route.patch('/users/{id}', async ({ params, body }) => {
+    if (!isAdmin()) return forbidden();
+    const user = data().users.find((u) => u.id === params.id);
+    if (!user) return notFound('User');
+    const patch = await body();
+    // The last active Admin keeps the role (as the API does, 409 `last_admin`).
+    const admins = data().users.filter((u) => u.orgRole === 'admin' && u.status === 'active');
+    if (
+      patch.orgRole !== undefined &&
+      patch.orgRole !== 'admin' &&
+      user.orgRole === 'admin' &&
+      !admins.some((a) => a.id !== user.id)
+    ) {
+      return problem(
+        409,
+        'last_admin',
+        'Conflict',
+        'this is the last active administrator: make somebody else an administrator first',
+      );
+    }
+    Object.assign(user, patch, { updatedAt: nowIso() });
+    return HttpResponse.json(user, { headers: etagHeaders(user.updatedAt) });
+  }),
   route.post('/users/{id}/deactivate', ({ params }) => {
     if (!isAdmin()) return forbidden();
     const user = data().users.find((u) => u.id === params.id);

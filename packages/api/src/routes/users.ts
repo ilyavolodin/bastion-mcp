@@ -33,6 +33,7 @@ import {
   setMember,
   teams,
   updateTeam,
+  updateUser,
   users,
 } from '../services/users';
 import { org, teamOf, versionOf } from './shared';
@@ -81,7 +82,7 @@ export const usersRoutes: RouteDefinition[] = [
     schema: { params: idParams, body: userPatchSchema, response: asRow(userRow) },
     authz: authz.on('users.write', org),
     version: versionOf('users'),
-    handler: (ctx) => users.update(ctx, ctx.params.id, ctx.body),
+    handler: (ctx) => updateUser(ctx, ctx.params.id, ctx.body),
   }),
   defineMutation({
     method: 'POST',

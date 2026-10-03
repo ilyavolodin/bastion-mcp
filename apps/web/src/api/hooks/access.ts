@@ -60,6 +60,17 @@ export const useSetMember = () =>
     INVALIDATE_DIRECTORY,
   );
 
+/**
+ * `PATCH /users/{id}` (10.1): an Admin gives a person an organization role (Admin, Auditor or Member). The row's
+ * version comes from the directory list (17.1). The last active Admin keeps the role (409 `last_admin`).
+ */
+export const useSetUserRole = () =>
+  useApiMutation(
+    (input: { userId: string; orgRole: Schemas['User']['orgRole'] }) =>
+      api.patch(`/users/${input.userId}`, { orgRole: input.orgRole }),
+    INVALIDATE_DIRECTORY,
+  );
+
 export const useDeactivateUser = () =>
   useApiMutation((id: string) => api.post(`/users/${id}/deactivate`), INVALIDATE_DIRECTORY);
 

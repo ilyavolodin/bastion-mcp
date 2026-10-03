@@ -188,6 +188,77 @@ describe.skipIf(!haveDocker())('20.1 CLI commands against Postgres and Redis', (
     expect(await execute(['rotate-keys', '--purpose', 'nope'], env.env(), bad.io)).toBe(2);
   });
 
+  it('20.1 set-role gives an account an organization role (an IdP user becomes an administrator), audited, and keeps the last administrator', async () => {
+    const idp = await infra.repos.users.create({
+      email: 'sso.user@example.com',
+      displayName: 'Sso',
+    });
+    expect(idp.orgRole).toBe('member');
+
+    const promote = capture();
+    expect(
+      await execute(
+        ['set-role', '--email', 'SSO.User@example.com', '--role', 'admin'],
+        env.env(),
+        promote.io,
+      ),
+    ).toBe(0);
+    expect(promote.out.join('\n')).toContain('sso.user@example.com is now admin (was member)');
+    expect((await infra.repos.users.findByEmail('sso.user@example.com'))?.orgRole).toBe('admin');
+    const audit = await infra.db.prisma.auditEvent.findFirst({
+      where: { action: 'user.update', targetId: idp.id },
+      orderBy: { seq: 'desc' },
+    });
+    expect(audit?.actorType).toBe('system');
+
+    const again = capture();
+    expect(
+      await execute(
+        ['set-role', '--email', 'sso.user@example.com', '--role', 'admin'],
+        env.env(),
+        again.io,
+      ),
+    ).toBe(0);
+    expect(again.out.join('\n')).toContain('already is admin');
+
+    // Wrong role, unknown account and a missing flag are refused with a reason.
+    for (const [args, message] of [
+      [
+        ['set-role', '--email', 'sso.user@example.com', '--role', 'root'],
+        /must be admin, auditor or member/,
+      ],
+      [
+        ['set-role', '--email', 'nobody@example.com', '--role', 'admin'],
+        /no account with the email/,
+      ],
+    ] as const) {
+      const bad = capture();
+      expect(await execute([...args], env.env(), bad.io)).toBe(1);
+      expect(bad.err.join('\n')).toMatch(message);
+    }
+    const missing = capture();
+    expect(
+      await execute(['set-role', '--email', 'sso.user@example.com'], env.env(), missing.io),
+    ).toBe(2);
+
+    // Demoting the only administrator is refused. (Other tests of this file may have created administrators.)
+    const admins = (
+      await infra.repos.users.list({ orgRole: 'admin', status: 'active', limit: 200 })
+    ).items;
+    for (const a of admins.filter((x) => x.id !== idp.id)) {
+      await infra.repos.users.update(a.id, { orgRole: 'member' }, { ifMatch: '*' });
+    }
+    const last = capture();
+    expect(
+      await execute(
+        ['set-role', '--email', 'sso.user@example.com', '--role', 'member'],
+        env.env(),
+        last.io,
+      ),
+    ).toBe(1);
+    expect(last.err.join('\n')).toContain('last active administrator');
+  });
+
   it('20.1 export-config / import-config round trip is complete, idempotent and never carries a secret', async () => {
     const user = await infra.repos.users.create({ email: 'author@example.com', displayName: 'A' });
     const entry = await infra.repos.catalogEntries.create({

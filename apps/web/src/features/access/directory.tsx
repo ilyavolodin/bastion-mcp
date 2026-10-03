@@ -17,6 +17,7 @@ import {
   useSaveRoleMapping,
   useServiceAccounts,
   useSetMember,
+  useSetUserRole,
   useTeams,
   useUsers,
 } from '@/api/hooks';
@@ -91,9 +92,27 @@ export function PeopleTab({ initialQuery }: { initialQuery?: string | undefined 
   }, [q]);
   const users = useUsers({ q: dq });
   const deactivate = useDeactivateUser();
+  const setRole = useSetUserRole();
+  const rules = useRoleMappingRules();
+  // Group rules that name a role set it again at every sign-in: a role chosen here would be replaced.
+  const rulesSetRoles = (rules.data ?? []).some((r) => 'orgRole' in (r.mapsTo as object));
+  const [roleError, setRoleError] = React.useState<string | undefined>();
   return (
     <Card aria-label="People" className="gap-3">
       <CardHeader title="People" />
+      <p className="m-0 text-caption text-muted">
+        {role === 'admin'
+          ? 'Everyone who signs in through your identity provider starts as a Member. Choose a role here to make somebody an Admin or an Auditor; to make somebody a team manager, open the team.'
+          : 'Roles and teams of the people in your organization.'}
+        {role === 'admin' && rulesSetRoles
+          ? ' IdP group mapping rules also set roles, at every sign-in, and replace a role chosen here.'
+          : ''}
+      </p>
+      {roleError ? (
+        <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
+          {roleError}
+        </p>
+      ) : null}
       <div className="flex h-11 items-center gap-2.5 rounded-md bg-sunken px-3.5">
         <Search className="size-4 text-muted" aria-hidden="true" />
         <input
@@ -127,7 +146,34 @@ export function PeopleTab({ initialQuery }: { initialQuery?: string | undefined 
                   <div className="truncate text-label">{u.name}</div>
                   <div className="truncate text-caption text-muted">{u.email}</div>
                 </div>
-                <Tag tone={ROLE_TONE[u.orgRole]}>{u.orgRole}</Tag>
+                {role === 'admin' && u.status === 'active' ? (
+                  <Select
+                    aria-label={`Role of ${u.name}`}
+                    value={u.orgRole}
+                    className="h-9 w-28 text-[13px]"
+                    onChange={(e) => {
+                      setRoleError(undefined);
+                      setRole.mutate(
+                        { userId: u.id, orgRole: e.target.value as typeof u.orgRole },
+                        {
+                          onSuccess: () => toast.success(`${u.name} is now ${e.target.value}`),
+                          onError: (error) =>
+                            setRoleError(
+                              error instanceof ApiError
+                                ? (error.detail ?? error.title)
+                                : 'Could not change the role',
+                            ),
+                        },
+                      );
+                    }}
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="auditor">Auditor</option>
+                    <option value="member">Member</option>
+                  </Select>
+                ) : (
+                  <Tag tone={ROLE_TONE[u.orgRole]}>{u.orgRole}</Tag>
+                )}
                 <div className="flex gap-1 max-lg:hidden">
                   {u.teams.map((t) => (
                     <Chip key={t.id}>
@@ -186,7 +232,7 @@ function TeamCard({ team }: { team: TeamView }) {
       <AvatarStrip names={team.members.map((m) => m.name)} size={28} />
       <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
         {team.members.map((m) => (
-          <li key={m.userId}>
+          <li key={m.userId} className="inline-flex items-center gap-1">
             <Chip
               onRemove={
                 canManage
@@ -198,6 +244,36 @@ function TeamCard({ team }: { team: TeamView }) {
               {m.name}
               {m.role === 'manager' ? ' · manager' : ''}
             </Chip>
+            {canManage ? (
+              <Button
+                variant="ghost"
+                size="xs"
+                aria-label={
+                  m.role === 'manager'
+                    ? `Make ${m.name} a member of ${team.name}`
+                    : `Make ${m.name} a manager of ${team.name}`
+                }
+                onClick={() =>
+                  setMember.mutate(
+                    {
+                      teamId: team.id,
+                      userId: m.userId,
+                      role: m.role === 'manager' ? 'member' : 'manager',
+                    },
+                    {
+                      onSuccess: () =>
+                        toast.success(
+                          m.role === 'manager'
+                            ? `${m.name} is now a member of ${team.name}`
+                            : `${m.name} now manages ${team.name}`,
+                        ),
+                    },
+                  )
+                }
+              >
+                {m.role === 'manager' ? 'Make member' : 'Make manager'}
+              </Button>
+            ) : null}
           </li>
         ))}
       </ul>

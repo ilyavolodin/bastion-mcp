@@ -73,6 +73,32 @@ describe('17.2 users', () => {
     expect(empty.status).toBe(400);
   });
 
+  it('10.1 the last active administrator keeps the role: demoting yourself is refused until somebody else is an administrator', async () => {
+    api = await buildTestApi();
+    const own = await ifMatch(api, `/users/${W.admin}`);
+    const refused = await api.call('admin', 'PATCH', `/users/${W.admin}`, {
+      headers: own,
+      body: { orgRole: 'member' },
+    });
+    expect(refused.status).toBe(409);
+    expect(rec(refused.body).code).toBe('last_admin');
+
+    // Make a second administrator (this is how an IdP account becomes an administrator), then it is allowed.
+    const other = await ifMatch(api, `/users/${W.memberA}`);
+    const promoted = await api.call('admin', 'PATCH', `/users/${W.memberA}`, {
+      headers: other,
+      body: { orgRole: 'admin' },
+    });
+    expect(promoted.status).toBe(200);
+    expect(rec(promoted.body).orgRole).toBe('admin');
+    const allowed = await api.call('admin', 'PATCH', `/users/${W.admin}`, {
+      headers: await ifMatch(api, `/users/${W.admin}`),
+      body: { orgRole: 'member' },
+    });
+    expect(allowed.status).toBe(200);
+    expect(rec(allowed.body).orgRole).toBe('member');
+  });
+
   it('9.1 deactivation marks the user, then revokes tokens and sessions and stops instances after commit', async () => {
     const executed: DeactivationAction['type'][] = [];
     api = await buildTestApi({

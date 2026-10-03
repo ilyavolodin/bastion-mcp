@@ -48,6 +48,35 @@ export const assertGroupPattern = (pattern: string | undefined): void => {
   }
 };
 
+/**
+ * An organization always keeps an active administrator: taking the role from, or deactivating, the last one would
+ * leave nobody who can change it back (the local break-glass account may be switched off, 9.1).
+ */
+const assertAnotherAdmin = async (ctx: WriteCtx, userId: string): Promise<void> => {
+  const admins = await ctx.tx.store.find('users', { orgRole: 'admin', status: 'active' });
+  if (!admins.some((a) => a.id !== userId)) {
+    throw new ConflictApiError(
+      'this is the last active administrator: make somebody else an administrator first',
+      'last_admin',
+    );
+  }
+};
+
+/** `PATCH /users/{id}`: a role change keeps at least one active administrator. */
+export const updateUser = async (
+  ctx: WriteCtx,
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<Row> => {
+  if (patch.orgRole !== undefined && patch.orgRole !== 'admin') {
+    const current = await ctx.tx.store.get('users', id);
+    if (current?.orgRole === 'admin' && current.status === 'active') {
+      await assertAnotherAdmin(ctx, id);
+    }
+  }
+  return users.update(ctx, id, patch);
+};
+
 export const createUser = (
   ctx: WriteCtx,
   body: { email: string; displayName: string; orgRole: string },
@@ -69,6 +98,7 @@ export const deactivateUser = async (ctx: WriteCtx, id: string): Promise<Row> =>
   if (id === ctx.principal.id) {
     throw new ConflictApiError('you cannot deactivate your own account', 'cannot_deactivate_self');
   }
+  if (user.orgRole === 'admin') await assertAnotherAdmin(ctx, id);
   const row = await ctx.tx.store.update('users', id, { status: 'deactivated' });
   await ctx.tx.audit({
     action: 'user.deactivate',
