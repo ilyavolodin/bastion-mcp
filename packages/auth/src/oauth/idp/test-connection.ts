@@ -31,7 +31,9 @@ export const testIdpConnection = async (input: {
       ok: matches,
       ...(matches
         ? {}
-        : { detail: 'issuer in the discovery document differs from the connection' }),
+        : {
+            detail: `the discovery document says the issuer is ${doc.issuer}, but this connection has ${input.expectedIssuer}. They must match exactly (scheme, host, path and trailing slash): set the connection's Issuer to ${doc.issuer}`,
+          }),
     });
   } catch (error) {
     checks.push({

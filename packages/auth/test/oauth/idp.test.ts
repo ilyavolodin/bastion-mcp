@@ -546,6 +546,11 @@ describe('17.2 idp_connection.test', () => {
     });
     expect(result.ok).toBe(false);
     expect(result.checks.find((c) => c.name === 'issuer')?.ok).toBe(false);
+    // The message says which issuer the IdP publishes, which one is configured, and what to change.
+    const detail = result.checks.find((c) => c.name === 'issuer')?.detail ?? '';
+    expect(detail).toContain(`the issuer is ${idp.issuer}`);
+    expect(detail).toContain('this connection has https://x.example');
+    expect(detail).toContain(`set the connection's Issuer to ${idp.issuer}`);
   });
 
   it('17.2 reports unreachable discovery', async () => {

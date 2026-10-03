@@ -282,7 +282,10 @@ export const idpTestSteps = (r: IdpTestResult): { name: string; ok: boolean; det
         {
           name: 'Issuer',
           ok: r.issuerMatches === true,
-          detail: r.issuerMatches === true ? r.issuer : `The IdP reports ${r.issuer}`,
+          detail:
+            r.issuerMatches === true
+              ? r.issuer
+              : `The IdP reports ${r.issuer}. Set the Issuer of this connection to exactly that`,
         },
       ]),
   ...(r.endpoints?.token ? [{ name: 'Token endpoint', ok: true, detail: r.endpoints.token }] : []),
