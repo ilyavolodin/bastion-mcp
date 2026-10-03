@@ -105,9 +105,16 @@ export const usePatchInstallation = (id: string) =>
     [keys.installations, keys.installation(id), keys.endpoints],
   );
 
-export const useDeleteInstallation = () =>
+/**
+ * `onDeleted` runs as soon as the server answers, BEFORE the lists refresh: refreshing `['installations']` also
+ * re-reads the page of the row that is gone (a 404), so the screen must have left that page by then.
+ */
+export const useDeleteInstallation = (onDeleted?: (id: string) => void | Promise<void>) =>
   useApiMutation(
-    (id: string) => api.delete(`/installations/${id}`),
+    async (id: string) => {
+      await api.delete(`/installations/${id}`);
+      await onDeleted?.(id);
+    },
     [keys.installations, keys.store, keys.endpoints],
   );
 

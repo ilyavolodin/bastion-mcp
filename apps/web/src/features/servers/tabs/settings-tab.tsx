@@ -74,9 +74,10 @@ function VariablesCard({ installation: i }: { installation: InstallationView }) 
 /** Names, version pinning, enable or disable, remove (18.3). Sends If-Match via the ETag cache. */
 export function SettingsTab({ installation: i }: { installation: InstallationView }) {
   const patch = usePatchInstallation(i.id);
-  const del = useDeleteInstallation();
-  const restart = useRestartInstallation(i.id);
   const navigate = useNavigate();
+  // Leave this server's page first: the lists that refresh afterwards would otherwise re-read it (404).
+  const del = useDeleteInstallation(() => navigate({ to: '/servers' }));
+  const restart = useRestartInstallation(i.id);
   const [confirm, setConfirm] = React.useState(false);
   const form = useForm<Names>({
     resolver: zodResolver(namesSchema),
@@ -184,10 +185,7 @@ export function SettingsTab({ installation: i }: { installation: InstallationVie
               disabled={del.isPending}
               onClick={() =>
                 del.mutate(i.id, {
-                  onSuccess: () => {
-                    toast.success(`${i.displayName} removed`);
-                    void navigate({ to: '/servers' });
-                  },
+                  onSuccess: () => toast.success(`${i.displayName} removed`),
                 })
               }
             >

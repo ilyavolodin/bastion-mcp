@@ -147,6 +147,27 @@ describe('My servers and Installation detail (18.3)', () => {
     expect(screen.getAllByText('Denied').length).toBeGreaterThan(0);
   });
 
+  it('removing a server goes straight to the list: the removed server’s page never shows "not found"', async () => {
+    const { user } = await renderRoute('/servers/i-slack?tab=settings');
+    await user.click(await screen.findByRole('button', { name: 'Remove server' }));
+    // The page of the deleted row answers 404 once the lists refresh: it must be gone from the screen by then.
+    let sawNotFound = false;
+    const watch = () => {
+      if (document.body.textContent?.includes('Installation not found')) sawNotFound = true;
+    };
+    const observer = new MutationObserver(watch);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    await user.click(await screen.findByRole('button', { name: 'Remove' }));
+    await screen.findByRole('heading', { level: 1, name: /servers/i });
+    await waitFor(() =>
+      expect(getDb().data.servers.installations.some((i) => i.id === 'i-slack')).toBe(false),
+    );
+    // Give the list refresh time to settle, then look at what was shown along the way.
+    await new Promise((r) => setTimeout(r, 300));
+    observer.disconnect();
+    expect(sawNotFound).toBe(false);
+  });
+
   it('Settings saves with If-Match and removes the server', async () => {
     const { user } = await renderRoute('/servers/i-slack?tab=settings');
     await user.click((await screen.findAllByRole('switch', { name: 'Enabled' }))[0] as HTMLElement);
