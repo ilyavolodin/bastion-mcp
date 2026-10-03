@@ -23,6 +23,8 @@ export type StatsQuery = {
   from?: string | undefined;
   to?: string | undefined;
   teamId?: string | undefined;
+  /** Only this person's calls (`GET /stats/calls?user=`). */
+  userId?: string | undefined;
 };
 
 export type StatsSeries = {

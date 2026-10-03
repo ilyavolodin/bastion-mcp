@@ -50,6 +50,7 @@ const statsQuery = z.object({
     .optional(),
   bucket: z.enum(['minute', 'hour', 'day']).optional(),
   team: z.string().min(1).optional(),
+  user: z.string().min(1).optional(),
   ...range,
 });
 
@@ -83,7 +84,7 @@ const statRoute = (
     summary,
     schema: { query: statsQuery, response: seriesSchema },
     authz: team
-      ? authz.oneOf(['logs.org', 'logs.team'], callStatsChoice)
+      ? authz.oneOf(['logs.org', 'logs.team', 'logs.user'], callStatsChoice)
       : authz.on('logs.org', org),
     handler: (ctx) =>
       stats(ctx.deps, kind, {
@@ -92,6 +93,7 @@ const statRoute = (
         from: ctx.query.from,
         to: ctx.query.to,
         teamId: team ? ctx.query.team : undefined,
+        userId: team ? ctx.query.user : undefined,
       }),
   });
 

@@ -634,6 +634,66 @@ describe.skipIf(!haveDocker())('17 control-plane API over Postgres and Redis', (
     }
   });
 
+  it('15.5 per-person statistics: groupBy=user ranks people from the call log, ?user= narrows to one person', async () => {
+    const other = await infra.repos.users.create({
+      email: 'busy.person@example.com',
+      displayName: 'Busy Person',
+    });
+    const ts = new Date(Date.now() - 60_000);
+    const row = (principalId: string, outcome: string) => ({
+      id: newId(),
+      ts,
+      durationMs: 5,
+      principalType: 'user',
+      principalId,
+      method: 'tools/call',
+      itemName: 'ranking__probe',
+      outcome,
+      eraDown: '2025-11-25',
+      coldStart: false,
+      bytesIn: 1,
+      bytesOut: 2,
+    });
+    await infra.repos.callLog.insertBatch([
+      row(other.id, 'ok'),
+      row(other.id, 'ok'),
+      row(other.id, 'tool_error'),
+      row(api.adminId, 'ok'),
+    ] as never);
+    const from = new Date(Date.now() - 600_000).toISOString();
+    const to = new Date(Date.now() + 600_000).toISOString();
+
+    const everybody = await api.call('GET', '/stats/calls', {
+      query: { groupBy: 'user', bucket: 'hour', from, to },
+    });
+    expect(everybody.status, JSON.stringify(everybody.body)).toBe(200);
+    const byPerson = new Map<string, { count: number; errors: number }>();
+    for (const b of everybody.body.buckets as {
+      group: string;
+      values: { count: number; errors: number };
+    }[]) {
+      const cur = byPerson.get(b.group) ?? { count: 0, errors: 0 };
+      byPerson.set(b.group, {
+        count: cur.count + b.values.count,
+        errors: cur.errors + b.values.errors,
+      });
+    }
+    expect(byPerson.get(other.id)).toEqual({ count: 3, errors: 1 });
+    expect(byPerson.get(api.adminId)?.count).toBeGreaterThanOrEqual(1);
+
+    const one = await api.call('GET', '/stats/calls', {
+      query: { user: other.id, groupBy: 'outcome', bucket: 'hour', from, to },
+    });
+    expect(one.status, JSON.stringify(one.body)).toBe(200);
+    const outcomes = Object.fromEntries(
+      (one.body.buckets as { group: string; values: { count: number } }[]).map((b) => [
+        b.group,
+        b.values.count,
+      ]),
+    );
+    expect(outcomes).toEqual({ ok: 2, tool_error: 1 });
+  });
+
   it('18.1 SSE: an event published on another replica reaches the stream of this one; audience and type filters apply', async () => {
     const port = await freePort();
     await api.app.listen({ port, host: '127.0.0.1' });

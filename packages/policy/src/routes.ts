@@ -592,7 +592,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
   {
     id: 'logs.user',
     area: 'Observability',
-    routes: ['GET /calls?user=', 'GET /calls/{id}'],
+    routes: ['GET /calls?user=', 'GET /calls/{id}', 'GET /stats/calls?user='],
     action: 'logs.view',
     resource: 'User',
     grants: g('allow', 'scoped', 'scoped', 'allow'),

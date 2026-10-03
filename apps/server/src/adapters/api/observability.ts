@@ -67,6 +67,8 @@ const GROUPS = {
   item: 'item',
   itemName: 'item',
   outcome: 'outcome',
+  user: 'user',
+  userId: 'user',
 } as const;
 type Group = (typeof GROUPS)[keyof typeof GROUPS];
 
@@ -93,7 +95,9 @@ export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallRead
     const { from, to } = rangeOf(q);
     if (to.getTime() <= from.getTime()) return { buckets: [] };
     const tier = tierFor(q, from, to);
-    const group = groupOf(q.groupBy);
+    const asked = groupOf(q.groupBy);
+    // The rollups carry no person: a grouping by person is answered from the call log (`logSeries`), never here.
+    const group = asked === 'user' ? undefined : asked;
     const { rows } = await repos.callLog.stats({
       from,
       to,
@@ -125,8 +129,11 @@ export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallRead
     };
   };
 
-  /** Team statistics need the principal, so they come from `call_log` itself. */
-  const teamSeries = async (q: StatsQuery, teamId: string): Promise<StatsSeries> => {
+  /**
+   * Statistics by team or person, or grouped by person, need the principal, so they come from `call_log` itself (the
+   * rollups carry no principal).
+   */
+  const logSeries = async (q: StatsQuery): Promise<StatsSeries> => {
     const { from, to } = rangeOf(q);
     const tier = tierFor(q, from, to);
     const group = groupOf(q.groupBy);
@@ -139,7 +146,13 @@ export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallRead
             ? Prisma.sql`c.item_name`
             : group === 'outcome'
               ? Prisma.sql`c.outcome`
-              : Prisma.sql`NULL::text`;
+              : group === 'user'
+                ? Prisma.sql`c.principal_id::text`
+                : Prisma.sql`NULL::text`;
+    const inTeam = q.teamId
+      ? Prisma.sql`AND c.principal_id IN (SELECT user_id FROM team_memberships WHERE team_id = ${q.teamId}::uuid)`
+      : Prisma.empty;
+    const ofUser = q.userId ? Prisma.sql`AND c.principal_id = ${q.userId}::uuid` : Prisma.empty;
     const rows = await prisma.$queryRaw<
       { ts: Date; grp: string | null; n: number; err: number; bytes: bigint | null }[]
     >`
@@ -147,8 +160,7 @@ export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallRead
              count(*) FILTER (WHERE c.outcome NOT IN ('ok', 'input_required'))::int AS err,
              sum(c.bytes_out)::bigint AS bytes
       FROM call_log c
-      WHERE c.ts >= ${from} AND c.ts < ${to}
-        AND c.principal_id IN (SELECT user_id FROM team_memberships WHERE team_id = ${teamId}::uuid)
+      WHERE c.ts >= ${from} AND c.ts < ${to} ${inTeam} ${ofUser}
       GROUP BY 1, 2 ORDER BY 1, 2`;
     return {
       buckets: rows.map((r) => ({
@@ -182,8 +194,8 @@ export const createCallReader = ({ prisma, repos }: ObservabilityDeps): CallRead
     },
 
     callStats: (q) =>
-      q.teamId
-        ? teamSeries(q, q.teamId)
+      q.teamId || q.userId || groupOf(q.groupBy) === 'user'
+        ? logSeries(q)
         : rollupSeries(q, (r) => ({ count: r.count, errors: r.errorCount, bytesOut: r.bytesOut })),
 
     latency: (q) =>

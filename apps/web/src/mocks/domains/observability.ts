@@ -383,7 +383,14 @@ const inWindow = (ts: string, from?: string, to?: string) =>
 
 // --- statistics ---------------------------------------------------------------------------------------------------
 
-type Query = { from?: string; to?: string; bucket?: Bucket; groupBy?: string; team?: string };
+type Query = {
+  from?: string;
+  to?: string;
+  bucket?: Bucket;
+  groupBy?: string;
+  team?: string;
+  user?: string;
+};
 type SeriesBucket = Res<'get', '/stats/calls'>['buckets'][number];
 
 const windowOf = (q: Query) => {
@@ -410,7 +417,9 @@ const groupOf = (c: CallRow, groupBy: string | undefined): string | null =>
         ? c.itemName
         : groupBy === 'outcome'
           ? c.outcome
-          : null;
+          : groupBy === 'user'
+            ? c.principalId
+            : null;
 
 const callStats = (q: Query): SeriesBucket[] => {
   const w = windowOf(q);
@@ -423,6 +432,7 @@ const callStats = (q: Query): SeriesBucket[] => {
     const t = new Date(c.ts).getTime();
     if (t < w.from || t >= w.to) continue;
     if (members && !members.has(c.principalId)) continue;
+    if (q.user && c.principalId !== q.user) continue;
     const ts = slotIso(c.ts, w.step);
     const group = groupOf(c, q.groupBy);
     const key = `${ts}|${group}`;
@@ -605,7 +615,14 @@ export const observabilityHandlers = [
   }),
   route.get('/stats/calls', ({ query }) => {
     const q = query as Query;
-    if (q.team ? !(sees() || managesTeam(q.team)) : !sees()) return forbidden();
+    // A team by its managers, one person by whoever may read their calls, everybody by the org rule (as the API).
+    const allowed =
+      q.team && !q.user
+        ? sees() || managesTeam(q.team)
+        : q.user && q.groupBy !== 'user'
+          ? mayReadCallsOf(q.user)
+          : sees();
+    if (!allowed) return forbidden();
     return HttpResponse.json({ buckets: callStats(q) });
   }),
   route.get('/stats/latency', ({ query }) =>

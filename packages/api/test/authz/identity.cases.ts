@@ -232,6 +232,17 @@ export const identityCases: AuthzCase[] = [
     route: 'GET /stats/calls',
     request: (scope, actor) => get('/stats/calls', { team: teamFor(scope, actor) }),
   },
+  {
+    rule: 'logs.user',
+    route: 'GET /stats/calls',
+    request: (scope, actor) => get('/stats/calls', { user: userFor(scope, actor) }),
+  },
+  {
+    // Everybody at once (the busiest people) is org-wide data.
+    rule: 'logs.org',
+    route: 'GET /stats/calls',
+    request: () => get('/stats/calls', { groupBy: 'user' }),
+  },
 
   // --- audit -----------------------------------------------------------------------------------------------
   { rule: 'audit.org', route: 'GET /audit', request: () => get('/audit') },

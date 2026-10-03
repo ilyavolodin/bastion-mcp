@@ -77,10 +77,12 @@ export const useCall = (id: string | null) =>
 
 // --- statistics -------------------------------------------------------------------------------------------------
 
-/** `org` and `team` read the rollups; `me` reads the caller's own call rows. */
+/** `org` and `team` read the rollups; `person` and `me` read the call log of one person. */
 export type StatsScope = {
-  scope?: 'org' | 'team' | 'me';
+  scope?: 'org' | 'team' | 'person' | 'me';
   teamId?: string;
+  /** The person of the `person` scope (Admin and Auditor). */
+  userId?: string;
   installationId?: string;
 };
 type StatsArgs = { range: StatsRange } & StatsScope;
@@ -131,11 +133,13 @@ export const useCallSeries = (args: StatsArgs) => {
         return seriesFromCalls(rows, window);
       }
       const team = args.scope === 'team' ? args.teamId : undefined;
+      const person = args.scope === 'person' ? args.userId : undefined;
       const stats = await api.get('/stats/calls', {
         query: {
           groupBy: 'outcome',
           bucket: w.bucket,
           ...(team ? { team } : {}),
+          ...(person ? { user: person } : {}),
           from: new Date(w.from).toISOString(),
           to: new Date(w.to).toISOString(),
         },
@@ -146,18 +150,19 @@ export const useCallSeries = (args: StatsArgs) => {
   });
 };
 
-const rangeQuery = (range: StatsRange, team?: string) => {
+const rangeQuery = (range: StatsRange, team?: string, user?: string) => {
   const w = windowOf(range);
   return {
     bucket: w.bucket,
     from: new Date(w.from).toISOString(),
     to: new Date(w.to).toISOString(),
     ...(team ? { team } : {}),
+    ...(user ? { user } : {}),
   };
 };
 
-/** Calls per server, or per tool, over the range (`groupBy`). */
-export const useCallTotals = (args: StatsArgs, groupBy: 'installation' | 'item') =>
+/** Calls per server, per tool or per person over the range (`groupBy`); one person's when the scope is a person. */
+export const useCallTotals = (args: StatsArgs, groupBy: 'installation' | 'item' | 'user') =>
   useQuery({
     queryKey: [...keys.stats, 'calls', groupBy, args],
     queryFn: ({ signal }) =>
@@ -165,7 +170,11 @@ export const useCallTotals = (args: StatsArgs, groupBy: 'installation' | 'item')
         .get('/stats/calls', {
           query: {
             groupBy,
-            ...rangeQuery(args.range, args.scope === 'team' ? args.teamId : undefined),
+            ...rangeQuery(
+              args.range,
+              args.scope === 'team' ? args.teamId : undefined,
+              args.scope === 'person' ? args.userId : undefined,
+            ),
           },
           signal,
         })

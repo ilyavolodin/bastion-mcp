@@ -16,13 +16,19 @@ const errorRateOf = (installationId: string): string => {
 };
 
 describe('Observability (15, 18.3)', () => {
-  it('renders four panels, each with an accessible table toggle', async () => {
+  it('renders five panels, each with an accessible table toggle', async () => {
     const { user } = await renderRoute('/observability');
-    for (const name of ['Where calls go', 'Server health', 'Latency', 'Sandboxes']) {
+    for (const name of [
+      'Where calls go',
+      'Server health',
+      'Busiest people',
+      'Latency',
+      'Sandboxes',
+    ]) {
       expect(await screen.findByRole('heading', { name })).toBeInTheDocument();
     }
     const toggles = screen.getAllByRole('button', { name: 'View as table' });
-    expect(toggles).toHaveLength(4);
+    expect(toggles).toHaveLength(5);
     await user.click(toggles[1]!);
     const table = await screen.findByRole('table', { name: 'Server health' });
     expect(within(table).getByText('Postgres analytics')).toBeInTheDocument();
@@ -43,6 +49,64 @@ describe('Observability (15, 18.3)', () => {
     const table = await panel.findByRole('table', { name: 'Latency' });
     expect(within(table).getByRole('columnheader', { name: 'p99 (ms)' })).toBeVisible();
     expect((card as HTMLElement).textContent).not.toContain('NaN');
+  });
+
+  /** Calls of the last 24 hours per person, as the mock call log has them. */
+  const callsByPerson = () => {
+    const since = Date.now() - 24 * 3_600_000;
+    const by = new Map<string, number>();
+    for (const c of getDb().data.observability.calls) {
+      if (new Date(c.ts).getTime() < since) continue;
+      by.set(c.principalId, (by.get(c.principalId) ?? 0) + 1);
+    }
+    return by;
+  };
+
+  it('15.5 an Admin sees the busiest people, ranked, each linking to their traffic and their calls', async () => {
+    const { user } = await renderRoute('/observability');
+    const heading = await screen.findByRole('heading', { name: 'Busiest people' });
+    const card = heading.closest('section') as HTMLElement;
+    const [topId, topCalls] = [...callsByPerson().entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
+    expect(topId).toBeTruthy();
+    const name = getDb().data.access.users.find((u) => u.id === topId)?.displayName ?? '';
+    expect(await within(card).findByRole('link', { name })).toHaveAttribute(
+      'href',
+      expect.stringContaining(`person=${topId}`),
+    );
+    expect(within(card).getByRole('link', { name: `Calls of ${name}` })).toHaveAttribute(
+      'href',
+      expect.stringContaining(`user=${topId}`),
+    );
+    await user.click(within(card).getByRole('button', { name: 'View as table' }));
+    const table = await within(card).findByRole('table', { name: 'Busiest people' });
+    const firstRow = within(table).getAllByRole('row')[1] as HTMLElement;
+    expect(firstRow).toHaveTextContent(name);
+    expect(firstRow).toHaveTextContent(String(topCalls));
+  });
+
+  it('15.5 the person scope shows one person’s traffic only', async () => {
+    const personId = 'u-raj';
+    const { user } = await renderRoute(`/observability?scope=person&person=${personId}`);
+    expect(await screen.findByText('Traffic of Raj Mehta.')).toBeInTheDocument();
+    // Their numbers are the whole traffic panel; the people ranking is for everybody and is not shown.
+    expect(screen.queryByRole('heading', { name: 'Busiest people' })).toBeNull();
+    const traffic = (await screen.findByRole('heading', { name: 'Where calls go' })).closest(
+      'section',
+    ) as HTMLElement;
+    await user.click(within(traffic).getByRole('button', { name: 'View as table' }));
+    const table = await within(traffic).findByRole('table', { name: 'Where calls go' });
+    const rows = within(table).getAllByRole('row').slice(1);
+    const sum = rows.reduce(
+      (n, r) => n + Number(r.children[1]?.textContent?.replaceAll(',', '')),
+      0,
+    );
+    expect(sum).toBe(callsByPerson().get(personId));
+  });
+
+  it('10.1 only Admins and Auditors can pick a person: managers see their team', async () => {
+    await renderRoute('/observability', { role: 'manager' });
+    await screen.findByRole('heading', { name: 'Latency' });
+    expect(screen.queryByRole('button', { name: 'A person' })).toBeNull();
   });
 
   it('colours health tiles and pairs them with a text label', async () => {

@@ -33,11 +33,20 @@ export const callChoice = async (input: AuthzInput): Promise<ResourceChoice> => 
   return { rule: 'logs.user', resource: resource ?? orgResource() };
 };
 
-/** `GET /stats/calls?team=` is team-scoped; every other statistic is org-wide. */
-export const callStatsChoice = (input: AuthzInput): ResourceChoice =>
-  input.query.team
-    ? { rule: 'logs.team', resource: teamResource(input.query.team) }
-    : { rule: 'logs.org', resource: orgResource() };
+/**
+ * `GET /stats/calls`: `?team=` is team-scoped, `?user=` is scoped to that person (the person and whoever may read their
+ * calls, as for `GET /calls`); asking for everybody (`groupBy=user`, or both filters) and every other statistic is
+ * org-wide.
+ */
+export const callStatsChoice = async (input: AuthzInput): Promise<ResourceChoice> => {
+  const { team, user, groupBy } = input.query;
+  if (team && !user) return { rule: 'logs.team', resource: teamResource(team) };
+  if (user && !team && groupBy !== 'user') {
+    const resource = await userResourceFor(input, user);
+    return { rule: 'logs.user', resource: resource ?? orgResource() };
+  }
+  return { rule: 'logs.org', resource: orgResource() };
+};
 
 export const getCall = async (deps: ApiDeps, id: string) => {
   const call = await deps.observability.calls.get(id);

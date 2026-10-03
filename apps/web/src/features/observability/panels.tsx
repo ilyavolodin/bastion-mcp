@@ -84,6 +84,90 @@ export function TrafficPanel({ args }: { args: Args }) {
   );
 }
 
+// --- Busiest people --------------------------------------------------------------------------------------
+/**
+ * Calls per person, busiest first (Admin and Auditor, and the managers of a team for their team). A name opens that
+ * person's own traffic view; "Calls" opens their call list.
+ */
+export function PeoplePanel({ args }: { args: Args }) {
+  const totals = useCallTotals(args, 'user');
+  const names = useNames();
+  const nameOf = (id: string) => names.data?.users.get(id) ?? id;
+  const top = (totals.data ?? []).slice(0, 10);
+  const max = Math.max(1, ...top.map((t) => t.calls));
+  return (
+    <ChartCard
+      title="Busiest people"
+      interactive
+      legend={
+        <Legend
+          items={[
+            { label: 'Succeeded', color: 'var(--sky)', shape: 'bar' },
+            { label: 'Errors', color: 'var(--coral)', shape: 'bar' },
+          ]}
+        />
+      }
+      table={{
+        columns: ['Person', 'Calls', 'Errors'],
+        rows: top.map((t) => [nameOf(t.group), t.calls, t.errors]),
+      }}
+    >
+      <QueryBoundary
+        query={totals}
+        isEmpty={(items) => items.length === 0}
+        empty={
+          <p className="m-0 py-10 text-center text-muted">Nobody has made a call in this time.</p>
+        }
+        skeleton={<Skeleton className="h-[320px] w-full" />}
+      >
+        {() => (
+          <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+            {top.map((t) => (
+              <li
+                key={t.group}
+                className="grid grid-cols-[140px_minmax(0,1fr)_64px_56px] items-center gap-3"
+                title={`${nameOf(t.group)}: ${formatNumber(t.calls)} calls, ${formatNumber(t.errors)} errors`}
+              >
+                <Link
+                  to="/observability"
+                  search={{ range: args.range, scope: 'person', person: t.group } as never}
+                  className="truncate text-[13px] font-medium no-underline"
+                >
+                  {nameOf(t.group)}
+                </Link>
+                <span className="flex h-4 overflow-hidden rounded-sm bg-sunken" aria-hidden="true">
+                  <span
+                    className="block h-full"
+                    style={{
+                      width: `${((t.calls - t.errors) / max) * 100}%`,
+                      background: 'var(--sky)',
+                    }}
+                  />
+                  <span
+                    className="block h-full"
+                    style={{ width: `${(t.errors / max) * 100}%`, background: 'var(--coral)' }}
+                  />
+                </span>
+                <span className="text-right text-caption tabular-nums text-muted">
+                  {formatNumber(t.calls)}
+                </span>
+                <Link
+                  to="/activity"
+                  search={{ user: t.group, range: args.range } as never}
+                  aria-label={`Calls of ${nameOf(t.group)}`}
+                  className="text-right text-caption no-underline"
+                >
+                  Calls
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </QueryBoundary>
+    </ChartCard>
+  );
+}
+
 // --- Server health map -----------------------------------------------------------------------------------
 export function HealthPanel({ args }: { args: Args }) {
   const { totals, named } = useServerTotals(args);
