@@ -64,6 +64,64 @@ describe('api client (17.1, 9.2)', () => {
     expect(match).toBe('"v7"');
   });
 
+  it('17.1 a list names the version of each row, so an edit from the list sends If-Match', async () => {
+    const seen: Record<string, string | null> = {};
+    server.use(
+      http.get('*/api/v1/idp-connections', () =>
+        HttpResponse.json({
+          items: [{ id: 'idp-1', updatedAt: '2026-10-02T10:00:00.000Z' }],
+          nextCursor: null,
+        }),
+      ),
+      http.get('*/api/v1/oauth-clients', () =>
+        HttpResponse.json({
+          items: [
+            { id: 'https://claude.ai/oauth/client.json', updatedAt: '2026-10-02T11:00:00.000Z' },
+          ],
+          nextCursor: null,
+        }),
+      ),
+      http.patch('*/api/v1/idp-connections/:id', ({ request }) => {
+        seen.idp = request.headers.get('if-match');
+        return HttpResponse.json({});
+      }),
+      http.patch('*/api/v1/oauth-clients/:id', ({ request }) => {
+        seen.client = request.headers.get('if-match');
+        return HttpResponse.json({});
+      }),
+    );
+    await api.get('/idp-connections');
+    await api.get('/oauth-clients');
+    await api.patch('/idp-connections/idp-1', { issuer: 'https://sso.example/webman/sso' });
+    // A client id that is a URL is addressed encoded, exactly as the screen sends it.
+    await api.patch(
+      `/oauth-clients/${encodeURIComponent('https://claude.ai/oauth/client.json')}`,
+      {},
+    );
+    expect(seen.idp).toBe('"2026-10-02T10:00:00.000Z"');
+    expect(seen.client).toBe('"2026-10-02T11:00:00.000Z"');
+  });
+
+  it('17.1 a team detail names the version of each membership, addressed by person', async () => {
+    let match: string | null = null;
+    server.use(
+      http.get('*/api/v1/teams/t-1', () =>
+        HttpResponse.json({
+          id: 't-1',
+          updatedAt: '2026-10-01T00:00:00.000Z',
+          members: [{ id: 't-1:u-1', userId: 'u-1', updatedAt: '2026-10-02T12:00:00.000Z' }],
+        }),
+      ),
+      http.put('*/api/v1/teams/t-1/members/u-1', ({ request }) => {
+        match = request.headers.get('if-match');
+        return HttpResponse.json({});
+      }),
+    );
+    await api.get('/teams/t-1');
+    await api.put('/teams/t-1/members/u-1', { role: 'manager' });
+    expect(match).toBe('"2026-10-02T12:00:00.000Z"');
+  });
+
   it('17.1 maps 412 to a conflict error', async () => {
     server.use(
       http.put('*/api/v1/settings/model-guards', () => problem(412, { title: 'Precondition' })),

@@ -86,6 +86,30 @@ export const configureApi = (next: Partial<Hooks>): void => {
 };
 
 const etags = new Map<string, string>();
+
+/**
+ * A list names the version of every row it returns (`updatedAt`, the same value the API sends as the ETag of the row,
+ * 17.1). Screens that edit a row from a list never GET the row itself, so its `If-Match` comes from here. A team lists
+ * its memberships the same way, addressed by person.
+ */
+const rememberRowEtags = (path: string, data: unknown): void => {
+  const base = path.split('?')[0]?.replace(/\/$/, '') ?? path;
+  const remember = (url: string, row: { updatedAt?: unknown } | null | undefined) => {
+    if (typeof row?.updatedAt === 'string') etags.set(url, `"${row.updatedAt}"`);
+  };
+  const body = data as { items?: unknown; members?: unknown } | null;
+  if (Array.isArray(body?.items)) {
+    for (const item of body.items as { id?: unknown; updatedAt?: unknown }[]) {
+      if (typeof item?.id === 'string') remember(`${base}/${encodeURIComponent(item.id)}`, item);
+    }
+  }
+  if (Array.isArray(body?.members)) {
+    for (const member of body.members as { userId?: unknown; updatedAt?: unknown }[]) {
+      if (typeof member?.userId === 'string')
+        remember(`${base}/members/${encodeURIComponent(member.userId)}`, member);
+    }
+  }
+};
 export const rememberEtag = (path: string, etag: string): void => {
   etags.set(path, etag);
 };
@@ -212,6 +236,7 @@ export async function request<T>(
       signal: controller.signal,
     });
     if (res.etag) etags.set(path, res.etag);
+    if (verb === 'get') rememberRowEtags(path, res.data);
     return res.data as T;
   } catch (e) {
     if (e instanceof ApiProblemError) {

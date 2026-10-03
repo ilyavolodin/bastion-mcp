@@ -6,6 +6,7 @@
 import type { HttpHandler } from 'msw';
 import type { Body, Schemas } from '@/api/schema';
 import {
+  etagHeaders,
   forbidden,
   HttpResponse,
   notFound,
@@ -228,6 +229,7 @@ function request(
 
 const data = () => getDb().data.registry;
 const nowIso = () => new Date().toISOString();
+const POLICY_STORED_AT = '2026-09-20T09:00:00.000Z';
 const canDecide = () => getDb().role === 'admin' || getDb().role === 'manager';
 /** The registry is hidden from auditors (`capabilities.registry`). */
 const hasRegistry = () => getDb().role !== 'auditor';
@@ -304,28 +306,33 @@ export const registryHandlers: HttpHandler[] = [
     source.lastSync = stats;
     return HttpResponse.json({ ok: true, stats, deletedNames: [], deprecatedNames: [] });
   }),
+  // A stored policy: its `updatedAt` is its version, sent as the ETag (17.1). A source without one has `updatedAt: null`
+  // and takes a first PUT without `If-Match`; the mock models the stored case.
   route.get('/registry-sources/{id}/policy', ({ params }) =>
-    HttpResponse.json({
-      sourceId: params.id,
-      policy: {
-        allowedNamespaces: ['*'],
-        blockedNamespaces: [],
-        allowedRuntimes: ['remote'],
-        whoMayInstall: 'managers',
-        mode: 'request',
-        requireOsvClean: true,
-        maxRisk: 'low',
+    HttpResponse.json(
+      {
+        sourceId: params.id,
+        policy: {
+          allowedNamespaces: ['*'],
+          blockedNamespaces: [],
+          allowedRuntimes: ['remote'],
+          whoMayInstall: 'managers',
+          mode: 'request',
+          requireOsvClean: true,
+          maxRisk: 'low',
+        },
+        updatedAt: POLICY_STORED_AT,
       },
-      updatedAt: null,
-    }),
+      { headers: etagHeaders(POLICY_STORED_AT) },
+    ),
   ),
-  route.put('/registry-sources/{id}/policy', async ({ params, body }) =>
-    HttpResponse.json({
-      sourceId: params.id,
-      policy: (await body()) as never,
-      updatedAt: nowIso(),
-    }),
-  ),
+  route.put('/registry-sources/{id}/policy', async ({ params, body }) => {
+    const updatedAt = nowIso();
+    return HttpResponse.json(
+      { sourceId: params.id, policy: (await body()) as never, updatedAt },
+      { headers: etagHeaders(updatedAt) },
+    );
+  }),
 
   route.get('/registry/servers', ({ url }) => {
     if (!hasRegistry()) return forbidden();

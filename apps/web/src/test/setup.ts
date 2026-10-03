@@ -1,10 +1,14 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, configure } from '@testing-library/react';
 import { toHaveNoViolations } from 'jest-axe';
-import { afterAll, afterEach, beforeAll, expect, vi } from 'vitest';
+import { http } from 'msw';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
 import { clearEtags } from '@/api/client';
 import { resetDb } from '@/mocks/db';
+import { problem } from '@/mocks/http';
 import { server } from '@/mocks/server';
+import { getDb } from '@/mocks/state';
+import { findOperation, type HttpMethod, requiresIfMatch } from './contract';
 
 expect.extend(toHaveNoViolations);
 configure({ asyncUtilTimeout: 8000 });
@@ -63,7 +67,43 @@ beforeAll(() => {
     ]);
   }) as typeof fetch;
 });
+// The real API answers 428 to a change of a stored row that names no version (17.1). The mock does too, for exactly
+// the operations the OpenAPI document marks `x-requires-if-match`, so a screen that forgets the header fails a test.
+const missingIfMatch: string[] = [];
+beforeEach(() => {
+  missingIfMatch.length = 0;
+  server.use(
+    http.all('*/api/v1/*', ({ request }) => {
+      const method = request.method.toLowerCase() as HttpMethod;
+      if (!['put', 'patch', 'delete'].includes(method) || request.headers.get('if-match')) return;
+      const pathname = new URL(request.url).pathname;
+      const op = findOperation(method, pathname);
+      // Adding a person to a team creates the membership: there is no version to name yet (17.1).
+      const member = /\/teams\/([^/]+)\/members\/([^/]+)$/.exec(pathname);
+      const newMember =
+        method === 'put' &&
+        member !== null &&
+        !getDb()
+          .data.access.teams.find((t) => t.id === member[1])
+          ?.members.some((m) => m.userId === member[2]);
+      if (op && requiresIfMatch(op) && !newMember) {
+        // The screen may swallow the 428 (a toast, a form error): the test fails on it anyway, in afterEach.
+        missingIfMatch.push(`${request.method} ${new URL(request.url).pathname}`);
+        return problem(
+          428,
+          'precondition_required',
+          'An If-Match header with the resource ETag is required',
+        );
+      }
+    }),
+  );
+});
 afterEach(() => {
+  if (missingIfMatch.length > 0) {
+    throw new Error(
+      `these changes were sent without If-Match (17.1): ${missingIfMatch.join(', ')}`,
+    );
+  }
   cleanup();
   // Radix dialogs mark siblings aria-hidden and lock body pointer events; do not leak that between tests.
   document.body.removeAttribute('style');

@@ -125,6 +125,8 @@ export const registerRoutes = (
           ? { response: { [def.status]: def.schema.response } }
           : {}),
         security: [{ bearer: [] }, { session: [] }],
+        // Clients read this from the OpenAPI document: the call needs the row's ETag in `If-Match` (17.1).
+        ...(def.version ? { 'x-requires-if-match': true } : {}),
       },
       preValidation: async (req) => {
         const principal = await authenticate(req, deps);

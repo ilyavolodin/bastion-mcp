@@ -39,6 +39,12 @@ export const findOperation = (method: HttpMethod, rawPath: string): OperationRef
   return best ? { method, template: best.template } : null;
 };
 
+/** Whether the API answers 428 to this operation without an `If-Match` (the route loads a row version, 17.1). */
+export const requiresIfMatch = (op: OperationRef): boolean =>
+  (doc.paths[op.template]?.[op.method] as { 'x-requires-if-match'?: boolean } | undefined)?.[
+    'x-requires-if-match'
+  ] === true;
+
 const ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats(ajv);
 const compiled = new Map<string, ReturnType<typeof ajv.compile>>();
