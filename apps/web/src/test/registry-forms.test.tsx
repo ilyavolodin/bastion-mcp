@@ -27,6 +27,44 @@ describe('Registry forms send what the API requires (17.2)', () => {
     capture.stop();
   });
 
+  it('11.6 an Admin hides a server from members and shows it again; the policy written is the one that was stored plus that name', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/registry');
+    const figma = await card(/com\.figma/);
+    await user.click(figma.getByRole('button', { name: 'Hide com.figma/mcp from members' }));
+    const hide = await expectSent(capture, 'put', '/registry-sources/rs-official/policy');
+    expect(hide).toMatchObject({
+      blockedNamespaces: ['com.figma/mcp'],
+      allowedNamespaces: ['*'],
+      whoMayInstall: 'managers',
+    });
+    // The Admin keeps seeing it, marked, with the way back.
+    expect(await figma.findByText('Hidden from members')).toBeVisible();
+    await user.click(figma.getByRole('button', { name: 'Show com.figma/mcp to members' }));
+    await waitFor(() =>
+      expect(getDb().data.registry.policies['rs-official']?.policy.blockedNamespaces).toEqual([]),
+    );
+    expect(figma.queryByText('Hidden from members')).toBeNull();
+    capture.stop();
+  });
+
+  it('11.6 a member does not see a hidden server at all, and has no curation buttons', async () => {
+    const { user } = await renderRoute('/registry', {
+      role: 'member',
+      prepare: (db) => {
+        const policy = db.data.registry.policies['rs-official'];
+        if (!policy) throw new Error('fixture missing');
+        policy.policy.blockedNamespaces = ['com.figma/mcp'];
+      },
+    });
+    expect(await screen.findByRole('heading', { name: /com\.cloudflare/ })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: /com\.figma/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /members$/ })).toBeNull();
+    // Searching for it finds nothing: it does not exist for them.
+    await user.type(screen.getByRole('searchbox'), 'figma');
+    expect(await screen.findByText('No registry servers match')).toBeVisible();
+  });
+
   it('11.7 a policy that asks for approval opens the request form with the justification the API requires', async () => {
     const capture = captureRequests();
     const { user } = await renderRoute('/registry');

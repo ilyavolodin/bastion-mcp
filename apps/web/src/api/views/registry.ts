@@ -56,6 +56,31 @@ export const toServerView = (
   ),
 });
 
+type NamespacePolicy = { allowedNamespaces: string[]; blockedNamespaces: string[] };
+
+/**
+ * The source policy that shows (`show`) or hides one server from members. The policy's namespace lists decide what is
+ * shown AND what may be installed: hiding adds the exact name to the blocked list; showing takes it off that list and,
+ * when the policy allows only certain names, adds it to the allowed ones. A pattern in the blocked list that covers
+ * the name cannot be undone by name; the list then still says hidden and the settings are where to change the pattern.
+ */
+export const withVisibility = <P extends NamespacePolicy>(
+  policy: P,
+  name: string,
+  show: boolean,
+): P => {
+  const blocked = policy.blockedNamespaces.filter((p) => p !== name);
+  if (!show) {
+    return { ...policy, blockedNamespaces: [...blocked, name] };
+  }
+  const allowsEverything = policy.allowedNamespaces.some((p) => p === '*' || p === '**');
+  const allowed =
+    allowsEverything || policy.allowedNamespaces.includes(name)
+      ? policy.allowedNamespaces
+      : [...policy.allowedNamespaces, name];
+  return { ...policy, blockedNamespaces: blocked, allowedNamespaces: allowed };
+};
+
 export type RequesterRef = { name: string; teams: string[] };
 
 export type InstallRequestView = InstallRequest & {

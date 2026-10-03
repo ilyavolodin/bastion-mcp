@@ -83,6 +83,8 @@ export const registryServerSummary = z
     description: z.string(),
     publishedAt: z.string().nullable().optional(),
     runtimes: z.array(z.string()),
+    /** Whether the source policy shows this server to members (Admins and Auditors see every server). */
+    visibleToMembers: z.boolean().optional(),
   })
   .meta({ id: 'RegistryServer' });
 

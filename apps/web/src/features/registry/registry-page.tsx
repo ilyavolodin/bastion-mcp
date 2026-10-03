@@ -11,6 +11,7 @@ import {
   useRegistryServers,
   useRegistrySources,
   useRejectRequest,
+  useSetServerVisibility,
 } from '@/api/hooks';
 import {
   type InstallRequestView,
@@ -105,17 +106,22 @@ function RequestDialog({ pending, onClose }: { pending: Pending | null; onClose:
 function ServerCard({
   s,
   blocked,
+  curate,
   onBlocked,
   onNeedsRequest,
   onSourceDisabled,
 }: {
   s: RegistryServerView;
   blocked: boolean;
+  /** Admins decide which servers members see; everybody else is only shown what the policy lets through. */
+  curate: boolean;
   onBlocked: () => void;
   onNeedsRequest: (reasons: string[]) => void;
   onSourceDisabled: (server: RegistryServerView) => void;
 }) {
   const install = useRegistryInstall();
+  const visibility = useSetServerVisibility();
+  const hidden = s.visibleToMembers === false;
   return (
     <article className="flex flex-col gap-3 rounded-lg bg-surface p-[18px] shadow-card">
       <div className="min-w-0">
@@ -136,7 +142,30 @@ function ServerCard({
             {TRUST_LABEL[s.trust] ?? s.trust}
           </Tag>
         ) : null}
+        {curate && hidden ? <Tag tone="warn">Hidden from members</Tag> : null}
       </div>
+      {curate ? (
+        <Button
+          variant="ghost"
+          size="xs"
+          className="self-start"
+          disabled={visibility.isPending}
+          aria-label={`${hidden ? 'Show' : 'Hide'} ${s.name} ${hidden ? 'to' : 'from'} members`}
+          onClick={() =>
+            visibility.mutate(
+              { sourceId: s.sourceId, name: s.name, show: hidden },
+              {
+                onSuccess: () =>
+                  toast.success(
+                    hidden ? `${s.name} is shown to members` : `${s.name} is hidden from members`,
+                  ),
+              },
+            )
+          }
+        >
+          {hidden ? 'Show to members' : 'Hide from members'}
+        </Button>
+      ) : null}
       <div className="mt-auto">
         {blocked ? (
           <Tag tone="bad">Blocked by registry policy</Tag>
@@ -490,6 +519,7 @@ export function RegistryPage() {
                       key={serverKey(s)}
                       s={s}
                       blocked={blocked.has(serverKey(s))}
+                      curate={isAdmin}
                       onBlocked={() => setBlocked((prev) => new Set(prev).add(serverKey(s)))}
                       onNeedsRequest={(reasons) => setRequesting({ server: s, reasons })}
                       onSourceDisabled={setDisabledSource}

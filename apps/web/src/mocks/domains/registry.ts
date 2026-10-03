@@ -4,7 +4,7 @@
  * `registryHandlers` answer from `getDb().data.registry`.
  */
 import type { HttpHandler } from 'msw';
-import type { Body, Schemas } from '@/api/schema';
+import type { Body, Res, Schemas } from '@/api/schema';
 import {
   etagHeaders,
   forbidden,
@@ -32,15 +32,30 @@ export type ServerRecord = {
   reasons: string[];
 };
 
+type Policy = Res<'get', '/registry-sources/{id}/policy'>['policy'];
+
 export type RegistryData = {
   sources: Source[];
   servers: ServerRecord[];
   requests: Request[];
+  /** The stored policy of each source, with the version it was stored at (its `updatedAt`, the ETag). */
+  policies: Record<string, { policy: Policy; updatedAt: string }>;
 };
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const iso = (ms: number) => new Date(ms).toISOString();
+
+const POLICY_STORED_AT = '2026-09-20T09:00:00.000Z';
+const DEFAULT_POLICY: Policy = {
+  allowedNamespaces: ['*'],
+  blockedNamespaces: [],
+  allowedRuntimes: ['remote'],
+  whoMayInstall: 'managers',
+  mode: 'request',
+  requireOsvClean: true,
+  maxRisk: 'low',
+};
 
 const REASON: Record<Decision, string[]> = {
   'allowed-direct': ['The source policy lets you install this runtime directly.'],
@@ -169,6 +184,9 @@ export const buildRegistryData = (now: number): RegistryData => ({
       'needs-request',
     ),
   ],
+  policies: {
+    'rs-official': { policy: { ...DEFAULT_POLICY }, updatedAt: POLICY_STORED_AT },
+  },
   requests: [
     request(
       'rq-1',
@@ -229,7 +247,26 @@ function request(
 
 const data = () => getDb().data.registry;
 const nowIso = () => new Date().toISOString();
-const POLICY_STORED_AT = '2026-09-20T09:00:00.000Z';
+
+/** Admins and Auditors see every server; everybody else only what the namespace lists of the policy let through. */
+const seesAll = () => getDb().role === 'admin' || getDb().role === 'auditor';
+const matchesName = (patterns: readonly string[], name: string) =>
+  patterns.some(
+    (p) =>
+      p === '*' ||
+      p === '**' ||
+      p === name ||
+      (p.endsWith('*') && name.startsWith(p.slice(0, -1))) ||
+      (p.endsWith('/*') && name.startsWith(p.slice(0, -1))),
+  );
+const policyOf = (sourceId: string): Policy =>
+  data().policies[sourceId]?.policy ?? { ...DEFAULT_POLICY };
+const isShown = (sourceId: string, name: string): boolean => {
+  const policy = policyOf(sourceId);
+  return (
+    !matchesName(policy.blockedNamespaces, name) && matchesName(policy.allowedNamespaces, name)
+  );
+};
 const canDecide = () => getDb().role === 'admin' || getDb().role === 'manager';
 /** The registry is hidden from auditors (`capabilities.registry`). */
 const hasRegistry = () => getDb().role !== 'auditor';
@@ -308,28 +345,23 @@ export const registryHandlers: HttpHandler[] = [
   }),
   // A stored policy: its `updatedAt` is its version, sent as the ETag (17.1). A source without one has `updatedAt: null`
   // and takes a first PUT without `If-Match`; the mock models the stored case.
-  route.get('/registry-sources/{id}/policy', ({ params }) =>
-    HttpResponse.json(
+  route.get('/registry-sources/{id}/policy', ({ params }) => {
+    const stored = data().policies[params.id];
+    return HttpResponse.json(
       {
         sourceId: params.id,
-        policy: {
-          allowedNamespaces: ['*'],
-          blockedNamespaces: [],
-          allowedRuntimes: ['remote'],
-          whoMayInstall: 'managers',
-          mode: 'request',
-          requireOsvClean: true,
-          maxRisk: 'low',
-        },
-        updatedAt: POLICY_STORED_AT,
+        policy: stored?.policy ?? { ...DEFAULT_POLICY },
+        updatedAt: stored?.updatedAt ?? null,
       },
-      { headers: etagHeaders(POLICY_STORED_AT) },
-    ),
-  ),
+      stored ? { headers: etagHeaders(stored.updatedAt) } : {},
+    );
+  }),
   route.put('/registry-sources/{id}/policy', async ({ params, body }) => {
     const updatedAt = nowIso();
+    const policy = (await body()) as Policy;
+    data().policies[params.id] = { policy, updatedAt };
     return HttpResponse.json(
-      { sourceId: params.id, policy: (await body()) as never, updatedAt },
+      { sourceId: params.id, policy, updatedAt },
       { headers: etagHeaders(updatedAt) },
     );
   }),
@@ -343,7 +375,8 @@ export const registryHandlers: HttpHandler[] = [
       .filter(
         (s) =>
           (!sourceId || s.sourceId === sourceId) &&
-          (!q || `${s.name} ${s.description}`.toLowerCase().includes(q)),
+          (!q || `${s.name} ${s.description}`.toLowerCase().includes(q)) &&
+          (seesAll() || isShown(s.sourceId, s.name)),
       );
     const enabled = new Set(
       data()
@@ -361,6 +394,7 @@ export const registryHandlers: HttpHandler[] = [
               sourceName: src?.name ?? '',
               trust: src?.trust as 'official',
               sourceEnabled: true,
+              visibleToMembers: isShown(x.sourceId, x.name),
             };
           }),
         url,
@@ -371,8 +405,12 @@ export const registryHandlers: HttpHandler[] = [
     if (!hasRegistry()) return forbidden();
     const found = find(params.sourceId, decodeURIComponent(params.name), params.version);
     if (!found) return notFound('Registry server');
+    if (!seesAll() && !isShown(found.summary.sourceId, found.summary.name)) {
+      return notFound('Registry server');
+    }
     return HttpResponse.json({
       ...found.summary,
+      visibleToMembers: isShown(found.summary.sourceId, found.summary.name),
       serverJson: found.serverJson,
       install: { installable: true, decision: found.decision, reasons: found.reasons },
     });

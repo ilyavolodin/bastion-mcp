@@ -151,6 +151,81 @@ describe('11.6 browsing the mirrored registry', () => {
   });
 });
 
+describe('11.6 what the policy lets people browse', () => {
+  const NPM_NAME = 'io.github.acme/npm-tool';
+  const REMOTE_NAME = 'io.github.acme/remote-docs';
+  const names = (v: unknown) =>
+    items(v)
+      .map((i) => String(i.name))
+      .sort();
+
+  it('11.6 a blocked name disappears from the list of members and managers; Admins and Auditors still see it, marked', async () => {
+    api = await buildTestApi();
+    await setPolicy(api, { blockedNamespaces: [NPM_NAME] });
+    // Members and managers: only what the policy shows.
+    for (const actor of ['member', 'managerOwn'] as const) {
+      const res = await api.call(actor, 'GET', '/registry/servers');
+      expect(names(res.body)).toEqual([REMOTE_NAME]);
+      expect(items(res.body)[0]?.visibleToMembers).toBe(true);
+    }
+    // Admins curate: every server, each saying whether members see it.
+    const admin = await api.call('admin', 'GET', '/registry/servers');
+    expect(names(admin.body)).toEqual([NPM_NAME, REMOTE_NAME]);
+    const flags = Object.fromEntries(items(admin.body).map((i) => [i.name, i.visibleToMembers]));
+    expect(flags).toEqual({ [NPM_NAME]: false, [REMOTE_NAME]: true });
+  });
+
+  it('11.6 allow only the names you want shown: everything else is hidden from members', async () => {
+    api = await buildTestApi();
+    await setPolicy(api, { allowedNamespaces: ['io.github.acme/remote-*'] });
+    const member = await api.call('member', 'GET', '/registry/servers');
+    expect(names(member.body)).toEqual([REMOTE_NAME]);
+    // Search cannot reveal a hidden name either.
+    const found = await api.call('member', 'GET', '/registry/servers', { query: { q: 'npm' } });
+    expect(items(found.body)).toHaveLength(0);
+  });
+
+  it('11.6 the detail of a hidden server is a 404 for members (and says nothing about it), a 200 for an Admin', async () => {
+    api = await buildTestApi();
+    await setPolicy(api, { blockedNamespaces: [NPM_NAME] });
+    const path = `/registry/servers/src-official/${encodeURIComponent(NPM_NAME)}/2.1.0`;
+    expect((await api.call('member', 'GET', path)).status).toBe(404);
+    const admin = await api.call('admin', 'GET', path);
+    expect(admin.status).toBe(200);
+    expect(rec(admin.body).visibleToMembers).toBe(false);
+    // The shown one is unchanged.
+    const shown = `/registry/servers/src-official/${encodeURIComponent(REMOTE_NAME)}/1.0.0`;
+    expect((await api.call('member', 'GET', shown)).status).toBe(200);
+  });
+
+  it('11.6 a member still gets full pages when much of the list is hidden', async () => {
+    const rows = Array.from({ length: 60 }, (_, i) => ({
+      ...(registryServerRows()[0] as RegistryServerRow),
+      name: `io.github.${i % 2 === 0 ? 'hidden' : 'shown'}/server-${String(i).padStart(3, '0')}`,
+      version: '1.0.0',
+      searchDocument: `bulk server ${i}`,
+    }));
+    api = await buildTestApi({
+      overrides: { registry: makeRegistry({ servers: new MemoryServerStore(rows) }) },
+    });
+    await setPolicy(api, { blockedNamespaces: ['io.github.hidden/*'] });
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page += 1) {
+      const res = await api.call('member', 'GET', '/registry/servers', {
+        query: { limit: '10', ...(cursor ? { cursor } : {}) },
+      });
+      seen.push(...items(res.body).map((i) => String(i.name)));
+      // Every page that has a successor is full (10 or more shown servers), however many were hidden on the way.
+      if (rec(res.body).nextCursor) expect(items(res.body).length).toBeGreaterThanOrEqual(10);
+      cursor = rec(res.body).nextCursor ? String(rec(res.body).nextCursor) : undefined;
+      if (!cursor) break;
+    }
+    expect(seen).toHaveLength(30);
+    expect(seen.every((n) => n.startsWith('io.github.shown/'))).toBe(true);
+  });
+});
+
 describe('11.6 paging, filters and provenance of the browse list', () => {
   const bulk = (n: number) =>
     Array.from({ length: n }, (_, i) => ({

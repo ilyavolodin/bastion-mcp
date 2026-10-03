@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Schemas } from '@/api/schema';
-import { reasonsText, serverKey, toRequestView, toServerView } from '@/api/views/registry';
+import {
+  reasonsText,
+  serverKey,
+  toRequestView,
+  toServerView,
+  withVisibility,
+} from '@/api/views/registry';
 import { rejectFormSchema, requestFormSchema, requestToBody } from '@/features/registry/forms';
 
 const server: Schemas['RegistryServer'] = {
@@ -81,5 +87,35 @@ describe('registry views (11.7)', () => {
       version: '1.2.0',
       justification: 'ok',
     });
+  });
+});
+
+describe('withVisibility: showing and hiding a server from members through the policy lists', () => {
+  const policy = { allowedNamespaces: ['*'], blockedNamespaces: ['x/old'], mode: 'request' };
+
+  it('hiding blocks the exact name once and changes nothing else', () => {
+    const hidden = withVisibility(policy, 'dev.acme/ledger', false);
+    expect(hidden).toEqual({ ...policy, blockedNamespaces: ['x/old', 'dev.acme/ledger'] });
+    expect(withVisibility(hidden, 'dev.acme/ledger', false).blockedNamespaces).toEqual([
+      'x/old',
+      'dev.acme/ledger',
+    ]);
+  });
+
+  it('showing takes the name off the blocked list, and adds it to the allowed names when the policy allows only some', () => {
+    const everything = withVisibility(
+      { ...policy, blockedNamespaces: ['dev.acme/ledger'] },
+      'dev.acme/ledger',
+      true,
+    );
+    expect(everything.blockedNamespaces).toEqual([]);
+    expect(everything.allowedNamespaces).toEqual(['*']);
+
+    const only = withVisibility(
+      { ...policy, allowedNamespaces: ['io.github.acme/*'], blockedNamespaces: [] },
+      'dev.acme/ledger',
+      true,
+    );
+    expect(only.allowedNamespaces).toEqual(['io.github.acme/*', 'dev.acme/ledger']);
   });
 });

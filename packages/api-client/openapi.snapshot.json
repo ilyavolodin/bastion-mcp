@@ -5133,6 +5133,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "visibleToMembers": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -5195,6 +5198,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "visibleToMembers": {
+            "type": "boolean"
           },
           "serverJson": {
             "type": "object",

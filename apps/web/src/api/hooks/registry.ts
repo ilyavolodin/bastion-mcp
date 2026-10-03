@@ -7,6 +7,7 @@ import {
   type RequesterRef,
   toRequestView,
   toServerView,
+  withVisibility,
 } from '../views/registry';
 import { useUsers } from './access';
 import { keys, pagedQuery, useApiMutation } from './base';
@@ -139,6 +140,22 @@ export const usePutRegistryPolicy = () =>
   useApiMutation(
     (input: { sourceId: string; body: Body<'put', '/registry-sources/{id}/policy'> }) =>
       api.put(`/registry-sources/${input.sourceId}/policy`, input.body),
+    [keys.registry],
+  );
+
+/**
+ * Shows or hides one server from members by editing the namespace lists of its source's policy (`withVisibility`).
+ * The policy is read first, so its version is the one sent back in `If-Match` (17.1).
+ */
+export const useSetServerVisibility = () =>
+  useApiMutation(
+    async (input: { sourceId: string; name: string; show: boolean }) => {
+      const current = await api.get(`/registry-sources/${input.sourceId}/policy`);
+      return api.put(
+        `/registry-sources/${input.sourceId}/policy`,
+        withVisibility(current.policy, input.name, input.show),
+      );
+    },
     [keys.registry],
   );
 

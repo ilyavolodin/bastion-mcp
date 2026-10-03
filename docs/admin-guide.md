@@ -392,12 +392,16 @@ Each source has one install policy (11.7):
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `allowedNamespaces` / `blockedNamespaces` | allow `*` / block none | Globs on server names, for example `io.github.acme/*`. |
+| `allowedNamespaces` / `blockedNamespaces` | allow `*` / block none | Globs on server names, for example `io.github.acme/*`. They decide what members and managers **see** in the Registry as well as what may be installed: list only the names you want shown (default deny), or keep `*` and block a few (default allow). Admins and Auditors always see every server, with a *Hidden from members* mark on those the policy hides. |
 | `allowedRuntimes` | `remote` | Add `npm` and `pypi` to allow sandboxed packages. Other registry types are shown as unsupported. |
 | `whoMayInstall` | `managers` | `admins`, `managers` or `everyone`. |
 | `mode` | `request` | `direct` (one click, then automatic test), `request` (approval by admins and the requester's managers), `catalogOnly`. |
 | `requireOsvClean` | `true` | Reject lockfiles with `MAL-` advisories (needs `BASTION_OSV_CHECK=true`, the default). |
 | `maxRisk` | `low` | Highest risk installable in `direct` mode. |
+
+On the Registry screen an Admin can hide a server from members, or show it again, with one button on its card; it edits
+these two lists of the source policy. A pattern in the blocked list that covers a name stays until it is changed in
+Settings.
 
 Bastion also serves a subregistry at `/registry/v0.1/servers` for MCP hosts with an enterprise registry setting (VS
 Code, GitHub Copilot), authenticated with a PAT or OAuth token scoped `api:read` (11.8).

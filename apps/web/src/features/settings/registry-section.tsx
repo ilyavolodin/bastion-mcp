@@ -326,7 +326,7 @@ function PolicyDialog({ source, onClose }: { source: RegistrySource | null; onCl
             </fieldset>
             <Field
               label="Allowed namespaces"
-              help="One pattern per line, for example io.github.acme/*. * allows all."
+              help="One pattern per line, for example io.github.acme/*. * allows all. Members only see, and may only install, servers that match."
             >
               {({ id }) => (
                 <textarea
@@ -340,7 +340,7 @@ function PolicyDialog({ source, onClose }: { source: RegistrySource | null; onCl
             </Field>
             <Field
               label="Blocked namespaces"
-              help="One pattern per line. Blocked wins over allowed."
+              help="One pattern per line. Blocked wins over allowed. Blocked servers are hidden from members; Admins still see them in the registry, marked."
             >
               {({ id }) => (
                 <textarea

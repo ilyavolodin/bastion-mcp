@@ -15,6 +15,7 @@ import {
   type InstallEvaluation,
   type InstallPlan,
   type InstallRequest,
+  isNamespaceAllowed,
   type MappingResult,
   parseRegistryPolicy,
   type RegistryAuditEvent,
@@ -249,8 +250,23 @@ export const serverSummary = (
   runtimes: availableRuntimes(row.serverJson),
 });
 
+/**
+ * Admins and Auditors see every mirrored server, so they can curate the list. Everybody else sees the servers the
+ * source policy lets through: its namespace allow and block lists decide what is SHOWN as well as what may be
+ * installed (allow `*` and block a few names, or allow only the names you want shown).
+ */
+const seesWholeRegistry = (principal: Pick<Principal, 'orgRole'>): boolean =>
+  principal.orgRole === 'admin' || principal.orgRole === 'auditor';
+
+const policiesBySource = async (deps: ApiDeps): Promise<Map<string, RegistryPolicy>> => {
+  const rows = await deps.store.list('registry_policies', { limit: 200 });
+  return new Map(rows.items.map((row) => [row.id, parseRegistryPolicy(row.policy)]));
+};
+
+const PAGES_TO_FILL = 8;
+
 export const searchServers = async (
-  ctx: Pick<ReadCtx, 'deps'>,
+  ctx: Pick<ReadCtx, 'deps' | 'principal'>,
   query: {
     q?: string | undefined;
     sourceId?: string | undefined;
@@ -262,23 +278,41 @@ export const searchServers = async (
     cursor?: string | undefined;
   },
 ) => {
-  const page = await ctx.deps.registry.servers.search({
-    ...(query.q ? { q: query.q } : {}),
-    ...(query.sourceId ? { sourceId: query.sourceId } : {}),
-    ...(query.runtime ? { runtime: query.runtime } : {}),
-    includeDeleted: query.includeDeleted === true,
-    // Rows of a disabled source cannot be installed: they are listed only when asked for.
-    enabledSourcesOnly: query.includeDisabled !== true,
-    latestOnly: query.latestOnly !== false,
-    limit: query.limit,
-    cursor: query.cursor,
-  });
   const sourceRows = await ctx.deps.store.list('registry_sources', { limit: 200 });
   const sources = new Map(sourceRows.items.map((row) => [row.id, sourceOf(row)]));
-  return {
-    items: page.items.map((row) => serverSummary(row, sources.get(row.sourceId))),
-    nextCursor: page.nextCursor ?? null,
-  };
+  const policies = await policiesBySource(ctx.deps);
+  const shown = (row: RegistryServerRow): boolean =>
+    isNamespaceAllowed(policies.get(row.sourceId) ?? DEFAULT_REGISTRY_POLICY, row.name);
+  const everything = seesWholeRegistry(ctx.principal);
+
+  const items: (ReturnType<typeof serverSummary> & { visibleToMembers: boolean })[] = [];
+  let cursor = query.cursor;
+  let next: string | null = null;
+  // A person who sees only part of the list gets full pages: keep reading until the page is filled.
+  for (let n = 0; n < PAGES_TO_FILL; n += 1) {
+    const page = await ctx.deps.registry.servers.search({
+      ...(query.q ? { q: query.q } : {}),
+      ...(query.sourceId ? { sourceId: query.sourceId } : {}),
+      ...(query.runtime ? { runtime: query.runtime } : {}),
+      includeDeleted: query.includeDeleted === true,
+      // Rows of a disabled source cannot be installed: they are listed only when asked for.
+      enabledSourcesOnly: query.includeDisabled !== true,
+      latestOnly: query.latestOnly !== false,
+      limit: query.limit,
+      cursor,
+    });
+    for (const row of page.items) {
+      if (!everything && !shown(row)) continue;
+      items.push({
+        ...serverSummary(row, sources.get(row.sourceId)),
+        visibleToMembers: shown(row),
+      });
+    }
+    next = page.nextCursor ?? null;
+    if (next === null || items.length >= query.limit) break;
+    cursor = next;
+  }
+  return { items, nextCursor: next };
 };
 
 const findServer = async (
@@ -306,16 +340,21 @@ export const serverDetail = async (
 ) => {
   const source = sourceOf(await registrySources.require(ctx, sourceId));
   const row = await findServer(ctx.deps, sourceId, name, version);
+  const policy = await loadPolicy(ctx.deps, sourceId);
+  const visible = isNamespaceAllowed(policy, name);
+  // What is not shown to somebody does not exist for them (no hint of it in a refusal).
+  if (!visible && !seesWholeRegistry(ctx.principal)) throw new NotFoundApiError('registry server');
   const mapping = safeMap(row);
   if (!mapping.installable) {
     return {
       ...serverSummary(row),
+      visibleToMembers: visible,
       serverJson: row.serverJson,
       install: { installable: false, reasons: [mapping.detail] },
     };
   }
   const evaluation = evaluateInstall({
-    policy: await loadPolicy(ctx.deps, sourceId),
+    policy,
     source,
     serverName: name,
     runtime: mapping.runtime,
@@ -323,6 +362,7 @@ export const serverDetail = async (
   });
   return {
     ...serverSummary(row),
+    visibleToMembers: visible,
     serverJson: row.serverJson,
     install: {
       installable: true,
