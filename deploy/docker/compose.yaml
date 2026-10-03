@@ -20,6 +20,7 @@ x-bastion-env: &bastion-env
   # Remote MCP servers on your own network (8.9): empty means public servers over HTTPS only.
   BASTION_PRIVATE_UPSTREAM_CIDRS: ${BASTION_PRIVATE_UPSTREAM_CIDRS:-}
   BASTION_INSECURE_UPSTREAM_HOSTS: ${BASTION_INSECURE_UPSTREAM_HOSTS:-}
+  BASTION_LOCAL_LOGIN: ${BASTION_LOCAL_LOGIN:-false}
 
 services:
   init-kek:

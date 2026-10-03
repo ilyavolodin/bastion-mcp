@@ -258,6 +258,13 @@ login page routes by email domain. First login provisions the user (JIT); group 
 every login and every SCIM update. Copy the redirect URI the connection form shows into the IdP; it lives under
 `https://<host>/auth/`.
 
+**Locked out after adding an IdP?** The local password login switches off as soon as one connection exists (even a
+disabled one). Set `BASTION_LOCAL_LOGIN=true` (Docker Compose: in `deploy/docker/.env`, then `docker compose up -d
+bastion`), sign in with the local admin, fix the connection, and turn it off again. If you forgot the local password:
+`bastion reset-password --email <admin>`. Only request scopes the IdP lists in `scopes_supported` of its discovery
+document: some IdPs (Synology SSO Server offers only `openid`, `email` and `groups`, and no refresh tokens) refuse
+the sign-in when asked for others, such as `profile` or `offline_access`, with a generic error.
+
 Turn on `storeRefreshToken` only if you use the `enterpriseManaged` or `tokenExchange` upstream credential modes
 (9.7): Bastion then stores the user's IdP refresh token, envelope-encrypted.
 
