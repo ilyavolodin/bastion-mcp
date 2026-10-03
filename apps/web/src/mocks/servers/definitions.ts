@@ -8,17 +8,25 @@ export type CapabilityItem = {
   name: string;
   description: string;
   access?: 'read' | 'write' | 'destructive';
+  /** Tools: the JSON Schema of the arguments (a single optional `query` when absent). */
+  inputSchema?: Record<string, unknown>;
+  /** Prompts: the arguments the prompt takes. */
+  arguments?: { name: string; description?: string; required?: boolean }[];
+  /** Resources: the URI served. */
+  uri?: string;
 };
 
 const t = (
   name: string,
   description: string,
   access: CapabilityItem['access'],
+  inputSchema?: Record<string, unknown>,
 ): CapabilityItem => ({
   kind: 'tool',
   name,
   description,
   access,
+  ...(inputSchema ? { inputSchema } : {}),
 });
 
 export const ITEMS: Record<string, CapabilityItem[]> = {
@@ -49,12 +57,42 @@ export const ITEMS: Record<string, CapabilityItem[]> = {
     t('delete_branch', 'Delete a branch', 'destructive'),
   ],
   postgres: [
-    t('pg_run_query', 'Run a read-only SQL query on analytics', 'read'),
+    t('pg_run_query', 'Run a read-only SQL query on analytics', 'read', {
+      type: 'object',
+      required: ['sql'],
+      properties: {
+        sql: { type: 'string', description: 'The SELECT statement to run' },
+        limit: { type: 'integer', description: 'Most rows to return', default: 100 },
+        explain: { type: 'boolean', description: 'Return the query plan instead of rows' },
+        params: { type: 'array', items: { type: 'string' }, description: 'Values for $1, $2, ...' },
+      },
+    }),
     t('pg_list_tables', 'List tables and views in a schema', 'read'),
-    t('pg_describe_table', 'Columns, types and row estimates', 'read'),
+    t('pg_describe_table', 'Columns, types and row estimates', 'read', {
+      type: 'object',
+      required: ['schema', 'table'],
+      properties: {
+        schema: { type: 'string', enum: ['public', 'analytics', 'staging'] },
+        table: { type: 'string', description: 'Name of the table' },
+      },
+    }),
     t('pg_explain', 'Explain a query plan', 'read'),
     t('pg_write_rows', 'Insert or update rows', 'destructive'),
-    { kind: 'prompt', name: 'weekly_metrics', description: 'Prompt: summarize this week’s KPIs' },
+    {
+      kind: 'prompt',
+      name: 'weekly_metrics',
+      description: 'Prompt: summarize this week’s KPIs',
+      arguments: [
+        { name: 'team', description: 'Which team’s numbers', required: true },
+        { name: 'week', description: 'ISO week, for example 2026-W40' },
+      ],
+    },
+    {
+      kind: 'resource',
+      name: 'table-index',
+      description: 'The list of tables in the warehouse',
+      uri: 'pg://catalog/tables',
+    },
     {
       kind: 'template',
       name: 'pg://{schema}/{table}',

@@ -271,6 +271,35 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
     });
     expect(unknown.isError).toBe(true);
 
+    // 12.5: a prompt is got with its arguments, a resource and a template are read, through the same pipeline.
+    const prompt = await ports.tryCall.run({
+      installationId: installation.id,
+      principalId: seeded.userId,
+      request: { kind: 'prompt', name: 'greet', arguments: { who: 'Ada' } },
+    });
+    expect(prompt.isError).toBe(false);
+    expect(JSON.stringify(prompt.result)).toContain('hi Ada');
+    const resource = await ports.tryCall.run({
+      installationId: installation.id,
+      principalId: seeded.userId,
+      request: { kind: 'resource', uri: 'test://static' },
+    });
+    expect(resource.isError).toBe(false);
+    expect(JSON.stringify(resource.result)).toContain('static body');
+    const templated = await ports.tryCall.run({
+      installationId: installation.id,
+      principalId: seeded.userId,
+      request: { kind: 'resource', uri: 'test://items/7' },
+    });
+    expect(templated.isError).toBe(false);
+    expect(JSON.stringify(templated.result)).toContain('item /7');
+    const nothing = await ports.tryCall.run({
+      installationId: installation.id,
+      principalId: seeded.userId,
+      request: { kind: 'resource', uri: 'test://nowhere' },
+    });
+    expect(nothing.isError).toBe(true);
+
     await expect
       .poll(
         async () => {

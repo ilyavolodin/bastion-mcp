@@ -1,16 +1,13 @@
-import { Play } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
-import { useOverrides, usePreviewOverrides, useSaveOverrides, useTryTool } from '@/api/hooks';
-import { type DefinitionPair, toDefinitionPairs } from '@/api/views/servers';
+import { useOverrides, usePreviewOverrides, useSaveOverrides } from '@/api/hooks';
+import { toDefinitionPairs } from '@/api/views/servers';
 import { CodeEditor } from '@/components/code-editor';
 import { DiffView } from '@/components/diff-view';
-import { Field } from '@/components/form';
 import { Card, CardHeader, ReadOnlyNote, Segmented, Tag } from '@/components/primitives';
 import { ProblemAlert } from '@/components/problem';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
-import { Select, Textarea } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 import { stableStringify } from '@/lib/diff';
 import {
@@ -21,91 +18,7 @@ import {
   validateOverrideText,
 } from '@/lib/override-schema';
 import { OverrideForm } from './override-form';
-
-/** The name AI tools call: the override's name, else the upstream one. */
-const finalName = (t: DefinitionPair): string =>
-  typeof t.final?.name === 'string' ? t.final.name : t.name;
-
-function TryIt({ installationId, tools }: { installationId: string; tools: DefinitionPair[] }) {
-  const run = useTryTool(installationId);
-  const [tool, setTool] = React.useState(tools[0] ? finalName(tools[0]) : '');
-  const [args, setArgs] = React.useState('{\n  "query": "orders"\n}');
-  const [argError, setArgError] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    if (!tool && tools[0]) setTool(finalName(tools[0]));
-  }, [tools, tool]);
-  const result = run.data;
-  return (
-    <Card aria-label="Try it" className="gap-3.5">
-      <CardHeader
-        title="Try it"
-        subtitle="Calls the tool through the final definition, with all guards"
-      />
-      <div className="grid gap-4 sm:grid-cols-[240px_minmax(0,1fr)]">
-        <Field label="Tool">
-          {({ id }) => (
-            <Select id={id} value={tool} onChange={(e) => setTool(e.target.value)}>
-              {tools.map((t) => (
-                <option key={t.name} value={finalName(t)}>
-                  {finalName(t)}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
-        <Field label="Arguments (JSON)" error={argError ?? undefined}>
-          {({ id, describedBy, invalid }) => (
-            <Textarea
-              id={id}
-              aria-describedby={describedBy}
-              aria-invalid={invalid}
-              value={args}
-              onChange={(e) => setArgs(e.target.value)}
-              className="min-h-20 font-mono text-[12px]"
-              spellCheck={false}
-            />
-          )}
-        </Field>
-      </div>
-      <div className="flex items-center gap-3">
-        <Button
-          size="sm"
-          disabled={run.isPending || !tool}
-          onClick={() => {
-            try {
-              const parsed = JSON.parse(args) as Record<string, unknown>;
-              setArgError(null);
-              run.mutate({ name: tool, arguments: parsed });
-            } catch (e) {
-              setArgError(e instanceof Error ? e.message : 'Invalid JSON');
-            }
-          }}
-        >
-          <Play className="size-4" aria-hidden="true" />
-          {run.isPending ? 'Running…' : 'Run'}
-        </Button>
-        {result ? (
-          <>
-            <Tag tone={result.isError ? 'bad' : 'ok'}>
-              {result.isError ? 'Failed' : 'Succeeded'}
-            </Tag>
-            <span className="text-caption text-muted">{result.durationMs} ms</span>
-          </>
-        ) : null}
-      </div>
-      {result ? (
-        <pre
-          role="group"
-          aria-label="Result"
-          className="m-0 max-h-60 overflow-auto rounded-md bg-sunken p-3 font-mono text-[12px]"
-        >
-          {JSON.stringify(result.result, null, 2)}
-        </pre>
-      ) : null}
-      {run.isError ? <ProblemAlert error={run.error} /> : null}
-    </Card>
-  );
-}
+import { TryIt } from './try-it';
 
 function Editor({
   installationId,
@@ -310,10 +223,7 @@ function Editor({
           </div>
         )}
       </Card>
-      <TryIt
-        installationId={installationId}
-        tools={defs.filter((d) => d.kind === 'tool' && d.final !== null)}
-      />
+      <TryIt installationId={installationId} defs={defs} />
     </div>
   );
 }

@@ -25,7 +25,7 @@ export const toUpstream = (items: readonly CapabilityItem[]): Upstream => ({
     .map((i) => ({
       name: i.name,
       description: i.description,
-      inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+      inputSchema: i.inputSchema ?? { type: 'object', properties: { query: { type: 'string' } } },
       annotations: {
         readOnlyHint: i.access === 'read',
         destructiveHint: i.access === 'destructive',
@@ -33,8 +33,19 @@ export const toUpstream = (items: readonly CapabilityItem[]): Upstream => ({
     })),
   prompts: items
     .filter((i) => i.kind === 'prompt')
-    .map((i) => ({ name: i.name, description: i.description })),
-  resources: [],
+    .map((i) => ({
+      name: i.name,
+      description: i.description,
+      ...(i.arguments ? { arguments: i.arguments } : {}),
+    })),
+  resources: items
+    .filter((i) => i.kind === 'resource')
+    .map((i) => ({
+      uri: i.uri ?? `mock://${i.name}`,
+      name: i.name,
+      description: i.description,
+      mimeType: 'text/plain',
+    })),
   resourceTemplates: items
     .filter((i) => i.kind === 'template')
     .map((i) => ({ uriTemplate: i.name, name: i.name, description: i.description })),

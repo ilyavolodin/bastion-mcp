@@ -673,28 +673,60 @@ export const serversHandlers = [
     const row = visibleInstallation(params.id);
     if (!row) return notFound('Installation');
     const input = await body();
-    if (input.kind !== 'tool') {
-      return HttpResponse.json({
-        result: { contents: [] },
-        isError: false,
-        durationMs: 24,
-        callId: null,
-      });
-    }
-    const tools = definitionsFor(
-      'tool',
-      data().upstream[row.id] ?? toUpstream([]),
-      layersOf(row),
-      null,
-    ).items;
-    if (!tools.some((t) => t.name === input.name)) {
-      return HttpResponse.json({
-        result: { content: [{ type: 'text', text: `Unknown tool: ${input.name}` }], isError: true },
+    const upstream = data().upstream[row.id] ?? toUpstream([]);
+    const failed = (text: string, ms = 3) =>
+      HttpResponse.json<Res<'post', '/installations/{id}/try'>>({
+        result: { content: [{ type: 'text', text }], isError: true },
         isError: true,
-        durationMs: 3,
+        durationMs: ms,
         callId: null,
       });
+    if (input.kind === 'prompt') {
+      const prompts = definitionsFor('prompt', upstream, layersOf(row), null).items;
+      const prompt = prompts.find((p) => p.name === input.name);
+      if (!prompt) return failed(`Unknown prompt: ${input.name}`);
+      const given = Object.entries(input.arguments ?? {})
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ');
+      return HttpResponse.json({
+        result: {
+          description: prompt.description,
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `Summarize the numbers (${given || 'no arguments'}).`,
+              },
+            },
+          ],
+        },
+        isError: false,
+        durationMs: 31,
+        callId: nextId('call'),
+      });
     }
+    if (input.kind === 'resource') {
+      const resources = definitionsFor('resource', upstream, layersOf(row), null).items;
+      const templates = definitionsFor('resourceTemplate', upstream, layersOf(row), null).items;
+      const known =
+        resources.some((r) => r.uri === input.uri) ||
+        templates.some((t) => {
+          const pattern = String(t.uriTemplate ?? '').replace(/\{[^}]+\}/g, '[^/]+');
+          return new RegExp(`^${pattern}$`).test(input.uri);
+        });
+      if (!known) return failed(`Resource not found: ${input.uri}`);
+      return HttpResponse.json({
+        result: {
+          contents: [{ uri: input.uri, mimeType: 'text/plain', text: `contents of ${input.uri}` }],
+        },
+        isError: false,
+        durationMs: 18,
+        callId: nextId('call'),
+      });
+    }
+    const tools = definitionsFor('tool', upstream, layersOf(row), null).items;
+    if (!tools.some((t) => t.name === input.name)) return failed(`Unknown tool: ${input.name}`);
     const rows = [
       { id: 1, orders: 482, region: 'emea' },
       { id: 2, orders: 311, region: 'apac' },
@@ -702,7 +734,7 @@ export const serversHandlers = [
     return HttpResponse.json({
       result: {
         content: [{ type: 'text', text: `${rows.length} rows` }],
-        structuredContent: { rows, rowCount: rows.length },
+        structuredContent: { rows, rowCount: rows.length, arguments: input.arguments ?? {} },
         isError: false,
       },
       isError: false,

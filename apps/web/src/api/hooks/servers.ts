@@ -258,13 +258,13 @@ export const usePreviewOverrides = () =>
       }),
   );
 
-export const useTryTool = (id: string) =>
-  useApiMutation((input: { name: string; arguments: Record<string, unknown> }) =>
-    api.post(`/installations/${id}/try`, {
-      kind: 'tool',
-      name: input.name,
-      arguments: input.arguments,
-    }),
+/**
+ * `POST /installations/{id}/try` (12.5): calls a tool, gets a prompt or reads a resource through the final
+ * definitions and the whole pipeline, as the signed-in person.
+ */
+export const useTry = (id: string) =>
+  useApiMutation((input: Body<'post', '/installations/{id}/try'>) =>
+    api.post(`/installations/${id}/try`, input),
   );
 
 // --- Endpoints ----------------------------------------------------------------------------------
