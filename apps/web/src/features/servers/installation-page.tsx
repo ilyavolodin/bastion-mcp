@@ -52,6 +52,10 @@ function Body({ installation: i }: { installation: InstallationView }) {
                   : ''}
             </Tag>
             {i.sandboxed ? <Tag tone="info">Sandbox</Tag> : null}
+            {i.followsCurrent ? <Tag tone="ok">Updates itself</Tag> : null}
+            {i.latestVersionLabel ? (
+              <Tag tone="warn">Pinned · v{i.latestVersionLabel} is available</Tag>
+            ) : null}
             {i.ownerType === 'team' ? <Tag tone="berry">Team · {i.ownerName}</Tag> : null}
           </span>
         }

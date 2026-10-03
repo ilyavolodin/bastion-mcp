@@ -44,20 +44,45 @@ export const useInstallations = () => {
         ...users.map((u) => [u.id, u.displayName] as const),
         ...teams.map((t) => [t.id, t.displayName] as const),
       ]);
+      // The version an installation runs is the entry's newest published one unless it is pinned: ask the entries.
+      const entryIds = [
+        ...new Set(rows.flatMap((r) => (r.catalogEntryId ? [r.catalogEntryId] : []))),
+      ];
+      const currentOf = new Map<string, string | null>();
+      for (let i = 0; i < entryIds.length; i += FAN_OUT) {
+        await Promise.all(
+          entryIds.slice(i, i + FAN_OUT).map(async (id) => {
+            const entry = await api.get(`/catalog/${id}`, { signal }).catch(() => null);
+            currentOf.set(id, entry?.currentVersionId ?? null);
+          }),
+        );
+      }
+      const versions = new Map<string, { running: string | null; latest: string | null }>();
+      for (const r of rows) {
+        if (!r.catalogEntryId) continue;
+        const latest = currentOf.get(r.catalogEntryId) ?? null;
+        versions.set(r.id, {
+          running: r.pinnedVersion ? r.catalogVersionId : (latest ?? r.catalogVersionId),
+          latest,
+        });
+      }
       const wanted = [
         ...new Map(
-          rows
-            .filter((r) => r.catalogEntryId && r.catalogVersionId)
-            .map((r) => [r.catalogVersionId, r] as const),
-        ).values(),
+          [...versions.entries()].flatMap(([id, v]) => {
+            const row = rows.find((r) => r.id === id);
+            return [v.running, v.latest]
+              .filter((versionId): versionId is string => versionId !== null)
+              .map((versionId) => [versionId, row?.catalogEntryId ?? ''] as const);
+          }),
+        ).entries(),
       ];
       const versionLabels = new Map<string, string>();
       const specs = new Map<string, ReturnType<typeof specInfo>>();
       for (let i = 0; i < wanted.length; i += FAN_OUT) {
         await Promise.all(
-          wanted.slice(i, i + FAN_OUT).map(async (r) => {
+          wanted.slice(i, i + FAN_OUT).map(async ([versionId, entryId]) => {
             const v = await api
-              .get(`/catalog/${r.catalogEntryId}/versions/${r.catalogVersionId}`, { signal })
+              .get(`/catalog/${entryId}/versions/${versionId}`, { signal })
               .catch(() => null);
             if (v) {
               versionLabels.set(v.id, v.label);
@@ -66,7 +91,7 @@ export const useInstallations = () => {
           }),
         );
       }
-      const lookups = { names, meId: me.data?.id ?? '', versionLabels, specs };
+      const lookups = { names, meId: me.data?.id ?? '', versionLabels, specs, versions };
       return rows.map((r) => toInstallationView(r, lookups));
     },
   });

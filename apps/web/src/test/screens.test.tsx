@@ -147,6 +147,48 @@ describe('My servers and Installation detail (18.3)', () => {
     expect(screen.getAllByText('Denied').length).toBeGreaterThan(0);
   });
 
+  it('11.4 an installation that is not pinned shows the version it runs (the newest published), not the one it was installed at', async () => {
+    await renderRoute('/servers/i-postgres', {
+      prepare: (db) => {
+        const entry = db.data.catalog.entries.find((e) => e.id === 'c-postgres');
+        const installed = db.data.catalog.versions.find((v) => v.entryId === 'c-postgres');
+        if (!entry || !installed) throw new Error('fixture missing');
+        // The entry published a newer version after this installation was created.
+        db.data.catalog.versions.push({
+          ...installed,
+          id: 'v-postgres-3.3.0',
+          label: '3.3.0',
+          status: 'published',
+        });
+        entry.currentVersionId = 'v-postgres-3.3.0';
+      },
+    });
+    expect(await screen.findByText(/3\.3\.0/)).toBeInTheDocument();
+    expect(screen.getByText('Updates itself')).toBeInTheDocument();
+    expect(screen.queryByText(/Pinned/)).toBeNull();
+  });
+
+  it('11.4 a pinned installation says which newer version is available', async () => {
+    await renderRoute('/servers/i-postgres', {
+      prepare: (db) => {
+        const entry = db.data.catalog.entries.find((e) => e.id === 'c-postgres');
+        const installed = db.data.catalog.versions.find((v) => v.entryId === 'c-postgres');
+        const row = db.data.servers.installations.find((i) => i.id === 'i-postgres');
+        if (!entry || !installed || !row) throw new Error('fixture missing');
+        db.data.catalog.versions.push({
+          ...installed,
+          id: 'v-postgres-3.3.0',
+          label: '3.3.0',
+          status: 'published',
+        });
+        entry.currentVersionId = 'v-postgres-3.3.0';
+        row.pinnedVersion = true;
+      },
+    });
+    expect(await screen.findByText('Pinned · v3.3.0 is available')).toBeInTheDocument();
+    expect(screen.queryByText('Updates itself')).toBeNull();
+  });
+
   it('removing a server goes straight to the list: the removed server’s page never shows "not found"', async () => {
     const { user } = await renderRoute('/servers/i-slack?tab=settings');
     await user.click(await screen.findByRole('button', { name: 'Remove server' }));

@@ -112,8 +112,12 @@ export type InstallationView = Installation & {
   runtime: Runtime;
   authMode: AuthMode;
   sandboxed: boolean;
-  /** Label of the catalog version it runs, or the package version of a personal install. */
+  /** Label of the catalog version it RUNS (the newest published one unless pinned), or the package version of a personal install. */
   versionLabel: string | null;
+  /** An installation of a catalog entry that is not pinned runs whatever version the entry has published last. */
+  followsCurrent: boolean;
+  /** Pinned to an older version than the entry's newest: the newest version's label, so the page can say so. */
+  latestVersionLabel: string | null;
   /** Package identifier, for sandboxed servers. */
   package: string | null;
   spec: SpecInfo | null;
@@ -128,16 +132,25 @@ export type InstallationLookups = {
   versionLabels: ReadonlyMap<string, string>;
   /** Parsed spec by catalog version id. */
   specs: ReadonlyMap<string, SpecInfo | null>;
+  /**
+   * The version each installation really runs and the newest published version of its entry, by installation id: an
+   * installation that is not pinned follows the entry's current version, whatever version it was installed at.
+   */
+  versions?: ReadonlyMap<string, { running: string | null; latest: string | null }>;
 };
 
 export const toInstallationView = (
   row: Installation,
   lookups: InstallationLookups,
 ): InstallationView => {
+  const known = lookups.versions?.get(row.id);
+  // What it runs: the newest published version unless pinned. The stored `catalogVersionId` is where it was installed.
+  const runningId = known?.running ?? row.catalogVersionId;
+  const latestId = known?.latest ?? null;
   const spec = row.personalSpec
     ? specInfo(row.personalSpec)
-    : row.catalogVersionId
-      ? (lookups.specs.get(row.catalogVersionId) ?? null)
+    : runningId
+      ? (lookups.specs.get(runningId) ?? null)
       : null;
   return {
     ...row,
@@ -151,9 +164,12 @@ export const toInstallationView = (
     authMode: spec?.authMode ?? 'none',
     sandboxed: spec?.sandboxed ?? false,
     versionLabel:
-      (row.catalogVersionId ? lookups.versionLabels.get(row.catalogVersionId) : undefined) ??
-      spec?.version ??
-      null,
+      (runningId ? lookups.versionLabels.get(runningId) : undefined) ?? spec?.version ?? null,
+    followsCurrent: row.catalogEntryId !== null && !row.pinnedVersion,
+    latestVersionLabel:
+      row.pinnedVersion && latestId && latestId !== runningId
+        ? (lookups.versionLabels.get(latestId) ?? null)
+        : null,
     package: spec?.sandboxed ? spec.target : null,
     spec,
   };
