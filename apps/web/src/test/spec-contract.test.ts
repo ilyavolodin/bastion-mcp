@@ -6,6 +6,7 @@ import {
   emptyDraft,
   emptyVariable,
   headerPreset,
+  oauthClientSecretName,
   specToDraft,
   validateDraft,
 } from '@/features/catalog/draft';
@@ -66,6 +67,24 @@ const CASES: [string, Draft][] = [
     }),
   ],
   [
+    'remote, OAuth with an app registered by hand',
+    remote((d) => {
+      d.spec.authMode = 'oauth';
+      d.spec.oauthClient = {
+        registration: 'preRegistered',
+        clientId: 'Iv1.abc123',
+        authMethod: 'client_secret_basic',
+      };
+    }),
+  ],
+  [
+    'remote, OAuth with a public client',
+    remote((d) => {
+      d.spec.authMode = 'oauth';
+      d.spec.oauthClient = { registration: 'preRegistered', clientId: 'pub', authMethod: 'none' };
+    }),
+  ],
+  [
     'package with variables, env vars and arguments',
     pkg((d) => {
       d.spec.variables = [
@@ -117,4 +136,53 @@ describe('the editor builds specs that serverSpecSchema accepts (8.1, 9.5)', () 
       expect(draftToSpec(specToDraft(spec))).toEqual(spec);
     });
   }
+});
+
+describe('OAuth client of the editor (9.6)', () => {
+  it('names the client secret after the client id and leaves it out for a public client', () => {
+    const d = remote((x) => {
+      x.spec.authMode = 'oauth';
+      x.spec.oauthClient = {
+        registration: 'preRegistered',
+        clientId: 'Iv1.abc123',
+        authMethod: 'client_secret_post',
+      };
+    });
+    expect(oauthClientSecretName(d.spec.oauthClient)).toBe('OAUTH_CLIENT_SECRET_IV1_ABC123');
+    expect(draftToSpec(d.spec).auth).toMatchObject({
+      mode: 'oauth',
+      client: {
+        registration: 'preRegistered',
+        clientId: 'Iv1.abc123',
+        clientSecretRef: 'OAUTH_CLIENT_SECRET_IV1_ABC123',
+        authMethod: 'client_secret_post',
+      },
+    });
+    d.spec.oauthClient.authMethod = 'none';
+    expect(draftToSpec(d.spec).auth).toMatchObject({ client: { authMethod: 'none' } });
+    expect(JSON.stringify(draftToSpec(d.spec).auth)).not.toContain('clientSecretRef');
+  });
+
+  it('asks for the client id when the app is registered by hand', () => {
+    const d = remote((x) => {
+      x.spec.authMode = 'oauth';
+      x.spec.oauthClient = { registration: 'preRegistered', clientId: ' ', authMethod: 'none' };
+    });
+    expect(validateDraft(d).map((i) => i.message)).toContain(
+      'Enter the client ID of the OAuth app you registered',
+    );
+  });
+
+  it('keeps a fixed cimd or dcr choice of an imported spec', () => {
+    const spec = {
+      type: 'remote',
+      transport: 'streamable-http',
+      url: 'https://mcp.example.com/mcp',
+      auth: { mode: 'oauth', client: { registration: 'dcr' } },
+    };
+    const parsed = serverSpecSchema.parse(spec);
+    expect(draftToSpec(specToDraft(parsed)).auth).toMatchObject({
+      client: { registration: 'dcr' },
+    });
+  });
 });

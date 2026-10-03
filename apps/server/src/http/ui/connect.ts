@@ -138,9 +138,16 @@ export const registerConnectRoutes = async (app: FastifyInstance, deps: UiDeps) 
           { type: principal.type, id: principal.id },
           query,
         );
-        return reply
-          .header('cache-control', 'no-store')
-          .redirect(`/servers/${encodeURIComponent(done.installationId)}?connected=1`, 302);
+        // The hidden installation of a catalog test has no page of its own: back to the editor's Test step.
+        const row = await infra.db.prisma.installation.findUnique({
+          where: { id: done.installationId },
+          select: { origin: true, catalogEntryId: true },
+        });
+        const target =
+          row?.origin === 'test' && row.catalogEntryId
+            ? `/catalog/${encodeURIComponent(row.catalogEntryId)}?step=test&run=1`
+            : `/servers/${encodeURIComponent(done.installationId)}?connected=1`;
+        return reply.header('cache-control', 'no-store').redirect(target, 302);
       } catch (error) {
         return upstreamFailure(reply, error);
       }

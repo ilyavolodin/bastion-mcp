@@ -1629,6 +1629,9 @@
                 },
                 "detail": {
                   "type": "string"
+                },
+                "connectUrl": {
+                  "type": "string"
                 }
               },
               "required": [

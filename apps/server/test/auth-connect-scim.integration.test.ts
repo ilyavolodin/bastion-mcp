@@ -189,6 +189,56 @@ describe.skipIf(!haveDocker())('9.1 SCIM and 9.6 upstream OAuth pages', () => {
       expect((await upstream.callMcp(token?.accessToken ?? null)).status).toBe(200);
     });
 
+    it('9.6 connecting from the Test step of the catalog editor returns to that step and runs the test again', async () => {
+      const spec = {
+        type: 'remote' as const,
+        transport: 'streamable-http' as const,
+        url: upstream.mcpUrl,
+        auth: { mode: 'oauth' as const, client: { registration: 'auto' as const } },
+      };
+      const entry = await h.infra.repos.catalogEntries.create({
+        slug: 'oauth-under-test',
+        displayName: 'OAuth under test',
+        description: 'an OAuth server being tested',
+        createdBy: adminId,
+      });
+      const version = await h.infra.repos.catalogVersions.create({
+        entryId: entry.id,
+        label: '0.1.0',
+        serverSpec: spec,
+        installForm: { variables: [], secrets: [] },
+        createdBy: adminId,
+      });
+      const test = await h.infra.repos.installations.create({
+        ownerType: 'user',
+        ownerId: adminId,
+        catalogEntryId: entry.id,
+        catalogVersionId: version.id,
+        pinnedVersion: true,
+        slug: 'test-oauth-under',
+        displayName: 'Test of OAuth under test',
+        enabled: false,
+        variables: {},
+        origin: 'test',
+        status: 'ready',
+      });
+
+      const b = await signIn();
+      const html = await (await b.request(`${PUBLIC_ORIGIN}/connect/${test.id}`)).text();
+      const { response, url } = await b.follow(
+        `${PUBLIC_ORIGIN}/connect/${test.id}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ _csrf: csrfOf(html) }),
+        },
+        (next) => new URL(next).pathname.startsWith('/catalog/'),
+      );
+      expect(response.status).toBe(302);
+      expect(url).toBe(`${PUBLIC_ORIGIN}/catalog/${entry.id}?step=test&run=1`);
+      expect((await h.auth.broker.status(adminId, test.id))?.status).toBe('valid');
+    });
+
     it('9.6 another user cannot start the flow for an installation they do not own', async () => {
       const other = await h.infra.repos.users.create({
         email: 'mallory@acme.example',

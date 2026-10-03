@@ -1,4 +1,5 @@
 import type { ApiEvent } from '@bastion-mcp/api';
+import { UpstreamAuthRequiredError } from '@bastion-mcp/core';
 import { type FakeModernServer, startFakeModernServer } from '@bastion-mcp/testkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createCatalogApiPorts } from '../src/adapters/api/catalog';
@@ -37,6 +38,7 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
   const newVersion = async (
     url: string,
     slug: string,
+    auth: Record<string, unknown> = { mode: 'none' },
   ): Promise<{ entryId: string; versionId: string }> => {
     const entry = await worker.infra.repos.catalogEntries.create({
       slug,
@@ -51,7 +53,7 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
         type: 'remote',
         transport: 'streamable-http',
         url,
-        auth: { mode: 'none' },
+        auth,
       },
       installForm: { variables: [], secrets: [] },
       createdBy: authorId,
@@ -77,7 +79,26 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
     poisoned = await startPoisonedServer();
     worker = await startTestWorker(env, {
       auth: (infra) =>
-        ({ ...stubAuth(infra), principalStore: infra.repos.principals }) as unknown as AuthServices,
+        ({
+          ...stubAuth(infra),
+          principalStore: infra.repos.principals,
+          credentials: {
+            // Nobody has connected an account: an OAuth server asks for it, as the real resolver does (9.6).
+            resolve: async (
+              _principal: unknown,
+              installation: { id: string },
+              spec: { auth: { mode: string } },
+            ) => {
+              if (spec.auth.mode === 'oauth') {
+                throw new UpstreamAuthRequiredError('connect your account to use this server', {
+                  installation: installation.id,
+                  connectUrl: `https://bastion.test/connect/${installation.id}`,
+                });
+              }
+              return { injections: [], credentialHash: 'none', expiresAt: null };
+            },
+          },
+        }) as unknown as AuthServices,
     });
     const author = await worker.infra.repos.users.create({
       email: 'author@acme.example',
@@ -175,6 +196,40 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
     const run = await waitForRun(ports.tests, versionId);
     expect(run.status).toBe('failed');
     expect(run.steps.find((s) => s.id === 'connect')?.status).toBe('failed');
+    await bus.close();
+  });
+
+  it('9.6 an OAuth server whose account is not connected fails the test with a link to connect it', async () => {
+    const guardService = guards();
+    await guardService.ready();
+    const bus = createEventBus({
+      redis: worker.infra.redis,
+      duplicate: worker.infra.duplicateRedis,
+    });
+    const ports = createCatalogApiPorts(worker.infra, authOf(), {
+      worker: worker.worker,
+      guards: guardService,
+      events: bus,
+    });
+    const { entryId, versionId } = await newVersion(upstream.url, 'needs-oauth', {
+      mode: 'oauth',
+      client: { registration: 'auto' },
+    });
+    await ports.tests.start({ entryId, versionId, requestedBy: authorId });
+    const run = await waitForRun(ports.tests, versionId);
+    expect(run.status).toBe('failed');
+    const connect = run.steps.find((s) => s.id === 'connect');
+    expect(connect?.status).toBe('failed');
+    expect(connect?.detail).toMatch(/not connected your account/);
+    // The link is the connect page of the author's hidden test installation, on the public origin.
+    const test = await worker.infra.repos.installations.getByOwnerSlug(
+      'user',
+      authorId,
+      `test-${versionId.replaceAll('-', '').slice(0, 10)}`,
+    );
+    expect(connect?.connectUrl).toBe(
+      new URL(`/connect/${test?.id}`, worker.infra.config.publicUrl).toString(),
+    );
     await bus.close();
   });
 

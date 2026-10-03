@@ -22,6 +22,9 @@ import {
   headerPreset,
   isEgressRule,
   LIMITS,
+  needsClientSecret,
+  type OAuthClientDraft,
+  oauthClientSecretName,
   type SpecDraft,
   secretNamesOf,
   setRowSecret,
@@ -1135,6 +1138,131 @@ function PackageSecrets({ draft, onChange, readOnly }: Omit<Props, 'errors' | 'e
   );
 }
 
+/**
+ * How Bastion identifies itself to the service behind an OAuth server (9.6). Most services let Bastion register itself;
+ * some (GitHub) only accept an app registered by hand, whose client id and secret are entered here. The secret is
+ * stored encrypted as a shared secret and never shown again.
+ */
+function OAuthClientSection({
+  draft,
+  onChange,
+  readOnly,
+}: {
+  draft: Draft;
+  onChange: (d: Draft) => void;
+  readOnly?: boolean | undefined;
+}) {
+  const spec = draft.spec;
+  const client = spec.oauthClient;
+  const { me, role } = useAuth();
+  const manual = client.registration === 'preRegistered';
+  const withSecret = needsClientSecret(spec);
+  const secretName = oauthClientSecretName(client);
+  const existing = useOrgSecretNames(withSecret);
+  const isSet = existing.data?.has(secretName) ?? false;
+  const set = (patch: Partial<OAuthClientDraft>) =>
+    onChange(setSpec(draft, { oauthClient: { ...client, ...patch } }));
+  const callback = `${me.org.baseUrl.replace(/\/$/, '')}/oauth/upstream/callback`;
+  return (
+    <section aria-label="OAuth app" className="flex flex-col gap-3 rounded-md bg-sunken p-3.5">
+      <div className="flex items-center gap-2">
+        <KeyRound className="size-4 text-muted" aria-hidden="true" />
+        <h3 className="m-0 text-label">OAuth app</h3>
+      </div>
+      <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+        <legend className="sr-only">How Bastion identifies itself</legend>
+        {(
+          [
+            ['auto', 'Automatic', 'Bastion registers itself with the service'],
+            ['preRegistered', 'An app I registered', 'The service needs a client ID and secret'],
+          ] as const
+        ).map(([value, label, help]) => (
+          <label
+            key={value}
+            className={`flex min-h-11 items-center gap-3 rounded-md border bg-surface px-3 py-2 ${client.registration === value ? 'border-tangerine-ink bg-tangerine-soft' : 'border-line'}`}
+          >
+            <input
+              type="radio"
+              name="oauth-registration"
+              disabled={readOnly}
+              checked={client.registration === value}
+              onChange={() => set({ registration: value })}
+              className="size-[18px] accent-[var(--tangerine-ink)]"
+            />
+            <span className="flex-1 text-label">{label}</span>
+            <span className="text-caption text-muted">{help}</span>
+          </label>
+        ))}
+      </fieldset>
+      {manual ? (
+        <>
+          <p className="m-0 text-caption text-muted">
+            Register an OAuth app with the service and give it this callback URL:{' '}
+            <code className="break-all">{callback}</code>
+          </p>
+          <Field label="Client ID">
+            {({ id }) => (
+              <Input
+                id={id}
+                autoComplete="off"
+                disabled={readOnly}
+                value={client.clientId}
+                onChange={(e) => set({ clientId: e.target.value })}
+              />
+            )}
+          </Field>
+          <Field label="How the secret is sent">
+            {({ id }) => (
+              <Select
+                id={id}
+                disabled={readOnly}
+                value={client.authMethod}
+                onChange={(e) =>
+                  set({ authMethod: e.target.value as OAuthClientDraft['authMethod'] })
+                }
+              >
+                <option value="client_secret_basic">Client secret, HTTP Basic (default)</option>
+                <option value="client_secret_post">Client secret, in the request body</option>
+                <option value="none">No secret (public client)</option>
+              </Select>
+            )}
+          </Field>
+          {withSecret ? (
+            <Field
+              label="Client secret"
+              help={
+                role !== 'admin'
+                  ? 'Only an Admin can set shared secrets. Ask an Admin to enter it.'
+                  : isSet
+                    ? 'Set. Type to replace. Stored encrypted when you save the draft.'
+                    : 'Stored encrypted when you save the draft. Never shown again.'
+              }
+            >
+              {({ id, describedBy }) => (
+                <Input
+                  id={id}
+                  type="password"
+                  autoComplete="new-password"
+                  aria-describedby={describedBy}
+                  disabled={readOnly || role !== 'admin'}
+                  value={spec.secretValues[secretName] ?? ''}
+                  onChange={(e) =>
+                    onChange(
+                      setSpec(draft, {
+                        secretValues: { ...spec.secretValues, [secretName]: e.target.value },
+                      }),
+                    )
+                  }
+                />
+              )}
+            </Field>
+          ) : null}
+        </>
+      ) : null}
+    </section>
+  );
+}
+
 export function AuthenticationStep({ draft, onChange, readOnly }: Props) {
   const mode = draft.spec.authMode;
   const remote = draft.spec.type === 'remote';
@@ -1190,6 +1318,9 @@ export function AuthenticationStep({ draft, onChange, readOnly }: Props) {
             />
           )}
         </Field>
+      ) : null}
+      {mode === 'oauth' ? (
+        <OAuthClientSection draft={draft} onChange={onChange} readOnly={readOnly} />
       ) : null}
       {remote && mode !== 'other' ? (
         <HeadersEditor draft={draft} onChange={onChange} readOnly={readOnly} />

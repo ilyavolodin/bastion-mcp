@@ -204,6 +204,7 @@ export const versionTestRun = z
         id: z.string(),
         status: z.enum(['pending', 'running', 'passed', 'failed', 'skipped']),
         detail: z.string().optional(),
+        connectUrl: z.string().optional(),
       }),
     ),
     startedAt: z.string(),

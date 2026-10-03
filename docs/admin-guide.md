@@ -208,6 +208,19 @@ An administrator allows it with two settings, both read at start (restart Bastio
 
 With Docker Compose set them in `deploy/docker/.env`, then `docker compose up -d bastion`.
 
+### 3.2 Remote MCP servers that sign each person in (OAuth)
+
+Choose **OAuth** under Authentication in the catalog editor and each person connects their own account; Bastion keeps a
+token per person and installation and never shares it. Two things to know:
+
+- **Testing.** The Test step runs the server as you, so you connect your own account first. A failed test says so and
+  shows **Connect your account**; after you sign in you return to the Test step and it runs again.
+- **Client registration.** *Automatic* lets Bastion register itself with the service (client ID metadata document or
+  dynamic registration). Some services, GitHub among them, only accept an app registered by hand. Choose *An app I
+  registered*, register the OAuth app with the service using the callback URL the editor shows
+  (`<public URL>/oauth/upstream/callback`), and enter its client ID and secret. The secret is stored encrypted as a
+  shared secret (an Admin enters it) and is never shown again.
+
 ## 4. Images and supply chain
 
 - `ghcr.io/bastion-mcp/bastion`: `node:24-bookworm-slim`, production dependencies only, the built SPA, `tini`,

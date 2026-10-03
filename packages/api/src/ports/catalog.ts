@@ -2,7 +2,13 @@ import type { ServerSpec } from '@bastion-mcp/core';
 import type { VersionResolver } from '@bastion-mcp/registry';
 
 export type TestStepStatus = 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
-export type VersionTestStep = { id: string; status: TestStepStatus; detail?: string };
+export type VersionTestStep = {
+  id: string;
+  status: TestStepStatus;
+  detail?: string;
+  /** Set when the step failed because the author has not connected their account: the page that does it. */
+  connectUrl?: string;
+};
 export type VersionTestRun = {
   id: string;
   versionId: string;

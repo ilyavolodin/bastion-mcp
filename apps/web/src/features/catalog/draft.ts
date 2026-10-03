@@ -62,6 +62,16 @@ export type ArgDraft = {
 /** `other` is a mode the editor does not edit (`enterpriseManaged`, `tokenExchange`): kept as loaded. */
 export type AuthMode = 'none' | 'orgSecret' | 'userSecret' | 'oauth' | 'other';
 
+/**
+ * How Bastion identifies itself to the service behind an OAuth server (9.6). `auto` registers itself when the service
+ * allows it. Services that do not (GitHub) need an app registered by hand: its client id and secret go here.
+ */
+export type OAuthClientDraft = {
+  registration: 'auto' | 'preRegistered';
+  clientId: string;
+  authMethod: 'client_secret_basic' | 'client_secret_post' | 'none';
+};
+
 export type SpecDraft = {
   type: 'package' | 'remote';
   runtime: 'npm' | 'pypi';
@@ -78,6 +88,7 @@ export type SpecDraft = {
   args: ArgDraft[];
   authMode: AuthMode;
   oauthScopes: string[];
+  oauthClient: OAuthClientDraft;
   /** Labels of the per-user secret fields (`userSecret`), by secret name. */
   secretLabels: Record<string, string>;
   /**
@@ -124,6 +135,7 @@ export const defaultSpec = (): SpecDraft => ({
   args: [],
   authMode: 'none',
   oauthScopes: [],
+  oauthClient: { registration: 'auto', clientId: '', authMethod: 'client_secret_basic' },
   secretLabels: {},
   secretValues: {},
   egress: [],
@@ -230,6 +242,19 @@ const injectedRows = (s: SpecDraft): { name: string; value: string }[] =>
 export const secretNamesOf = (s: SpecDraft): string[] => [
   ...new Set(injectedRows(s).flatMap((r) => secretRefsOf(r.value))),
 ];
+
+/** The shared secret that holds the client secret of a pre-registered OAuth app, one per client id. */
+export const oauthClientSecretName = (c: OAuthClientDraft): string =>
+  `OAUTH_CLIENT_SECRET_${c.clientId
+    .trim()
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .toUpperCase()}`;
+
+/** Whether this spec keeps a client secret in the org secrets. */
+export const needsClientSecret = (s: SpecDraft): boolean =>
+  s.authMode === 'oauth' &&
+  s.oauthClient.registration === 'preRegistered' &&
+  s.oauthClient.authMethod !== 'none';
 
 /** `Authorization` carries a bearer token; any other header an API key. */
 export const defaultSecretValue = (headerName: string, taken: readonly string[] = []): string => {
@@ -395,6 +420,12 @@ export const validateDraft = (d: Draft): Issue[] => {
         ? 'Add a header that carries the secret, for example a Bearer token'
         : 'Add an environment variable or argument that carries the secret',
     );
+  if (
+    s.authMode === 'oauth' &&
+    s.oauthClient.registration === 'preRegistered' &&
+    !s.oauthClient.clientId.trim()
+  )
+    add('authentication', 'Enter the client ID of the OAuth app you registered');
   if (s.authMode === 'oauth' && s.type === 'package' && injected.length === 0)
     add('authentication', 'Say where the access token goes: add a secret environment variable');
   for (const rule of s.egress)
@@ -434,6 +465,23 @@ const injectionsOf = (s: SpecDraft): Injection[] =>
           ),
       ];
 
+const oauthClientOf = (s: SpecDraft) => {
+  const c = s.oauthClient;
+  if (c.registration === 'preRegistered') {
+    return {
+      registration: 'preRegistered' as const,
+      clientId: c.clientId.trim(),
+      ...(c.authMethod === 'none' ? {} : { clientSecretRef: oauthClientSecretName(c) }),
+      authMethod: c.authMethod,
+    };
+  }
+  // A spec imported with a fixed `cimd` or `dcr` choice keeps it.
+  const kept = rec(rec(s.base?.auth).client);
+  return kept.registration === 'cimd' || kept.registration === 'dcr'
+    ? (kept as { registration: 'cimd' | 'dcr' })
+    : { registration: 'auto' as const };
+};
+
 const authOf = (s: SpecDraft): ServerSpecBody['auth'] => {
   switch (s.authMode) {
     case 'none':
@@ -453,7 +501,7 @@ const authOf = (s: SpecDraft): ServerSpecBody['auth'] => {
       const inject = injectionsOf(s);
       return {
         mode: 'oauth',
-        client: { registration: 'auto' },
+        client: oauthClientOf(s),
         ...(s.oauthScopes.length ? { scopes: s.oauthScopes } : {}),
         ...(inject.length > 0
           ? { inject }
@@ -745,11 +793,24 @@ export const specToDraft = (spec: unknown, installForm?: unknown): SpecDraft => 
     args,
     authMode,
     oauthScopes: list(auth.scopes).map(String),
+    oauthClient: oauthClientFrom(rec(auth.client)),
     secretLabels,
     secretValues: {},
     egress: list(rec(s.egress).allow).map(String),
     size: s.size === 'medium' || s.size === 'large' ? s.size : 'small',
     base: s,
+  };
+};
+
+const oauthClientFrom = (client: Record<string, unknown>): OAuthClientDraft => {
+  if (client.registration !== 'preRegistered')
+    return { registration: 'auto', clientId: '', authMethod: 'client_secret_basic' };
+  const method = client.authMethod;
+  return {
+    registration: 'preRegistered',
+    clientId: str(client.clientId),
+    authMethod:
+      method === 'client_secret_post' || method === 'none' ? method : 'client_secret_basic',
   };
 };
 

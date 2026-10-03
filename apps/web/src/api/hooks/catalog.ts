@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   type Draft,
+  needsClientSecret,
   normalizeOverrides,
+  oauthClientSecretName,
   secretNamesOf,
   toEntryCreateBody,
   toEntryPatchBody,
@@ -136,8 +138,12 @@ const isDefaultOverrides = (doc: Record<string, unknown>) =>
  */
 export const writeOrgSecrets = async (draft: Draft): Promise<void> => {
   const spec = draft.spec;
-  if (spec.authMode !== 'orgSecret') return;
-  for (const name of secretNamesOf(spec)) {
+  const names = needsClientSecret(spec)
+    ? [oauthClientSecretName(spec.oauthClient)]
+    : spec.authMode === 'orgSecret'
+      ? secretNamesOf(spec)
+      : [];
+  for (const name of names) {
     const value = spec.secretValues[name];
     if (value)
       await api.put(`/secrets/org/org/${encodeURIComponent(name)}`, { value }, { etag: '*' });

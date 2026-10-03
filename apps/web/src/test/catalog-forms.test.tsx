@@ -153,6 +153,41 @@ describe('Catalog forms send what the API requires (17.2)', () => {
     capture.stop();
   });
 
+  it('9.6 an OAuth server that needs an app registered by hand sends the client id and stores the secret through the secrets API', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/catalog/new');
+    await user.type(await screen.findByLabelText(/Display name/), 'Acme Code Host');
+    await user.selectOptions(screen.getByLabelText('Runtime'), 'remote');
+    await user.type(screen.getByLabelText('Server URL'), 'https://api.githubcopilot.com/mcp/');
+    await user.click(screen.getByRole('button', { name: /Authentication/ }));
+    await user.click(await screen.findByRole('radio', { name: /^OAuth/ }));
+    const app = await screen.findByRole('region', { name: 'OAuth app' });
+    await user.click(within(app).getByLabelText(/An app I registered/));
+    // The callback to register comes from the public address of this Bastion.
+    expect(app).toHaveTextContent('/oauth/upstream/callback');
+    await user.type(within(app).getByLabelText('Client ID'), 'Iv1.abc123');
+    await user.type(within(app).getByLabelText('Client secret'), 's3cret');
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await expectSent(capture, 'post', '/catalog');
+    const version = (await expectSent(capture, 'post', /\/catalog\/[^/]+\/versions$/)) as Sent;
+    expect(version.serverSpec).toMatchObject({
+      auth: {
+        mode: 'oauth',
+        client: {
+          registration: 'preRegistered',
+          clientId: 'Iv1.abc123',
+          clientSecretRef: 'OAUTH_CLIENT_SECRET_IV1_ABC123',
+          authMethod: 'client_secret_basic',
+        },
+      },
+    });
+    expect(JSON.stringify(version)).not.toContain('s3cret');
+    expect(
+      await expectSent(capture, 'put', '/secrets/org/org/OAUTH_CLIENT_SECRET_IV1_ABC123'),
+    ).toEqual({ value: 's3cret' });
+    capture.stop();
+  });
+
   it('11.1 a draft the API would refuse is not sent: a range instead of an exact version', async () => {
     const capture = captureRequests();
     const { user } = await renderRoute('/catalog/new');

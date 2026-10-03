@@ -193,6 +193,7 @@ export function TestPanel({
   }, [autoRun, versionId, version.isLoading]);
 
   const reason = failureReason(t);
+  const connectUrl = t?.steps.find((s) => s.status === 'failed')?.connectUrl;
   const hasInputs =
     needs.variables.length > 0 || needs.mySecrets.length > 0 || needs.orgSecrets.length > 0;
   return (
@@ -284,10 +285,25 @@ export function TestPanel({
             <p className="m-0 mt-1 whitespace-pre-wrap break-words">
               {reason ?? 'The run ended without a result.'}
             </p>
-            <p className="m-0 mt-1 text-muted">
-              Fix it on the step it names, save, and run the test again. You can still go back and
-              forward between steps.
-            </p>
+            {connectUrl ? (
+              <>
+                <p className="m-0 mt-2">
+                  The test runs the server as you, so it needs your own sign-in to the service
+                  behind it.
+                </p>
+                <Button asChild variant="primary" size="sm" className="mt-2">
+                  <a href={connectUrl}>Connect your account</a>
+                </Button>
+                <p className="m-0 mt-2 text-muted">
+                  You come back here and the test runs again once you have signed in.
+                </p>
+              </>
+            ) : (
+              <p className="m-0 mt-1 text-muted">
+                Fix it on the step it names, save, and run the test again. You can still go back and
+                forward between steps.
+              </p>
+            )}
           </div>
         ) : null}
         {t?.status === 'passed' ? (

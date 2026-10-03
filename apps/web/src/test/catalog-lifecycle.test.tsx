@@ -241,4 +241,33 @@ describe('Catalog editor lifecycle (11.1, 11.3, 18.3)', () => {
     await user.click(screen.getByRole('button', { name: 'Go to Publish' }));
     expect(await screen.findByLabelText('Ready to publish')).toBeVisible();
   });
+
+  it('9.6 a test that failed because the account is not connected offers Connect your account', async () => {
+    await renderRoute('/catalog/c-postgres?step=test', {
+      prepare: (db) => {
+        const v = db.data.catalog.versions.find((x) => x.entryId === 'c-postgres');
+        if (!v) throw new Error('fixture missing');
+        v.testResult = {
+          id: 'run-needs-connect',
+          versionId: v.id,
+          status: 'failed',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          steps: [
+            { id: 'prepare', status: 'passed' },
+            {
+              id: 'connect',
+              status: 'failed',
+              detail: 'You have not connected your account yet.',
+              connectUrl: 'http://localhost:8080/connect/inst-1',
+            },
+          ],
+        };
+      },
+    });
+    const alert = await screen.findByRole('alert');
+    const link = within(alert).getByRole('link', { name: 'Connect your account' });
+    expect(link).toHaveAttribute('href', 'http://localhost:8080/connect/inst-1');
+    expect(alert).toHaveTextContent('runs the server as you');
+  });
 });

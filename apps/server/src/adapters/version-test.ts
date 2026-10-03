@@ -42,6 +42,8 @@ import type { UpstreamAccess } from './upstream-access';
 
 const STALE_AFTER_MS = 15 * 60_000;
 
+type StepOutcome = { status: VersionTestStep['status']; detail?: string; connectUrl?: string };
+
 type Row = {
   id: string;
   slug: string;
@@ -129,10 +131,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
       draft: boolean;
       variables?: Record<string, string>;
     },
-    step: (
-      id: string,
-      fn: () => Promise<{ status: VersionTestStep['status']; detail?: string }>,
-    ) => Promise<boolean>,
+    step: (id: string, fn: () => Promise<StepOutcome>) => Promise<boolean>,
   ): Promise<void> => {
     const { entry, versionId, authorId, spec } = ctx;
     let installationId = '';
@@ -196,6 +195,15 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
       if (out.status === 'ok') {
         state.items = out.items;
         return { status: 'passed', detail: `connected, ${out.items.tools.length} tools` };
+      }
+      if (out.code === 'upstream_auth_required') {
+        // Not a fault of the server: the author has not signed in to it yet (9.6).
+        return {
+          status: 'failed',
+          detail:
+            'This server signs each person in to its own service, and you have not connected your account yet. Connect it, then run the test again.',
+          connectUrl: new URL(`/connect/${installationId}`, infra.config.publicUrl).toString(),
+        };
       }
       const record = await infra.repos.instances.getForInstallation(installationId);
       const stderr = record ? await readStderrTail(infra, record.id, 20).catch(() => []) : [];
@@ -334,10 +342,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
 
   const runFiles = async (
     ctx: { entry: Row; versionId: string; authorId: string; label: string },
-    step: (
-      id: string,
-      fn: () => Promise<{ status: VersionTestStep['status']; detail?: string }>,
-    ) => Promise<boolean>,
+    step: (id: string, fn: () => Promise<StepOutcome>) => Promise<boolean>,
   ): Promise<void> => {
     const { entry, versionId, authorId } = ctx;
     const files = await loadVersionFiles(
@@ -464,10 +469,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
           topic: versionId,
         });
 
-      const step = async (
-        id: string,
-        fn: () => Promise<{ status: VersionTestStep['status']; detail?: string }>,
-      ): Promise<boolean> => {
+      const step = async (id: string, fn: () => Promise<StepOutcome>): Promise<boolean> => {
         const pending: VersionTestStep = { id, status: 'running' };
         run.steps.push(pending);
         await persist(versionId, run);
@@ -476,6 +478,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
           const out = await fn();
           pending.status = out.status;
           if (out.detail !== undefined) pending.detail = out.detail;
+          if (out.connectUrl !== undefined) pending.connectUrl = out.connectUrl;
         } catch (error) {
           pending.status = 'failed';
           pending.detail = error instanceof Error ? error.message : String(error);
