@@ -21,7 +21,10 @@ export type RuntimeAccessToken = {
   save(): Promise<string>;
 };
 
+export type RuntimeSession = { destroy(): Promise<void> };
+
 export type RuntimeProvider = {
+  Session: { findByUid(uid: string): Promise<RuntimeSession | undefined> };
   AccessToken: new (props: Record<string, unknown>) => RuntimeAccessToken;
   ResourceServer: new (identifier: string, info: ResourceServerInfo) => unknown;
   Grant: (new (props: {

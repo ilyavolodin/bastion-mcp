@@ -18,6 +18,16 @@ describe.skipIf(!haveDocker())('9.3 embedded authorization server and token veri
     await h.close();
   });
 
+  /** Registers each client once: dynamic registration is rate limited, and several tests share these. */
+  const shared = new Map<string, string>();
+  const registerOnce = async (name: string): Promise<string> => {
+    const known = shared.get(name);
+    if (known) return known;
+    const id = await register(name);
+    shared.set(name, id);
+    return id;
+  };
+
   const register = async (name: string): Promise<string> => {
     const res = await h.fetch(`${PUBLIC_ORIGIN}/oauth/reg`, {
       method: 'POST',
@@ -58,8 +68,16 @@ describe.skipIf(!haveDocker())('9.3 embedded authorization server and token veri
     if (step.response.status === 200 && step.url.includes('/oauth/interaction/')) {
       const html = await step.response.text();
       const link = /href="(\/auth\/login\?[^"]+)"/.exec(html)?.[1]?.replaceAll('&amp;', '&');
+      const chooser = /action="(\/oauth\/interaction\/[^/"]+\/continue)"/.exec(html)?.[1];
       if (link) step = await b.follow(`${PUBLIC_ORIGIN}${link}`);
-      else throw new Error(`no login link in ${html}`);
+      else if (chooser) {
+        // Already signed in to Bastion: confirm the account.
+        step = await b.follow(`${PUBLIC_ORIGIN}${chooser}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ _csrf: csrfOf(html) }),
+        });
+      } else throw new Error(`no login link or account step in ${html}`);
     }
     // 2. consent
     if (step.response.status === 200) {
@@ -136,6 +154,133 @@ describe.skipIf(!haveDocker())('9.3 embedded authorization server and token veri
     const second = await authorize(clientId, 'mcp offline_access', browser);
     expect(second.consentHtml).toBeUndefined();
     expect(second.tokens.access_token).not.toBe(first.tokens.access_token);
+  });
+
+  /** Starts an authorization in `b` and returns the first page it lands on. */
+  const startAuthorization = async (clientId: string, b: ReturnType<UiHarness['browser']>) => {
+    const verifier = randomBytes(32).toString('base64url');
+    const query = new URLSearchParams({
+      client_id: clientId,
+      response_type: 'code',
+      redirect_uri: REDIRECT,
+      scope: 'mcp',
+      state: 'who',
+      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+      code_challenge_method: 'S256',
+      resource: `${PUBLIC_ORIGIN}/mcp`,
+    });
+    const step = await b.follow(`${PUBLIC_ORIGIN}/oauth/auth?${query}`);
+    return { step, verifier, html: await step.response.text() };
+  };
+  const post = (b: ReturnType<UiHarness['browser']>, path: string, html: string, extra = {}) =>
+    b.follow(`${PUBLIC_ORIGIN}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ _csrf: csrfOf(html), ...extra }),
+    });
+  const uidOf = (html: string) =>
+    /\/oauth\/interaction\/([^/"]+)\/(?:continue|consent)/.exec(html)?.[1];
+  const exchange = async (clientId: string, code: string, verifier: string) => {
+    const res = await h.fetch(`${PUBLIC_ORIGIN}/oauth/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT,
+        client_id: clientId,
+        code_verifier: verifier,
+        resource: `${PUBLIC_ORIGIN}/mcp`,
+      }),
+    });
+    expect(res.status).toBe(200);
+    return ((await res.json()) as Tokens).access_token;
+  };
+
+  it('9.3 a browser that is already signed in is asked which account the app gets, and the consent names it', async () => {
+    const browser = h.browser();
+    // Ada signs in to Bastion first (the session stays in the browser).
+    await authorize(await registerOnce('Warm-up client'), 'mcp', browser);
+
+    const clientId = await registerOnce('Account client');
+    const { html, step } = await startAuthorization(clientId, browser);
+    // No silent authorization: the page names the account and offers both ways on.
+    expect(step.url).toContain('/oauth/interaction/');
+    expect(html).toContain('Signed in as');
+    expect(html).toContain('Ada Lovelace');
+    expect(html).toContain('ada@acme.example');
+    expect(html).toContain('Use a different account');
+    expect(new URL(step.url).searchParams.get('code')).toBeNull();
+
+    const consent = await post(browser, `/oauth/interaction/${uidOf(html)}/continue`, html);
+    const consentHtml = await consent.response.text();
+    expect(consentHtml).toContain('Signed in as');
+    expect(consentHtml).toContain('Ada Lovelace');
+  });
+
+  it('9.3 "Use a different account" ends the browser session and the token belongs to the new account', async () => {
+    const browser = h.browser();
+    await authorize(await registerOnce('Warm-up client'), 'mcp', browser);
+    const clientId = await registerOnce('Account client');
+    const { html, verifier } = await startAuthorization(clientId, browser);
+    const adaSession = browser.cookie('bastion_sid');
+    expect(adaSession).toBeTruthy();
+
+    // Somebody else (a member with no group mapping) is the person at the keyboard.
+    Object.assign(h.idp.behavior, {
+      sub: 'idp-user-2',
+      email: 'grace@acme.example',
+      name: 'Grace Hopper',
+      groups: [],
+    });
+    const switched = await post(browser, `/oauth/interaction/${uidOf(html)}/switch`, html);
+    // The session of the first account is gone, and the sign-in page is offered.
+    expect(await h.auth.sessions.authenticate(adaSession ?? '')).toBeNull();
+    const loginHtml = await switched.response.text();
+    const link = /href="(\/auth\/login\?[^"]+)"/.exec(loginHtml)?.[1]?.replaceAll('&amp;', '&');
+    expect(link).toBeTruthy();
+    const consent = await browser.follow(`${PUBLIC_ORIGIN}${link}`);
+    const consentHtml = await consent.response.text();
+    expect(consentHtml).toContain('Grace Hopper');
+    expect(consentHtml).not.toContain('Ada Lovelace');
+
+    const done = await post(
+      browser,
+      `/oauth/interaction/${uidOf(consentHtml)}/consent`,
+      consentHtml,
+      {
+        decision: 'approve',
+      },
+    );
+    const code = new URL(done.url).searchParams.get('code') ?? '';
+    const token = await exchange(clientId, code, verifier);
+    const principal = await h.auth.verifier.verify(`Bearer ${token}`, `${PUBLIC_ORIGIN}/mcp`);
+    const grace = await h.infra.repos.users.findByEmail('grace@acme.example');
+    expect(principal.id).toBe(grace?.id);
+    expect(principal.orgRole).toBe('member');
+    Object.assign(h.idp.behavior, {
+      sub: 'idp-user-1',
+      email: 'ada@acme.example',
+      name: 'Ada Lovelace',
+      groups: ['eng', 'bastion-admins'],
+    });
+  });
+
+  it('9.3 the account step needs the CSRF token', async () => {
+    const browser = h.browser();
+    await authorize(await registerOnce('Warm-up client'), 'mcp', browser);
+    const { html } = await startAuthorization(await registerOnce('Account client'), browser);
+    for (const action of ['continue', 'switch']) {
+      const res = await browser.request(
+        `${PUBLIC_ORIGIN}/oauth/interaction/${uidOf(html)}/${action}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({}),
+        },
+      );
+      expect(res.status).toBe(403);
+    }
   });
 
   it('9.3 denying consent returns access_denied to the client', async () => {

@@ -201,6 +201,37 @@ const SCOPE_TEXT: Record<string, { title: string; detail: string }> = {
   },
 };
 
+/** Who is signed in to this browser, as the pages name them. */
+export type AccountView = { name: string; email: string };
+
+const accountLine = (account: AccountView) =>
+  html`<p class="account" aria-label="Signed in as">Signed in as <strong>${account.name}</strong>${
+    account.name === account.email ? '' : html` <span class="muted">(${account.email})</span>`
+  }</p>`;
+
+export type AccountChooserInput = {
+  uid: string;
+  csrf: string;
+  /** The OAuth client id: a URL for client ID metadata documents, an opaque id for registered clients. */
+  clientId: string;
+  account: AccountView;
+};
+
+/**
+ * Shown when the browser is already signed in to Bastion and an app asks for access (9.3): the app is authorized as
+ * the account named here, so the person confirms it, or signs in as somebody else, before anything is granted.
+ */
+export const accountChooserPage = (input: AccountChooserInput): string =>
+  renderPage({
+    title: 'Which account?',
+    body: html`<p>An app (<code>${input.clientId}</code>) wants to use Bastion. Which account should it use?</p>${accountLine(input.account)}<form method="post" action="/oauth/interaction/${encodeURIComponent(input.uid)}/continue">${csrfField(input.csrf)}${actions(
+      [button({ label: html`Continue as ${input.account.name}`, variant: 'primary' })],
+    )}</form><form method="post" action="/oauth/interaction/${encodeURIComponent(input.uid)}/switch">${csrfField(input.csrf)}${actions(
+      [button({ label: 'Use a different account', variant: 'outline' })],
+    )}</form>`,
+    footnote: 'The app acts with this account’s access and its activity is recorded under it.',
+  });
+
 export type ConsentPageInput = {
   uid: string;
   csrf: string;
@@ -208,13 +239,15 @@ export type ConsentPageInput = {
   logoUri: string | null;
   redirectHost: string;
   scopes: readonly string[];
+  /** The account the app is being authorized as. */
+  account: AccountView;
 };
 
 /** Consent: the client, where the user returns to (spec MUST), what it asks for, Allow or Deny. */
 export const consentPage = (input: ConsentPageInput): string =>
   renderPage({
     title: 'Authorize access',
-    body: html`<div class="client">${clientAvatar(input.clientName, input.logoUri)}<div><span class="client-name">${input.clientName}</span><span class="caption block">wants to access your Bastion account</span></div></div><p>After you decide, you will be sent back to ${chip(input.redirectHost)}</p><span class="overline" id="scopes-label">It is asking to</span>${
+    body: html`<div class="client">${clientAvatar(input.clientName, input.logoUri)}<div><span class="client-name">${input.clientName}</span><span class="caption block">wants to access your Bastion account</span></div></div>${accountLine(input.account)}<p>After you decide, you will be sent back to ${chip(input.redirectHost)}</p><span class="overline" id="scopes-label">It is asking to</span>${
       input.scopes.length > 0
         ? permissionList(
             input.scopes.map((s) => ({

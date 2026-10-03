@@ -10,6 +10,7 @@ import {
   canonicalHost,
   type DenyReason,
   decideResolved,
+  denyDetail,
   type EgressPolicy,
   type EgressPolicyStore,
   type EgressProtocol,
@@ -223,28 +224,46 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
       return policy ? { instanceId, policy } : 'unknown-instance';
     };
 
-  const deny = (socket: net.Socket | http.ServerResponse, reason: DenyReason): void => {
+  /**
+   * Refuses a request. A 403 or 502 carries what was blocked and how to change it as the reason phrase of the status
+   * line, because that is the one thing HTTP clients print (`ProxyError: 403 <phrase>`), and again in the body and in
+   * `X-Bastion-Egress-Detail`.
+   */
+  const deny = (
+    socket: net.Socket | http.ServerResponse,
+    reason: DenyReason,
+    target?: { host: string; port: number; ip?: string | null | undefined },
+  ): void => {
+    const detail = denyDetail(reason, target ?? { host: 'the host', port: 0 }).replace(
+      /[^\x20-\x7e]/g,
+      '?',
+    );
+    const informative = reason === 'not-allowlisted' || reason === 'ssrf-blocked';
     const status =
       reason === 'bad-credentials' || reason === 'unknown-instance'
         ? '407 Proxy Authentication Required'
         : reason === 'bad-request'
           ? '400 Bad Request'
           : reason === 'unresolvable' || reason === 'connect-failed'
-            ? '502 Bad Gateway'
-            : '403 Forbidden';
-    const body = `bastion egress: ${reason}\n`;
+            ? `502 ${target ? detail : 'Bad Gateway'}`
+            : `403 ${informative && target ? detail : 'Forbidden'}`;
+    const body = `bastion egress: ${reason}: ${detail}\n`;
     const headers = [
       `Content-Length: ${Buffer.byteLength(body)}`,
       'Content-Type: text/plain',
       `X-Bastion-Egress-Reason: ${reason}`,
+      `X-Bastion-Egress-Detail: ${detail}`,
       'Connection: close',
       ...(status.startsWith('407') ? ['Proxy-Authenticate: Basic realm="bastion-egress"'] : []),
     ];
     if (socket instanceof http.ServerResponse) {
       const code = Number(status.slice(0, 3));
+      socket.statusMessage = status.slice(4);
       socket.writeHead(
         code,
-        Object.fromEntries(headers.map((h) => h.split(': ') as [string, string])),
+        Object.fromEntries(
+          headers.map((h) => [h.slice(0, h.indexOf(': ')), h.slice(h.indexOf(': ') + 2)]),
+        ),
       );
       socket.end(body);
     } else {
@@ -277,7 +296,7 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     const outcome = await evaluate(auth, parsed, 'connect');
     if (!outcome.allowed) {
       finish({ ...base, resolvedIp: outcome.resolvedIp, decision: 'deny', reason: outcome.reason });
-      return deny(client, outcome.reason);
+      return deny(client, outcome.reason, { ...parsed, ip: outcome.resolvedIp });
     }
     const upstream = connectTo(outcome.address, parsed.port);
     track(client);
@@ -293,7 +312,7 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     upstream.once('error', () => {
       if (!connected) {
         done('deny', 'connect-failed');
-        deny(client, 'connect-failed');
+        deny(client, 'connect-failed', { ...parsed, ip: outcome.resolvedIp });
       }
       client.destroy();
     });
@@ -362,7 +381,7 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     if (!outcome.allowed) {
       req.resume();
       finish({ ...base, resolvedIp: outcome.resolvedIp, decision: 'deny', reason: outcome.reason });
-      return deny(res, outcome.reason);
+      return deny(res, outcome.reason, { host, port, ip: outcome.resolvedIp });
     }
     const headers: http.OutgoingHttpHeaders = {};
     const connectionTokens = String(req.headers.connection ?? '')
@@ -396,7 +415,7 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     upstream.on('error', () => {
       if (!settled) {
         done('deny', 'connect-failed');
-        if (!res.headersSent) deny(res, 'connect-failed');
+        if (!res.headersSent) deny(res, 'connect-failed', { host, port, ip: outcome.resolvedIp });
         else res.destroy();
       }
     });

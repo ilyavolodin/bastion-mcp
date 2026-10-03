@@ -154,7 +154,10 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
   it('8.8 denies a non-allowlisted host with 403 and audits the denial (100%)', async () => {
     resolved['evil.test'] = ['93.184.216.36'];
     const r = await connect('evil.test', 443);
-    expect(r.head).toContain('403 Forbidden');
+    // The reason phrase is what HTTP clients print (`ProxyError: 403 ...`): it names what to change.
+    expect(r.head).toContain(
+      `HTTP/1.1 403 Blocked by Bastion: evil.test:443 is not in this server's Network allowlist; add the host there`,
+    );
     expect(r.head).toContain('X-Bastion-Egress-Reason: not-allowlisted');
     expect(audit[0]).toMatchObject({
       decision: 'deny',
@@ -170,8 +173,18 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
       resolved['ok.test'] = [ip];
       policy = { ...(policy as EgressPolicy), allow: [`ok.test:${targetPort}`] };
       const r = await connect('ok.test', targetPort);
-      expect(r.head).toContain('403 Forbidden');
+      expect(r.head).toMatch(/^HTTP\/1\.1 403 Blocked by Bastion: /);
       expect(r.head).toContain('ssrf-blocked');
+      if (ip === '10.0.0.7') {
+        // The one way out is named: the address range goes into the server's own allowlist.
+        expect(r.head).toContain(
+          `ok.test resolves to 10.0.0.7, a private network address; add 10.0.0.7/32 to this server's Network allowlist`,
+        );
+      } else if (ip === '169.254.169.254') {
+        // The cloud metadata address is never allowed, so no way out is offered.
+        expect(r.head).toContain('never allowed');
+        expect(r.head).not.toContain('add ');
+      }
     }
     expect(connectedTo).toEqual([]);
     expect(audit.every((e) => e.decision === 'deny' && e.reason === 'ssrf-blocked')).toBe(true);

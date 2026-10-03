@@ -8,6 +8,7 @@ import { POPPINS_WOFF2_BASE64 } from '../src/http/pages/fonts.generated';
 import { escapeHtml, html, raw, safeImageUrl } from '../src/http/pages/html';
 import { bastionProviderPages } from '../src/http/pages/provider-pages';
 import {
+  accountChooserPage,
   connectPage,
   consentPage,
   deviceCodePage,
@@ -66,6 +67,13 @@ const samplePages = (): Record<string, string> => ({
     logoUri: 'https://example.com/logo.png',
     redirectHost: 'claude.ai',
     scopes: ['mcp', 'offline_access'],
+    account: { name: 'Ada Lovelace', email: 'ada@acme.test' },
+  }),
+  'account chooser': accountChooserPage({
+    uid: 'uid1',
+    csrf: 'csrf-token',
+    clientId: 'dcr-9f2c11',
+    account: { name: 'Ada Lovelace', email: 'ada@acme.test' },
   }),
   connect: connectPage({
     installationId: 'i1',
@@ -239,11 +247,38 @@ describe('9.1 pages escape every interpolated value (XSS)', () => {
           logoUri: `https://${a}`,
           redirectHost: b,
           scopes: [a, c],
+          account: { name: c, email: b },
         });
         for (const v of [a, b, c]) injected(v, page);
         if (a.length > 0 && !/[<>"'&]/.test(a)) expect(page).toContain(encodeURIComponent(a));
       }),
     );
+  });
+
+  it('9.3 account chooser: names the account and the app, escapes both, and offers both ways on', () => {
+    fc.assert(
+      fc.property(payload, payload, payload, (a, b, c) => {
+        const page = accountChooserPage({
+          uid: a,
+          csrf: b,
+          clientId: c,
+          account: { name: a, email: b },
+        });
+        for (const v of [a, b, c]) injected(v, page);
+      }),
+    );
+    const page = accountChooserPage({
+      uid: 'u1',
+      csrf: 'tok',
+      clientId: 'dcr-1',
+      account: { name: 'Ada Lovelace', email: 'ada@acme.test' },
+    });
+    expect(page).toContain('Signed in as');
+    expect(page).toContain('Ada Lovelace');
+    expect(page).toContain('ada@acme.test');
+    expect(page).toContain('action="/oauth/interaction/u1/continue"');
+    expect(page).toContain('action="/oauth/interaction/u1/switch"');
+    expect(page).toContain('Use a different account');
   });
 
   it('9.1 login page: connection names, return path, email and messages', () => {

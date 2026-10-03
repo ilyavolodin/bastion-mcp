@@ -1,8 +1,10 @@
 import { timingSafeEqual } from 'node:crypto';
 import {
   type AddressPolicy,
+  describeAddressKind,
   ipInCidr,
   isAddressDenied,
+  isMetadataAddress,
   matchEgressRule,
   normalizeIpLiteral,
   tryParseEgressRule,
@@ -30,6 +32,38 @@ export type DenyReason =
   | 'ssrf-blocked'
   | 'unresolvable'
   | 'connect-failed';
+
+/**
+ * What the program behind the proxy (and the person reading its error) needs to know about a refusal: what was
+ * blocked, why, and the one thing that changes it. One line of printable ASCII, because clients show it as the reason
+ * phrase of the status line (`httpx.ProxyError: 403 <this>`).
+ */
+export const denyDetail = (
+  reason: DenyReason,
+  target: { host: string; port: number; ip?: string | null | undefined },
+): string => {
+  const where = `${target.host}:${target.port}`;
+  switch (reason) {
+    case 'not-allowlisted':
+      return `Blocked by Bastion: ${where} is not in this server's Network allowlist; add the host there`;
+    case 'ssrf-blocked': {
+      const ip = target.ip ?? '';
+      if (ip === '' || isMetadataAddress(ip)) {
+        return `Blocked by Bastion: ${target.host} resolves to ${ip || 'a forbidden address'}, which is never allowed`;
+      }
+      const mask = ip.includes(':') ? 128 : 32;
+      return `Blocked by Bastion: ${target.host} resolves to ${ip}, ${describeAddressKind(ip)}; add ${ip}/${mask} to this server's Network allowlist to allow it`;
+    }
+    case 'unresolvable':
+      return `Bastion could not resolve ${target.host}`;
+    case 'connect-failed':
+      return `Bastion could not connect to ${where}`;
+    case 'bad-request':
+      return 'Bastion could not read the proxy request';
+    default:
+      return 'Bastion proxy credentials are missing or wrong';
+  }
+};
 
 /** Constant-time comparison of a presented token against the stored hash. */
 export const verifyEgressToken = (token: string, tokenSha256: string): boolean => {

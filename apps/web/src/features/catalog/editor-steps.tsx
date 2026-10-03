@@ -1404,6 +1404,12 @@ export function NetworkStep({ draft, onChange, readOnly }: Props) {
           runs.
         </p>
       ) : (
+        <p className="m-0 text-caption text-muted">
+          A host that resolves to an address on your own network (for example 192.168.1.2) is
+          refused unless that address is listed here as well, such as <code>192.168.1.2/32</code>.
+        </p>
+      )}
+      {remote ? null : (
         <Field label="Sandbox size">
           {({ id }) => (
             <Select

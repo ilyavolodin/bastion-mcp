@@ -32,6 +32,12 @@ export type InteractionApi = {
     input?: { approvedScopes?: readonly string[] },
   ): Promise<void>;
   denyConsent(req: IncomingMessage, res: ServerResponse): Promise<void>;
+  /**
+   * Ends the provider's own login session of this browser. A person who signs in as somebody else would otherwise
+   * hit the provider's "different account" logout step: the account switch must start from a clean session. The
+   * pending request ends with it; the result is the query string of the same authorization request, to start again.
+   */
+  endSession(req: IncomingMessage, res: ServerResponse): Promise<string>;
   abort(
     req: IncomingMessage,
     res: ServerResponse,
@@ -110,6 +116,21 @@ export const createInteractionApi = (current: () => Provider): InteractionApi =>
       { consent: { grantId } },
       { mergeWithLastSubmission: true },
     );
+  },
+
+  async endSession(req, res) {
+    const provider = current();
+    const details = await provider.interactionDetails(req, res);
+    const uid = (details.session as { uid?: string } | undefined)?.uid;
+    if (uid) await (await runtime(provider).Session.findByUid(uid))?.destroy();
+    // The pending request dies with the session it belongs to: the same authorization request starts again.
+    const query = new URLSearchParams();
+    for (const [name, value] of Object.entries(asRecord(details.params))) {
+      for (const v of Array.isArray(value) ? value : [value]) {
+        if (typeof v === 'string') query.append(name, v);
+      }
+    }
+    return query.toString();
   },
 
   async denyConsent(req, res) {

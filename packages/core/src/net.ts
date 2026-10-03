@@ -131,6 +131,12 @@ const CLASS_WORDS: Partial<Record<AddressClass, string>> = {
 export const isMetadataAddress = (ip: string): boolean =>
   METADATA_ADDRESSES.includes(unmap(ip) as (typeof METADATA_ADDRESSES)[number]);
 
+/** The kind of a refused address, in words (`a private network address`). */
+export const describeAddressKind = (address: string): string =>
+  isMetadataAddress(address)
+    ? 'the cloud metadata address'
+    : (CLASS_WORDS[classifyAddress(address)] ?? 'an address that is not publicly routable');
+
 /**
  * What a person needs to know when an outbound connection is refused: which name resolved to which address, why that
  * is refused, and the one way out (`BASTION_PRIVATE_UPSTREAM_CIDRS`, set by an administrator).

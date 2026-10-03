@@ -234,6 +234,21 @@ export const createAuthorizationServer = async (
           const policy = interactionPolicy.base();
           // Remembered consent (9.3): native clients use the same Grant lookup, no forced prompt.
           policy.get('consent')?.checks.remove('native_client_prompt');
+          // The provider keeps its own login session, so a browser that has signed in once would authorize every
+          // app as that account without a word. Each authorization request confirms the account (or signs in as
+          // another) once: the check holds until this interaction has its login result.
+          policy
+            .get('login')
+            ?.checks.add(
+              new interactionPolicy.Check(
+                'confirm_account',
+                'The account the app is authorized as must be confirmed',
+                (ctx) =>
+                  ctx.oidc.result?.login
+                    ? interactionPolicy.Check.NO_NEED_TO_PROMPT
+                    : interactionPolicy.Check.REQUEST_PROMPT,
+              ),
+            );
           return policy;
         })(),
       },

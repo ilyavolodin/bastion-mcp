@@ -188,6 +188,17 @@ describe('Catalog forms send what the API requires (17.2)', () => {
     capture.stop();
   });
 
+  it('8.8 the Network step of a package says a LAN host needs its address range in the allowlist, and accepts a CIDR', async () => {
+    const { user } = await renderRoute('/catalog/new?step=network');
+    const card = await screen.findByLabelText('Network');
+    expect(card).toHaveTextContent('192.168.1.2/32');
+    await user.type(within(card).getByLabelText('Add a host'), '192.168.1.2/32');
+    await user.click(within(card).getByRole('button', { name: 'Add' }));
+    expect(
+      await within(card).findByText('192.168.1.2/32', { selector: 'span, div' }),
+    ).toBeVisible();
+  });
+
   it('11.1 a draft the API would refuse is not sent: a range instead of an exact version', async () => {
     const capture = captureRequests();
     const { user } = await renderRoute('/catalog/new');

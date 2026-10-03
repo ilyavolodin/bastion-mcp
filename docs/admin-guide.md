@@ -326,6 +326,12 @@ installations need no sandbox. Org settings (`sandbox`): `defaultSize` (`small`)
 loopback, link-local (including `169.254.169.254`), RFC 1918, CGNAT and IPv6 ULA are denied unless a CIDR entry
 allows them (8.8). Package mirrors (`BASTION_NPM_REGISTRY`, `BASTION_PYPI_INDEX_URL`) are reachable during install only.
 
+A server that talks to a host on your own network therefore needs two entries in its **Network** step: the host
+(`docker.example.com:443`) and the address range it resolves to (`192.168.1.2/32`). `BASTION_PRIVATE_UPSTREAM_CIDRS`
+does not apply to sandboxes. A refused connection answers `403 Blocked by Bastion: <host> resolves to <address>, a
+private network address; add <address>/32 to this server's Network allowlist`, which is what the program in the
+sandbox prints (for example `ProxyError: 403 Blocked by Bastion: ...`), and the denial is recorded in `egress_events`.
+
 Warm-pool and claim details to know when operating: the driver names pools `bastion-runtime-<size>` and
 `bastion-runtime-<size>-pvc`; claims are `bst-<12 hex of the id's random tail>` (ephemeral, 24 h shutdown time refreshed hourly) and
 `bsp-<12 hex of the id's random tail>` (persistent workspaces, suspended on idle). The ui scheduler garbage-collects claims whose instance is

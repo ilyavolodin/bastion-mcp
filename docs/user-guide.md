@@ -26,7 +26,11 @@ ways to split it or hide tools. Teams' installations also appear in your default
 ## 2. Connect your AI tool
 
 All clients sign in through your browser the first time (OAuth against Bastion, which in turn signs you in with your
-company identity provider). The consent page names the client and the address it will return to; check it.
+company identity provider). Before anything is granted, Bastion shows **which account** the tool will use and offers
+*Use a different account*; the consent page names that account again, the client and the address it will return to.
+Check all three: the tool acts as that account, and its calls appear in that account's Activity and Logs. A browser that
+is already signed in to Bastion as somebody else (an administrator account, say) would otherwise authorize your tool as
+that person.
 
 ### Claude Code
 

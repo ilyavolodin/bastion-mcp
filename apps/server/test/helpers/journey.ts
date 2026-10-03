@@ -190,8 +190,19 @@ export const connectWithOAuth = async (
   if (step.response.status === 200 && step.url.includes('/oauth/interaction/')) {
     const html = await step.response.text();
     const link = /href="(\/auth\/login\?[^"]+)"/.exec(html)?.[1]?.replaceAll('&amp;', '&');
-    if (!link) throw new Error(`no login link in ${html}`);
-    step = await b.follow(`${PUBLIC_ORIGIN}${link}`);
+    const chooser = /action="(\/oauth\/interaction\/[^/"]+\/continue)"/.exec(html)?.[1];
+    if (link) {
+      step = await b.follow(`${PUBLIC_ORIGIN}${link}`);
+    } else if (chooser) {
+      // Already signed in to Bastion: confirm the account.
+      step = await b.follow(`${PUBLIC_ORIGIN}${chooser}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ _csrf: /name="_csrf" value="([^"]+)"/.exec(html)?.[1] ?? '' }),
+      });
+    } else {
+      throw new Error(`no login link or account step in ${html}`);
+    }
   }
   let consentHtml: string | undefined;
   if (step.response.status === 200) {
