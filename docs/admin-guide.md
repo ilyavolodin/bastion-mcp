@@ -414,6 +414,12 @@ the change is then saved on the server's current version (`PUT /catalog/{id}/def
 installation on that version, before each person's own changes. Overrides never change what runs, so this does not
 need a new version; older, pinned versions keep theirs.
 
+The same tab adds prompts, resources and resource templates that Bastion itself serves ("Add prompt or resource"):
+fixed messages or text, in which `{{name}}` is replaced by a prompt's arguments or a template's URI variables. They are
+listed next to the upstream's, can be hidden like any other item, go through the same policy, limits and guards, and
+are stored in the `added` section of the override document. In an installation's own overrides they need the entry's
+`userOverrides` level `full`. They are not served while the upstream cannot be listed.
+
 ## 9. Guards
 
 Guard profiles run on three phases (request, response, definition). The org default profile ships enabled:
