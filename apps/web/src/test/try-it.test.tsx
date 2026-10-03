@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { captureRequests } from './capture';
+import { captureRequests, expectSent } from './capture';
 import { renderRoute } from './utils';
 
 /**
@@ -146,5 +146,29 @@ describe('Try it asks for what the definition declares (12.5)', () => {
       }),
     );
     capture.stop();
+  });
+});
+
+describe('The Overrides tab leads with what is shown (12.5)', () => {
+  it('12.5 a switch hides a tool, and saving sends it as hidden', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/servers/i-postgres?tab=overrides');
+    const shown = await screen.findByLabelText('Show pg_explain');
+    await user.click(shown);
+    await waitFor(() => expect(shown).not.toBeChecked());
+    await user.click(screen.getByRole('button', { name: 'Save overrides' }));
+    const body = (await expectSent(capture, 'put', '/installations/i-postgres/overrides')) as {
+      tools?: Record<string, unknown>;
+    };
+    expect(body.tools?.pg_explain).toEqual({ hidden: true });
+    capture.stop();
+  });
+
+  it('12.5 search narrows the list', async () => {
+    const { user } = await renderRoute('/servers/i-postgres?tab=overrides');
+    await screen.findByLabelText('Show pg_explain');
+    await user.type(screen.getByLabelText('Search items'), 'explain');
+    expect(screen.queryByLabelText('Show pg_run_query')).toBeNull();
+    expect(screen.getByLabelText('Show pg_explain')).toBeInTheDocument();
   });
 });

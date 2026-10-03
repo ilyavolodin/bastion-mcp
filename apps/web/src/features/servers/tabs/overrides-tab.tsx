@@ -3,21 +3,17 @@ import { toast } from 'sonner';
 import { useOverrides, usePreviewOverrides, useSaveOverrides } from '@/api/hooks';
 import { toDefinitionPairs } from '@/api/views/servers';
 import { CodeEditor } from '@/components/code-editor';
-import { DiffView } from '@/components/diff-view';
 import { Card, CardHeader, ReadOnlyNote, Segmented, Tag } from '@/components/primitives';
 import { ProblemAlert } from '@/components/problem';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/cn';
 import { stableStringify } from '@/lib/diff';
 import {
   type OverrideDocument,
   overrideJsonSchema,
-  sectionOf,
-  setItemField,
   validateOverrideText,
 } from '@/lib/override-schema';
-import { OverrideForm } from './override-form';
+import { ItemsList } from './items-list';
 import { TryIt } from './try-it';
 
 function Editor({
@@ -35,7 +31,6 @@ function Editor({
   const [saved, setSaved] = React.useState<OverrideDocument>(initial);
   const [view, setView] = React.useState<'editor' | 'json'>('editor');
   const [raw, setRaw] = React.useState(() => JSON.stringify(initial, null, 2));
-  const [selected, setSelected] = React.useState<string | null>(null);
   const preview = usePreviewOverrides();
   const save = useSaveOverrides(installationId);
   const schema = React.useMemo(() => overrideJsonSchema(), []);
@@ -53,15 +48,6 @@ function Editor({
     () => (preview.data ? toDefinitionPairs(preview.data) : []),
     [preview.data],
   );
-  const current = defs.find((d) => d.name === selected) ?? defs[0];
-  const entry = current ? (doc[sectionOf(current.kind)]?.[current.name] ?? {}) : {};
-
-  const onForm = (field: string, value: unknown) => {
-    if (!current) return;
-    const next = setItemField(doc, sectionOf(current.kind), current.name, field, value);
-    setDoc(next);
-    setRaw(JSON.stringify(next, null, 2));
-  };
   const onRaw = (text: string) => {
     setRaw(text);
     const v = validateOverrideText(text);
@@ -76,7 +62,7 @@ function Editor({
       <Card aria-label="Overrides editor" className="gap-4">
         <CardHeader
           title="Overrides"
-          subtitle="What your AI tools see instead of the upstream definition"
+          subtitle="Choose which tools, prompts and resources your AI tools see; customize the few that need it"
           actions={
             <>
               <Segmented
@@ -87,7 +73,7 @@ function Editor({
                   setView(v);
                 }}
                 options={[
-                  { value: 'editor', label: 'Form' },
+                  { value: 'editor', label: 'Items' },
                   { value: 'json', label: 'Raw JSON' },
                 ]}
               />
@@ -164,63 +150,15 @@ function Editor({
             )}
           </div>
         ) : (
-          <div className="grid items-start gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
-            <ul aria-label="Items" className="m-0 flex list-none flex-col gap-1 p-0">
-              {defs.map((d) => {
-                const on = d.name === (current?.name ?? '');
-                const touched = Boolean(doc[sectionOf(d.kind)]?.[d.name]);
-                return (
-                  <li key={`${d.kind}-${d.name}`}>
-                    <button
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => setSelected(d.name)}
-                      className={cn(
-                        'flex h-10 w-full items-center gap-2 rounded-md px-3 text-left font-mono text-[13px]',
-                        on ? 'bg-tangerine-soft text-tangerine-ink' : 'hover:bg-sunken',
-                      )}
-                    >
-                      <span className="flex-1 truncate">{d.name}</span>
-                      {touched ? (
-                        <span className="size-2 rounded-full bg-tangerine" title="Overridden" />
-                      ) : null}
-                      {d.hidden ? <span className="sr-only">hidden</span> : null}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-            {current ? (
-              <div className="flex min-w-0 flex-col gap-5">
-                {current.final === null ? (
-                  <p className="m-0 rounded-md bg-sunken p-3 text-muted">
-                    {current.error
-                      ? `Not served: ${current.error}`
-                      : 'Hidden. This item is not served to AI tools.'}
-                  </p>
-                ) : null}
-                <DiffView
-                  mode="lines"
-                  leftLabel="Upstream definition"
-                  rightLabel="Final definition"
-                  left={
-                    current.upstream
-                      ? stableStringify(current.upstream)
-                      : '(the definition is withheld while the item is hidden)'
-                  }
-                  right={current.final ? stableStringify(current.final) : '(hidden)'}
-                />
-                <OverrideForm
-                  kind={current.kind}
-                  entry={entry as Record<string, unknown>}
-                  disabled={!canEdit}
-                  onChange={onForm}
-                />
-              </div>
-            ) : (
-              <p className="m-0 text-muted">Waiting for the server’s definitions…</p>
-            )}
-          </div>
+          <ItemsList
+            defs={defs}
+            doc={doc}
+            canEdit={canEdit}
+            onChange={(next) => {
+              setDoc(next);
+              setRaw(JSON.stringify(next, null, 2));
+            }}
+          />
         )}
       </Card>
       <TryIt installationId={installationId} defs={defs} />

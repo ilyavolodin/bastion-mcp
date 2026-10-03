@@ -110,6 +110,9 @@ describe('My servers and Installation detail (18.3)', () => {
 
   it('12.5 shows upstream and final definitions side by side and validates raw JSON', async () => {
     const { user } = await renderRoute('/servers/i-postgres?tab=overrides');
+    await user.click(
+      (await screen.findAllByRole('button', { name: 'Customize' }))[0] as HTMLElement,
+    );
     expect(await screen.findByText('Upstream definition')).toBeInTheDocument();
     expect(await screen.findByText('Final definition')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Raw JSON' }));
@@ -124,7 +127,7 @@ describe('My servers and Installation detail (18.3)', () => {
 
   it('12.5 the Try it panel calls the tool through the final definition', async () => {
     const { user } = await renderRoute('/servers/i-postgres?tab=overrides');
-    await screen.findByText('Final definition');
+    await screen.findByLabelText('Show pg_run_query');
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Tool' })).toHaveValue('pg_run_query'),
     );

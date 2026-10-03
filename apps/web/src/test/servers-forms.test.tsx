@@ -281,7 +281,7 @@ describe('Overrides and Try it send what the API requires (12.5)', () => {
   it('12.5 Try it sends a tool call with its arguments', async () => {
     const capture = captureRequests();
     const { user } = await renderRoute('/servers/i-postgres?tab=overrides');
-    await screen.findByText('Final definition');
+    await screen.findByLabelText('Show pg_run_query');
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Tool' })).toHaveValue('pg_run_query'),
     );
