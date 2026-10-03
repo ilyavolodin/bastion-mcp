@@ -135,6 +135,55 @@ const SECTIONS = [
 
 const keyOf = (def: Json, field: string): string => String(def[field] ?? '');
 
+/** Items written in the override documents (`added`): the later layer wins per key. */
+const addedOf = (layers: readonly (Json | undefined)[], section: string): Record<string, Json> => {
+  let out: Record<string, Json> = {};
+  for (const doc of layers) {
+    const added = isObject(doc?.added) ? (doc.added as Json) : {};
+    const items = added[section];
+    if (isObject(items)) out = { ...out, ...(items as Record<string, Json>) };
+  }
+  return out;
+};
+
+const hostedDefinition = (kind: Kind, key: string, def: Json): Json =>
+  kind === 'prompt'
+    ? {
+        name: key,
+        ...(def.title === undefined ? {} : { title: def.title }),
+        ...(def.description === undefined ? {} : { description: def.description }),
+        ...(def.arguments === undefined ? {} : { arguments: def.arguments }),
+      }
+    : {
+        [kind === 'resource' ? 'uri' : 'uriTemplate']: key,
+        name: def.name,
+        ...(def.title === undefined ? {} : { title: def.title }),
+        ...(def.description === undefined ? {} : { description: def.description }),
+        mimeType: def.mimeType ?? 'text/plain',
+      };
+
+/** The upstream listing with the added items in it (an upstream item with the same key gives way). */
+const withAddedItems = (
+  upstream: Upstream,
+  kind: Kind,
+  list: keyof Upstream,
+  field: string,
+  layers: readonly (Json | undefined)[],
+): { defs: Json[]; added: Set<string> } => {
+  if (kind === 'tool') return { defs: upstream[list], added: new Set() };
+  const section =
+    kind === 'prompt' ? 'prompts' : kind === 'resource' ? 'resources' : 'resourceTemplates';
+  const added = addedOf(layers, section);
+  const keys = Object.keys(added);
+  return {
+    defs: [
+      ...upstream[list].filter((d) => !keys.includes(keyOf(d, field))),
+      ...keys.map((k) => hostedDefinition(kind, k, added[k] as Json)),
+    ],
+    added: new Set(keys),
+  };
+};
+
 /** What `GET /installations/{id}/tools|prompts|resources|templates` answers for one kind. */
 export const definitionsFor = (
   kind: Kind,
@@ -145,7 +194,7 @@ export const definitionsFor = (
   const [, list, section, field] = SECTIONS.find((s) => s[0] === kind) ?? SECTIONS[0];
   const items: Definitions['items'] = [];
   const meta: Definitions['meta'] = [];
-  for (const def of upstream[list]) {
+  for (const def of withAddedItems(upstream, kind, list, field, layers).defs) {
     const key = keyOf(def, field);
     const r = apply(def, section, key, layers);
     if (r.status === 'hidden') continue;
@@ -186,12 +235,14 @@ export const previewFor = (
   };
   const diff: OverridePreview['diff'] = [];
   for (const [kind, list, section, field] of SECTIONS) {
-    for (const def of upstream[list]) {
+    const listing = withAddedItems(upstream, kind, list, field, [catalogLayer, doc]);
+    for (const def of listing.defs) {
       const key = keyOf(def, field);
+      const mark = listing.added.has(key) ? { added: true as const } : {};
       const r = apply(def, section, key, [catalogLayer, doc]);
       if (r.status === 'hidden') {
         final.hidden.push({ kind, key });
-        diff.push({ kind, key, status: 'hidden', issues: [], changes: [] });
+        diff.push({ kind, key, status: 'hidden', ...mark, issues: [], changes: [] });
         continue;
       }
       const changes = changesBetween(def, r.final);
@@ -199,6 +250,7 @@ export const previewFor = (
         kind,
         key,
         status: changes.length ? 'modified' : 'unchanged',
+        ...mark,
         issues: [],
         changes,
       });

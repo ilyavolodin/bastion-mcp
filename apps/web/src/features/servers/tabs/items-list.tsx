@@ -5,8 +5,15 @@ import { Segmented, Tag } from '@/components/primitives';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { type AddedDraft, definitionToDraft, sectionOfAdded } from '@/lib/added-items';
 import { stableStringify } from '@/lib/diff';
-import { type OverrideDocument, sectionOf, setItemField } from '@/lib/override-schema';
+import {
+  type OverrideDocument,
+  sectionOf,
+  setAddedItem,
+  setItemField,
+} from '@/lib/override-schema';
+import { AddedForm } from './added-form';
 import { OverrideForm } from './override-form';
 
 type KindFilter = 'all' | DefinitionPair['kind'];
@@ -50,6 +57,8 @@ export function ItemsList({
   const [query, setQuery] = React.useState('');
   const [kind, setKind] = React.useState<KindFilter>('all');
   const [open, setOpen] = React.useState<string | null>(null);
+  const [adding, setAdding] = React.useState(false);
+  const [editing, setEditing] = React.useState<{ key: string; draft: AddedDraft } | null>(null);
 
   const kinds = React.useMemo(() => [...new Set(defs.map((d) => d.kind))], [defs]);
   const q = query.trim().toLowerCase();
@@ -67,7 +76,28 @@ export function ItemsList({
     onChange(next);
   };
 
-  if (defs.length === 0) {
+  const editAdded = (d: DefinitionPair) => {
+    if (d.kind === 'tool') return;
+    const stored = doc.added?.[sectionOfAdded(d.kind)]?.[d.name];
+    if (stored)
+      setEditing({ key: `${d.kind}-${d.name}`, draft: definitionToDraft(d.kind, d.name, stored) });
+  };
+
+  const removeAdded = (d: DefinitionPair) => {
+    if (d.kind === 'tool') return;
+    // The item's own override entry (hidden, title...) goes with it, so a later item of the same key starts clean.
+    let next = setAddedItem(doc, sectionOfAdded(d.kind), d.name, undefined);
+    const section = sectionOf(d.kind);
+    if (next[section]?.[d.name]) {
+      const rest = { ...next[section] };
+      delete rest[d.name];
+      next = { ...next, [section]: rest };
+      if (Object.keys(rest).length === 0) delete next[section];
+    }
+    onChange(next);
+  };
+
+  if (defs.length === 0 && !doc.added && !adding) {
     return <p className="m-0 text-muted">Waiting for the server’s definitions…</p>;
   }
 
@@ -95,6 +125,17 @@ export function ItemsList({
           />
         ) : null}
         <span className="flex-1" />
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!canEdit || adding}
+          onClick={() => {
+            setEditing(null);
+            setAdding(true);
+          }}
+        >
+          Add prompt or resource
+        </Button>
         <span className="text-caption text-muted">
           {defs.length - hiddenCount} of {defs.length} shown
         </span>
@@ -115,6 +156,17 @@ export function ItemsList({
           Hide these
         </Button>
       </div>
+      {adding ? (
+        <AddedForm
+          doc={doc}
+          editing={null}
+          onCancel={() => setAdding(false)}
+          onSave={(next) => {
+            onChange(next);
+            setAdding(false);
+          }}
+        />
+      ) : null}
       {visible.length === 0 ? <p className="m-0 text-muted">Nothing matches.</p> : null}
       <ul aria-label="Items" className="m-0 flex list-none flex-col gap-2 p-0">
         {visible.map((d) => {
@@ -137,19 +189,56 @@ export function ItemsList({
                   <span className="truncate text-caption text-muted">{describe(d)}</span>
                 </div>
                 {d.kind !== 'tool' ? <Tag>{KIND_LABEL[d.kind]}</Tag> : null}
+                {d.added ? <Tag tone="info">Added</Tag> : null}
                 {hidden ? <Tag tone="warn">Hidden</Tag> : null}
                 {custom > 0 ? <Tag tone="info">Customized</Tag> : null}
                 {d.error ? <Tag tone="bad">Not served</Tag> : null}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-expanded={expanded}
-                  onClick={() => setOpen(expanded ? null : key)}
-                >
-                  {expanded ? 'Close' : 'Customize'}
-                </Button>
+                {d.added ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!canEdit}
+                      aria-label={`Edit ${d.name}`}
+                      onClick={() => editAdded(d)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!canEdit}
+                      aria-label={`Remove ${d.name}`}
+                      onClick={() => removeAdded(d)}
+                    >
+                      Remove
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-expanded={expanded}
+                    onClick={() => setOpen(expanded ? null : key)}
+                  >
+                    {expanded ? 'Close' : 'Customize'}
+                  </Button>
+                )}
               </div>
-              {expanded ? (
+              {editing?.key === key ? (
+                <div className="border-t border-line p-4">
+                  <AddedForm
+                    doc={doc}
+                    editing={editing.draft}
+                    onCancel={() => setEditing(null)}
+                    onSave={(next) => {
+                      onChange(next);
+                      setEditing(null);
+                    }}
+                  />
+                </div>
+              ) : null}
+              {expanded && !d.added ? (
                 <div className="flex flex-col gap-5 border-t border-line p-4">
                   {d.error ? <p className="m-0 text-muted">Not served: {d.error}</p> : null}
                   <DiffView

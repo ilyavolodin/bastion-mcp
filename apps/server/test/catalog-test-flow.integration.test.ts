@@ -311,6 +311,66 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
       .toBe(true);
   });
 
+  it('12.2 prompts, resources and templates written in the overrides are answered by Bastion, not the upstream', async () => {
+    const policy = createPolicyService(worker.infra);
+    const seeded = await seedInstallation(worker.infra, {
+      email: 'author-added@acme.example',
+      slug: 'added-items',
+      spec: {
+        type: 'remote',
+        transport: 'streamable-http',
+        url: upstream.url,
+        auth: { mode: 'none' },
+      },
+    });
+    const current = await worker.infra.repos.installations.getWithEtag(seeded.installationId);
+    await worker.infra.repos.installations.update(
+      seeded.installationId,
+      {
+        overrides: {
+          version: 1,
+          added: {
+            prompts: {
+              review: {
+                arguments: [{ name: 'repo', required: true }],
+                messages: [{ role: 'user', text: 'Please review {{repo}}.' }],
+              },
+            },
+            resources: { 'notes://welcome': { name: 'welcome', text: 'Hello from Bastion' } },
+            resourceTemplates: { 'notes://page/{id}': { name: 'page', text: 'Page {{id}}' } },
+          },
+        },
+      },
+      { ifMatch: current?.etag ?? '*' },
+    );
+    await policy.rebuild();
+    const access = createUpstreamAccess(worker.infra, authOf(), worker.worker);
+    const ports = createInstallationApiPorts(worker.infra, authOf(), {
+      worker: worker.worker,
+      policy,
+      access,
+    });
+    const run = (request: Record<string, unknown>) =>
+      ports.tryCall.run({
+        installationId: seeded.installationId,
+        principalId: seeded.userId,
+        request: request as never,
+      });
+
+    const prompt = await run({ kind: 'prompt', name: 'review', arguments: { repo: 'bastion' } });
+    expect(prompt.isError).toBe(false);
+    expect(JSON.stringify(prompt.result)).toContain('Please review bastion.');
+    const missing = await run({ kind: 'prompt', name: 'review', arguments: {} });
+    expect(missing.isError).toBe(true);
+    const resource = await run({ kind: 'resource', uri: 'notes://welcome' });
+    expect(JSON.stringify(resource.result)).toContain('Hello from Bastion');
+    const templated = await run({ kind: 'resource', uri: 'notes://page/42' });
+    expect(JSON.stringify(templated.result)).toContain('Page 42');
+    // The upstream's own items still work next to them.
+    const upstreamOwn = await run({ kind: 'prompt', name: 'greet', arguments: { who: 'Ada' } });
+    expect(JSON.stringify(upstreamOwn.result)).toContain('hi Ada');
+  });
+
   it('8.6 restart and log tail work for an installation without a sandbox instance', async () => {
     const policy = createPolicyService(worker.infra);
     await policy.rebuild();

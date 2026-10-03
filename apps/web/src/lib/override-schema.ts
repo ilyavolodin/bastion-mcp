@@ -89,6 +89,68 @@ const template = z.strictObject({
   hidden: z.boolean().optional(),
 });
 
+/** Limits of hosted items, as in `packages/overrides` (`ADDED_LIMITS`). */
+export const ADDED_LIMITS = { items: 50, messages: 20, textChars: 100_000 } as const;
+
+const uriProblem = (uri: string): string | undefined => {
+  if (!/^[A-Za-z][A-Za-z0-9+.-]*:/.test(uri)) {
+    return 'must be a URI with a scheme, such as notes://welcome';
+  }
+  return /^(skill|bastion\+[^:]*):/i.test(uri) ? 'this scheme is reserved by Bastion' : undefined;
+};
+const addedText = z.string().max(ADDED_LIMITS.textChars);
+
+const addedPrompt = z.strictObject({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  arguments: z
+    .array(
+      z.strictObject({
+        name,
+        description: z.string().optional(),
+        required: z.boolean().optional(),
+      }),
+    )
+    .max(ADDED_LIMITS.items)
+    .optional(),
+  messages: z
+    .array(z.strictObject({ role: z.enum(['user', 'assistant']), text: addedText }))
+    .min(1)
+    .max(ADDED_LIMITS.messages),
+});
+
+const addedResource = z.strictObject({
+  name: z.string().min(1),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  mimeType: z.string().min(1).optional(),
+  text: addedText,
+});
+
+const added = z
+  .strictObject({
+    prompts: z.record(z.string(), addedPrompt).optional(),
+    resources: z.record(z.string(), addedResource).optional(),
+    resourceTemplates: z.record(z.string(), addedResource).optional(),
+  })
+  .superRefine((value, ctx) => {
+    for (const key of Object.keys(value.prompts ?? {})) {
+      if (!/^[A-Za-z0-9_.-]{1,128}$/.test(key)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['prompts', key],
+          message: 'must match ^[A-Za-z0-9_.-]{1,128}$',
+        });
+      }
+    }
+    for (const section of ['resources', 'resourceTemplates'] as const) {
+      for (const key of Object.keys(value[section] ?? {})) {
+        const problem = uriProblem(key);
+        if (problem) ctx.addIssue({ code: 'custom', path: [section, key], message: problem });
+      }
+    }
+  });
+
 export const overrideDocumentSchema = z.strictObject({
   // Like `packages/overrides`: a document without `version` is version 1, so `{}` is the empty document.
   version: z.literal(1).default(1),
@@ -100,6 +162,7 @@ export const overrideDocumentSchema = z.strictObject({
   prompts: z.record(z.string(), prompt).optional(),
   resources: z.record(z.string(), resource).optional(),
   resourceTemplates: z.record(z.string(), template).optional(),
+  added: added.optional(),
 });
 
 export type OverrideSection = 'tools' | 'prompts' | 'resources' | 'resourceTemplates';
@@ -108,10 +171,15 @@ export type OverrideSection = 'tools' | 'prompts' | 'resources' | 'resourceTempl
  * The document the editor works on: the shape `overrideDocumentSchema` accepts, with items as open records so form
  * controls can write any field. The API types the body as a plain record (`PUT /installations/{id}/overrides`).
  */
+/** What Bastion hosts itself, keyed by prompt name, resource URI or URI template (12.2 `added`). */
+export type AddedSection = 'prompts' | 'resources' | 'resourceTemplates';
+export type AddedItems = Partial<Record<AddedSection, Record<string, Record<string, unknown>>>>;
+
 export type OverrideDocument = {
   version: 1;
   uriPrefix?: boolean;
   instructions?: { mode: 'append' | 'replace'; text: string };
+  added?: AddedItems;
 } & Partial<Record<OverrideSection, Record<string, Record<string, unknown>>>>;
 
 export type OverrideIssue = { path: string; message: string };
@@ -162,6 +230,23 @@ export function setItemField(
   else map[item] = entry;
   const next: OverrideDocument = { ...doc, [section]: map };
   if (Object.keys(map).length === 0) delete next[section];
+  return next;
+}
+
+/** Adds, replaces or (with `undefined`) removes one hosted item; empty sections and `added` itself disappear. */
+export function setAddedItem(
+  doc: OverrideDocument,
+  section: AddedSection,
+  key: string,
+  definition: Record<string, unknown> | undefined,
+): OverrideDocument {
+  const map = { ...(doc.added?.[section] ?? {}) };
+  if (definition === undefined) delete map[key];
+  else map[key] = definition;
+  const added: AddedItems = { ...(doc.added ?? {}), [section]: map };
+  if (Object.keys(map).length === 0) delete added[section];
+  const next: OverrideDocument = { ...doc, added };
+  if (Object.keys(added).length === 0) delete next.added;
   return next;
 }
 

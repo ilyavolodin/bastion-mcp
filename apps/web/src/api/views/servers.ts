@@ -273,6 +273,8 @@ export type DefinitionPair = {
   /** The definition AI tools see; `null` when hidden or invalid. */
   final: Record<string, unknown> | null;
   hidden: boolean;
+  /** Written in the override document and served by Bastion itself (not listed by the upstream). */
+  added: boolean;
   error: string | null;
 };
 
@@ -336,6 +338,7 @@ export const toDefinitionPairs = (preview: OverridePreview): DefinitionPair[] =>
       upstream: final ? revertChanges(final, d.changes) : null,
       final,
       hidden: d.status === 'hidden',
+      added: d.added === true,
       error: d.error ?? (d.status === 'invalid' ? 'invalid override' : null),
     };
   });

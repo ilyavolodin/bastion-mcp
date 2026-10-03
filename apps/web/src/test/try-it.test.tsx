@@ -188,3 +188,70 @@ describe('Overrides for everyone who installs a server (12.5)', () => {
     capture.stop();
   });
 });
+
+describe('Prompts and resources Bastion serves itself (12.2)', () => {
+  it('12.2 a prompt is added with its arguments and messages, listed as Added, and saved in the document', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/servers/i-postgres?tab=overrides');
+    await screen.findByLabelText('Show pg_explain');
+    await user.click(screen.getByRole('button', { name: 'Add prompt or resource' }));
+    const form = within(await screen.findByRole('form', { name: 'Add item' }));
+    await user.type(form.getByLabelText(/Prompt name/), 'review_change');
+    await user.type(form.getByLabelText('Description'), 'Review a change');
+    await user.type(form.getByLabelText('Arguments'), 'repo*');
+    // `{` starts a key description in user.type, so the braces of a placeholder are pasted.
+    await user.click(form.getByLabelText('Message 1'));
+    await user.paste('Review {{repo}} carefully');
+    await user.click(form.getByRole('button', { name: 'Add item' }));
+    expect(await screen.findByLabelText('Show review_change')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit review_change')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save overrides' }));
+    const body = (await expectSent(capture, 'put', '/installations/i-postgres/overrides')) as {
+      added?: { prompts?: Record<string, unknown> };
+    };
+    expect(body.added?.prompts?.review_change).toEqual({
+      description: 'Review a change',
+      arguments: [{ name: 'repo', required: true }],
+      messages: [{ role: 'user', text: 'Review {{repo}} carefully' }],
+    });
+    capture.stop();
+  });
+
+  it('12.2 a resource is added, can be removed again, and the form refuses a URI without a scheme', async () => {
+    const { user } = await renderRoute('/servers/i-postgres?tab=overrides');
+    await screen.findByLabelText('Show pg_explain');
+    await user.click(screen.getByRole('button', { name: 'Add prompt or resource' }));
+    const form = within(await screen.findByRole('form', { name: 'Add item' }));
+    await user.click(form.getByRole('button', { name: 'Resource' }));
+    await user.type(form.getByLabelText(/Resource URI/), 'welcome');
+    await user.type(form.getByLabelText(/^Name/), 'welcome');
+    await user.type(form.getByLabelText('Text'), 'Hello');
+    await user.click(form.getByRole('button', { name: 'Add item' }));
+    expect(await form.findByRole('alert')).toHaveTextContent('scheme');
+    await user.clear(form.getByLabelText(/Resource URI/));
+    await user.type(form.getByLabelText(/Resource URI/), 'notes://welcome');
+    await user.click(form.getByRole('button', { name: 'Add item' }));
+    expect(await screen.findByLabelText('Show notes://welcome')).toBeInTheDocument();
+    await user.click(screen.getByLabelText('Remove notes://welcome'));
+    await waitFor(() => expect(screen.queryByLabelText('Show notes://welcome')).toBeNull());
+  });
+
+  it('12.2 an added item is edited in place: its key cannot change', async () => {
+    const { user } = await renderRoute('/servers/i-postgres?tab=overrides');
+    await screen.findByLabelText('Show pg_explain');
+    await user.click(screen.getByRole('button', { name: 'Add prompt or resource' }));
+    let form = within(await screen.findByRole('form', { name: 'Add item' }));
+    await user.type(form.getByLabelText(/Prompt name/), 'p1');
+    await user.type(form.getByLabelText('Message 1'), 'one');
+    await user.click(form.getByRole('button', { name: 'Add item' }));
+    await user.click(await screen.findByLabelText('Edit p1'));
+    form = within(await screen.findByRole('form', { name: 'Add item' }));
+    expect(form.getByLabelText(/Prompt name/)).toBeDisabled();
+    await user.clear(form.getByLabelText('Message 1'));
+    await user.type(form.getByLabelText('Message 1'), 'two');
+    await user.click(form.getByRole('button', { name: 'Update item' }));
+    await user.click(await screen.findByLabelText('Edit p1'));
+    form = within(await screen.findByRole('form', { name: 'Add item' }));
+    expect(form.getByLabelText('Message 1')).toHaveValue('two');
+  });
+});

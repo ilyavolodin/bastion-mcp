@@ -123,10 +123,13 @@ export const ADDED_LIMITS = {
   textChars: 100_000,
 } as const;
 
-const uriKey = z
-  .string()
-  .regex(/^[A-Za-z][A-Za-z0-9+.-]*:/, 'must be a URI with a scheme, such as notes://welcome')
-  .refine((v) => !/^(skill|bastion\+[^:]*):/i.test(v), 'this scheme is reserved by Bastion');
+/** Why a resource URI (or URI template) cannot be hosted; `undefined` when it can. */
+export const addedUriProblem = (uri: string): string | undefined => {
+  if (!/^[A-Za-z][A-Za-z0-9+.-]*:/.test(uri)) {
+    return 'must be a URI with a scheme, such as notes://welcome';
+  }
+  return /^(skill|bastion\+[^:]*):/i.test(uri) ? 'this scheme is reserved by Bastion' : undefined;
+};
 const addedText = z.string().max(ADDED_LIMITS.textChars);
 
 export const addedPromptArgumentSchema = z.strictObject({
@@ -161,11 +164,30 @@ export type AddedResource = z.infer<typeof addedResourceSchema>;
 export const addedResourceTemplateSchema = addedResourceSchema;
 export type AddedResourceTemplate = AddedResource;
 
-export const addedSchema = z.strictObject({
-  prompts: z.record(z.string().regex(NAME_PATTERN), addedPromptSchema).optional(),
-  resources: z.record(uriKey, addedResourceSchema).optional(),
-  resourceTemplates: z.record(uriKey, addedResourceTemplateSchema).optional(),
-});
+// The keys are checked after the record so that each problem names its key and says what is wrong with it.
+export const addedSchema = z
+  .strictObject({
+    prompts: z.record(z.string(), addedPromptSchema).optional(),
+    resources: z.record(z.string(), addedResourceSchema).optional(),
+    resourceTemplates: z.record(z.string(), addedResourceTemplateSchema).optional(),
+  })
+  .superRefine((added, ctx) => {
+    for (const key of Object.keys(added.prompts ?? {})) {
+      if (!NAME_PATTERN.test(key)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['prompts', key],
+          message: 'must match ^[A-Za-z0-9_.-]{1,128}$',
+        });
+      }
+    }
+    for (const section of ['resources', 'resourceTemplates'] as const) {
+      for (const key of Object.keys(added[section] ?? {})) {
+        const problem = addedUriProblem(key);
+        if (problem) ctx.addIssue({ code: 'custom', path: [section, key], message: problem });
+      }
+    }
+  });
 export type AddedItems = z.infer<typeof addedSchema>;
 
 export const overridesSchema = z.strictObject({
