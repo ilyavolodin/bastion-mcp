@@ -785,6 +785,11 @@ export const accessSamples: SampleFactory = (db) => {
   const sim: SimBody = slackTest.request;
   const samples: Sample[] = [
     { method: 'get', path: '/users' },
+    {
+      method: 'patch',
+      path: '/users/u-raj',
+      body: { orgRole: 'auditor' } satisfies Body<'patch', '/users/{id}'>,
+    },
     { method: 'post', path: '/users/u-tom/deactivate' },
     { method: 'get', path: '/teams' },
     { method: 'get', path: `/teams/${a.teams[0]?.id}` },
