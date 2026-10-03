@@ -18,7 +18,7 @@ import { ConfirmDialog } from '../catalog/entry-actions';
 import { applyServerErrors } from '../settings/form-errors';
 
 /** The same rules the server enforces (9.1); the server stays the authority. */
-export const MIN_PASSWORD_LENGTH = 12;
+export const MIN_PASSWORD_LENGTH = 8;
 
 const schema = z
   .object({

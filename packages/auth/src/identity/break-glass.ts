@@ -5,7 +5,7 @@ import { IdentityValidationError } from './errors';
 import { base62Encode } from './pat/token';
 import type { OrgRole } from './principal';
 
-export const MIN_LOCAL_PASSWORD_LENGTH = 12;
+export const MIN_LOCAL_PASSWORD_LENGTH = 8;
 
 export type BootstrapDecision =
   | { action: 'create'; email: string }

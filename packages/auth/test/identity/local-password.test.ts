@@ -9,6 +9,7 @@ import {
   type LocalPasswordRepository,
   type LocalUser,
   MAX_LOCAL_PASSWORD_LENGTH,
+  MIN_LOCAL_PASSWORD_LENGTH,
   resetLocalPassword,
   SessionService,
 } from '../../src/identity';
@@ -53,8 +54,10 @@ const seed = async (password = 'initial password 123') => {
 };
 
 describe('9.1 local password policy', () => {
-  it('9.1 requires 12 to 256 characters', () => {
-    expect(checkPasswordPolicy('short', { email: 'a@b.test' })).toMatch(/at least 12/);
+  it('9.1 requires 8 to 256 characters', () => {
+    expect(checkPasswordPolicy('short', { email: 'a@b.test' })).toMatch(/at least 8/);
+    expect(checkPasswordPolicy('seven77', { email: 'a@b.test' })).toMatch(/at least 8/);
+    expect(checkPasswordPolicy('eight-88', { email: 'a@b.test' })).toBeNull();
     expect(
       checkPasswordPolicy('x1'.repeat(MAX_LOCAL_PASSWORD_LENGTH), { email: 'a@b.test' }),
     ).toMatch(/at most/);
@@ -74,7 +77,7 @@ describe('9.1 local password policy', () => {
       fc.property(fc.string({ maxLength: 400 }), fc.string({ maxLength: 40 }), (pw, current) => {
         const verdict = checkPasswordPolicy(pw, { email: 'u@x.test', current });
         if (verdict === null) {
-          expect(pw.length).toBeGreaterThanOrEqual(12);
+          expect(pw.length).toBeGreaterThanOrEqual(MIN_LOCAL_PASSWORD_LENGTH);
           expect(pw.length).toBeLessThanOrEqual(MAX_LOCAL_PASSWORD_LENGTH);
           expect(pw).not.toBe(current);
         }

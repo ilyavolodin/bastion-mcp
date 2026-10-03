@@ -35,7 +35,7 @@ describe('Account: change password (9.1)', () => {
     await user.type(screen.getByLabelText(/^New password/), 'short');
     await user.type(screen.getByLabelText(/Repeat the new password/), 'other');
     await user.click(screen.getByRole('button', { name: 'Change password' }));
-    expect(await screen.findByText('Use at least 12 characters')).toBeInTheDocument();
+    expect(await screen.findByText('Use at least 8 characters')).toBeInTheDocument();
     expect(screen.getByText('The passwords do not match')).toBeInTheDocument();
     expect(capture.calls.some((c) => c.path.endsWith('/me/password'))).toBe(false);
     capture.stop();

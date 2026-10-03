@@ -44,7 +44,7 @@ const COMMON = new Set([
 const squash = (value: string): string => value.toLowerCase().replace(/[\s._-]+/g, '');
 
 /**
- * The local password policy (9.1, 22.3): 12 to 256 characters, different from the current password (which also
+ * The local password policy (9.1, 22.3): 8 to 256 characters, different from the current password (which also
  * stops a user keeping the generated bootstrap password), no run of one character, not the name part of the
  * account's e-mail and not one of the most common passwords. Returns the first violation or null.
  */

@@ -225,7 +225,7 @@ describe.skipIf(!haveDocker())(
             weak.io,
           ),
         ).toBe(1);
-        expect(weak.err.join('\n')).toMatch(/at least 12/);
+        expect(weak.err.join('\n')).toMatch(/at least 8/);
         const unknown = capture();
         expect(
           await execute(

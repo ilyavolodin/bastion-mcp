@@ -139,13 +139,13 @@ export const sessionHandlers: HttpHandler[] = [
         { path: 'currentPassword', message: 'The current password is not correct.' },
       ]);
     }
-    if (newPassword.length < 12) {
+    if (newPassword.length < 8) {
       return problem(
         400,
         'validation_failed',
-        'The password must be at least 12 characters.',
+        'The password must be at least 8 characters.',
         undefined,
-        [{ path: 'newPassword', message: 'The password must be at least 12 characters.' }],
+        [{ path: 'newPassword', message: 'The password must be at least 8 characters.' }],
       );
     }
     return HttpResponse.json({ changed: true as const });

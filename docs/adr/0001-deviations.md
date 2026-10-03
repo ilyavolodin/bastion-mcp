@@ -104,7 +104,7 @@ fails when unprivileged user namespaces or network unsharing are unavailable (wh
 The spec has no password reset and no e-mail delivery in v1. What is implemented, and nothing that needs mail:
 
 - `POST /api/v1/me/password` `{currentPassword, newPassword}` (self route, no Cedar action): verifies the current
-  password, applies the policy of `packages/auth` (12 to 256 characters, different from the current password, so the
+  password, applies the policy of `packages/auth` (8 to 256 characters, different from the current password, so the
   generated bootstrap password cannot be kept, not the name part of the e-mail, not a run of one character, not a
   common password), stores a new argon2id hash and revokes every other session and token of the user through the
   revocation watermark. The caller's own session survives (it is re-stamped to start in the next second, because the
