@@ -257,6 +257,10 @@ const idpFields = (v: IdpFormValues) => ({
   enabled: v.enabled,
 });
 
+/** The address the IdP sends people back to after sign-in, which the IdP's own application registration must list (9.1). */
+export const idpRedirectUri = (baseUrl: string, connectionId: string): string =>
+  `${baseUrl.replace(/\/$/, '')}/auth/callback/${connectionId}`;
+
 /** `POST /idp-connections`: the client secret is required and write-only. */
 export const idpCreateBody = (v: IdpFormValues): Body<'post', '/idp-connections'> => ({
   ...idpFields(v),

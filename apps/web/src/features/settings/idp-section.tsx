@@ -12,9 +12,12 @@ import {
   type IdpTestResult,
   idpCreateBody,
   idpPatchBody,
+  idpRedirectUri,
   idpTestSteps,
   idpToForm,
 } from '@/api/views/settings';
+import { useAuth } from '@/auth/auth';
+import { CopyField } from '@/components/copy-field';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/form';
 import { Card, CardHeader, Tag } from '@/components/primitives';
@@ -198,6 +201,12 @@ function IdpDialog({ editing, onClose }: { editing: IdpConnection | 'new'; onClo
         'Enterprise-managed authorization',
         'Use this IdP to authorize upstream servers',
       )}
+      {creating ? (
+        <p className="m-0 text-caption text-muted">
+          After you save, the redirect URI to register in your identity provider appears on the
+          connection.
+        </p>
+      ) : null}
       {formError ? (
         <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
           {formError}
@@ -215,6 +224,7 @@ export function IdpSection() {
   const test = useTestIdp();
   const [results, setResults] = React.useState<Record<string, IdpTestResult>>({});
   const [editing, setEditing] = React.useState<IdpConnection | 'new' | null>(null);
+  const { me } = useAuth();
   return (
     <Card aria-label="Identity providers" className="gap-3">
       <CardHeader
@@ -270,6 +280,17 @@ export function IdpSection() {
                   <Button variant="ghost" size="xs" onClick={() => setEditing(c)}>
                     Edit
                   </Button>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-caption text-muted">
+                    Redirect URI: register exactly this in your identity provider
+                  </span>
+                  <CopyField
+                    tone="sunken"
+                    mono
+                    label={`Redirect URI of ${c.name}`}
+                    value={idpRedirectUri(me.org.baseUrl, c.id)}
+                  />
                 </div>
                 {results[c.id] ? <TestResult result={results[c.id] as IdpTestResult} /> : null}
               </li>

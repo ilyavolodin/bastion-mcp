@@ -111,6 +111,15 @@ describe('Settings forms send what the API accepts (19.2)', () => {
     capture.stop();
   });
 
+  it('9.1 each connection shows the redirect URI to register in the identity provider', async () => {
+    await renderRoute('/settings?section=idp');
+    const field = await screen.findByText('Redirect URI of Okta', { exact: false });
+    // The address the IdP must list: this Bastion's public address plus the connection's callback path.
+    const base = getDb().me.org.baseUrl.replace(/\/$/, '');
+    expect(field.closest('div')).toHaveTextContent(`${base}/auth/callback/idp-1`);
+    expect(screen.getByRole('button', { name: /Copy Redirect URI of Okta/ })).toBeVisible();
+  });
+
   it('9.4 editing a connection leaves the client secret out unless a new one is typed', async () => {
     const capture = captureRequests();
     const { user } = await renderRoute('/settings?section=idp');
