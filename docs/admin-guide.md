@@ -369,7 +369,8 @@ not in Postgres every 5 minutes. Several of these behaviors are still being conf
 ### 7.2 Bubblewrap prerequisites
 
 - The container must be allowed to create user namespaces: run with `deploy/docker/seccomp-bastion.json`
-  (`--security-opt seccomp=...`). **How the profile was derived:** it is the Docker/moby default profile
+  (`--security-opt seccomp=...`) and `--security-opt systempaths=unconfined` (bwrap mounts a fresh `/proc` in its jail, which Docker
+  refuses while it masks the container's `/proc`; the startup probe does not mount `/proc`, so it passes without this and sandboxed runs then fail). **How the profile was derived:** it is the Docker/moby default profile
   (`moby/profiles`, `seccomp/default.json`, 60 syscall rules, copied unchanged) plus four appended rules: `clone` with
   `CLONE_NEWUSER` set in its flags (two rules, for the s390 argument order), `unshare` unrestricted, and `mount`,
   `umount`, `umount2`, `pivot_root`. The design specifies only the `clone`/`unshare` additions; the mount rules were

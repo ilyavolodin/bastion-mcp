@@ -71,6 +71,10 @@ services:
   migrate:
     image: ${BASTION_IMAGE:-ghcr.io/ilyavolodin/bastion}:${BASTION_VERSION:-main}
     entrypoint: ["bastion", "migrate"]
+    # Watchtower (if you run it) must not swap the image under a running database schema: update with
+    # `docker compose pull && docker compose up -d`, which re-runs `migrate` first.
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
     environment: *bastion-env
     depends_on:
       postgres:
@@ -80,6 +84,10 @@ services:
   bastion:
     image: ${BASTION_IMAGE:-ghcr.io/ilyavolodin/bastion}:${BASTION_VERSION:-main}
     environment: *bastion-env
+    # Watchtower (if you run it) must not swap the image under a running database schema: update with
+    # `docker compose pull && docker compose up -d`, which re-runs `migrate` first.
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
     ports:
       - "${BASTION_HTTP_BIND:-0.0.0.0}:${BASTION_HTTP_PORT_HOST:-8080}:8080"
     volumes:
@@ -89,6 +97,8 @@ services:
     # CLONE_NEWUSER. On Ubuntu 24.04 hosts also set kernel.apparmor_restrict_unprivileged_userns=0.
     security_opt:
       - seccomp=./seccomp-bastion.json
+      # bwrap mounts a fresh /proc inside its jail, which Docker refuses while it masks the container's /proc paths.
+      - systempaths=unconfined
     depends_on:
       init-kek:
         condition: service_completed_successfully
