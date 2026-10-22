@@ -29,15 +29,19 @@ RUN corepack enable \
  && apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
-# Lockfile and manifests first so the install layer caches until dependencies change.
+# `pnpm fetch` needs only the lockfile, so every dependency download stays cached until the lockfile changes; the
+# install after the sources are copied then links from the local store without touching the network.
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm fetch --config.strict-dep-builds=false
 # tsconfig.base.json and vitest.shared.ts are extended/imported by every workspace package (prisma generate, vite, tsdown).
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.json vitest.shared.ts ./
+COPY package.json turbo.json tsconfig.base.json vitest.shared.ts ./
 COPY apps ./apps
 # The server bundles the sandbox seccomp profile (inlined at build time).
 COPY deploy/docker/sandbox-seccomp.json ./deploy/docker/sandbox-seccomp.json
 COPY packages ./packages
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+    pnpm install --offline --frozen-lockfile
 RUN pnpm db:generate
 # The SPA is typechecked against the generated API types (src/generated is excluded from the build context).
 RUN pnpm --filter @bastion-mcp/api-client generate
