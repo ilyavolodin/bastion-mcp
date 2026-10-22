@@ -162,7 +162,7 @@ export const systemRoutes: RouteDefinition[] = [
     url: '/system/restore',
     tag: TAG,
     summary:
-      'Restore a backup: merge (upsert by id, deletes nothing) or replace (needs maintenance mode); dryRun only reports',
+      'Restore a backup: merge (upsert by id; a row with the same email, slug or name but another id is replaced) or replace (needs maintenance mode); dryRun only reports',
     schema: { body: restoreBodySchema, response: restoreViewSchema },
     readOnly: true,
     bodyLimit: RESTORE_BODY_LIMIT,

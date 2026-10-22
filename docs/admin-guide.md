@@ -520,7 +520,7 @@ the backup and how many already exist.
 
 | Mode | What it does |
 | --- | --- |
-| `merge` (default) | Inserts what is missing and overwrites rows with the same id. Deletes nothing. Keeps this installation's own signing keys and audit log (those come back only with `replace`). A unique-name clash with a different id (for example the same email under another user id) stops the restore and changes nothing. |
+| `merge` (default) | Inserts what is missing and overwrites rows with the same id. A row of this installation with the same email, slug or name but another id (the administrator a fresh install creates on first start, for example) is replaced by the backup's row, and the preview lists those; nothing else is deleted. The console refuses a merge that would replace the account you are signed in as: run it with the CLI. Keeps this installation's own signing keys and audit log (those come back only with `replace`). |
 | `replace` | Deletes everything the backup covers and loads the backup, including signing keys (so issued tokens stay valid) and the audit log; the restore itself is appended to the restored log. For disaster recovery. **Requires maintenance mode.** Refused if the backup has no active administrator, or (from the console) does not contain the administrator performing it. |
 
 **Maintenance mode** (`bastion maintenance on|off|status`, or the switch on the Backup page) makes every replica answer

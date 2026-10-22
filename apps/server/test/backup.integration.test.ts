@@ -241,6 +241,78 @@ describe.skipIf(!haveDocker())('backup and restore between two installations', (
   });
 });
 
+describe.skipIf(!haveDocker())(
+  'merge into an installation that already has an account with the same email',
+  () => {
+    let a: Instance;
+    let b: Instance;
+    const adminId = newId();
+    const localAdminId = newId();
+    let file: Buffer;
+
+    beforeAll(async () => {
+      a = await boot();
+      b = await boot();
+      await a.infra.db.prisma.user.create({
+        data: {
+          id: adminId,
+          email: 'admin@example.test',
+          displayName: 'Old admin',
+          orgRole: 'admin',
+        },
+      });
+      await a.infra.db.prisma.team.create({
+        data: { id: newId(), slug: 'platform', displayName: 'Platform' },
+      });
+      file = (await createBackup(a.infra, PASS, { id: adminId })).file;
+      // The first-start administrator of a fresh installation: same email, other id; and a team with the same slug.
+      await b.infra.db.prisma.user.create({
+        data: {
+          id: localAdminId,
+          email: 'admin@example.test',
+          displayName: 'First-start admin',
+          orgRole: 'admin',
+        },
+      });
+      await b.infra.db.prisma.team.create({
+        data: { id: newId(), slug: 'platform', displayName: 'Local platform' },
+      });
+    });
+    afterAll(async () => {
+      await stop(a);
+      await stop(b);
+    });
+
+    it('warns in the preview, refuses to remove the account that performs it, then lets the backup win', async () => {
+      const maintenance = createMaintenance(b.infra.redis);
+      const { document } = await readBackup(file, PASS);
+      const preview = await restoreBackup(b.infra, maintenance, document, {
+        mode: 'merge',
+        dryRun: true,
+      });
+      expect(preview.warnings.join(' ')).toMatch(/users: 1 existing row shares email/);
+      expect(preview.warnings.join(' ')).toMatch(/teams: 1 existing row shares slug/);
+
+      await expect(
+        restoreBackup(b.infra, maintenance, document, { mode: 'merge', actorId: localAdminId }),
+      ).rejects.toMatchObject({ code: 'unsafe' });
+      expect(
+        await b.infra.db.prisma.user.findUnique({ where: { id: localAdminId } }),
+      ).not.toBeNull();
+
+      await restoreBackup(b.infra, maintenance, document, { mode: 'merge' });
+      const users = await b.infra.db.prisma.user.findMany({
+        where: { email: 'admin@example.test' },
+      });
+      expect(users.map((u) => u.id)).toEqual([adminId]);
+      expect(users[0]?.displayName).toBe('Old admin');
+      expect((await b.infra.db.prisma.team.findMany({ where: { slug: 'platform' } })).length).toBe(
+        1,
+      );
+    });
+  },
+);
+
 describe.skipIf(!haveDocker())('backup commands of the CLI', () => {
   let a: Instance;
   let dir: string;

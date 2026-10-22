@@ -318,8 +318,8 @@ function RestoreCard() {
             <span>
               <span className="font-medium">Merge</span>
               <span className="block text-caption text-muted">
-                Adds what is missing and overwrites rows with the same id. Nothing is deleted, and
-                the keys and audit log of this installation stay.
+                Adds what is missing and overwrites rows with the same id, email, slug or name.
+                Nothing else is deleted, and the keys and audit log of this installation stay.
               </span>
             </span>
           </label>

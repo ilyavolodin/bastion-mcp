@@ -92,7 +92,7 @@ Commands:
   backup --out <f>           Full encrypted backup: configuration, catalog, users, teams, installations and per-user
                              settings, OAuth connections, token hashes, audit log and every secret. The passphrase
                              comes from BASTION_BACKUP_PASSPHRASE or the first line of stdin (--passphrase-stdin)
-  restore --file <f>         Restore a backup. --mode merge (default) upserts by id and deletes nothing; --mode replace
+  restore --file <f>         Restore a backup. --mode merge (default) upserts by id (an existing row with the same email or slug but another id is replaced); --mode replace
                              swaps every backed-up table and needs maintenance mode. --dry-run shows what would change
   maintenance on|off|status  Stop (or resume) gateway and OAuth traffic on every replica
 `;

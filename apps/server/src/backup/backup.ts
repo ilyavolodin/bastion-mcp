@@ -74,6 +74,71 @@ const primaryKey = async (db: Queryable, table: string): Promise<string[]> => {
   return rows.map((r) => r.attname);
 };
 
+/** A unique index other than the primary key (plain columns only; expression indexes are left to the database). */
+type UniqueKey = { columns: string[]; predicate: string | null };
+
+const uniqueKeys = async (db: Queryable, table: string): Promise<UniqueKey[]> => {
+  const rows = await db.$queryRawUnsafe<{ cols: string[]; pred: string | null }[]>(
+    `SELECT array_agg(a.attname::text ORDER BY k.ord) AS cols, pg_get_expr(i.indpred, i.indrelid) AS pred
+       FROM pg_index i
+       CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
+       JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+      WHERE i.indrelid = to_regclass($1) AND i.indisunique AND NOT i.indisprimary AND i.indexprs IS NULL
+      GROUP BY i.indexrelid, i.indrelid, i.indpred`,
+    `public.${quote(table)}`,
+  );
+  return rows.map((r) => ({ columns: r.cols, predicate: r.pred }));
+};
+
+/**
+ * Rows of this installation that a merge would collide with: same unique key (an email, a slug, a name) as a backup
+ * row, different primary key. The upsert only matches on the primary key, so these have to go first.
+ */
+const clashFrom = (table: string, key: UniqueKey, pk: string[]): string => {
+  const where = key.predicate ? ` WHERE ${key.predicate}` : '';
+  const same = key.columns.map((c) => `x.${quote(c)} = b.${quote(c)}`).join(' AND ');
+  const differs = pk.map((c) => `x.${quote(c)} IS DISTINCT FROM b.${quote(c)}`).join(' OR ');
+  return `FROM (SELECT ctid AS row_id, * FROM ${quote(table)}${where}) x
+          JOIN (SELECT * FROM jsonb_populate_recordset(NULL::${quote(table)}, $1::jsonb)${where}) b
+            ON ${same} AND (${differs})`;
+};
+
+type Clash = { key: string; count: number; ids: string[] };
+
+const findClashes = async (db: Queryable, table: string, rows: Row[]): Promise<Clash[]> => {
+  if (rows.length === 0) return [];
+  const pk = await primaryKey(db, table);
+  const size = pageRows(table);
+  const out: Clash[] = [];
+  for (const key of await uniqueKeys(db, table)) {
+    const seen = new Map<string, string>();
+    for (let i = 0; i < rows.length; i += size) {
+      const found = await db.$queryRawUnsafe<{ row_id: string; id: string | null }[]>(
+        `SELECT DISTINCT x.row_id::text AS row_id, to_jsonb(x)->>'id' AS id ${clashFrom(table, key, pk)}`,
+        JSON.stringify(rows.slice(i, i + size)),
+      );
+      for (const f of found) seen.set(f.row_id, f.id ?? '');
+    }
+    if (seen.size > 0)
+      out.push({ key: key.columns.join(' + '), count: seen.size, ids: [...seen.values()] });
+  }
+  return out;
+};
+
+const removeClashes = async (db: Queryable, table: string, rows: Row[]): Promise<void> => {
+  if (rows.length === 0) return;
+  const pk = await primaryKey(db, table);
+  const size = pageRows(table);
+  for (const key of await uniqueKeys(db, table)) {
+    for (let i = 0; i < rows.length; i += size) {
+      await db.$executeRawUnsafe(
+        `DELETE FROM ${quote(table)} WHERE ctid IN (SELECT x.row_id ${clashFrom(table, key, pk)})`,
+        JSON.stringify(rows.slice(i, i + size)),
+      );
+    }
+  }
+};
+
 const lastMigration = async (db: Queryable): Promise<string | null> => {
   const rows = await db.$queryRawUnsafe<{ migration_name: string }[]>(
     'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY migration_name DESC LIMIT 1',
@@ -259,6 +324,7 @@ const insertRows = async (tx: Queryable, table: string, rows: Row[], mode: Resto
   const list = cols.map(quote).join(', ');
   let sql = `INSERT INTO ${quote(table)} (${list}) SELECT ${list} FROM jsonb_populate_recordset(NULL::${quote(table)}, $1::jsonb)`;
   if (mode === 'merge') {
+    await removeClashes(tx, table, rows);
     const pk = await primaryKey(tx, table);
     const update = cols.filter((c) => !pk.includes(c));
     sql += ` ON CONFLICT (${pk.map(quote).join(', ')}) ${
@@ -369,6 +435,20 @@ export const restoreBackup = async (
     };
     if (step.note === 'not in this backup')
       warnings.push(`${step.table.name} is not in this backup`);
+    if (mode === 'merge' && !step.skip) {
+      for (const clash of await findClashes(infra.db.prisma, step.table.name, step.rows)) {
+        if (step.table.name === 'users' && options.actorId && clash.ids.includes(options.actorId)) {
+          throw new RestoreRefusedError(
+            `the backup has a different account with the same ${clash.key} as yours: merging would replace your account and sign you out. ` +
+              'Run `bastion restore` on the server instead',
+            'unsafe',
+          );
+        }
+        warnings.push(
+          `${step.table.name}: ${clash.count} existing row${clash.count === 1 ? ' shares' : 's share'} ${clash.key} with a row of the backup and ${clash.count === 1 ? 'is' : 'are'} replaced by it (the backup wins)`,
+        );
+      }
+    }
   }
   const report: RestoreReport = {
     mode,
