@@ -288,6 +288,12 @@ describe('8.3 runner (real HTTP + WebSocket, fake stdio server)', () => {
     });
     await client.bind(TOKEN);
     await startAndWait(client, { ...START, env: { IGNORE_SIGTERM: '1' } }, { installation: 'i1' });
+    // "started" only means spawned: a SIGTERM that lands before node has run the script's handler kills it at once.
+    // The fixture registers the handler before it reads stdin, so one answered request proves it is in place.
+    const channel = await client.openStdio();
+    const reply = nextMessage(channel);
+    await channel.send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+    await reply;
     const started = Date.now();
     await client.stop();
     // Windows has no catchable SIGTERM; elsewhere the server ignores it and is killed after killGraceMs.
