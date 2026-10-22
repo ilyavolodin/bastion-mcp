@@ -51,6 +51,18 @@ describe('SSRF guard for OAuth endpoints (9.6, 23.3)', () => {
     );
   });
 
+  it('9.6 plain http passes for an allowed private address once the host is in the insecure hosts', async () => {
+    const policy = {
+      addressPolicy: { allowCidrs: ['10.0.0.0/8'] },
+      lookup,
+      allowHttpHosts: ['rebind.test'],
+    };
+    await expect(assertOutboundUrl('http://rebind.test/x', policy)).resolves.toBeInstanceOf(URL);
+    await expect(
+      assertOutboundUrl('http://other.test/x', { ...policy, lookup: async () => ['10.0.0.6'] }),
+    ).rejects.toThrow(/https/);
+  });
+
   it('9.6 admin CIDR entries may allow private targets, and http only when opted in', async () => {
     const policy = { addressPolicy: { allowCidrs: ['10.0.0.0/8'] }, lookup };
     await expect(assertOutboundUrl('https://rebind.test/x', policy)).resolves.toBeInstanceOf(URL);

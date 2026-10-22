@@ -172,6 +172,8 @@ export const redisKeys = {
   idempotency: (principalId: string, key: string) => `idem:${principalId}:${key}`,
   upstreamStepUp: (principalId: string, installationId: string) =>
     `ups:stepup:${principalId}:${installationId}`,
+  /** Set when an upstream AS refused our CIMD identity; `auto` registration then uses DCR for that issuer. */
+  upstreamCimdRejected: (issuer: string) => `ups:cimdrej:${issuer}`,
 } as const;
 
 export const REDIS_CHANNELS = {

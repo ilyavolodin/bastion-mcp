@@ -2,6 +2,7 @@
 import {
   buildUpstreamClientMetadata,
   buildUpstreamJwksDocument,
+  buildUpstreamPublicClientMetadata,
   OAuthProtocolError,
   UpstreamClientError,
   UpstreamDiscoveryError,
@@ -50,6 +51,14 @@ export const registerConnectRoutes = async (app: FastifyInstance, deps: UiDeps) 
         .header('access-control-allow-origin', '*')
         .type('application/json')
         .send(buildUpstreamClientMetadata({ host, orgName: settings.org.displayName }));
+    });
+    scope.get('/oauth/upstream/client-metadata-public.json', async (_req, reply) => {
+      const settings = await infra.repos.orgSettings.getAll();
+      return reply
+        .header('cache-control', 'public, max-age=300')
+        .header('access-control-allow-origin', '*')
+        .type('application/json')
+        .send(buildUpstreamPublicClientMetadata({ host, orgName: settings.org.displayName }));
     });
     scope.get('/oauth/upstream/jwks', async (_req, reply) =>
       reply

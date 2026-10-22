@@ -140,6 +140,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
       clusterCidrs: config.clusterCidrs,
     },
     allowHttpToAllowedCidrs: options.allowInsecureHttp === true,
+    allowHttpHosts: config.insecureUpstreamHosts,
   };
   const baseFetch = options.fetch ?? fetch;
   /** IdP, CIMD and upstream AS traffic goes through the SSRF guard (9.6, 23.3) unless a test replaces fetch. */
@@ -149,6 +150,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
       ? createSafeFetch(baseFetch, fetchPolicy)
       : createSafeFetch(baseFetch, {
           addressPolicy: fetchPolicy.addressPolicy,
+          allowHttpHosts: fetchPolicy.allowHttpHosts,
         });
 
   // --- identity ---------------------------------------------------------------------------------------------
@@ -244,7 +246,10 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
     installations: installationLookup,
     fetch: baseFetch,
     outbound: fetchPolicy,
-    ...(options.allowInsecureHttp ? { allowInsecureHttp: true } : {}),
+    // openid-client refuses http on its own; the SSRF guard above still limits plain http to the insecure hosts.
+    ...(options.allowInsecureHttp || config.insecureUpstreamHosts.length > 0
+      ? { allowInsecureHttp: true }
+      : {}),
   });
   const minted = new IdpMintedTokens({
     host: publicOrigin,

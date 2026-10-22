@@ -23,6 +23,8 @@ export type OutboundPolicy = {
   lookup?: (host: string) => Promise<string[]>;
   /** Permit plain http only when the target address is inside an admin-allowed CIDR. Default false. */
   allowHttpToAllowedCidrs?: boolean;
+  /** `BASTION_INSECURE_UPSTREAM_HOSTS`: hosts (or host:port) the administrator allows over plain http. */
+  allowHttpHosts?: readonly string[];
   timeoutMs?: number;
 };
 
@@ -41,6 +43,10 @@ export const resolveOutboundTarget = async (
       ...(policy.addressPolicy ? { addressPolicy: policy.addressPolicy } : {}),
       ...(policy.lookup ? { lookup: policy.lookup } : {}),
       // Plain http is only for targets inside an admin-allowed CIDR, and only when the caller opted in.
+      allowHttp: (url, hostname) => {
+        const hosts = (policy.allowHttpHosts ?? []).map((h) => h.toLowerCase());
+        return hosts.includes(hostname.toLowerCase()) || hosts.includes(url.host.toLowerCase());
+      },
       allowHttpAddresses: (addresses) =>
         policy.allowHttpToAllowedCidrs === true &&
         addresses.every((address) => isAddressDenied(address, {})),

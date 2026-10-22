@@ -32,6 +32,14 @@ export const DISCOVERY_TTL_MS = 10 * MS.MINUTE;
 export const DISCOVERY_CACHE_MAX = 256;
 /** How long a recorded step-up scope set waits for the user to reconnect. */
 export const STEP_UP_TTL_S = SECONDS.HOUR;
+/** How long `auto` registration avoids CIMD at an issuer that refused it. */
+export const CIMD_REJECTED_TTL_S = SECONDS.DAY;
+/** Error codes that show an AS refused our client identity. */
+export const CIMD_REFUSAL_ERRORS: readonly string[] = [
+  'invalid_client',
+  'unauthorized_client',
+  'invalid_request',
+];
 /** The daily sweep refreshes tokens that expire within this window. */
 export const SWEEP_WINDOW_MS = MS.DAY;
 export const LOGIN_STATE_TTL_MS = 10 * MS.MINUTE;

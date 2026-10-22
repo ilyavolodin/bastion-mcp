@@ -201,9 +201,12 @@ describe('8.8 egress proxy (real sockets on loopback)', () => {
 
   it('8.8 mirror hosts pass only while the phase is installing', async () => {
     resolved['registry.npmjs.org'] = ['104.16.1.1'];
+    // Own sink: the tunnel's audit record is written when it closes, which can be after this test has ended and the
+    // next one has replaced `audit`.
+    const mirrorAudit: EgressAuditEvent[] = [];
     const rebuilt = createEgressProxy({
       policies: { get: async () => policy },
-      audit: { record: (e) => void audit.push(e) },
+      audit: { record: (e) => void mirrorAudit.push(e) },
       mirrorUrls: ['https://registry.npmjs.org'],
       resolver: async () => ['104.16.1.1'],
       connect: () => net.connect({ host: '127.0.0.1', port: targetPort }),

@@ -7,6 +7,8 @@ export const createVitestConfig = (overrides: { name: string; coverageExclude?: 
       name: overrides.name,
       include: ['test/**/*.test.ts'],
       environment: 'node',
+      // Generous ceiling: suites run in parallel under v8 coverage, which slows property tests several times over.
+      testTimeout: 30_000,
       coverage: {
         provider: 'v8',
         include: ['src/**/*.ts'],

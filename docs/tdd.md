@@ -914,7 +914,7 @@ For remote servers the default injection for `oauth`, `enterpriseManaged` and `t
 
 - `preRegistered`: admin-supplied client credentials (needed for GitHub OAuth Apps, Atlassian, Google).
 
-- `cimd`: `client_id` = `https://<host>/oauth/upstream/client-metadata.json`, a document Bastion serves with `client_name: "Bastion MCP Gateway (<org>)"`, `redirect_uris: ["https://<host>/oauth/upstream/callback"]`, `application_type: "web"`, `token_endpoint_auth_method: "private_key_jwt"` and `jwks_uri: "https://<host>/oauth/upstream/jwks"`.
+- `cimd`: `client_id` = `https://<host>/oauth/upstream/client-metadata.json`, a document Bastion serves with `client_name: "Bastion MCP Gateway (<org>)"`, `redirect_uris: ["https://<host>/oauth/upstream/callback"]`, `application_type: "web"`, `token_endpoint_auth_method: "private_key_jwt"` and `jwks_uri: "https://<host>/oauth/upstream/jwks"`. When the AS lists `token_endpoint_auth_methods_supported` without `private_key_jwt` but with `none` (Linear, Notion), Bastion uses the public-client variant `https://<host>/oauth/upstream/client-metadata-public.json` (same document, `token_endpoint_auth_method: "none"`, PKCE only). `auto` skips CIMD when the AS accepts neither, and for 24 hours after the AS refused the CIMD identity at the authorization redirect or the code exchange (`invalid_client`, `unauthorized_client`, `invalid_request`), so the user's retry registers dynamically. DCR accepts any 2xx response.
 
 - `dcr`: RFC 7591 registration with `application_type: "web"`. Credentials are stored in `upstream_clients` keyed by issuer, never reused with another issuer, and re-registered when the issuer changes.
 
@@ -1890,7 +1890,7 @@ The ui role serves a JSON REST API at `/api/v1`, described by an OpenAPI 3.1 doc
 |  Settings and system  |  `GET/PATCH /settings`, `GET /system/status`, `POST /system/kms/rotate`, `POST /system/signing-keys/rotate`  | 
 |  Skills and plugins  |  GET /catalog/{id}/versions/{vid}/files, GET/PUT/DELETE /catalog/{id}/versions/{vid}/files/{path}, POST /catalog/import (also zip upload and git URL), POST /catalog/{id}/versions/{vid}/approve-executable, GET/POST /plugin-sources, PATCH/DELETE /plugin-sources/{id}, POST /plugin-sources/{id}/sync  | 
 |  Marketplaces  |  GET/POST /marketplaces, GET/PATCH/DELETE /marketplaces/{id}, PUT/DELETE /marketplaces/{id}/items/{entryId}, GET /marketplaces/{id}/releases, POST /marketplaces/{id}/releases/{n}/promote, GET/PUT /marketplaces/{id}/mirror, POST /marketplaces/{id}/mirror/push, GET /marketplaces/{id}/rollout?client=, GET /marketplaces/{id}/usage  | 
-Other public routes outside `/api/v1`: `/oauth/*` (authorization server), `/auth/login`, `/auth/callback/{idpConnectionId}`, `/auth/logout`, `/connect/{installation``Id``}`, `/oauth/upstream/callback`, `/oauth/upstream/client-metadata.json`, `/oauth/upstream/jwks`, `/scim/v2/*`, `/registry/v0.1/*` (11.8), `/healthz`, `/readyz`.
+Other public routes outside `/api/v1`: `/oauth/*` (authorization server), `/auth/login`, `/auth/callback/{idpConnectionId}`, `/auth/logout`, `/connect/{installation``Id``}`, `/oauth/upstream/callback`, `/oauth/upstream/client-metadata.json`, `/oauth/upstream/client-metadata-public.json`, `/oauth/upstream/jwks`, `/scim/v2/*`, `/registry/v0.1/*` (11.8), `/healthz`, `/readyz`.
 
 ## 18. User interface
 

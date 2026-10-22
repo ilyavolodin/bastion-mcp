@@ -32,6 +32,9 @@ export const upstreamCallbackUrl = (host: string): string =>
   `${originOf(host)}/oauth/upstream/callback`;
 export const upstreamClientMetadataUrl = (host: string): string =>
   `${originOf(host)}/oauth/upstream/client-metadata.json`;
+/** The CIMD document of the public-client variant (`none` + PKCE), for servers that do not accept `private_key_jwt`. */
+export const upstreamPublicClientMetadataUrl = (host: string): string =>
+  `${originOf(host)}/oauth/upstream/client-metadata-public.json`;
 export const upstreamJwksUrl = (host: string): string => `${originOf(host)}/oauth/upstream/jwks`;
 export const idpCallbackUrl = (host: string, connectionId: string): string =>
   `${originOf(host)}/auth/callback/${connectionId}`;

@@ -77,6 +77,7 @@ const isPublicCorsPath = (url: string): boolean =>
   url.startsWith('/oauth/token') ||
   url.startsWith('/oauth/reg') ||
   url.startsWith('/oauth/upstream/client-metadata.json') ||
+  url.startsWith('/oauth/upstream/client-metadata-public.json') ||
   url.startsWith('/oauth/upstream/jwks');
 
 export const registerSecurityHeaders = async (

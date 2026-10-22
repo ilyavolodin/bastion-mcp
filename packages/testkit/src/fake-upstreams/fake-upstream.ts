@@ -24,6 +24,10 @@ export type FakeUpstreamBehavior = {
   /** Scope granted at the token endpoint regardless of the request (null: echo the request). */
   grantScope: string | null;
   authMethods: string[];
+  /** Redirects URL-form (CIMD) client ids back with `error=invalid_client`. */
+  rejectCimdClients: boolean;
+  /** HTTP status of a successful /register response (201 by RFC 7591). */
+  registrationStatus: number;
 };
 
 export type UpstreamRequest = {
@@ -79,6 +83,8 @@ export const startFakeUpstream = async (
     requiredScope: null,
     grantScope: null,
     authMethods: ['client_secret_basic', 'client_secret_post', 'private_key_jwt', 'none'],
+    rejectCimdClients: false,
+    registrationStatus: 201,
     ...overrides,
   };
   const requests: UpstreamRequest[] = [];
@@ -170,6 +176,16 @@ export const startFakeUpstream = async (
     if (url.pathname === '/authorize') {
       const q = Object.fromEntries(url.searchParams);
       requests.push({ path: '/authorize', params: q, headers });
+      if (behavior.rejectCimdClients && /^https?:\/\//.test(q.client_id ?? '')) {
+        const refused = new URL(q.redirect_uri ?? '');
+        refused.searchParams.set('error', 'invalid_client');
+        refused.searchParams.set('state', q.state ?? '');
+        if (behavior.issParameter) {
+          refused.searchParams.set('iss', behavior.issParameterValue ?? origin);
+        }
+        res.writeHead(302, { location: refused.href });
+        return res.end();
+      }
       const code = `up-code-${++n}`;
       codes.set(code, {
         challenge: q.code_challenge ?? '',
@@ -188,7 +204,7 @@ export const startFakeUpstream = async (
       registrations.push(body);
       requests.push({ path: '/register', params: {}, headers });
       const method = String(body.token_endpoint_auth_method);
-      return json(res, 201, {
+      return json(res, behavior.registrationStatus, {
         client_id: `dcr-client-${registrations.length}`,
         ...(method === 'none' ? {} : { client_secret: `dcr-secret-${registrations.length}` }),
         token_endpoint_auth_method: method,

@@ -10,6 +10,8 @@ import {
 import * as client from 'openid-client';
 import { z } from 'zod';
 import {
+  CIMD_REFUSAL_ERRORS,
+  CIMD_REJECTED_TTL_S,
   DISCOVERY_CACHE_MAX,
   DISCOVERY_TTL_MS,
   STEP_UP_TTL_S,
@@ -190,7 +192,15 @@ export class UpstreamOAuthBroker {
   }
 
   private async configurationFor(spec: UpstreamOAuthClientSpec, discovery: UpstreamDiscovery) {
-    const identity = await resolveClientIdentity(
+    const identity = await this.identityFor(spec, discovery);
+    return buildConfiguration(discovery.metadata, identity.clientId, identity.auth, this.http);
+  }
+
+  private async identityFor(spec: UpstreamOAuthClientSpec, discovery: UpstreamDiscovery) {
+    const cimdRejected =
+      spec.registration === 'auto' &&
+      (await this.deps.redis.get(redisKeys.upstreamCimdRejected(discovery.issuer))) !== null;
+    return resolveClientIdentity(
       {
         host: this.deps.host,
         orgName: this.deps.orgName,
@@ -199,11 +209,31 @@ export class UpstreamOAuthBroker {
         signingKeys: this.deps.signingKeys,
         fetch: this.safeFetch,
         clock: this.clock,
+        cimdRejected,
       },
       spec,
       discovery,
     );
-    return buildConfiguration(discovery.metadata, identity.clientId, identity.auth, this.http);
+  }
+
+  /**
+   * `auto` registration chose CIMD and the AS refused the identity (the failure only shows at the authorization
+   * redirect or the code exchange). Remember it per issuer so the user's retry registers dynamically instead.
+   */
+  private async noteCimdRefusal(
+    installation: OAuthInstallation,
+    discovery: UpstreamDiscovery,
+    error: string | undefined,
+  ): Promise<void> {
+    if (!error || !CIMD_REFUSAL_ERRORS.includes(error)) return;
+    if (installation.auth.client.registration !== 'auto') return;
+    const identity = await this.identityFor(installation.auth.client, discovery);
+    if (identity.registration !== 'cimd') return;
+    await this.deps.redis.set(
+      redisKeys.upstreamCimdRejected(discovery.issuer),
+      '1',
+      CIMD_REJECTED_TTL_S,
+    );
   }
 
   private async pendingStepUp(principalId: string, installationId: string): Promise<string[]> {
@@ -285,15 +315,16 @@ export class UpstreamOAuthBroker {
     });
     const installation = await this.deps.installations.get(state.installationId);
     if (!installation) throw new OAuthProtocolError('installation no longer exists');
+    const discovery = await this.discover(installation.upstreamUrl);
     const error = params.get('error');
     if (error) {
+      await this.noteCimdRefusal(installation, discovery, error);
       const description = params.get('error_description');
       throw new OAuthProtocolError(`upstream returned ${error}`, {
         error,
         ...(description ? { description } : {}),
       });
     }
-    const discovery = await this.discover(installation.upstreamUrl);
     if (discovery.issuer !== state.issuer) {
       throw new OAuthProtocolError('upstream authorization server changed during the flow');
     }
@@ -310,7 +341,9 @@ export class UpstreamOAuthBroker {
         { resource: discovery.resource },
       );
     } catch (e) {
-      throw toProtocolError(e, 'upstream code exchange failed');
+      const failure = toProtocolError(e, 'upstream code exchange failed');
+      await this.noteCimdRefusal(installation, discovery, failure.error);
+      throw failure;
     }
     const scopes = response.scope ? response.scope.split(' ') : state.scopes;
     await this.store(principal, installation.id, discovery.issuer, response, scopes);

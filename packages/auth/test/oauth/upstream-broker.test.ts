@@ -6,6 +6,8 @@ import { UpstreamOAuthBroker } from '../../src/oauth/upstream/broker';
 import {
   buildUpstreamClientMetadata,
   buildUpstreamJwksDocument,
+  buildUpstreamPublicClientMetadata,
+  cimdReachable,
   UpstreamClientError,
 } from '../../src/oauth/upstream/client-identity';
 import {
@@ -355,6 +357,119 @@ describe('9.6 client identity', () => {
     h = dcr;
     await dcr.connect();
     expect(dcr.upstream.registrations).toHaveLength(1);
+  });
+
+  it('9.6 cimd: an AS that lists no private_key_jwt gets the public-client document and no assertion', async () => {
+    const x = await start(
+      { advertiseCimd: true, authMethods: ['client_secret_basic', 'client_secret_post', 'none'] },
+      { client: { registration: 'cimd' } },
+    );
+    await x.connect();
+    const authorize = x.upstream.requests.find((r) => r.path === '/authorize');
+    expect(authorize?.params.client_id).toBe(
+      `https://${HOST}/oauth/upstream/client-metadata-public.json`,
+    );
+    const token = tokenRequests(x)[0];
+    expect(token?.params.client_assertion).toBeUndefined();
+    expect(token?.headers.authorization).toBeUndefined();
+  });
+
+  it('9.6 cimd is refused when the AS accepts neither private_key_jwt nor public clients', async () => {
+    const x = await start(
+      { advertiseCimd: true, authMethods: ['client_secret_basic'] },
+      { client: { registration: 'cimd' } },
+    );
+    await expect(x.broker.startAuthorization(USER, x.installation)).rejects.toBeInstanceOf(
+      UpstreamClientError,
+    );
+  });
+
+  it('9.6 auto: falls back to DCR when the AS cannot use a CIMD client', async () => {
+    const x = await start(
+      { advertiseCimd: true, authMethods: ['client_secret_basic'] },
+      { client: { registration: 'auto' } },
+    );
+    await x.connect();
+    expect(x.upstream.registrations).toHaveLength(1);
+  });
+
+  it('9.6 auto: an AS that refuses the CIMD client at authorization gets DCR on the retry', async () => {
+    const x = await start(
+      { advertiseCimd: true, rejectCimdClients: true },
+      { client: { registration: 'auto' } },
+    );
+    await expect(x.connect()).rejects.toMatchObject({ error: 'invalid_client' });
+    expect(x.upstream.registrations).toHaveLength(0);
+    await x.connect();
+    expect(x.upstream.registrations).toHaveLength(1);
+    expect(
+      x.upstream.requests.filter((r) => r.path === '/authorize').at(-1)?.params.client_id,
+    ).toBe('dcr-client-1');
+  });
+
+  it('9.6 an explicit cimd registration is not downgraded to DCR after a refusal', async () => {
+    const x = await start(
+      { advertiseCimd: true, rejectCimdClients: true },
+      { client: { registration: 'cimd' } },
+    );
+    await expect(x.connect()).rejects.toMatchObject({ error: 'invalid_client' });
+    await expect(x.connect()).rejects.toMatchObject({ error: 'invalid_client' });
+    expect(x.upstream.registrations).toHaveLength(0);
+  });
+
+  it('9.6 auto: a local http origin cannot be fetched by the AS, so it registers dynamically', async () => {
+    const x = await start({ advertiseCimd: true }, { client: { registration: 'auto' } });
+    const local = new UpstreamOAuthBroker({ ...x.deps, host: 'http://localhost:8080' });
+    await local.startAuthorization(USER, x.installation);
+    expect(x.upstream.registrations).toHaveLength(1);
+    expect(x.upstream.registrations[0]).toMatchObject({
+      redirect_uris: ['http://localhost:8080/oauth/upstream/callback'],
+    });
+    const explicit = new UpstreamOAuthBroker({ ...x.deps, host: 'http://localhost:8080' });
+    await expect(
+      explicit.startAuthorization(USER, {
+        ...x.installation,
+        auth: { ...x.installation.auth, client: { registration: 'cimd' } },
+      }),
+    ).rejects.toThrow(/public HTTPS/);
+  });
+
+  it('9.6 cimdReachable: only public https origins', () => {
+    for (const ok of ['bastion.example.com', 'https://bastion.example.com:8443', 'https://8.8.8.8']) {
+      expect(cimdReachable(ok)).toBe(true);
+    }
+    for (const bad of [
+      'http://bastion.example.com',
+      'http://localhost:8080',
+      'https://localhost',
+      'https://bastion.local',
+      'https://127.0.0.1',
+      'https://10.1.2.3',
+      'https://192.168.0.5',
+      'https://172.20.0.1',
+      'https://169.254.1.1',
+      'https://[::1]',
+    ]) {
+      expect(cimdReachable(bad)).toBe(false);
+    }
+  });
+
+  it('9.6 dcr: any 2xx registration response is accepted', async () => {
+    const x = await start({ registrationStatus: 202 });
+    await x.connect();
+    expect(x.upstream.registrations).toHaveLength(1);
+  });
+
+  it('9.6 serves the public-client CIMD document', () => {
+    expect(buildUpstreamPublicClientMetadata({ host: HOST, orgName: 'Acme' })).toEqual({
+      client_id: `https://${HOST}/oauth/upstream/client-metadata-public.json`,
+      client_name: 'Bastion MCP Gateway (Acme)',
+      redirect_uris: [`https://${HOST}/oauth/upstream/callback`],
+      application_type: 'web',
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+    });
   });
 
   it('9.6 serves the CIMD document and the JWKS of the upstream-client keyring', async () => {

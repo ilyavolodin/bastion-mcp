@@ -12,7 +12,8 @@ export default defineConfig((env) =>
         css: false,
         setupFiles: ['./src/test/polyfills.ts', './src/test/setup.ts'],
         include: ['src/**/*.test.{ts,tsx}'],
-        testTimeout: 15000,
+        // The heavy form tests run several times slower under v8 coverage instrumentation.
+        testTimeout: 45_000,
         coverage: {
           provider: 'v8',
           include: ['src/**/*.{ts,tsx}'],

@@ -13,7 +13,13 @@ import type {
   UpstreamClientStore,
 } from '../ports';
 import { systemClock } from '../ports';
-import { upstreamCallbackUrl, upstreamClientMetadataUrl, upstreamJwksUrl } from '../urls';
+import {
+  originOf,
+  upstreamCallbackUrl,
+  upstreamClientMetadataUrl,
+  upstreamJwksUrl,
+  upstreamPublicClientMetadataUrl,
+} from '../urls';
 import type { UpstreamDiscovery } from './discovery';
 
 export type UpstreamOAuthClientSpec = Extract<UpstreamAuthSpec, { mode: 'oauth' }>['client'];
@@ -38,6 +44,56 @@ export const buildUpstreamClientMetadata = (input: { host: string; orgName: stri
   jwks_uri: upstreamJwksUrl(input.host),
 });
 
+/**
+ * The document served at `/oauth/upstream/client-metadata-public.json`: the same client as a public client (`none`,
+ * PKCE). Used for authorization servers that support CIMD but not `private_key_jwt` (Linear and Notion advertise
+ * only `client_secret_basic`, `client_secret_post` and `none`).
+ */
+export const buildUpstreamPublicClientMetadata = (input: { host: string; orgName: string }) => ({
+  client_id: upstreamPublicClientMetadataUrl(input.host),
+  client_name: `Bastion MCP Gateway (${input.orgName})`,
+  redirect_uris: [upstreamCallbackUrl(input.host)],
+  application_type: 'web',
+  grant_types: ['authorization_code', 'refresh_token'],
+  response_types: ['code'],
+  token_endpoint_auth_method: 'none',
+});
+
+/**
+ * The AS fetches our metadata document itself, so the origin must be public HTTPS. `http://localhost:8080` (an
+ * evaluation setup) or a private address can never be fetched by a third-party AS.
+ */
+export const cimdReachable = (host: string): boolean => {
+  const url = new URL(originOf(host));
+  if (url.protocol !== 'https:') return false;
+  const name = url.hostname.toLowerCase();
+  if (name === 'localhost' || name.endsWith('.localhost') || name.endsWith('.local')) return false;
+  if (name.includes(':')) return !/^\[?(::1?|f[cd]|fe80)/i.test(name);
+  const octets = name.split('.').map(Number);
+  if (octets.length === 4 && octets.every((n) => Number.isInteger(n))) {
+    const [a = 0, b = 0] = octets;
+    return !(
+      a === 10 ||
+      a === 127 ||
+      a === 0 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168)
+    );
+  }
+  return true;
+};
+
+/**
+ * How we authenticate at a CIMD-capable AS: `private_key_jwt` unless the AS lists its methods without it, then
+ * `none`; null when it accepts neither.
+ */
+export const cimdAuthMethod = (discovery: UpstreamDiscovery): 'private_key_jwt' | 'none' | null => {
+  const methods = discovery.tokenEndpointAuthMethods;
+  if (!methods || methods.includes('private_key_jwt')) return 'private_key_jwt';
+  return methods.includes('none') ? 'none' : null;
+};
+
 /** The document served at `/oauth/upstream/jwks`: public parts of the `upstream-client` keyring (22.3). */
 export const buildUpstreamJwksDocument = async (
   source: SigningKeySource,
@@ -60,6 +116,8 @@ export type ClientIdentityDeps = {
   /** SSRF-guarded fetch for RFC 7591 registration. */
   fetch: FetchFn;
   clock?: Clock;
+  /** `auto` only: this issuer already refused our CIMD identity, so go straight to DCR. */
+  cimdRejected?: boolean;
 };
 
 const dcrResponse = z.object({
@@ -123,7 +181,7 @@ const registerDynamically = async (
       token_endpoint_auth_method: authMethod,
     }),
   });
-  if (response.status !== 201 && response.status !== 200) {
+  if (response.status < 200 || response.status >= 300) {
     throw new OAuthProtocolError('dynamic client registration failed', { status: response.status });
   }
   const parsed = dcrResponse.parse(await response.json());
@@ -176,7 +234,7 @@ const dcrRowUsable = (deps: ClientIdentityDeps, row: UpstreamClientRow, issuer: 
 
 /**
  * Chooses the client identity at the upstream AS (9.6): `preRegistered`, `cimd`, `dcr` or `auto`
- * (pre-registered row for the issuer, else CIMD when the AS supports it, else DCR).
+ * (pre-registered row for the issuer, else CIMD when the AS supports it and has not refused it, else DCR).
  */
 export const resolveClientIdentity = async (
   deps: ClientIdentityDeps,
@@ -191,17 +249,34 @@ export const resolveClientIdentity = async (
         : await registerDynamically(deps, discovery);
     return fromRow(deps, row);
   };
-  const useCimd = async (): Promise<ResolvedClient> => {
+  const useCimd = async (bestEffort = false): Promise<ResolvedClient> => {
     if (!discovery.cimdSupported) {
       throw new UpstreamClientError(
         'authorization server does not support client ID metadata documents',
       );
     }
-    return {
-      clientId: upstreamClientMetadataUrl(deps.host),
-      registration: 'cimd',
-      auth: await privateKeyAuth(deps),
-    };
+    if (!bestEffort && !cimdReachable(deps.host)) {
+      throw new UpstreamClientError(
+        'client ID metadata documents need a public HTTPS origin; this deployment is not reachable by the authorization server',
+      );
+    }
+    const method = cimdAuthMethod(discovery);
+    if (method === null) {
+      throw new UpstreamClientError(
+        'authorization server supports client ID metadata documents but accepts neither private_key_jwt nor public clients',
+      );
+    }
+    return method === 'none'
+      ? {
+          clientId: upstreamPublicClientMetadataUrl(deps.host),
+          registration: 'cimd',
+          auth: client.None(),
+        }
+      : {
+          clientId: upstreamClientMetadataUrl(deps.host),
+          registration: 'cimd',
+          auth: await privateKeyAuth(deps),
+        };
   };
   switch (spec.registration) {
     case 'preRegistered': {
@@ -225,7 +300,14 @@ export const resolveClientIdentity = async (
       if (existing?.registration === 'preRegistered' && existing.issuer === discovery.issuer) {
         return fromRow(deps, existing);
       }
-      if (discovery.cimdSupported) return useCimd();
+      const cimdOffered =
+        discovery.cimdSupported && !deps.cimdRejected && cimdAuthMethod(discovery) !== null;
+      if (cimdOffered && cimdReachable(deps.host)) return useCimd();
+      if (discovery.registrationEndpoint) return useDcr();
+      // No registration endpoint and an origin the AS cannot fetch (a LAN or localhost deployment): still offer
+      // our CIMD client ID. An AS that never fetches it when the redirect URI shares its host (Home Assistant's
+      // IndieAuth) accepts it, as it does the loopback clients of desktop apps; any other AS rejects it at authorize.
+      if (cimdOffered) return useCimd(true);
       return useDcr();
     }
   }
