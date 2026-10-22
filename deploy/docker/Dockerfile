@@ -24,24 +24,24 @@ ARG NODE_IMAGE=node:24-bookworm-slim
 # ---- build: install, generate, build SPA, bundle server and runner -----------------------------------------
 FROM ${NODE_IMAGE} AS build
 WORKDIR /src
-ENV CI=true
+ENV CI=true \
+    npm_config_store_dir=/pnpm-store
 RUN corepack enable \
  && apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
-# `pnpm fetch` needs only the lockfile, so every dependency download stays cached until the lockfile changes; the
-# install after the sources are copied then links from the local store without touching the network.
+# `pnpm fetch` needs only the lockfile, so the download layer (store in /pnpm-store, an ordinary layer: BuildKit cache
+# mounts do not survive between CI builders) stays cached until the lockfile changes; the
+# install after the sources are copied then reuses that store and downloads only what fetch left out.
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm fetch --config.strict-dep-builds=false
+RUN pnpm fetch --config.strict-dep-builds=false
 # tsconfig.base.json and vitest.shared.ts are extended/imported by every workspace package (prisma generate, vite, tsdown).
 COPY package.json turbo.json tsconfig.base.json vitest.shared.ts ./
 COPY apps ./apps
 # The server bundles the sandbox seccomp profile (inlined at build time).
 COPY deploy/docker/sandbox-seccomp.json ./deploy/docker/sandbox-seccomp.json
 COPY packages ./packages
-RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm install --offline --frozen-lockfile
+RUN pnpm install --prefer-offline --frozen-lockfile
 RUN pnpm db:generate
 # The SPA is typechecked against the generated API types (src/generated is excluded from the build context).
 RUN pnpm --filter @bastion-mcp/api-client generate
