@@ -81,7 +81,7 @@ services:
     image: ${BASTION_IMAGE:-ghcr.io/ilyavolodin/bastion}:${BASTION_VERSION:-main}
     environment: *bastion-env
     ports:
-      - "${BASTION_HTTP_PORT_HOST:-8080}:8080"
+      - "${BASTION_HTTP_BIND:-0.0.0.0}:${BASTION_HTTP_PORT_HOST:-8080}:8080"
     volumes:
       - bastion-data:/var/lib/bastion
       - bastion-keys:/keys:ro
