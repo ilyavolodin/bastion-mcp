@@ -3,9 +3,14 @@
  * sandbox driver, registry sync, KMS and the config version; plus the two operator actions, KEK rewrap and
  * signing-key rotation (22.3, 9.3).
  */
-import type { SystemStatus, SystemStatusPort } from '@bastion-mcp/api';
+import {
+  ConflictApiError,
+  type SystemStatus,
+  type SystemStatusPort,
+  ValidationApiError,
+} from '@bastion-mcp/api';
 import { REDIS_CHANNELS, redisKeys } from '@bastion-mcp/core';
-import { Prisma } from '@bastion-mcp/db';
+import { appendAuditEvent, Prisma } from '@bastion-mcp/db';
 import {
   generateEs256KeyPair,
   ROTATION_POLICIES,
@@ -13,6 +18,9 @@ import {
   rewrapAll,
   rotateKeyring,
 } from '@bastion-mcp/secrets';
+import { createBackup, RestoreRefusedError, readBackup, restoreBackup } from '../../backup/backup';
+import { createMaintenance } from '../../backup/maintenance';
+import { BackupFileError } from '../../backup/sealed-file';
 import type { Infra } from '../../infra';
 
 export type SystemStatusDeps = {
@@ -34,8 +42,20 @@ const scan = async (redis: Infra['redis'], pattern: string, max = 5000): Promise
   return keys;
 };
 
+/** Backup problems the operator can fix are reported as API errors, not as 500s. */
+const asApiError = (error: unknown): unknown => {
+  if (error instanceof BackupFileError) return new ValidationApiError(error.message);
+  if (error instanceof RestoreRefusedError) {
+    return error.code === 'invalid' || error.code === 'newer_schema'
+      ? new ValidationApiError(error.message)
+      : new ConflictApiError(error.message, { code: `restore_${error.code}` });
+  }
+  return error;
+};
+
 export const createSystemStatus = (infra: Infra, deps: SystemStatusDeps): SystemStatusPort => {
   const { redis, db, repos } = infra;
+  const maintenance = createMaintenance(redis);
 
   const replicas = async (): Promise<SystemStatus['replicas']> => {
     const out: SystemStatus['replicas'] = [];
@@ -185,6 +205,47 @@ export const createSystemStatus = (infra: Infra, deps: SystemStatusDeps): System
       await rotateKeyring(store, 'as');
       await infra.publish(REDIS_CHANNELS.config, JSON.stringify({ topic: 'signing_keys' }));
       return { kids: [pair.kid] };
+    },
+
+    async createBackup({ passphrase, actorId }) {
+      try {
+        const report = await createBackup(infra, passphrase, { id: actorId });
+        const stamp = report.createdAt.toISOString().replaceAll(/[:.]/g, '-');
+        return {
+          filename: `bastion-backup-${stamp}.bastion-backup`,
+          size: report.file.length,
+          createdAt: report.createdAt.toISOString(),
+          counts: report.counts,
+          data: report.file.toString('base64'),
+        };
+      } catch (error) {
+        throw asApiError(error);
+      }
+    },
+
+    async restoreBackup({ data, passphrase, mode, dryRun, actorId }) {
+      try {
+        const { document } = await readBackup(Buffer.from(data, 'base64'), passphrase);
+        return await restoreBackup(infra, maintenance, document, { mode, dryRun, actorId });
+      } catch (error) {
+        throw asApiError(error);
+      }
+    },
+
+    maintenance: () => maintenance.get(),
+
+    async setMaintenance({ enabled, actorId }) {
+      const state = await maintenance.set(enabled, actorId);
+      await infra.db.prisma.$transaction((tx) =>
+        appendAuditEvent(tx, {
+          actorType: 'user',
+          actorId,
+          action: enabled ? 'maintenance.enable' : 'maintenance.disable',
+          targetType: 'system',
+          targetId: 'maintenance',
+        }),
+      );
+      return state;
     },
   };
 };

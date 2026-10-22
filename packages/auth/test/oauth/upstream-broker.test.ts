@@ -435,7 +435,11 @@ describe('9.6 client identity', () => {
   });
 
   it('9.6 cimdReachable: only public https origins', () => {
-    for (const ok of ['bastion.example.com', 'https://bastion.example.com:8443', 'https://8.8.8.8']) {
+    for (const ok of [
+      'bastion.example.com',
+      'https://bastion.example.com:8443',
+      'https://8.8.8.8',
+    ]) {
       expect(cimdReachable(ok)).toBe(true);
     }
     for (const bad of [

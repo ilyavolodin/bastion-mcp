@@ -99,6 +99,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
       'GET /limit-rules/{id}/usage',
       'GET /settings',
       'GET /system/status',
+      'GET /system/maintenance',
     ],
     action: 'seeCatalog',
     resource: 'Org',
@@ -622,7 +623,14 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
   {
     id: 'settings.write',
     area: 'Settings and system',
-    routes: ['PATCH /settings', 'POST /system/kms/rotate', 'POST /system/signing-keys/rotate'],
+    routes: [
+      'PATCH /settings',
+      'POST /system/kms/rotate',
+      'POST /system/signing-keys/rotate',
+      'POST /system/backup',
+      'POST /system/restore',
+      'POST /system/maintenance',
+    ],
     action: 'settings.edit',
     resource: 'Org',
     grants: g('allow', 'deny', 'deny', 'deny'),

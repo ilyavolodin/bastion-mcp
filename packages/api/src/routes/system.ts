@@ -8,7 +8,15 @@ import {
   settingsPatchSchema,
   settingsVersion,
 } from '../services/settings';
-import { rotateKms, rotateSigningKeys, systemStatus } from '../services/system';
+import {
+  createBackup,
+  getMaintenance,
+  restoreBackup,
+  rotateKms,
+  rotateSigningKeys,
+  setMaintenance,
+  systemStatus,
+} from '../services/system';
 import { org } from './shared';
 
 const TAG = 'Settings and system';
@@ -45,6 +53,39 @@ const statusSchema = z.object({
   }),
   configVersion: z.string(),
 });
+
+const maintenanceSchema = z.object({
+  enabled: z.boolean(),
+  since: z.string().nullable(),
+  by: z.string().nullable(),
+});
+
+const restoreBodySchema = z.object({
+  /** The backup file, base64. */
+  data: z.string().min(1),
+  passphrase: z.string().min(1),
+  mode: z.enum(['merge', 'replace']),
+  dryRun: z.boolean().default(false),
+});
+
+const restoreViewSchema = z.object({
+  mode: z.enum(['merge', 'replace']),
+  dryRun: z.boolean(),
+  backup: z.object({ createdAt: z.string(), migration: z.string().nullable() }),
+  tables: z.record(
+    z.string(),
+    z.object({
+      rows: z.number(),
+      existing: z.number(),
+      action: z.enum(['restore', 'skip']),
+      note: z.string().optional(),
+    }),
+  ),
+  warnings: z.array(z.string()),
+});
+
+/** Backups arrive as base64 inside JSON: this is the largest body the API accepts (about 380 MiB of file). */
+const RESTORE_BODY_LIMIT = 512 * 1024 * 1024;
 
 export const systemRoutes: RouteDefinition[] = [
   defineRoute({
@@ -94,5 +135,57 @@ export const systemRoutes: RouteDefinition[] = [
     authz: authz.on('settings.write', org),
     status: 200,
     handler: (ctx) => rotateSigningKeys(ctx),
+  }),
+  defineRoute({
+    method: 'POST',
+    url: '/system/backup',
+    tag: TAG,
+    summary:
+      'Create a full encrypted backup: configuration, catalog, users, installations, OAuth connections, token hashes, audit log and every secret',
+    schema: {
+      body: z.object({ passphrase: z.string().min(12) }),
+      response: z.object({
+        filename: z.string(),
+        size: z.number(),
+        createdAt: z.string(),
+        counts: z.record(z.string(), z.number()),
+        data: z.string(),
+      }),
+    },
+    // A POST that changes no configuration: the port audits the export itself, in its own transaction.
+    readOnly: true,
+    authz: authz.on('settings.write', org),
+    handler: (ctx) => createBackup(ctx, ctx.body.passphrase),
+  }),
+  defineRoute({
+    method: 'POST',
+    url: '/system/restore',
+    tag: TAG,
+    summary:
+      'Restore a backup: merge (upsert by id, deletes nothing) or replace (needs maintenance mode); dryRun only reports',
+    schema: { body: restoreBodySchema, response: restoreViewSchema },
+    readOnly: true,
+    bodyLimit: RESTORE_BODY_LIMIT,
+    authz: authz.on('settings.write', org),
+    handler: (ctx) => restoreBackup(ctx, ctx.body),
+  }),
+  defineRoute({
+    method: 'GET',
+    url: '/system/maintenance',
+    tag: TAG,
+    summary: 'Whether maintenance mode (gateway and OAuth traffic stopped) is on',
+    schema: { response: maintenanceSchema },
+    authz: authz.on('org.view', org),
+    handler: (ctx) => getMaintenance(ctx.deps),
+  }),
+  defineRoute({
+    method: 'POST',
+    url: '/system/maintenance',
+    tag: TAG,
+    summary: 'Turn maintenance mode on or off on every replica',
+    schema: { body: z.object({ enabled: z.boolean() }), response: maintenanceSchema },
+    readOnly: true,
+    authz: authz.on('settings.write', org),
+    handler: (ctx) => setMaintenance(ctx, ctx.body.enabled),
   }),
 ];

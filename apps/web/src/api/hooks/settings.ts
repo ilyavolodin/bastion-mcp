@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../client';
 import type { Body } from '../schema';
-import { POLL_SYSTEM_MS } from '../timing';
+import { BACKUP_TIMEOUT_MS, POLL_SYSTEM_MS } from '../timing';
 import { keys, pagedQuery, useApiMutation } from './base';
 
 // --- Org settings (read by many screens) ---------------------------------------------------------------
@@ -84,3 +84,30 @@ export const useSystemStatus = (enabled = true) =>
 
 export const useRotateKms = () =>
   useApiMutation(() => api.post('/system/kms/rotate'), [keys.system]);
+
+// --- Backup, restore and maintenance mode -------------------------------------------------------------------
+const MAINTENANCE_KEY = [...keys.system, 'maintenance'] as const;
+
+export const useMaintenance = () =>
+  useQuery({
+    queryKey: MAINTENANCE_KEY,
+    refetchInterval: POLL_SYSTEM_MS,
+    queryFn: ({ signal }) => api.get('/system/maintenance', { signal }),
+  });
+
+export const useSetMaintenance = () =>
+  useApiMutation(
+    (enabled: boolean) => api.post('/system/maintenance', { enabled }),
+    [MAINTENANCE_KEY],
+  );
+
+export const useCreateBackup = () =>
+  useApiMutation((passphrase: string) =>
+    api.post('/system/backup', { passphrase }, { timeoutMs: BACKUP_TIMEOUT_MS }),
+  );
+
+/** `dryRun` previews; the real run changes the data, so every cached screen is refetched afterwards. */
+export const useRestoreBackup = () =>
+  useApiMutation((body: Body<'post', '/system/restore'>) =>
+    api.post('/system/restore', body, { timeoutMs: BACKUP_TIMEOUT_MS }),
+  );

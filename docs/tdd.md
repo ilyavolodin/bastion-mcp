@@ -2055,7 +2055,7 @@ Bastion ships two images and one Helm chart: production runs the worker and ui r
 |  `ghcr.io/bastion-mcp/sandbox-runtime`  |  `node:24-bookworm-slim` + `uv` + Python 3.13 + `git` + `runner.mjs` + `tini`; uid 1000; read-only root filesystem compatible  | 
 - Both images are multi-arch (`linux/amd64`, `linux/arm64`), signed keylessly with cosign, published with an SPDX SBOM (syft) and SLSA build provenance from GitHub Actions.
 
-- The CLI in the main image: `bastion migrate`, `bastion check-config`, `bastion create-admin --email`, `bastion rotate-keys --purpose as|state|upstream-client`, `bastion export-config`, `bastion import-config`. Release assets also include the `bastion-credential` helper binaries (25.6).
+- The CLI in the main image: `bastion migrate`, `bastion check-config`, `bastion create-admin --email`, `bastion rotate-keys --purpose as|state|upstream-client`, `bastion export-config`, `bastion import-config`, `bastion backup`, `bastion restore`, `bastion maintenance on|off|status`. Release assets also include the `bastion-credential` helper binaries (25.6).
 
 ### 20.2 Helm chart (`deploy/helm/bastion`)
 

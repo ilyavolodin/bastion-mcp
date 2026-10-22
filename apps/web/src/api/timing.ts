@@ -11,6 +11,9 @@ export const STALE_LOOKUP_MS = MINUTE;
 /** The session (`/me`) and the command palette's lists. */
 export const STALE_LONG_MS = 5 * MINUTE;
 
+/** Creating or restoring a backup copies every table; far longer than an ordinary call. */
+export const BACKUP_TIMEOUT_MS = 10 * MINUTE;
+
 /** System status refreshes this often while the screen is open. */
 export const POLL_SYSTEM_MS = 30 * SECOND;
 /** A version whose automatic test is running is re-read this often. */

@@ -13,10 +13,11 @@ import {
   noContent,
   notFound,
   pageOf,
+  problem,
   route,
   type SampleFactory,
 } from '../http';
-import { INTERNAL_REGISTRY_NAME, ORG_NAME, SEED_IDS, TOOL_WARN_THRESHOLD } from '../seed';
+import { INTERNAL_REGISTRY_NAME, ME_ID, ORG_NAME, SEED_IDS, TOOL_WARN_THRESHOLD } from '../seed';
 import { getDb, nextId } from '../state';
 import { DAY, HOUR, iso, nowIso, validationFailed } from '../util';
 
@@ -30,6 +31,7 @@ export type SettingsData = {
   modelGuards: Schemas['ModelGuards'];
   limitRules: Schemas['LimitRule'][];
   system: Res<'get', '/system/status'>;
+  maintenance: Res<'get', '/system/maintenance'>;
 };
 
 /** The seeded per-user limits, which the quotas of `GET /me/quotas` report (`session.ts`). */
@@ -124,6 +126,7 @@ export const buildSettingsData = (now: number): SettingsData => ({
       updatedAt: iso(now - 30 * DAY),
     },
   ],
+  maintenance: { enabled: false, since: null, by: null },
   system: {
     replicas: [
       ...[1, 2, 3, 4, 5].map((n) => ({
@@ -477,6 +480,78 @@ export const settingsHandlers: HttpHandler[] = [
     },
     { allow: 'admin' },
   ),
+  route.get('/system/maintenance', () => HttpResponse.json(data().maintenance), {
+    allow: 'readConfig',
+  }),
+  route.post(
+    '/system/maintenance',
+    async ({ request }) => {
+      const body = (await request.json()) as { enabled: boolean };
+      data().maintenance = body.enabled
+        ? { enabled: true, since: stamp(), by: ME_ID }
+        : { enabled: false, since: null, by: null };
+      return HttpResponse.json(data().maintenance);
+    },
+    { allow: 'admin' },
+  ),
+  route.post(
+    '/system/backup',
+    async ({ request }) => {
+      const body = (await request.json()) as { passphrase: string };
+      if (body.passphrase.length < 12) return validationFailed([]);
+      const at = stamp();
+      return HttpResponse.json({
+        filename: 'bastion-backup-sample.bastion-backup',
+        size: 3,
+        createdAt: at,
+        counts: { users: 12, installations: 41, secrets: 9 },
+        data: 'AAEC',
+      });
+    },
+    { allow: 'admin' },
+  ),
+  route.post(
+    '/system/restore',
+    async ({ request }) => {
+      const body = (await request.json()) as {
+        mode: 'merge' | 'replace';
+        dryRun?: boolean;
+        passphrase: string;
+      };
+      if (body.passphrase === 'wrong passphrase!') {
+        return problem(
+          400,
+          'validation_failed',
+          'Validation failed',
+          'wrong passphrase, or the backup file is damaged',
+        );
+      }
+      if (body.mode === 'replace' && !data().maintenance.enabled && !body.dryRun) {
+        return problem(
+          409,
+          'restore_maintenance_required',
+          'Conflict',
+          'a replace needs maintenance mode: turn it on first so nothing writes while the data is swapped',
+        );
+      }
+      return HttpResponse.json({
+        mode: body.mode,
+        dryRun: body.dryRun ?? false,
+        backup: { createdAt: stamp(), migration: '0004_idp_redirect_root' },
+        tables: {
+          users: { rows: 12, existing: body.mode === 'merge' ? 10 : 12, action: 'restore' },
+          signing_keys: {
+            rows: 0,
+            existing: 0,
+            action: body.mode === 'merge' ? 'skip' : 'restore',
+            ...(body.mode === 'merge' ? { note: 'restored by a replace only' } : {}),
+          },
+        },
+        warnings: [],
+      });
+    },
+    { allow: 'admin' },
+  ),
 ];
 
 /** One valid call per operation of this domain (checked against the OpenAPI document by route-contract.test.ts). */
@@ -547,4 +622,12 @@ export const settingsSamples: SampleFactory = () => [
   { method: 'delete', path: '/limit-rules/lr-3' },
   { method: 'get', path: '/system/status' },
   { method: 'post', path: '/system/kms/rotate' },
+  { method: 'get', path: '/system/maintenance' },
+  { method: 'post', path: '/system/maintenance', body: { enabled: false } },
+  { method: 'post', path: '/system/backup', body: { passphrase: 'a long enough passphrase' } },
+  {
+    method: 'post',
+    path: '/system/restore',
+    body: { data: 'AAEC', passphrase: 'a long enough passphrase', mode: 'merge', dryRun: true },
+  },
 ];

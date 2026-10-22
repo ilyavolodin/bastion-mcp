@@ -63,6 +63,7 @@ export const identityCases: AuthzCase[] = [
       '/oauth-clients',
       '/settings',
       '/system/status',
+      '/system/maintenance',
       '/idp-connections/{id}',
     ] as const
   ).map(
@@ -269,5 +270,28 @@ export const identityCases: AuthzCase[] = [
     rule: 'settings.write',
     route: 'POST /system/signing-keys/rotate',
     request: () => ({ method: 'POST', url: '/system/signing-keys/rotate' }),
+  },
+  {
+    rule: 'settings.write',
+    route: 'POST /system/backup',
+    request: () => ({
+      method: 'POST',
+      url: '/system/backup',
+      body: { passphrase: 'a long enough passphrase' },
+    }),
+  },
+  {
+    rule: 'settings.write',
+    route: 'POST /system/restore',
+    request: () => ({
+      method: 'POST',
+      url: '/system/restore',
+      body: { data: 'AAEC', passphrase: 'x', mode: 'merge', dryRun: true },
+    }),
+  },
+  {
+    rule: 'settings.write',
+    route: 'POST /system/maintenance',
+    request: () => ({ method: 'POST', url: '/system/maintenance', body: { enabled: false } }),
   },
 ];

@@ -3,6 +3,15 @@ import { type BastionConfig, ConfigError } from '@bastion-mcp/core';
 import { createKmsProvider, type KeyringPurpose } from '@bastion-mcp/secrets';
 import { Redis } from 'ioredis';
 import pg from 'pg';
+import {
+  createBackup,
+  RestoreRefusedError,
+  type RestoreReport,
+  readBackup,
+  restoreBackup,
+} from '../backup/backup';
+import { createMaintenance } from '../backup/maintenance';
+import { BackupFileError } from '../backup/sealed-file';
 import { bootstrapAdminUser } from '../boot/bootstrap-admin';
 import { migrate, migrationStatus } from '../boot/migrate';
 import { resetPassword } from '../boot/reset-password';
@@ -33,6 +42,9 @@ export const COMMANDS = [
   'rotate-keys',
   'export-config',
   'import-config',
+  'backup',
+  'restore',
+  'maintenance',
   'help',
 ] as const;
 
@@ -57,7 +69,7 @@ export const parseArgs = (argv: readonly string[]): Parsed => {
   return { command: positional[0] ?? 'serve', flags, positional: positional.slice(1) };
 };
 
-const VALUE_FLAGS = new Set(['email', 'purpose', 'file', 'out', 'role']);
+const VALUE_FLAGS = new Set(['email', 'purpose', 'file', 'out', 'role', 'mode']);
 
 export const HELP = `bastion: self-hosted MCP gateway
 
@@ -77,6 +89,12 @@ Commands:
   export-config [--out f]    Export catalog, policies, settings, guard profiles, limit rules, registry sources,
                              marketplaces as JSON (secrets are never exported)
   import-config [--file f]   Import such a JSON (stdin by default; --dry-run validates only)
+  backup --out <f>           Full encrypted backup: configuration, catalog, users, teams, installations and per-user
+                             settings, OAuth connections, token hashes, audit log and every secret. The passphrase
+                             comes from BASTION_BACKUP_PASSPHRASE or the first line of stdin (--passphrase-stdin)
+  restore --file <f>         Restore a backup. --mode merge (default) upserts by id and deletes nothing; --mode replace
+                             swaps every backed-up table and needs maintenance mode. --dry-run shows what would change
+  maintenance on|off|status  Stop (or resume) gateway and OAuth traffic on every replica
 `;
 
 const flagString = (p: Parsed, name: string): string | undefined => {
@@ -98,6 +116,26 @@ const withInfra = async <T>(
   } finally {
     await infra.close();
   }
+};
+
+const passphraseOf = async (p: Parsed, env: Env, io: Io): Promise<string | undefined> => {
+  const fromStdin = p.flags.has('passphrase-stdin')
+    ? (await io.stdin()).split(/\r?\n/)[0]
+    : undefined;
+  const value = fromStdin ?? env.BASTION_BACKUP_PASSPHRASE;
+  if (!value)
+    io.err('a passphrase is required: set BASTION_BACKUP_PASSPHRASE or use --passphrase-stdin');
+  return value || undefined;
+};
+
+const formatRestoreReport = (report: RestoreReport): string => {
+  const rows = Object.entries(report.tables).map(
+    ([name, t]) =>
+      `${name.padEnd(26)} ${String(t.rows).padStart(7)} in backup ${String(t.existing).padStart(7)} ${
+        report.mode === 'merge' ? 'already here' : 'here now (removed)'
+      }${t.action === 'skip' ? `  [skipped: ${t.note}]` : ''}`,
+  );
+  return rows.join('\n');
 };
 
 export type CheckRow = { check: string; ok: boolean; detail: string };
@@ -352,6 +390,83 @@ export const execute = async (argv: readonly string[], env: Env, io: Io): Promis
         return await withInfra(env, async (infra) => {
           const report = await importConfig(infra, input, { dryRun: parsed.flags.has('dry-run') });
           io.out(`${report.dryRun ? 'validated' : 'imported'}: ${JSON.stringify(report.counts)}`);
+          return 0;
+        });
+      }
+      case 'backup': {
+        const out = flagString(parsed, 'out');
+        if (!out) {
+          io.err('backup: --out <file> is required');
+          return 2;
+        }
+        const passphrase = await passphraseOf(parsed, env, io);
+        if (!passphrase) return 2;
+        return await withInfra(env, async (infra) => {
+          const report = await createBackup(infra, passphrase, { id: null });
+          writeFileSync(out, report.file, { mode: 0o600 });
+          io.out(`backup written to ${out} (${report.file.length} bytes)`);
+          io.out(`rows: ${JSON.stringify(report.counts)}`);
+          io.out('Keep the passphrase and the file apart. The file contains every secret.');
+          return 0;
+        });
+      }
+      case 'restore': {
+        const file = flagString(parsed, 'file');
+        if (!file) {
+          io.err('restore: --file <backup> is required');
+          return 2;
+        }
+        const mode = flagString(parsed, 'mode') ?? 'merge';
+        if (mode !== 'merge' && mode !== 'replace') {
+          io.err('restore: --mode must be merge or replace');
+          return 2;
+        }
+        const passphrase = await passphraseOf(parsed, env, io);
+        if (!passphrase) return 2;
+        return await withInfra(env, async (infra) => {
+          try {
+            const { document } = await readBackup(readFileSync(file), passphrase);
+            const report = await restoreBackup(infra, createMaintenance(infra.redis), document, {
+              mode,
+              dryRun: parsed.flags.has('dry-run'),
+            });
+            io.out(
+              `${report.dryRun ? 'would restore' : 'restored'} (${mode}) backup from ${report.backup.createdAt}`,
+            );
+            io.out(formatRestoreReport(report));
+            for (const warning of report.warnings) io.out(`warning: ${warning}`);
+            if (!report.dryRun && mode === 'replace') {
+              io.out(
+                'Maintenance mode is still on. Check the instance, then run: bastion maintenance off',
+              );
+            }
+            return 0;
+          } catch (error) {
+            if (error instanceof RestoreRefusedError || error instanceof BackupFileError) {
+              io.err(`restore refused: ${error.message}`);
+              return 1;
+            }
+            throw error;
+          }
+        });
+      }
+      case 'maintenance': {
+        const action = parsed.positional[0];
+        if (action !== 'on' && action !== 'off' && action !== 'status') {
+          io.err('maintenance: expected on, off or status');
+          return 2;
+        }
+        return await withInfra(env, async (infra) => {
+          const maintenance = createMaintenance(infra.redis);
+          const state =
+            action === 'status'
+              ? await maintenance.get()
+              : await maintenance.set(action === 'on', 'cli');
+          io.out(
+            state.enabled
+              ? `maintenance mode is ON since ${state.since} (by ${state.by})`
+              : 'maintenance mode is off',
+          );
           return 0;
         });
       }

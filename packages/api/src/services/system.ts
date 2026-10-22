@@ -1,3 +1,4 @@
+import type { Principal } from '@bastion-mcp/auth';
 import type { ApiDeps } from '../ports';
 import type { WriteCtx } from './crud';
 
@@ -27,3 +28,18 @@ export const rotateSigningKeys = async (ctx: WriteCtx) => {
   ctx.tx.configChanged('signing_keys');
   return result;
 };
+
+type Actor = { deps: ApiDeps; principal: Principal };
+
+export const createBackup = (ctx: Actor, passphrase: string) =>
+  ctx.deps.system.createBackup({ passphrase, actorId: ctx.principal.id });
+
+export const restoreBackup = (
+  ctx: Actor,
+  input: { data: string; passphrase: string; mode: 'merge' | 'replace'; dryRun: boolean },
+) => ctx.deps.system.restoreBackup({ ...input, actorId: ctx.principal.id });
+
+export const getMaintenance = (deps: ApiDeps) => deps.system.maintenance();
+
+export const setMaintenance = (ctx: Actor, enabled: boolean) =>
+  ctx.deps.system.setMaintenance({ enabled, actorId: ctx.principal.id });

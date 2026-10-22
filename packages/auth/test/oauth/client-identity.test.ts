@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { UpstreamDiscovery } from '../../src/oauth/upstream/discovery';
 import { resolveClientIdentity } from '../../src/oauth/upstream/client-identity';
+import type { UpstreamDiscovery } from '../../src/oauth/upstream/discovery';
 
 const discovery = (over: Partial<UpstreamDiscovery> = {}): UpstreamDiscovery =>
   ({
@@ -37,7 +37,9 @@ describe('upstream client identity (9.6)', () => {
       discovery(),
     );
     expect(resolved.registration).toBe('cimd');
-    expect(resolved.clientId).toBe('http://localhost:8080/oauth/upstream/client-metadata-public.json');
+    expect(resolved.clientId).toBe(
+      'http://localhost:8080/oauth/upstream/client-metadata-public.json',
+    );
   });
 
   it('9.6 auto: an unreachable origin still prefers dynamic registration when the AS offers it', async () => {

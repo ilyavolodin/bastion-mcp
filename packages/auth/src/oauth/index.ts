@@ -115,8 +115,8 @@ export {
 } from './upstream/broker';
 export {
   buildUpstreamClientMetadata,
-  buildUpstreamPublicClientMetadata,
   buildUpstreamJwksDocument,
+  buildUpstreamPublicClientMetadata,
   UpstreamClientError,
 } from './upstream/client-identity';
 export {
@@ -150,6 +150,6 @@ export {
   mcpResource,
   upstreamCallbackUrl,
   upstreamClientMetadataUrl,
-  upstreamPublicClientMetadataUrl,
   upstreamJwksUrl,
+  upstreamPublicClientMetadataUrl,
 } from './urls';

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PageHeader } from '@/components/page-header';
 import { cn } from '@/lib/cn';
 import { useSearchState } from '@/lib/search';
+import { BackupSection } from './backup-section';
 import { ModelGuardsSection } from './guards-section';
 import { IdpSection } from './idp-section';
 import { LimitsSection } from './limits-section';
@@ -18,6 +19,7 @@ export const SECTIONS = [
   ['registry', 'Registry'],
   ['limits', 'Limits'],
   ['retention', 'Retention'],
+  ['backup', 'Backup and restore'],
   ['system', 'System status'],
 ] as const;
 type Section = (typeof SECTIONS)[number][0];
@@ -38,6 +40,7 @@ const BODY: Record<Section, () => React.JSX.Element> = {
   registry: RegistrySection,
   limits: LimitsSection,
   retention: RetentionSection,
+  backup: BackupSection,
   system: SystemStatusSection,
 };
 

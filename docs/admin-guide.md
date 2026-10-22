@@ -485,9 +485,44 @@ The collector keeps all error traces and 10% of the rest by default. `BASTION_TR
 | Internal secret | Kept in your secret manager. | Regenerable (it only signs worker-to-worker requests). |
 | Redis | No backup needed. | Holds sessions, leases, caches and limits: after a loss, users sign in again and sandboxes re-attach. |
 | `/var/lib/bastion` (bubblewrap) | Volume snapshot if persistent workspaces matter. | Kubernetes persistent workspaces live in PVCs in `bastion-sandboxes`. |
-| Configuration as code | `bastion export-config` and `bastion import-config`. | Use for promoting configuration between environments and as a human-readable backup of catalog and settings; it is not a substitute for database backups. |
+| **Application backup** | `bastion backup`, the **Backup and restore** page in Settings, or `POST /api/v1/system/backup`. | One passphrase-encrypted file with the whole configuration, users, installations and per-user settings, OAuth connections, token hashes, the audit log and every secret. Restores on an installation with a different KMS key. See below. |
+| Configuration as code | `bastion export-config` and `bastion import-config`. | Use for promoting configuration between environments (declarative, **never** contains secrets, users or installations); it is not a backup. |
 
-To restore: restore Postgres, make the same KMS key available, deploy the same or a newer chart version (migrations
+### Application backup and restore
+
+`bastion backup --out backup.bastion-backup` (passphrase from `BASTION_BACKUP_PASSPHRASE` or `--passphrase-stdin`, at
+least 12 characters) writes one file. The whole file is sealed (AES-256-GCM, key derived from the passphrase with scrypt),
+because besides secrets it holds user data, token hashes and OAuth grants. Each secret keeps its own ciphertext; the
+data key travels inside the sealed file, and a restore wraps it with the **target's** KMS. So a backup restores on a new
+installation with a different KMS key, and the passphrase is the only thing that protects the secrets in the file:
+**store the file and the passphrase in different places; nobody can recover a backup without the passphrase.**
+
+| Included | Left out |
+| --- | --- |
+| Settings, guard profiles, limit and policy rules, registry sources, catalog entries, versions and files, marketplaces; users, teams, memberships, role mappings, service accounts; IdP connections; every installation with per-user variables, overrides, preferences and endpoints; OAuth client registrations, upstream OAuth tokens and IdP tokens; personal access token and SCIM token hashes; OAuth clients of MCP desktop apps; signing keys; the audit log; all secrets | Call logs, statistics, egress and download events, notifications, running-sandbox state (rebuilt on demand), the cache of servers synced from registry sources (the first sync after a restore is a full one), and **sessions** (they live in Redis: people sign in again) |
+
+A new table in a future version fails the build until it is classified as included or left out, so a backup cannot
+silently miss data.
+
+**Restore** is `bastion restore --file backup.bastion-backup [--mode merge|replace] [--dry-run]`, the same page in
+Settings, or `POST /api/v1/system/restore`. Always preview first (`--dry-run`): it shows per table how many rows are in
+the backup and how many already exist.
+
+| Mode | What it does |
+| --- | --- |
+| `merge` (default) | Inserts what is missing and overwrites rows with the same id. Deletes nothing. Keeps this installation's own signing keys and audit log (those come back only with `replace`). A unique-name clash with a different id (for example the same email under another user id) stops the restore and changes nothing. |
+| `replace` | Deletes everything the backup covers and loads the backup, including signing keys (so issued tokens stay valid) and the audit log; the restore itself is appended to the restored log. For disaster recovery. **Requires maintenance mode.** Refused if the backup has no active administrator, or (from the console) does not contain the administrator performing it. |
+
+**Maintenance mode** (`bastion maintenance on|off|status`, or the switch on the Backup page) makes every replica answer
+`503` on the MCP gateway and the OAuth endpoints, and reject changes from the console, while reads and the system
+routes keep working. Turning it on returns after about a second, once every replica has noticed. A replace leaves it on
+afterwards so you can check the instance before resuming traffic.
+
+Both a backup and a restore are audited (`backup.export`, `backup.restore.merge`, `backup.restore.replace`). A backup
+made at a newer database migration than the target is refused: upgrade Bastion first. Through the API the file travels as
+base64 inside JSON (up to about 380 MiB); use the CLI for very large installations.
+
+To restore from database backups instead: restore Postgres, make the same KMS key available, deploy the same or a newer chart version (migrations
 run in the pre-upgrade Job), and start workers. After a Postgres restore older than the last key rotation, the `as`,
 `state` and `upstream-client` keyrings come back from the backup, which is consistent.
 
@@ -529,9 +564,11 @@ run on invalid configuration, printing every error.
 | `bastion rotate-keys --purpose as\|state\|upstream-client` | Rotate one keyring (see [rotating keys](runbooks/rotating-keys.md)). |
 | `bastion export-config` | Write catalog and settings as portable configuration. |
 | `bastion import-config` | Load such a file. |
+| `bastion backup --out <file>` | Full encrypted backup (see [Application backup and restore](#application-backup-and-restore)). Passphrase from `BASTION_BACKUP_PASSPHRASE` or `--passphrase-stdin`. |
+| `bastion restore --file <file> [--mode merge|replace] [--dry-run]` | Restore such a backup. `replace` needs maintenance mode. |
+| `bastion maintenance on|off|status` | Stop or resume gateway and OAuth traffic on every replica. |
 
-The design fixes these commands and the flags shown; any other flags (output path, dry run) are not specified yet.
-Check `bastion <command> --help` in your build.
+Check `bastion <command> --help` in your build for the flags of each command.
 
 ## 15. Sizing
 

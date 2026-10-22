@@ -18,6 +18,7 @@ import { createGuardService } from './adapters/guards';
 import { createLimitService } from './adapters/limits';
 import { createPluginServices } from './adapters/plugin-services';
 import { createPolicyService } from './adapters/policy';
+import { createMaintenance, registerMaintenanceGate } from './backup/maintenance';
 import { bootstrapAdminUser } from './boot/bootstrap-admin';
 import { keyStoreOf } from './boot/key-store';
 import { migrate } from './boot/migrate';
@@ -99,6 +100,8 @@ export const startServer = async (
       forceCloseConnections: true,
       bodyLimit: BODY_LIMIT_BYTES,
     });
+
+    registerMaintenanceGate(app, createMaintenance(infra.redis));
 
     await registerSecurityHeaders(app, {
       publicUrl: config.publicUrl,

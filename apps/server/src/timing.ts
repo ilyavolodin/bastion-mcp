@@ -29,6 +29,12 @@ export const HARD_KILL_MS = DRAIN_GRACE_MS + HARD_KILL_SLACK_MS;
 
 /** Connection timeout of the CLI's database and Redis probes. */
 export const CLI_CONNECT_TIMEOUT_MS = 5 * MS.SECOND;
+/** Interactive transactions of `backup` and `restore`: they copy every table in one snapshot. */
+export const BACKUP_TX_OPTIONS = {
+  timeout: 15 * MS.MINUTE,
+  maxWait: 10 * MS.SECOND,
+} as const;
+
 /** Interactive transaction of `import-config`. */
 export const CONFIG_IMPORT_TX_OPTIONS = {
   timeout: 2 * MS.MINUTE,
