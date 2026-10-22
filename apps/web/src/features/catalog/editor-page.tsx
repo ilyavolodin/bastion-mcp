@@ -11,6 +11,7 @@ import {
   useCreateCatalogEntry,
   usePublish,
   useSaveDraft,
+  useSaveEntry,
   useTeamOptions,
 } from '@/api/hooks';
 import { bumpLabel, editableVersion, isPassing } from '@/api/views/catalog';
@@ -61,7 +62,9 @@ const searchSchema = z.object({
     .catch('source')
     .default('source'),
   /** Set when a new entry was saved from the Test step: the test starts once the saved entry has loaded. */
-  run: z.string().optional(),
+  // The OAuth return redirect writes a bare `run=1`, which the router parses as the number 1: take it as text,
+  // or the whole search fails to parse and the editor falls back to the Source step with every tab stuck.
+  run: z.preprocess((v) => (v == null ? undefined : String(v)), z.string().optional()),
 });
 
 /** The step that edits what a server-side error path points at. */
@@ -114,6 +117,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
   const [saveError, setSaveError] = React.useState<unknown>(null);
   const create = useCreateCatalogEntry();
   const saveDraft = useSaveDraft(entry?.id ?? '', version);
+  const saveEntry = useSaveEntry(entry?.id ?? '');
   const draftVersion = version?.status === 'draft' ? version : undefined;
   const publish = usePublish(entry?.id ?? '', draftVersion?.id ?? '');
   const current = useCatalogVersion(entry?.id, draftVersion?.id);
@@ -125,6 +129,9 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
   const versionDirty = versionKey(draft) !== savedKey;
   const testRun = current.data?.testResult ?? undefined;
   const passing = !versionDirty && Boolean(draftVersion) && isPassing(testRun);
+  // A published entry whose version content is untouched: audience, risk and update settings are entry fields, so they
+  // save on their own, without a new version and a new test.
+  const entryOnly = Boolean(entry) && !draftVersion && !versionDirty;
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const mayDelete = useCanManageEntry(entry ?? { ownerTeamId: null });
 
@@ -141,6 +148,12 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
     setErrors({});
     setSaveError(null);
     try {
+      if (entry && entryOnly && !options.run) {
+        await saveEntry.mutateAsync(draft);
+        setDirty(false);
+        toast.success('Changes saved');
+        return version?.id ?? entry.id;
+      }
       if (!entry) {
         const created = await create.mutateAsync(draft);
         toast.success('Draft saved');
@@ -225,7 +238,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
               disabled={saving || (!dirty && Boolean(entry))}
               onClick={() => void save()}
             >
-              {saving ? 'Saving…' : 'Save draft'}
+              {saving ? 'Saving…' : entryOnly ? 'Save changes' : 'Save draft'}
             </Button>
           </>
         }
@@ -295,7 +308,17 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
               </Card>
             )
           ) : null}
-          {s.step === 'publish' ? (
+          {s.step === 'publish' && entryOnly ? (
+            <Card aria-label="Already published" className="gap-3">
+              <CardHeader title="Already published" />
+              <p className="m-0 text-[13px] text-muted">
+                Version {version?.label} is live and you have not changed it, so there is nothing to
+                test or publish. Who gets it, risk and update settings save with Save changes. To
+                ship different content, change a step and run the test: that makes a new version.
+              </p>
+            </Card>
+          ) : null}
+          {s.step === 'publish' && !entryOnly ? (
             <PublishSummary
               draft={draft}
               label={label}
@@ -334,11 +357,12 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
             draft={draft}
             onChange={(p) => change({ ...draft, ...p })}
             versionLabel={label}
-            canPublish={passing}
+            canPublish={entryOnly ? dirty : passing}
             publishing={publish.isPending || saving}
-            disabledReason={disabledReason}
+            disabledReason={entryOnly ? 'Nothing changed yet.' : disabledReason}
             entryId={entry?.id}
-            onPublish={() => void onPublish()}
+            onPublish={() => (entryOnly ? void save() : void onPublish())}
+            {...(entryOnly ? { saveOnly: true } : {})}
           />
           <AutoInstallCard entryId={entry?.id} />
         </div>

@@ -239,6 +239,16 @@ export const useSaveDraft = (entryId: string, version: CatalogVersion | undefine
     [keys.catalog],
   );
 
+/**
+ * Saves only the entry's own fields (who gets it, risk, description, update settings) on a published entry whose
+ * version did not change: no new version, so no new test.
+ */
+export const useSaveEntry = (entryId: string) =>
+  useApiMutation(
+    (draft: Draft) => api.patch(`/catalog/${entryId}`, toEntryPatchBody(draft)),
+    [keys.catalog, keys.store],
+  );
+
 // --- test and publish ----------------------------------------------------------------------------------------------
 
 /** Starts the automatic test of a version (11.2); progress arrives on the version row and over SSE. */

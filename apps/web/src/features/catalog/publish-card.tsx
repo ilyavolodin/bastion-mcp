@@ -20,6 +20,8 @@ type Props = {
   disabledReason?: string | undefined;
   entryId?: string | undefined;
   noun?: string;
+  /** A published entry with an unchanged version: the button saves the entry's fields instead of publishing. */
+  saveOnly?: boolean;
 };
 
 /** "Who gets it" and Publish: enabled only after a passing test of this exact version (11.3, 18.3). */
@@ -32,6 +34,7 @@ export function PublishCard({
   onPublish,
   disabledReason,
   noun = 'v',
+  saveOnly = false,
 }: Props) {
   const { me, role } = useAuth();
   const teams = useTeamOptions();
@@ -160,8 +163,19 @@ export function PublishCard({
         Installs follow new versions
       </label>
       <Button size="lg" disabled={!canPublish || publishing} onClick={onPublish}>
-        {publishing ? 'Publishing…' : `Publish ${noun}${versionLabel}`}
+        {saveOnly
+          ? publishing
+            ? 'Saving…'
+            : 'Save changes'
+          : publishing
+            ? 'Publishing…'
+            : `Publish ${noun}${versionLabel}`}
       </Button>
+      {saveOnly ? (
+        <p className="m-0 text-caption text-muted">
+          This version is live. Changes here apply to it without a new version or test.
+        </p>
+      ) : null}
       {!canPublish && disabledReason ? (
         <p className="m-0 text-caption text-muted">{disabledReason}</p>
       ) : null}

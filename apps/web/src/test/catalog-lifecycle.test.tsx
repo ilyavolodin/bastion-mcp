@@ -272,3 +272,35 @@ describe('Catalog editor lifecycle (11.1, 11.3, 18.3)', () => {
     expect(alert).toHaveTextContent('runs the server as you');
   });
 });
+
+describe('Catalog editor: coming back from the account sign-in, and changes to a published entry', () => {
+  it('9.6 the redirect after connecting an account (a bare run=1) opens the Test step, and the steps stay usable', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/catalog/c-postgres?step=test&run=1');
+    expect(await screen.findByLabelText('Test start')).toBeVisible();
+    await capture.next('post', /\/versions\/[^/]+\/test$/);
+    const stepper = screen.getByRole('navigation', { name: 'Catalog steps' });
+    await user.click(within(stepper).getByRole('button', { name: /Configuration/ }));
+    expect(stepper).toBeVisible();
+    expect(screen.queryByLabelText('Test start')).toBeNull();
+    capture.stop();
+  });
+
+  it('11.1 who gets a published entry (and its risk) saves on their own: no new version, no new test', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/catalog/c-slack?step=publish');
+    const card = await screen.findByLabelText('Publish');
+    const save = within(card).getByRole('button', { name: 'Save changes' });
+    expect(save).toBeDisabled();
+    expect(await screen.findByLabelText('Already published')).toBeVisible();
+    await user.click(within(card).getByRole('radio', { name: 'Selected teams' }));
+    expect(save).toBeEnabled();
+    await user.click(save);
+    const patch = await capture.next('patch', /\/catalog\/c-slack$/);
+    expect(patch.body).toMatchObject({ visibility: { org: false } });
+    expect(capture.calls.some((c) => c.method === 'post' && /\/versions$/.test(c.path))).toBe(
+      false,
+    );
+    capture.stop();
+  });
+});
