@@ -194,6 +194,15 @@ With `BASTION_ROLE=all` the process serves every route on 8080, runs the schedul
 the internal RPC listener on, so replicas can be added later. Several `all` replicas work, but each owns only the
 bubblewrap sandboxes it started; when it dies they die with it and restart elsewhere on the next use (20.3).
 
+**Without the source code.** `.github/workflows/image.yml` publishes `ghcr.io/<owner>/bastion` (amd64 and arm64) on every push to `main`, tagged
+`main` and `sha-<commit>`; release tags (`vX.Y.Z`, `latest`) come from `release.yml`. The compose file pulls that image,
+so a machine needs only three files from `deploy/docker/`: `compose.yaml`, `seccomp-bastion.json` and `.env.example`
+(saved as `.env`). Then `docker compose up -d`. To update: `docker compose pull && docker compose up -d`.
+
+The first publish creates the package as private. Make it public (repository → Packages → the package → Package
+settings → Change visibility) or run `docker login ghcr.io` on the target machine with a token that has `read:packages`.
+Set `BASTION_VERSION` in `.env` to a `sha-<commit>` or release tag to pin a version.
+
 ### 3.1 Remote MCP servers on your own network
 
 By default Bastion only connects to hosts that are on the public internet and use HTTPS (8.9, 23.3). That covers remote

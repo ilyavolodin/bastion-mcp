@@ -69,7 +69,7 @@ services:
     restart: unless-stopped
 
   migrate:
-    image: ${BASTION_IMAGE:-ghcr.io/bastion-mcp/bastion}:${BASTION_VERSION:-latest}
+    image: ${BASTION_IMAGE:-ghcr.io/ilyavolodin/bastion}:${BASTION_VERSION:-main}
     entrypoint: ["bastion", "migrate"]
     environment: *bastion-env
     depends_on:
@@ -78,7 +78,7 @@ services:
     restart: "no"
 
   bastion:
-    image: ${BASTION_IMAGE:-ghcr.io/bastion-mcp/bastion}:${BASTION_VERSION:-latest}
+    image: ${BASTION_IMAGE:-ghcr.io/ilyavolodin/bastion}:${BASTION_VERSION:-main}
     environment: *bastion-env
     ports:
       - "${BASTION_HTTP_PORT_HOST:-8080}:8080"
