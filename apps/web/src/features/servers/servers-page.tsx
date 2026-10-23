@@ -17,7 +17,7 @@ const searchSchema = z.object({
 
 export function ServersPage() {
   const [s, setS] = useSearchState(searchSchema);
-  const q = useInstallations();
+  const q = useInstallations({ mine: true });
   return (
     <>
       <PageHeader

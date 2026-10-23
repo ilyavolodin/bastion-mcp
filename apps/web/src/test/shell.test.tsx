@@ -98,7 +98,7 @@ describe('app shell', () => {
   it('a11y: Home has no axe violations', async () => {
     const { container } = await renderRoute('/');
     await screen.findByText('Connect your AI tools');
-    await screen.findByText('Postgres analytics');
+    await screen.findByText('Jira');
     expect(await expectNoA11yViolations(container)).toHaveNoViolations();
   });
 });

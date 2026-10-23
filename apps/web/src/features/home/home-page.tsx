@@ -27,7 +27,7 @@ export const quotaText = (q: QuotaView): string =>
     : `${formatNumber(q.used)} of ${formatNumber(q.limit)} in use`;
 
 function SetupBanner() {
-  const { data } = useInstallations();
+  const { data } = useInstallations({ mine: true });
   const { run, pending } = useInstallationAction();
   const needy = (data ?? []).filter((i) => installationAction(i) !== null);
   const first = needy[0];
@@ -218,7 +218,7 @@ function TeamAdoptionCard() {
 
 export function HomePage() {
   const { me, role } = useAuth();
-  const installations = useInstallations();
+  const installations = useInstallations({ mine: true });
   return (
     <>
       <PageHeader title="Home" subtitle={`${me.org.name} · ${me.org.host}`} />

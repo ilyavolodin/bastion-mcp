@@ -137,6 +137,28 @@ describe('My servers and Installation detail (18.3)', () => {
     expect(await screen.findByLabelText('Result')).toHaveTextContent('"rows"');
   });
 
+  it('an administrator sees only what is installed for their own account under My servers', async () => {
+    await renderRoute('/servers', {
+      prepare: (db) => {
+        const base = db.data.servers.installations.find((i) => i.ownerType === 'user');
+        if (!base) throw new Error('fixture missing');
+        // Another person's server: the administrator may manage it, but it is not theirs.
+        db.data.servers.installations.push({
+          ...base,
+          id: 'i-someone-else',
+          ownerType: 'user',
+          ownerId: 'u-someone-else',
+          slug: 'someone-elses',
+          displayName: 'Someone Elses Server',
+        });
+      },
+    });
+    await screen.findByText('Jira');
+    expect(screen.queryByText('Someone Elses Server')).toBeNull();
+    // Team installs count only for members of that team: Dana is not in the Data team.
+    expect(screen.queryByText('Postgres analytics')).toBeNull();
+  });
+
   it('10.1 a member neither lists nor opens a team installation', async () => {
     await renderRoute('/servers/i-postgres', { role: 'member' });
     expect((await screen.findAllByText(/Installation not found/)).length).toBeGreaterThan(0);

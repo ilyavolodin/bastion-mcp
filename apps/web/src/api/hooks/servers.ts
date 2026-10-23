@@ -24,14 +24,26 @@ import { useMe } from './session';
 // --- Installations ------------------------------------------------------------------------------
 
 /**
- * The caller's installations with owner names and what their server specs say (runtime, sign-in mode). The rows carry
+ * The installations the caller may manage (all of them for an administrator; `mine` narrows to their own and their
+ * teams') with owner names and what their server specs say (runtime, sign-in mode). The rows carry
  * only ids, so this reads the teams and people and the catalog versions of the installations, a bounded fan-out.
  */
-export const useInstallations = () => {
+export const useInstallations = ({ mine = false }: { mine?: boolean } = {}) => {
   const me = useMe();
+  const teamIds = new Set((me.data?.teams ?? []).map((t) => t.id));
   return useQuery({
     queryKey: [...keys.installations, me.data?.id ?? ''],
     enabled: me.isSuccess,
+    // An administrator may manage every installation, so the list comes back whole; "mine" keeps what is installed
+    // for this account or one of its teams (My servers, the Home cards, the setup badge).
+    select: (rows: InstallationView[]) =>
+      mine
+        ? rows.filter(
+            (i) =>
+              (i.ownerType === 'user' && i.ownerId === me.data?.id) ||
+              (i.ownerType === 'team' && teamIds.has(i.ownerId)),
+          )
+        : rows,
     queryFn: async ({ signal }): Promise<InstallationView[]> => {
       const rows = await fetchAll('/installations', undefined, undefined, signal);
       const [teams, users] = await Promise.all([
