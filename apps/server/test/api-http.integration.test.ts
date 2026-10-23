@@ -739,6 +739,31 @@ describe.skipIf(!haveDocker())('17 control-plane API over Postgres and Redis', (
     }
   });
 
+  it('13.6 approving a drift review replaces a pin the drift checker stored under another id', async () => {
+    const install = await api.call('POST', '/installations', {
+      body: { personalSpec: REMOTE_SPEC, displayName: 'Pinned', slug: 'pinned-server' },
+    });
+    expect(install.status).toBe(201);
+    const subject = { installationId: install.body.id as string };
+    const hash = (c: string) => c.repeat(64);
+    // The checker pins by (subject, kind, key) under a random id; approving must update that row, not insert a twin.
+    await infra.repos.definitionPins.upsertPins(subject, [
+      { itemKind: 'tool', itemKey: 'search', hash: hash('a'), definition: { name: 'search' } },
+    ]);
+    const { review } = await infra.repos.driftReviews.open(subject, {
+      itemKind: 'tool',
+      itemKey: 'search',
+      oldHash: hash('a'),
+      newHash: hash('b'),
+      newDefinition: { name: 'search', outputSchema: {} },
+    });
+    const approved = await api.call('POST', `/drift-reviews/${review.id}/approve`, { body: {} });
+    expect(approved.status).toBe(200);
+    const pins = await infra.repos.definitionPins.list(subject);
+    expect(pins).toHaveLength(1);
+    expect(pins[0]).toMatchObject({ itemKey: 'search', hash: hash('b') });
+  });
+
   it('9.4 connected apps: the grant list is typed, only yours is listed, and revoking one drops its tokens', async () => {
     const prisma = infra.db.prisma;
     const iat = Math.floor(Date.now() / 1000);

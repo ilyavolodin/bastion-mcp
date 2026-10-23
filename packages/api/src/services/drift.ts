@@ -45,7 +45,7 @@ export const approveReview = async (ctx: WriteCtx, id: string, note?: string): P
     decidedAt,
     reason: note ?? null,
   });
-  await ctx.tx.store.upsert('definition_pins', pinId(review), {
+  const pin = {
     installationId: review.installationId ?? null,
     catalogVersionId: review.catalogVersionId ?? null,
     itemKind: review.itemKind,
@@ -54,7 +54,18 @@ export const approveReview = async (ctx: WriteCtx, id: string, note?: string): P
     definition: review.newDefinition,
     approvedBy: ctx.principal.id,
     approvedAt: decidedAt,
+  };
+  // The drift checker and the catalog test create pins under random ids, so look the pin up by what the unique index
+  // keys on (subject, kind, key); a lookup by the derived id would miss it and the insert would hit that index.
+  const [existing] = await ctx.tx.store.find('definition_pins', {
+    ...(review.catalogVersionId
+      ? { catalogVersionId: review.catalogVersionId }
+      : { installationId: review.installationId }),
+    itemKind: review.itemKind,
+    itemKey: review.itemKey,
   });
+  if (existing) await ctx.tx.store.update('definition_pins', String(existing.id), pin);
+  else await ctx.tx.store.upsert('definition_pins', pinId(review), pin);
   await ctx.tx.audit({
     action: 'drift_review.approve',
     targetType: 'drift_review',
