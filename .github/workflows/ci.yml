@@ -24,6 +24,11 @@ jobs:
         run: pnpm typecheck
       - name: Package boundaries (5.3)
         run: pnpm boundaries
+      # The all-in-one boot test serves the SPA from apps/web/dist, as the image does.
+      - name: Build the web app
+        run: |
+          pnpm --filter @bastion-mcp/api-client generate
+          pnpm --filter @bastion-mcp/web exec vite build
       - name: Unit and integration tests (Docker is available on the runner)
         # Two packages at a time: with turbo's default of ten, Cedar compiles, property tests and the Docker suites starve
         # each other on the runner, and vitest's worker calls time out.
