@@ -857,3 +857,24 @@ describe('12.2 items Bastion hosts itself (added)', () => {
     expect(r.degraded).toHaveLength(1);
   });
 });
+
+describe('7.3 output schemas a strict client would reject', () => {
+  it('7.3 a tool nothing overrides is served without an outputSchema whose type is not "object"', async () => {
+    const a = installation({ id: 'a', slug: 'github' });
+    const good = { type: 'object', properties: { id: { type: 'string' } } };
+    const map = {
+      a: items({
+        tools: [
+          tool('nullable', { outputSchema: { type: ['object', 'null'], properties: {} } }),
+          tool('one_of', { outputSchema: { oneOf: [{ type: 'null' }, { type: 'object' }] } }),
+          tool('fine', { outputSchema: good }),
+        ],
+      }),
+    };
+    const r = await compileEndpoint(base([a], map));
+    const byName = new Map(r.tools.map((t) => [t.name, t]));
+    expect(byName.get('github__nullable')).not.toHaveProperty('outputSchema');
+    expect(byName.get('github__one_of')).not.toHaveProperty('outputSchema');
+    expect(byName.get('github__fine')?.outputSchema).toEqual(good);
+  });
+});

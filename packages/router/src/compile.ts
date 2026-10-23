@@ -40,6 +40,7 @@ import {
   type UpstreamResourceTemplate,
   type UpstreamTool,
   withAdded,
+  withServableOutputSchema,
 } from '@bastion-mcp/overrides';
 import type {
   AuthorizeRequest,
@@ -315,6 +316,8 @@ type KindSpec<U, F extends { kind: string; issues: OverrideIssue[] }> = {
   key(item: U): string;
   apply(item: U, layers: OverrideLayers, slug: string): ApplyResult<F>;
   finalItem(final: F): U;
+  /** What an item that nothing overrides is served as (default: as the upstream sent it). */
+  passthrough?(item: U): U;
   overridden(item: U, final: F, layers: OverrideLayers): boolean;
   exactName?(final: F): string | undefined;
 };
@@ -332,6 +335,7 @@ const toolSpec: KindSpec<UpstreamTool, FinalTool> = {
       : withCatalogToolPins(r, layers, tool.name);
   },
   finalItem: (final) => final.tool,
+  passthrough: withServableOutputSchema,
   overridden: (tool, _final, layers) =>
     Object.keys(resolveToolOverride(layers, tool.name)).length > 0,
   exactName: (final) => final.exactName,
@@ -408,7 +412,8 @@ const collectKind = <U, F extends { kind: string; issues: OverrideIssue[] }>(
     const upstreamKey = spec.key(upstream);
     const base = { installation, priority, upstreamKey };
     if (passthrough) {
-      entries.push({ ...base, final: null, issues: [], overridden: false, item: upstream });
+      const item = spec.passthrough ? spec.passthrough(upstream) : upstream;
+      entries.push({ ...base, final: null, issues: [], overridden: false, item });
       continue;
     }
     const r = spec.apply(upstream, layers, slug);

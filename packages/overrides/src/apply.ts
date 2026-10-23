@@ -136,6 +136,13 @@ const applyMeta = (
 const isObjectOutputSchema = (schema: unknown): boolean =>
   isObject(schema) && schema.type === 'object';
 
+/** The tool as a strict client can take it: without an `outputSchema` that is not an object schema (see 4b below). */
+export const withServableOutputSchema = (tool: UpstreamTool): UpstreamTool => {
+  if (tool.outputSchema === undefined || isObjectOutputSchema(tool.outputSchema)) return tool;
+  const { outputSchema: _dropped, ...rest } = tool;
+  return rest;
+};
+
 /**
  * Applies the layered override to one upstream tool (12.3): hidden; name; title and description;
  * pinning; defaults; the JSON Patch (after pinning, checked against 2020-12); annotations; `_meta`;
