@@ -17,6 +17,9 @@ on:
       - "deploy/kind/**"
       - "deploy/chaos/**"
       - "deploy/upgrade/**"
+      # Tests are not part of the image: a push that only touches them does not need a new one.
+      - "**/test/**"
+      - "packages/testkit/**"
   pull_request:
     paths:
       - ".github/workflows/image.yml"
