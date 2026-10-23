@@ -396,7 +396,7 @@ function BulkApproveDialog({
             className="m-0 flex max-h-48 list-none flex-col gap-1 overflow-y-auto p-0 font-mono text-[12px]"
           >
             {reviews.map((r) => (
-              <li key={r.id} className="truncate">
+              <li key={r.id} className="shrink-0 truncate">
                 {r.serverName} · {r.itemKey}
               </li>
             ))}

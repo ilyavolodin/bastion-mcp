@@ -54,6 +54,33 @@ describe('Store and install flow (11.2, 11.4)', () => {
     expect(within(dialog).getByText(/v1\.8\.2/)).toBeInTheDocument();
   });
 
+  it('an entry only someone else installed is not marked Installed for an administrator', async () => {
+    await renderRoute('/store', {
+      prepare: (db) => {
+        const base = db.data.servers.installations.find((i) => i.ownerType === 'user');
+        if (!base) throw new Error('fixture missing');
+        db.data.servers.installations.push({
+          ...base,
+          id: 'i-someone-else-sd',
+          ownerType: 'user',
+          ownerId: 'u-someone-else',
+          slug: 'servicedesk',
+          displayName: 'ServiceDesk',
+          catalogEntryId: 'c-servicedesk',
+        });
+      },
+    });
+    // The badge sits in the card header, a few levels above the name button.
+    const header = async (name: string): Promise<HTMLElement> => {
+      let el = (await screen.findByRole('button', { name })).parentElement;
+      for (let i = 0; i < 3 && el?.parentElement; i += 1) el = el.parentElement;
+      return el as HTMLElement;
+    };
+    // Jira is the administrator's own install and carries the badge; ServiceDesk, installed by another person, does not.
+    expect(within(await header('Jira')).getByText('Installed')).toBeInTheDocument();
+    expect(within(await header('ServiceDesk')).queryByText('Installed')).toBeNull();
+  });
+
   it('searches names and descriptions so "pull requests" finds GitHub', async () => {
     const { user } = await renderRoute('/store');
     await screen.findByRole('button', { name: 'Jira' });

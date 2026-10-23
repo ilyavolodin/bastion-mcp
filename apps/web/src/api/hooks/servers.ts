@@ -28,22 +28,23 @@ import { useMe } from './session';
  * teams') with owner names and what their server specs say (runtime, sign-in mode). The rows carry
  * only ids, so this reads the teams and people and the catalog versions of the installations, a bounded fan-out.
  */
+/** Installed for this account or for one of its teams (an administrator may manage more than that). */
+const ownedByCaller = (
+  i: { ownerType: string; ownerId: string },
+  me: { id: string; teams: readonly { id: string }[] },
+): boolean =>
+  (i.ownerType === 'user' && i.ownerId === me.id) ||
+  (i.ownerType === 'team' && me.teams.some((t) => t.id === i.ownerId));
+
 export const useInstallations = ({ mine = false }: { mine?: boolean } = {}) => {
   const me = useMe();
-  const teamIds = new Set((me.data?.teams ?? []).map((t) => t.id));
   return useQuery({
     queryKey: [...keys.installations, me.data?.id ?? ''],
     enabled: me.isSuccess,
     // An administrator may manage every installation, so the list comes back whole; "mine" keeps what is installed
     // for this account or one of its teams (My servers, the Home cards, the setup badge).
     select: (rows: InstallationView[]) =>
-      mine
-        ? rows.filter(
-            (i) =>
-              (i.ownerType === 'user' && i.ownerId === me.data?.id) ||
-              (i.ownerType === 'team' && teamIds.has(i.ownerId)),
-          )
-        : rows,
+      mine && me.data ? rows.filter((i) => me.data && ownedByCaller(i, me.data)) : rows,
     queryFn: async ({ signal }): Promise<InstallationView[]> => {
       const rows = await fetchAll('/installations', undefined, undefined, signal);
       const [teams, users] = await Promise.all([
@@ -345,36 +346,44 @@ export const useClientConfig = (endpointId: string | undefined, client: ClientKi
 // --- Store --------------------------------------------------------------------------------------
 
 /** The ids of the catalog entries the caller already installed. */
-const installedEntryIds = async (signal: AbortSignal): Promise<Set<string>> =>
+const installedEntryIds = async (
+  signal: AbortSignal,
+  me: { id: string; teams: readonly { id: string }[] },
+): Promise<Set<string>> =>
   new Set(
     (await orEmpty(fetchAll('/installations', undefined, LOOKUP_PAGES, signal)))
+      .filter((i) => ownedByCaller(i, me))
       .map((i) => i.catalogEntryId)
       .filter((id): id is string => id !== null),
   );
 
-export const useStore = (q: string) =>
-  useQuery({
-    queryKey: [...keys.store, 'list', q],
+export const useStore = (q: string) => {
+  const me = useMe();
+  return useQuery({
+    queryKey: [...keys.store, 'list', q, me.data?.id ?? ''],
+    enabled: me.isSuccess,
     placeholderData: keepPreviousData,
     queryFn: async ({ signal }) => {
       const [rows, installed] = await Promise.all([
         // Skills and plugins reach AI tools through marketplaces, not installations: the store lists servers.
         fetchAll('/store', { kind: 'mcp_server', ...(q ? { q } : {}) }, undefined, signal),
-        installedEntryIds(signal),
+        installedEntryIds(signal, me.data as NonNullable<typeof me.data>),
       ]);
       return rows.map((r) => toStoreEntryView(r, installed));
     },
   });
+};
 
 /** One store entry with what the installer needs; the server spec comes from its current version. */
-export const useStoreEntry = (slug: string | null) =>
-  useQuery({
-    queryKey: [...keys.store, 'entry', slug],
-    enabled: Boolean(slug),
+export const useStoreEntry = (slug: string | null) => {
+  const me = useMe();
+  return useQuery({
+    queryKey: [...keys.store, 'entry', slug, me.data?.id ?? ''],
+    enabled: Boolean(slug) && me.isSuccess,
     queryFn: async ({ signal }) => {
       const [row, installed] = await Promise.all([
         api.get(`/store/${slug ?? ''}`, { signal }),
-        installedEntryIds(signal),
+        installedEntryIds(signal, me.data as NonNullable<typeof me.data>),
       ]);
       const version = row.version
         ? await api
@@ -384,3 +393,4 @@ export const useStoreEntry = (slug: string | null) =>
       return toStoreEntryDetailView(row, installed, version ? specInfo(version.serverSpec) : null);
     },
   });
+};
