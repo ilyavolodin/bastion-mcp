@@ -107,9 +107,13 @@ add({
   hide: ['kind', 'payload'],
   decorate: (db, row) => {
     const payload = obj(db.payload);
-    row.type = db.kind;
-    row.title = payload.title ?? null;
-    row.data = payload.data ?? null;
+    // Drift notices stored before the title/data envelope (kind `drift_review`, the bare ids in the payload).
+    const legacyDrift = db.kind === 'drift_review' && payload.title === undefined;
+    row.type = legacyDrift ? 'drift' : db.kind;
+    row.title = legacyDrift ? `Definition changed: ${str(payload.tool)}` : (payload.title ?? null);
+    row.data = legacyDrift
+      ? { message: 'Review it on the Security page.', ...payload }
+      : (payload.data ?? null);
   },
   mapIn: (data, existing) => {
     const { type, title, data: body, ...rest } = data;

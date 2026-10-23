@@ -91,8 +91,11 @@ const notifyOwners = async (
     for (const userId of recipients) {
       await infra.repos.notifications.create({
         userId,
-        kind: 'drift_review',
-        payload: { reviewId, installationId, tool },
+        kind: 'drift',
+        payload: {
+          title: `Definition changed: ${tool}`,
+          data: { message: 'Review it on the Security page.', reviewId, installationId, tool },
+        },
       });
     }
   } catch (error) {

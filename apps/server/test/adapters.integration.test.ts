@@ -157,7 +157,11 @@ describe.skipIf(!haveDocker())('adapters of the worker role against Postgres and
       (await worker.infra.repos.driftReviews.list({ catalogVersionId: bob.versionId })).items,
     ).toHaveLength(1);
     const inbox = await worker.infra.repos.notifications.list(admin.id, {});
-    expect(inbox.items.map((n) => n.kind)).toContain('drift_review');
+    const notice = inbox.items.find((n) => n.kind === 'drift');
+    expect(notice?.payload).toMatchObject({
+      title: 'Definition changed: pinned',
+      data: { tool: 'pinned' },
+    });
   });
 
   it('10.3 a forbid rule hides and blocks a tool for its subject once bastion:config reaches the worker', async () => {

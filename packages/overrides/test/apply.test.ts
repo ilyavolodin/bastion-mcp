@@ -286,6 +286,28 @@ describe('12.3 applyToTool', () => {
   });
 });
 
+describe('12.3 output schemas that break the MCP schema are left out', () => {
+  const tool = (outputSchema: unknown): UpstreamTool =>
+    ({ name: 't', inputSchema: { type: 'object' }, outputSchema }) as UpstreamTool;
+  const run = (u: UpstreamTool) => applyToTool(u, { installation: doc({ tools: {} }) });
+
+  it.each([
+    ['a type list', { type: ['object', 'null'], properties: {} }],
+    ['a bare oneOf', { oneOf: [{ type: 'null' }, { type: 'object' }] }],
+  ])('%s: the tool is served without outputSchema and the drop is reported', (_name, schema) => {
+    const r = run(tool(schema));
+    expect(r.kind).toBe('tool');
+    expect(r.kind === 'tool' && 'outputSchema' in r.tool).toBe(false);
+    expect(r.kind === 'tool' && r.issues.map((i) => i.code)).toContain('output_schema_dropped');
+  });
+
+  it('a schema with type "object" is kept', () => {
+    const schema = { type: 'object', properties: { id: { type: 'string' } } };
+    const r = run(tool(schema));
+    expect(r.kind === 'tool' && r.tool.outputSchema).toEqual(schema);
+  });
+});
+
 describe('12.3 x-mcp-header validation after overrides (2026-07-28)', () => {
   const withHeader = (extra: Record<string, unknown>): UpstreamTool => ({
     name: 't',

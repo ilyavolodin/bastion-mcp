@@ -1,5 +1,10 @@
 import type { ApiDeps, TryRequest } from '@bastion-mcp/api';
-import type { Principal } from '@bastion-mcp/auth';
+import {
+  OAuthProtocolError,
+  type Principal,
+  UpstreamClientError,
+  UpstreamDiscoveryError,
+} from '@bastion-mcp/auth';
 import {
   BastionError,
   effectiveTeamSlug,
@@ -253,7 +258,26 @@ export const createInstallationApiPorts = (
             httpStatus: 404,
           });
         }
-        return auth.broker.startAuthorization({ type: 'user', id: principalId }, installation);
+        try {
+          return await auth.broker.startAuthorization(
+            { type: 'user', id: principalId },
+            installation,
+          );
+        } catch (error) {
+          // The upstream's sign-in service refused or did not answer: say so instead of a bare 500.
+          if (
+            error instanceof OAuthProtocolError ||
+            error instanceof UpstreamDiscoveryError ||
+            error instanceof UpstreamClientError
+          ) {
+            throw new BastionError(
+              'UPSTREAM_UNAVAILABLE',
+              `the server’s sign-in service could not be used: ${error.message}. Check that it is reachable from Bastion and does not block its address.`,
+              { httpStatus: 502 },
+            );
+          }
+          throw error;
+        }
       },
       async disconnect({ installationId, principalId }) {
         await auth.broker.disconnect(

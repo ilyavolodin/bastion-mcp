@@ -133,6 +133,9 @@ const applyMeta = (
   return Object.keys(out).length === 0 ? undefined : out;
 };
 
+const isObjectOutputSchema = (schema: unknown): boolean =>
+  isObject(schema) && schema.type === 'object';
+
 /**
  * Applies the layered override to one upstream tool (12.3): hidden; name; title and description;
  * pinning; defaults; the JSON Patch (after pinning, checked against 2020-12); annotations; `_meta`;
@@ -223,6 +226,17 @@ export const applyToTool = (
       ...issues,
       ...headerErrors.map((message) => ({ code: 'invalid_x_mcp_header', message })),
     ]);
+  }
+
+  // 4b. The MCP schema requires `outputSchema.type` to be "object"; some upstreams publish `["object","null"]` or a
+  // bare `oneOf`, and strict clients (Claude Desktop) then reject the whole tools/list. Serve such a tool without it.
+  if (tool.outputSchema !== undefined && !isObjectOutputSchema(tool.outputSchema)) {
+    delete tool.outputSchema;
+    issues.push({
+      code: 'output_schema_dropped',
+      message: 'the upstream outputSchema is not a JSON Schema with type "object"; it was left out',
+      path: '/outputSchema',
+    });
   }
 
   // 5. Presentation: name, title, description, annotations, _meta.

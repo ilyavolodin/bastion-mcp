@@ -158,6 +158,32 @@ describe('9.6 discovery', () => {
     expect(d.resource).toBe('https://up.example/mcp');
   });
 
+  it('9.6 sends no unauthenticated call to the MCP URL when the well-known metadata answers', async () => {
+    const posts: string[] = [];
+    const fetchStub: typeof fetch = async (input, init) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (init?.method === 'POST') posts.push(url);
+      if (url === 'https://up.example/.well-known/oauth-protected-resource') {
+        return Response.json({
+          resource: 'https://up.example',
+          authorization_servers: ['https://up.example'],
+        });
+      }
+      if (url === 'https://up.example/.well-known/oauth-authorization-server') {
+        return Response.json({
+          issuer: 'https://up.example',
+          authorization_endpoint: 'https://up.example/a',
+          token_endpoint: 'https://up.example/t',
+          code_challenge_methods_supported: ['S256'],
+        });
+      }
+      return new Response('', { status: 404 });
+    };
+    const d = await discoverUpstream({ mcpUrl: 'https://up.example/api/mcp', fetch: fetchStub });
+    expect(d.issuer).toBe('https://up.example');
+    expect(posts).toEqual([]);
+  });
+
   it('9.6 parses WWW-Authenticate challenge parameters', () => {
     expect(
       parseChallengeParams(

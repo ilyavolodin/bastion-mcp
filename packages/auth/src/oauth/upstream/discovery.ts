@@ -115,34 +115,38 @@ export const discoverUpstream = async (input: {
   fetch: FetchFn;
 }): Promise<UpstreamDiscovery> => {
   const mcp = new URL(input.mcpUrl);
-  let resourceMetadataUrl: string | undefined;
-  try {
-    const probe = await input.fetch(input.mcpUrl, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json, text/event-stream',
-      },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' }),
-    });
-    if (probe.status === 401) {
-      resourceMetadataUrl = parseChallengeParams(
-        probe.headers.get('www-authenticate'),
-      ).resource_metadata;
+  const firstMetadata = async (urls: string[]) => {
+    for (const url of urls) {
+      const parsed = prmSchema.safeParse(await getJson(input.fetch, url));
+      if (parsed.success) return parsed.data;
     }
-    await probe.body?.cancel();
-  } catch (error) {
-    if (error instanceof OutboundDeniedError) throw error;
-    // Fall through to the well-known paths; an unreachable upstream fails there.
-  }
-  const candidates = resourceMetadataUrl ? [resourceMetadataUrl] : prmCandidates(mcp);
-  let prm: z.infer<typeof prmSchema> | null = null;
-  for (const url of candidates) {
-    const parsed = prmSchema.safeParse(await getJson(input.fetch, url));
-    if (parsed.success) {
-      prm = parsed.data;
-      break;
+    return null;
+  };
+  // The well-known paths first: they need no credential, while the unauthenticated call below is a failed login to
+  // an upstream with intrusion protection (Home Assistant bans the caller's address after a few of them).
+  let prm = await firstMetadata(prmCandidates(mcp));
+  if (!prm) {
+    let resourceMetadataUrl: string | undefined;
+    try {
+      const probe = await input.fetch(input.mcpUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' }),
+      });
+      if (probe.status === 401) {
+        resourceMetadataUrl = parseChallengeParams(
+          probe.headers.get('www-authenticate'),
+        ).resource_metadata;
+      }
+      await probe.body?.cancel();
+    } catch (error) {
+      if (error instanceof OutboundDeniedError) throw error;
+      // An unreachable upstream fails below.
     }
+    if (resourceMetadataUrl) prm = await firstMetadata([resourceMetadataUrl]);
   }
   if (!prm) {
     throw new UpstreamDiscoveryError(
