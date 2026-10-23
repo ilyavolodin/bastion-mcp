@@ -37,6 +37,15 @@ import { identityUriMapper, type NotifyPublisher, type UriMapper } from './event
 
 export const LISTEN_CLOSE_GRACE_MS = MS.MINUTE;
 export const LISTEN_TICK_MS = 5 * MS.SECOND;
+/** An upstream that answered "method not found" to `subscriptions/listen` is not asked again for this long. */
+export const LISTEN_UNSUPPORTED_RETRY_MS = 30 * MS.MINUTE;
+/** Any other failure to open a listen is retried after a delay that doubles from one tick up to this. */
+export const LISTEN_RETRY_MAX_MS = 5 * MS.MINUTE;
+
+/** JSON-RPC "method not found" (-32601), as an error code or in the text the SDK builds from the response. */
+const isMethodNotFound = (error: unknown): boolean =>
+  (error as { code?: unknown } | null)?.code === -32601 ||
+  /-32601|method not found/i.test(String(error));
 
 const NOTIFICATION_KIND: Record<string, ListKind> = {
   'notifications/tools/list_changed': 'tools',
@@ -81,6 +90,8 @@ const keyOf = (args: ListenArgs): string =>
 export class ListenManager {
   private readonly interests = new Map<string, { count: number; args: ListenArgs }>();
   private readonly held = new Map<string, Held>();
+  /** Keys whose listen could not be opened: no new attempt before `until`; `failures` sets the next delay. */
+  private readonly retryAfter = new Map<string, { until: number; failures: number }>();
   private readonly owned = new Map<string, Map<string, number>>();
   private timer: ReturnType<typeof setInterval> | undefined;
   private readonly clock: Clock;
@@ -219,7 +230,11 @@ export class ListenManager {
       return;
     }
     // Not holding: take the lease when it is vacant or its holder is gone, and there are subscribers.
-    if ((await this.refsOf(args)) <= 0 && !this.interests.has(key)) return;
+    if ((await this.refsOf(args)) <= 0 && !this.interests.has(key)) {
+      this.retryAfter.delete(key);
+      return;
+    }
+    if ((this.retryAfter.get(key)?.until ?? 0) > this.clock.now()) return;
     const holder = await this.deps.redis.get(leaseKey);
     if (holder !== null) {
       if (holder === me) return;
@@ -232,10 +247,39 @@ export class ListenManager {
     this.held.set(key, entry);
     try {
       await this.open(entry);
+      this.retryAfter.delete(key);
     } catch (error) {
-      this.logger.warn('could not open the upstream listen stream', { key, error: String(error) });
+      this.noteOpenFailure(key, error);
       await this.closeHeld(key, true);
     }
+  }
+
+  /** Remembers a failed open so the next tick does not repeat it: for good reason an upstream without listen waits long. */
+  private noteOpenFailure(key: string, error: unknown): void {
+    const failures = (this.retryAfter.get(key)?.failures ?? 0) + 1;
+    if (isMethodNotFound(error)) {
+      this.retryAfter.set(key, {
+        until: this.clock.now() + LISTEN_UNSUPPORTED_RETRY_MS,
+        failures,
+      });
+      this.logger.info(
+        'the upstream does not support subscriptions/listen; not asking again for a while',
+        {
+          key,
+        },
+      );
+      return;
+    }
+    const delay = Math.min(
+      (this.deps.tickMs ?? LISTEN_TICK_MS) * 2 ** failures,
+      LISTEN_RETRY_MAX_MS,
+    );
+    this.retryAfter.set(key, { until: this.clock.now() + delay, failures });
+    this.logger.warn('could not open the upstream listen stream', {
+      key,
+      error: String(error),
+      retryInMs: delay,
+    });
   }
 
   private filterOf(entry: Held) {
