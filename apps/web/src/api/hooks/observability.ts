@@ -235,6 +235,29 @@ export const useDriftReviews = (status: 'open' | 'all' = 'open', enabled = true)
     },
   });
 
+export type BulkApproveResult = { approved: number; failed: { id: string; message: string }[] };
+
+/**
+ * Approves many definition changes one after the other (the API decides one review per call). A failure does not stop
+ * the rest: the result lists what went through and what did not, and the queue refreshes once at the end.
+ */
+export const useApproveDriftMany = () =>
+  useApiMutation(
+    async (input: { ids: readonly string[]; note?: string }): Promise<BulkApproveResult> => {
+      const result: BulkApproveResult = { approved: 0, failed: [] };
+      for (const id of input.ids) {
+        try {
+          await api.post(`/drift-reviews/${id}/approve`, input.note ? { note: input.note } : {});
+          result.approved += 1;
+        } catch (e) {
+          result.failed.push({ id, message: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      return result;
+    },
+    [keys.drift, keys.installations, [...keys.stats, 'findings']],
+  );
+
 /** Approves (optional note) or rejects (reason required, 13.6) a definition change. */
 export const useDecideDrift = () =>
   useApiMutation(

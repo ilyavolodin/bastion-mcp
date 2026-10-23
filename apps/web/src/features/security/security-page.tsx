@@ -5,7 +5,13 @@ import { useForm } from 'react-hook-form';
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis } from 'recharts';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { useDecideDrift, useDriftReviews, useFindings, useGuardStats } from '@/api/hooks';
+import {
+  useApproveDriftMany,
+  useDecideDrift,
+  useDriftReviews,
+  useFindings,
+  useGuardStats,
+} from '@/api/hooks';
 import {
   type DriftView,
   FINDING_KIND_LABEL,
@@ -31,6 +37,7 @@ import {
 } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -336,11 +343,109 @@ function ReviewDetail({ r }: { r: DriftView }) {
   );
 }
 
+function BulkApproveDialog({
+  reviews,
+  onClose,
+}: {
+  reviews: DriftView[];
+  /** Ids that were accepted, so the queue can drop them from the selection. */
+  onClose: (approvedIds: string[]) => void;
+}) {
+  const approve = useApproveDriftMany();
+  const [note, setNote] = React.useState('');
+  const [problem, setProblem] = React.useState<string | undefined>();
+  const flagged = reviews.filter((r) => r.verdict !== 'clean').length;
+  const servers = new Set(reviews.map((r) => r.serverName)).size;
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setProblem(undefined);
+    approve.mutate(
+      { ids: reviews.map((r) => r.id), note: note.trim() },
+      {
+        onSuccess: ({ approved, failed }) => {
+          if (failed.length === 0) {
+            toast.success(`${approved} ${approved === 1 ? 'definition' : 'definitions'} accepted`);
+            onClose(reviews.map((r) => r.id));
+            return;
+          }
+          const failedIds = new Set(failed.map((f) => f.id));
+          toast.error(
+            `${approved} accepted, ${failed.length} failed: ${failed[0]?.message ?? 'unknown error'}`,
+          );
+          onClose(reviews.filter((r) => !failedIds.has(r.id)).map((r) => r.id));
+        },
+        onError: (err: Error) => setProblem(err.message),
+      },
+    );
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && !approve.isPending && onClose([])}>
+      <DialogContent
+        title={`Accept ${reviews.length} ${reviews.length === 1 ? 'definition' : 'definitions'}`}
+        description={`The new definitions go live for everyone who uses ${servers === 1 ? 'this server' : `these ${servers} servers`}.`}
+      >
+        <form className="flex flex-col gap-4" onSubmit={submit}>
+          {flagged > 0 ? (
+            <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
+              {flagged} of these {flagged === 1 ? 'was' : 'were'} flagged by a guard. Check{' '}
+              {flagged === 1 ? 'it' : 'them'} before you accept.
+            </p>
+          ) : null}
+          <ul
+            aria-label="Definitions to accept"
+            className="m-0 flex max-h-48 list-none flex-col gap-1 overflow-y-auto p-0 font-mono text-[12px]"
+          >
+            {reviews.map((r) => (
+              <li key={r.id} className="truncate">
+                {r.serverName} · {r.itemKey}
+              </li>
+            ))}
+          </ul>
+          <Field label="Note" help="Optional. Recorded with every approval.">
+            {({ id, describedBy }) => (
+              <Textarea
+                id={id}
+                rows={2}
+                aria-describedby={describedBy}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+            )}
+          </Field>
+          {problem ? (
+            <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
+              {problem}
+            </p>
+          ) : null}
+          <Button type="submit" disabled={approve.isPending}>
+            {approve.isPending ? 'Accepting…' : `Accept ${reviews.length}`}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DriftQueue() {
   const q = useDriftReviews('open');
+  const { role } = useAuth();
+  const canDecide = role === 'admin' || role === 'manager';
   const [s, setS] = useSearchState(searchSchema);
+  const [picked, setPicked] = React.useState<ReadonlySet<string>>(new Set());
+  const [bulk, setBulk] = React.useState(false);
   const items = q.data ?? [];
   const current = items.find((r) => r.id === s.review) ?? items[0];
+  const chosen = items.filter((r) => picked.has(r.id));
+  // Select-all takes only the reviews no guard flagged: a flagged definition has to be ticked on purpose.
+  const clean = items.filter((r) => r.verdict === 'clean');
+  const allClean = clean.length > 0 && clean.every((r) => picked.has(r.id));
+  const toggle = (id: string, on: boolean) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   return (
     <Card aria-label="Drift reviews" className="gap-4">
       <CardHeader
@@ -360,40 +465,82 @@ function DriftQueue() {
       >
         {() => (
           <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-            <ul aria-label="Reviews" className="m-0 flex list-none flex-col gap-2 p-0">
-              {items.map((r) => (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    aria-pressed={r.id === current?.id}
-                    onClick={() => setS({ review: r.id })}
-                    className={cn(
-                      'flex w-full items-center gap-2.5 rounded-md p-3 text-left',
-                      r.id === current?.id ? 'bg-surface ring-2 ring-tangerine-ink' : 'bg-sunken',
-                    )}
-                  >
-                    <ServerIcon
-                      letter={letterOf(r.serverName)}
-                      color={tintOf(r.installationId ?? r.id)}
-                      size={32}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-mono text-[13px] leading-5 font-semibold">
-                        {r.itemKey}
+            <div className="flex min-w-0 flex-col gap-2">
+              {canDecide && items.length > 1 ? (
+                <div className="flex items-center gap-2.5 px-1">
+                  <Checkbox
+                    id="drift-select-clean"
+                    checked={allClean}
+                    disabled={clean.length === 0}
+                    onCheckedChange={(on) =>
+                      setPicked(on === true ? new Set(clean.map((r) => r.id)) : new Set())
+                    }
+                  />
+                  <label htmlFor="drift-select-clean" className="flex-1 text-caption">
+                    Select all {clean.length} with a clean scan
+                  </label>
+                </div>
+              ) : null}
+              {canDecide && chosen.length > 0 ? (
+                <Button type="button" size="sm" onClick={() => setBulk(true)}>
+                  Accept {chosen.length} selected
+                </Button>
+              ) : null}
+              <ul aria-label="Reviews" className="m-0 flex list-none flex-col gap-2 p-0">
+                {items.map((r) => (
+                  <li key={r.id} className="flex items-center gap-2">
+                    {canDecide ? (
+                      <Checkbox
+                        aria-label={`Select ${r.itemKey} from ${r.serverName}`}
+                        checked={picked.has(r.id)}
+                        // A malicious scan blocks accepting, one by one or in bulk.
+                        disabled={r.verdict === 'malicious'}
+                        onCheckedChange={(on) => toggle(r.id, on === true)}
+                      />
+                    ) : null}
+                    <button
+                      type="button"
+                      aria-pressed={r.id === current?.id}
+                      onClick={() => setS({ review: r.id })}
+                      className={cn(
+                        'flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-3 text-left',
+                        r.id === current?.id ? 'bg-surface ring-2 ring-tangerine-ink' : 'bg-sunken',
+                      )}
+                    >
+                      <ServerIcon
+                        letter={letterOf(r.serverName)}
+                        color={tintOf(r.installationId ?? r.id)}
+                        size={32}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-mono text-[13px] leading-5 font-semibold">
+                          {r.itemKey}
+                        </span>
+                        <span className="block text-caption text-muted">
+                          {r.serverName} · {formatRelative(r.createdAt)}
+                        </span>
                       </span>
-                      <span className="block text-caption text-muted">
-                        {r.serverName} · {formatRelative(r.createdAt)}
-                      </span>
-                    </span>
-                    <Tag tone={RISK[r.risk].tone}>{RISK[r.risk].label}</Tag>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                      <Tag tone={RISK[r.risk].tone}>{RISK[r.risk].label}</Tag>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
             {current ? <ReviewDetail r={current} /> : null}
           </div>
         )}
       </QueryBoundary>
+      {bulk ? (
+        <BulkApproveDialog
+          reviews={chosen}
+          onClose={(done) => {
+            setBulk(false);
+            const gone = new Set(done);
+            if (gone.size > 0)
+              setPicked((prev) => new Set([...prev].filter((id) => !gone.has(id))));
+          }}
+        />
+      ) : null}
     </Card>
   );
 }

@@ -169,6 +169,29 @@ describe('Security (13.6)', () => {
     );
   });
 
+  it('13.6 bulk accept: select-all takes the clean scans, leaves a malicious one alone, and approves them together', async () => {
+    const { user } = await renderRoute('/security');
+    const all = await screen.findByRole('checkbox', { name: /Select all 2 with a clean scan/ });
+    expect(screen.getByRole('checkbox', { name: /Select get_event/ })).toBeDisabled();
+    await user.click(all);
+    await user.click(await screen.findByRole('button', { name: 'Accept 2 selected' }));
+    const dialog = await screen.findByRole('dialog', { name: /Accept 2 definitions/ });
+    await user.type(within(dialog).getByLabelText(/Note/), 'upstream added output schemas');
+    await user.click(within(dialog).getByRole('button', { name: 'Accept 2' }));
+    await waitFor(() => {
+      const drift = getDb().data.observability.drift;
+      expect(drift.find((d) => d.id === 'dr-2')?.status).toBe('approved');
+      expect(drift.find((d) => d.id === 'dr-3')?.status).toBe('approved');
+    });
+    expect(getDb().data.observability.drift.find((d) => d.id === 'dr-1')?.status).toBe('open');
+  });
+
+  it('10.1 auditors get no checkboxes for bulk accept', async () => {
+    await renderRoute('/security', { role: 'auditor' });
+    await screen.findByText(/Read-only\. A Manager of the owning team/);
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
   it('10.1 auditors get a read-only note instead of decision buttons', async () => {
     await renderRoute('/security', { role: 'auditor' });
     expect(await screen.findByText(/Read-only\. A Manager of the owning team/)).toBeInTheDocument();
