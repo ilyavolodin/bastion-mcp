@@ -32,6 +32,9 @@ export const startFakeRegistry = async (): Promise<FakeRegistry> => {
   const running = await startHttp((req, res) => {
     requests.push({ url: req.url ?? '', headers: req.headers });
     const respond = (): void => {
+      // A client that timed out or aborted is gone: answering it would still take the failure or raw body queued for a
+      // later call (the delayed response of one test landing in the next).
+      if (res.destroyed || req.socket.destroyed) return;
       const failure = failures.shift();
       if (failure) {
         res.writeHead(failure.status, { 'content-type': 'application/json' });
