@@ -25,7 +25,9 @@ jobs:
       - name: Package boundaries (5.3)
         run: pnpm boundaries
       - name: Unit and integration tests (Docker is available on the runner)
-        run: pnpm test:coverage
+        # Two packages at a time: with turbo's default of ten, Cedar compiles, property tests and the Docker suites starve
+        # each other on the runner, and vitest's worker calls time out.
+        run: pnpm test:coverage --concurrency=2
       - name: Tooling tests
         run: pnpm test:scripts
       # Report only: sections with a MUST but no citing test are listed, never failing the build. `--strict` is
