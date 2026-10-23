@@ -15,5 +15,8 @@
     "@bastion-mcp/core": "workspace:*",
     "@cedar-policy/cedar-wasm": "4.13.0",
     "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@bastion-mcp/testkit": "workspace:*"
   }
 }

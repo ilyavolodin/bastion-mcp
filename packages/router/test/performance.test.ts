@@ -1,4 +1,5 @@
 import { overridesSchema } from '@bastion-mcp/overrides';
+import { budget } from '@bastion-mcp/testkit/perf';
 import { describe, expect, it } from 'vitest';
 import { assembleEndpoint, type CompileInput, type LoadedInstallation } from '../src';
 import { engineFor, installation, items, principal, requestContext, tool } from './helpers';
@@ -44,7 +45,7 @@ describe('7.2 performance: 30 installations and 1,000 tools compile in under 50 
     configVersion: '1',
   };
 
-  it('7.2 assembling is under 50 ms (CI gate 100 ms; real median is logged)', () => {
+  it('7.2 assembling is under 50 ms (gate 100 ms, scaled on CI; real median is logged)', () => {
     const toolTotal = loaded.reduce(
       (n, l) => n + (l.listing.status === 'ok' ? l.listing.items.tools.length : 0),
       0,
@@ -65,6 +66,6 @@ describe('7.2 performance: 30 installations and 1,000 tools compile in under 50 
     );
     // The MUST is 50 ms; CI machines and v8 coverage instrumentation are slower, so the gate is 2x. It is applied to
     // the best run: load on a shared machine only ever adds time, so the minimum still catches a real slowdown.
-    expect(runs[0] as number).toBeLessThan(100);
+    expect(runs[0] as number).toBeLessThan(budget(100));
   });
 });

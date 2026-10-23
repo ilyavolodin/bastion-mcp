@@ -612,6 +612,9 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@bastion-mcp/testkit':
+        specifier: workspace:*
+        version: link:../testkit
       '@types/picomatch':
         specifier: 4.0.3
         version: 4.0.3
@@ -829,6 +832,10 @@ importers:
       zod:
         specifier: 4.6.5
         version: 4.6.5
+    devDependencies:
+      '@bastion-mcp/testkit':
+        specifier: workspace:*
+        version: link:../testkit
 
   packages/registry:
     dependencies:
@@ -866,6 +873,10 @@ importers:
       zod:
         specifier: 4.6.5
         version: 4.6.5
+    devDependencies:
+      '@bastion-mcp/testkit':
+        specifier: workspace:*
+        version: link:../testkit
 
   packages/sandbox:
     dependencies:

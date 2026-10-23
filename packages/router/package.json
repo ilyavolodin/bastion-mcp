@@ -16,5 +16,8 @@
     "@bastion-mcp/overrides": "workspace:*",
     "@bastion-mcp/policy": "workspace:*",
     "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@bastion-mcp/testkit": "workspace:*"
   }
 }

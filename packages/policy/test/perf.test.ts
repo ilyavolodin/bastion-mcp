@@ -1,3 +1,4 @@
+import { budget } from '@bastion-mcp/testkit/perf';
 import { describe, expect, it } from 'vitest';
 import {
   type InstallationInput,
@@ -94,8 +95,8 @@ describe('10.4 performance', () => {
       `policy perf: ${engine.policyCount} policies, compile ${compileMs.toFixed(0)} ms, p50 ${p50.toFixed(3)} ms, p99 ${p99.toFixed(3)} ms`,
     );
     // Target is 1 ms (10.4); the CI bound is deliberately generous to avoid flaking on shared runners.
-    expect(p99).toBeLessThan(5);
-    expect(p50).toBeLessThan(1);
+    expect(p99).toBeLessThan(budget(5));
+    expect(p50).toBeLessThan(budget(1));
   });
 
   it('10.4 listing 1,000 tools of 30 installations stays well under the 50 ms compile budget (7.2)', () => {
@@ -124,6 +125,6 @@ describe('10.4 performance', () => {
       `policy perf: filterVisible of ${visibleTools.length} tools took ${ms.toFixed(1)} ms`,
     );
     expect(visibleTools.length).toBeGreaterThanOrEqual(1000);
-    expect(ms).toBeLessThan(250);
+    expect(ms).toBeLessThan(budget(250));
   });
 });

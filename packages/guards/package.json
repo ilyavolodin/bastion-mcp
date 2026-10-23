@@ -18,6 +18,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@bastion-mcp/testkit": "workspace:*",
     "@types/picomatch": "4.0.3"
   }
 }

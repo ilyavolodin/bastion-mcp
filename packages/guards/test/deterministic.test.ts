@@ -1,3 +1,4 @@
+import { budget } from '@bastion-mcp/testkit/perf';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
@@ -469,8 +470,7 @@ describe('performance (13.8)', () => {
       times.sort((a, b) => a - b);
       batchP99s.push(times[Math.floor(times.length * 0.99)] ?? Number.POSITIVE_INFINITY);
     }
-    // The target is 2 ms p99 on a quiet machine. GitHub's shared runners measure about 30 ms, so the gate is 50 ms:
-    // it still fails on an order-of-magnitude slowdown without failing every push.
-    expect(Math.min(...batchP99s)).toBeLessThan(50);
+    // The target is 2 ms p99 on a quiet machine; 15 ms is the developer-machine gate and CI scales it (`budget`).
+    expect(Math.min(...batchP99s)).toBeLessThan(budget(15));
   });
 });

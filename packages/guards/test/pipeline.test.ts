@@ -1,4 +1,5 @@
 import { GuardBlockedError, META_KEYS } from '@bastion-mcp/core';
+import { budget } from '@bastion-mcp/testkit/perf';
 import { describe, expect, it, vi } from 'vitest';
 import {
   type AsyncGuardResult,
@@ -312,7 +313,7 @@ describe('failure handling (13.1, 13.5)', () => {
     const result = await pipeline.run(base(), {
       org: { guards: [jevInstance()], latencyBudgetMs: 30 },
     });
-    expect(performance.now() - started).toBeLessThan(500);
+    expect(performance.now() - started).toBeLessThan(budget(500));
     expect(result.records[0]?.error).toBe('timeout');
   });
 
@@ -329,7 +330,7 @@ describe('failure handling (13.1, 13.5)', () => {
     });
     const took = performance.now() - started;
     expect(result.records).toHaveLength(3);
-    expect(took).toBeLessThan(200);
+    expect(took).toBeLessThan(budget(200));
   });
 
   it('13.1 an unregistered guard type or an invalid config is a guard error, not a crash', async () => {
@@ -634,7 +635,7 @@ describe('async guards (13.1)', () => {
     const result = await pipeline.run(base(), {
       org: profile(jevInstance('slow', { mode: 'async' })),
     });
-    expect(performance.now() - started).toBeLessThan(40);
+    expect(performance.now() - started).toBeLessThan(budget(40));
     expect(result.records).toEqual([]);
     expect(result.action).toBe('allow');
     expect(onAsync).not.toHaveBeenCalled();
