@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { perfFactor } from './packages/testkit/src/perf';
 
 /** Shared Vitest settings; each package config merges this via `createVitestConfig`. */
 export const createVitestConfig = (overrides: { name: string; coverageExclude?: string[] }) =>
@@ -7,8 +8,9 @@ export const createVitestConfig = (overrides: { name: string; coverageExclude?: 
       name: overrides.name,
       include: ['test/**/*.test.ts'],
       environment: 'node',
-      // Generous ceiling: suites run in parallel under v8 coverage, which slows property tests several times over.
-      testTimeout: 30_000,
+      // Generous ceiling: suites run in parallel under v8 coverage, which slows property tests several times over. It
+      // scales with the machine like the timing budgets do (`budget()` in @bastion-mcp/testkit/perf).
+      testTimeout: 30_000 * perfFactor(),
       coverage: {
         provider: 'v8',
         include: ['src/**/*.ts'],
