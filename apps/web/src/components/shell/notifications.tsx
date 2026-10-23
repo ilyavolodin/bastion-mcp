@@ -36,7 +36,7 @@ export function NotificationsBell() {
         ) : (
           <ul className="m-0 flex max-h-[360px] list-none flex-col gap-1 overflow-y-auto p-0">
             {items.map((n) => (
-              <li key={n.id}>
+              <li key={n.id} className="shrink-0">
                 <button
                   type="button"
                   onClick={() => {
