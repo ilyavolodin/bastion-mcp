@@ -54,7 +54,10 @@ if [ "$GVISOR" = 1 ]; then
     version="$(docker exec "$node" sed -n 's/^version = \([0-9]*\)/\1/p' /etc/containerd/config.toml | head -n1)"
     if [ "${version:-2}" -ge 3 ]; then table="plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc"
     else table="plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes.runsc"; fi
-    docker exec "$node" sh -c "grep -q runtimes.runsc /etc/containerd/config.toml || printf '\n[$table]\n  runtime_type = \"io.containerd.runsc.v1\"\n' >> /etc/containerd/config.toml"
+    # A kind node is itself a container, so gVisor's own network stack cannot start in it ("cannot run with network
+    # enabled in root network namespace"). network=host has runsc use the pod's network namespace directly.
+    docker exec "$node" sh -c "printf '[runsc_config]\n  network = \"host\"\n' > /etc/containerd/runsc.toml"
+    docker exec "$node" sh -c "grep -q runtimes.runsc /etc/containerd/config.toml || printf '\n[$table]\n  runtime_type = \"io.containerd.runsc.v1\"\n\n[$table.options]\n  TypeUrl = \"io.containerd.runsc.v1.options\"\n  ConfigPath = \"/etc/containerd/runsc.toml\"\n' >> /etc/containerd/config.toml"
     docker exec "$node" systemctl restart containerd
   done
   rm -rf "$tmp"
