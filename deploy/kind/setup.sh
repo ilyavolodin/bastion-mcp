@@ -108,9 +108,11 @@ chart_args=("$ROOT/deploy/helm/bastion")
 [ -n "$CHART_VERSION" ] && chart_args=(--version "$CHART_VERSION" "oci://ghcr.io/bastion-mcp/charts/bastion")
 image_repo="${BASTION_IMAGE%%:*}"; image_tag="${BASTION_IMAGE##*:}"
 sandbox_repo="${SANDBOX_IMAGE%%:*}"; sandbox_tag="${SANDBOX_IMAGE##*:}"
+# The server refuses a non-https BASTION_PUBLIC_URL unless the host is localhost (packages/core/src/config.ts), and nothing
+# in the cluster resolves it: probes use pod IPs and the ingress is off.
 # shellcheck disable=SC2086
 helm upgrade --install bastion "${chart_args[@]}" --namespace bastion --wait --timeout 10m \
-  --set publicUrl=http://bastion-worker.bastion.svc:8080 \
+  --set publicUrl=http://localhost:8080 \
   --set existingSecret=bastion-secrets \
   --set kms.localKeySecret=bastion-kek \
   --set bootstrapAdminEmail=admin@example.com \
