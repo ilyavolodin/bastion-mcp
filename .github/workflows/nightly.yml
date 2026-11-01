@@ -106,3 +106,9 @@ jobs:
         run: |
           kubectl get pods -A -o wide || true
           kubectl -n bastion-sandboxes describe pods | tail -200 || true
+          kubectl -n bastion-sandboxes get events --sort-by=.lastTimestamp | tail -40 || true
+          for node in $(kind get nodes --name bastion 2>/dev/null || true); do
+            echo "== containerd on $node"
+            docker exec "$node" sh -c "journalctl -u containerd --no-pager | grep -iE 'runsc|gvisor|error' | tail -30" || true
+            docker exec "$node" sh -c "tail -n 12 /etc/containerd/config.toml" || true
+          done
