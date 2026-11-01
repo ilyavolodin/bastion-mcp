@@ -41,10 +41,12 @@ kubectl config use-context "kind-$CLUSTER"
 
 if [ "$GVISOR" = 1 ]; then
   log "installing gVisor (runsc) into every kind node"
-  arch="$(uname -m)"; base="https://storage.googleapis.com/gvisor/releases/release/latest/$arch"
+  # gVisor moved the bare binaries out of release/latest/<arch>/ (it holds only gvisor.tar.* now): the newest build
+  # of each binary is at release/<binary>/<arch>/<binary>.
+  arch="$(uname -m)"; base="https://storage.googleapis.com/gvisor/releases/release"
   tmp="$(mktemp -d)"
-  curl -fsSL -o "$tmp/runsc" "$base/runsc"
-  curl -fsSL -o "$tmp/containerd-shim-runsc-v1" "$base/containerd-shim-runsc-v1"
+  curl -fsSL -o "$tmp/runsc" "$base/runsc/$arch/runsc"
+  curl -fsSL -o "$tmp/containerd-shim-runsc-v1" "$base/containerd-shim-runsc-v1/$arch/containerd-shim-runsc-v1"
   chmod +x "$tmp/runsc" "$tmp/containerd-shim-runsc-v1"
   for node in $(kind get nodes --name "$CLUSTER"); do
     docker cp "$tmp/runsc" "$node:/usr/local/bin/runsc"

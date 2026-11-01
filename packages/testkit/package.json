@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./perf": "./src/perf.ts"
+    "./perf": "./src/perf.ts",
+    "./fuzz": "./src/fuzz.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",

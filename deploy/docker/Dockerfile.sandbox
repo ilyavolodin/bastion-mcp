@@ -6,6 +6,8 @@
 FROM node:24-bookworm-slim AS runner-build
 WORKDIR /src
 RUN corepack enable
+# No terminal in a build: pnpm must never wait for an answer.
+ENV CI=true
 COPY . .
 RUN pnpm install --frozen-lockfile --filter bastion-runner... \
  && pnpm --filter bastion-runner build

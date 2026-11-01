@@ -1,3 +1,4 @@
+import { fuzzRuns, inChunks } from '@bastion-mcp/testkit/fuzz';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { parseArgs } from '../src/args';
@@ -181,13 +182,11 @@ describe('8.3 stdout line splitting', () => {
     expect(classifyStdoutLine('   ').kind).toBe('blank');
   });
 
-  it('23.3 fuzz: classification never throws', () => {
-    fc.assert(
-      fc.property(fc.oneof(fc.string(), fc.json()), (line) => {
-        expect(['message', 'stderr', 'blank']).toContain(classifyStdoutLine(line).kind);
-      }),
-      { numRuns: Number(process.env.FUZZ_RUNS ?? 300) },
-    );
+  it('23.3 fuzz: classification never throws', async () => {
+    const property = fc.property(fc.oneof(fc.string(), fc.json()), (line) => {
+      expect(['message', 'stderr', 'blank']).toContain(classifyStdoutLine(line).kind);
+    });
+    await inChunks(fuzzRuns(300), (numRuns) => fc.assert(property, { numRuns }));
   });
 });
 

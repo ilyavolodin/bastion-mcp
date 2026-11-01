@@ -1,3 +1,4 @@
+import { fuzzRuns, inChunks } from '@bastion-mcp/testkit/fuzz';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
@@ -88,13 +89,11 @@ describe('8.3 stdio frames', () => {
     );
   });
 
-  it('23.3 fuzz: the decoder never throws on arbitrary input', () => {
-    fc.assert(
-      fc.property(fc.oneof(fc.string(), fc.uint8Array(), fc.json()), (raw) => {
-        const result = decodeFrame(raw);
-        expect(typeof result.ok).toBe('boolean');
-      }),
-      { numRuns: Number(process.env.FUZZ_RUNS ?? 300) },
-    );
+  it('23.3 fuzz: the decoder never throws on arbitrary input', async () => {
+    const property = fc.property(fc.oneof(fc.string(), fc.uint8Array(), fc.json()), (raw) => {
+      const result = decodeFrame(raw);
+      expect(typeof result.ok).toBe('boolean');
+    });
+    await inChunks(fuzzRuns(300), (numRuns) => fc.assert(property, { numRuns }));
   });
 });

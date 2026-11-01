@@ -22,6 +22,20 @@ const GRANT_LINKED = new Set([
 ]);
 
 /**
+ * oidc-provider drops `offline_access` from an authorization request unless it carries `prompt=consent`, yet Bastion
+ * issues refresh tokens to every client allowed the grant. Codex and mcp-remote then send `offline_access` on refresh
+ * and got `invalid_scope: refresh token missing requested scope`, which forced a new sign-in each time the access
+ * token expired. A refresh token is offline access by definition, so it always reports the scope. Access tokens are
+ * unaffected: their scope is filtered by the grant.
+ */
+const withOfflineAccess = <T extends Record<string, unknown>>(type: string, payload: T): T => {
+  if (type !== 'RefreshToken') return payload;
+  const scopes = typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : [];
+  if (scopes.includes('offline_access')) return payload;
+  return { ...payload, scope: [...scopes, 'offline_access'].join(' ') };
+};
+
+/**
  * Adapter factory for oidc-provider over the `oidc_models` table shape (16.2). `consumed` is derived from
  * `consumed_at`; rows past `expires_at` are treated as absent.
  */
@@ -58,7 +72,10 @@ export const createOidcAdapterClass = (
   const toPayload = (row: OidcModelRow | null): AdapterPayload | undefined => {
     if (!row) return undefined;
     if (row.expiresAt && row.expiresAt.getTime() <= clock.now()) return undefined;
-    const base = row.type === 'Client' ? openSecret(row.payload) : row.payload;
+    const base = withOfflineAccess(
+      row.type,
+      row.type === 'Client' ? openSecret(row.payload) : row.payload,
+    );
     return row.consumedAt
       ? { ...base, consumed: Math.floor(row.consumedAt.getTime() / 1000) }
       : (base as AdapterPayload);

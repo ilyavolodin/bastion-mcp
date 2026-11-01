@@ -259,6 +259,24 @@ describe('9.3 refresh tokens', () => {
     expect(afterRevoke.json.error).toBe('invalid_grant');
   });
 
+  it('9.3 a refresh that asks for offline_access succeeds, however many times it rotates (Codex, mcp-remote)', async () => {
+    const clientId = await newClient();
+    // No prompt=consent, so oidc-provider drops offline_access from the grant; clients still send it on refresh.
+    const first = await codeFlow(h, clientId, { scope: 'mcp' });
+    let token = String(first.json.refresh_token);
+    for (let i = 0; i < 3; i += 1) {
+      const result = await tokenRequest(h, {
+        grant_type: 'refresh_token',
+        refresh_token: token,
+        client_id: clientId,
+        scope: 'mcp offline_access',
+      });
+      expect(result.status).toBe(200);
+      expect(String(result.json.scope).split(' ')).not.toContain('offline_access');
+      token = String(result.json.refresh_token);
+    }
+  });
+
   it('9.3 refresh tokens are opaque', async () => {
     const flow = await codeFlow(h, await newClient());
     expect(String(flow.json.refresh_token).split('.')).toHaveLength(1);
