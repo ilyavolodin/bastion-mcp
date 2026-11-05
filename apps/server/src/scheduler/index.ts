@@ -1,4 +1,6 @@
+import { pgConnectionOptions } from '@bastion-mcp/db';
 import { Logger, makeWorkerUtils, type Runner, run, type WorkerUtils } from 'graphile-worker';
+import pg from 'pg';
 import type { Infra } from '../infra';
 import { SCHEDULER_KEEPALIVE_MS, SCHEDULER_LEADER_RETRY_MS, SCHEDULER_POLL_MS } from '../timing';
 import { LeaderElection } from './leader';
@@ -37,14 +39,24 @@ export const createScheduler = (infra: Infra, deps: SchedulerDeps = {}): Schedul
   const connectionString = infra.config.databaseUrl;
   let runner: Runner | undefined;
   let utils: Promise<WorkerUtils> | undefined;
+  // graphile-worker opens its own pool from a bare connection string, with no connect timeout; hand it one that has.
+  const pgPool = new pg.Pool({ ...pgConnectionOptions(connectionString), max: 10 });
+  pgPool.on('error', (error) =>
+    infra.logger.warn({ err: error.message }, 'scheduler database pool error'),
+  );
 
   const getUtils = (): Promise<WorkerUtils> => {
     utils ??= (async () => {
-      const u = await makeWorkerUtils({ connectionString, logger: noopGraphileLogger });
+      const u = await makeWorkerUtils({ pgPool, logger: noopGraphileLogger });
       await u.migrate();
       return u;
     })();
-    return utils;
+    // A failed start must not be cached: forget it so the next call retries instead of failing until restart.
+    const attempt = utils;
+    attempt.catch(() => {
+      if (utils === attempt) utils = undefined;
+    });
+    return attempt;
   };
 
   const enqueue: TaskContext['enqueue'] = async (task, payload, options = {}) => {
@@ -80,7 +92,7 @@ export const createScheduler = (infra: Infra, deps: SchedulerDeps = {}): Schedul
     async onGained() {
       await getUtils();
       runner = await run({
-        connectionString,
+        pgPool,
         concurrency: 2,
         noHandleSignals: true,
         pollInterval: deps.timing?.pollIntervalMs ?? SCHEDULER_POLL_MS,
@@ -120,6 +132,7 @@ export const createScheduler = (infra: Infra, deps: SchedulerDeps = {}): Schedul
           // pool already closed
         }
       }
+      await pgPool.end().catch(() => undefined);
     },
     isLeader: () => election.isLeader(),
     ready: () => election.ready(),
