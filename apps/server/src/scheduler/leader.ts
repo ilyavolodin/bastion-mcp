@@ -1,6 +1,10 @@
+import { pgConnectionOptions } from '@bastion-mcp/db';
 import pg from 'pg';
 
 export const SCHEDULER_LOCK_SQL = `SELECT pg_try_advisory_lock(hashtext('bastion-scheduler')) AS locked, pg_backend_pid() AS pid`;
+
+/** A lock or keepalive query that takes longer than this means the leader connection is dead. */
+export const LEADER_QUERY_TIMEOUT_MS = 5_000;
 
 export type LeaderElectionOptions = {
   connectionString: string;
@@ -85,7 +89,11 @@ export class LeaderElection {
   }
 
   private async attempt(): Promise<void> {
-    const client = new pg.Client({ connectionString: this.options.connectionString });
+    const client = new pg.Client({
+      ...pgConnectionOptions(this.options.connectionString),
+      // Every query on this connection is a one-liner; a hung one must read as a lost connection.
+      query_timeout: LEADER_QUERY_TIMEOUT_MS,
+    });
     client.on('error', () => void this.giveUp(false));
     client.on('end', () => void this.giveUp(false));
     try {
