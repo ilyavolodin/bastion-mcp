@@ -29,7 +29,6 @@ import {
 } from '@bastion-mcp/router';
 import { SPAN_NAMES } from '@bastion-mcp/telemetry';
 import {
-  classifyInboundRequest,
   hostHeaderValidationResponse,
   isJsonContentType,
   originValidationResponse,
@@ -39,7 +38,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Exchange, LegacyAdapter, ListenAdapter } from '../adapters/contracts';
 import { type createDirectHandler, isDirectExchange } from '../adapters/modern/direct';
 import type { ModernAdapter } from '../adapters/modern/server';
-import { first } from '../adapters/shared';
+import { classifyExchange, first } from '../adapters/shared';
 import { type BastionRequestContext, bastionRequestContext } from '../context';
 import type { CatalogInstallPort, Logger, TokenVerifierPort } from '../ports';
 import { toRpcErrorBody } from '../rpc';
@@ -347,20 +346,7 @@ export const isLegacyExchange = (input: {
   headers: Record<string, string | string[] | undefined>;
   body: unknown;
 }): boolean => {
-  const outcome = classifyInboundRequest({
-    httpMethod: input.method,
-    ...(first(input.headers['mcp-protocol-version']) === undefined
-      ? {}
-      : { protocolVersionHeader: first(input.headers['mcp-protocol-version']) as string }),
-    ...(first(input.headers['mcp-method']) === undefined
-      ? {}
-      : { mcpMethodHeader: first(input.headers['mcp-method']) as string }),
-    ...(first(input.headers['mcp-name']) === undefined
-      ? {}
-      : { mcpNameHeader: first(input.headers['mcp-name']) as string }),
-    body: input.body,
-  });
-  return outcome.kind === 'legacy';
+  return classifyExchange(input).kind === 'legacy';
 };
 
 const isLegacy = (exchange: Exchange): boolean =>

@@ -6,16 +6,22 @@
 import { JSONRPC_CODES } from '@bastion-mcp/core';
 import type { CallPrincipal } from '@bastion-mcp/mcp-upstream';
 import type { BastionMetrics } from '@bastion-mcp/telemetry';
-import { classifyInboundRequest } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { BastionRequestContext } from '../../context';
 import { notificationFor } from '../../notify-hub';
 import { type Logger, noopLogger, type UpstreamPort } from '../../ports';
 import type { Exchange, ListenAdapter, NotifyEvent, NotifyHubPort } from '../contracts';
-import { first, KEEPALIVE_MS, sendResponse, sseCommentFrame, sseMessageFrame } from '../shared';
+import {
+  classifyExchange,
+  first,
+  KEEPALIVE_MS,
+  SERVER_INFO_KEY,
+  sendResponse,
+  sseCommentFrame,
+  sseMessageFrame,
+} from '../shared';
 
 const SUBSCRIPTION_ID_KEY = 'io.modelcontextprotocol/subscriptionId';
-const SERVER_INFO_KEY = 'io.modelcontextprotocol/serverInfo';
 const DEFAULT_MAX_LISTEN_STREAMS = 1024;
 
 export type ListenAdapterDeps = {
@@ -123,17 +129,9 @@ export const createListenAdapter = (deps: ListenAdapterDeps): ListenAdapter => {
 
   const handle = async ({ req, res, body, rc }: Exchange): Promise<void> => {
     const bodyId = (body as { id?: unknown } | null)?.id;
-    const classified = classifyInboundRequest({
-      httpMethod: req.method ?? 'POST',
-      ...(first(req.headers['mcp-protocol-version']) === undefined
-        ? {}
-        : { protocolVersionHeader: first(req.headers['mcp-protocol-version']) as string }),
-      ...(first(req.headers['mcp-method']) === undefined
-        ? {}
-        : { mcpMethodHeader: first(req.headers['mcp-method']) as string }),
-      ...(first(req.headers['mcp-name']) === undefined
-        ? {}
-        : { mcpNameHeader: first(req.headers['mcp-name']) as string }),
+    const classified = classifyExchange({
+      method: req.method ?? 'POST',
+      headers: req.headers,
       body,
     });
     if (classified.kind === 'reject') {

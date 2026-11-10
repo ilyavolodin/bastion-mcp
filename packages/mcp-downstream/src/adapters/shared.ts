@@ -2,6 +2,7 @@
 import type { ServerResponse } from 'node:http';
 import { MS, PROTOCOL_VERSIONS } from '@bastion-mcp/core';
 import { inputRequiredPayload } from '@bastion-mcp/mcp-upstream';
+import { classifyInboundRequest } from '@modelcontextprotocol/server';
 import type { SpanContext } from '@opentelemetry/api';
 import type { BastionRequestContext } from '../context';
 import type { OpContext } from '../types';
@@ -19,6 +20,30 @@ export const ROOT_SPAN_CONTEXT: SpanContext = {
 /** First value of a header Node may deliver as a list. */
 export const first = (value: string | string[] | undefined): string | undefined =>
   Array.isArray(value) ? value[0] : value;
+
+/** Result `_meta` key that carries the endpoint's server info on modern responses. */
+export const SERVER_INFO_KEY = 'io.modelcontextprotocol/serverInfo';
+
+/**
+ * The SDK's own classification step over plain data (headers, method, body), so no web `Request` is built per call:
+ * the one place that states how Bastion feeds the SDK ladder.
+ */
+export const classifyExchange = (input: {
+  method: string;
+  headers: Record<string, string | string[] | undefined>;
+  body: unknown;
+}): ReturnType<typeof classifyInboundRequest> => {
+  const protocolVersionHeader = first(input.headers['mcp-protocol-version']);
+  const mcpMethodHeader = first(input.headers['mcp-method']);
+  const mcpNameHeader = first(input.headers['mcp-name']);
+  return classifyInboundRequest({
+    httpMethod: input.method,
+    ...(protocolVersionHeader === undefined ? {} : { protocolVersionHeader }),
+    ...(mcpMethodHeader === undefined ? {} : { mcpMethodHeader }),
+    ...(mcpNameHeader === undefined ? {} : { mcpNameHeader }),
+    body: input.body,
+  });
+};
 
 /** One SSE `message` event (6.2). No event ids are ever written. */
 export const sseMessageFrame = (message: unknown): string =>
