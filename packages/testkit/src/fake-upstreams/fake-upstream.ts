@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { readBody } from '../http';
 
 /** A fake upstream MCP server with its own authorization server (RFC 9728, 8414, 7591, 7009, 9207). */
 export type FakeUpstreamBehavior = {
@@ -50,9 +51,7 @@ export type FakeUpstream = {
 };
 
 const read = async (req: IncomingMessage): Promise<string> => {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
-  return Buffer.concat(chunks).toString('utf8');
+  return (await readBody(req)).toString('utf8');
 };
 const json = (
   res: ServerResponse,
