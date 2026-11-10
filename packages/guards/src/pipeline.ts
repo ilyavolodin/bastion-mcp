@@ -397,14 +397,26 @@ export class GuardPipeline {
     const score = decayedScore(state, this.deps.clock.now());
     const finding = escalationFinding(input, profile.riskEscalation, score);
     const all = finding === undefined ? resolved : [...resolved, finding];
+    await this.recordRiskFor(input, records, all);
+    return finding === undefined ? { score } : { score, finding };
+  }
+
+  /** Writes this evaluation's risk delta when risk tracking is on for the caller (riskStore and client id). */
+  private async recordRiskFor(
+    input: PipelineInput,
+    records: readonly GuardResultRecord[],
+    findings: readonly ResolvedFinding[],
+  ): Promise<void> {
+    const { riskStore } = this.deps;
+    const clientId = input.principal.clientId;
+    if (riskStore === undefined || clientId === undefined) return;
     await recordRisk(
       riskStore,
       input.principal.principalId,
       clientId,
-      this.deltaOf(records, all),
+      this.deltaOf(records, findings),
       this.deps.clock.now(),
     );
-    return finding === undefined ? { score } : { score, finding };
   }
 
   private deltaOf(
@@ -501,17 +513,7 @@ export class GuardPipeline {
         );
         const findings = outcomes.flatMap((o) => o.resolved);
         const records = outcomes.map((o) => o.record);
-        const { riskStore } = this.deps;
-        const clientId = input.principal.clientId;
-        if (riskStore !== undefined && clientId !== undefined) {
-          await recordRisk(
-            riskStore,
-            input.principal.principalId,
-            clientId,
-            this.deltaOf(records, findings),
-            this.deps.clock.now(),
-          );
-        }
+        await this.recordRiskFor(input, records, findings);
         await this.deps.onAsync?.({ input, findings, records });
       } catch {
         // Async evaluation is best effort and never affects the call.
