@@ -250,7 +250,7 @@ const createUiWorkerClient = (
   };
 };
 
-/** The access for this process: in-process when a worker runs here, RPC otherwise. */
+/** The access for this process: in-process when a worker runs here, the public gateway as the user otherwise. */
 export const createUpstreamAccess = (
   infra: Infra,
   auth: Pick<AuthServices, 'keyStore' | 'principalStore'>,

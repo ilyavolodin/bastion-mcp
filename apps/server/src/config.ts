@@ -50,7 +50,7 @@ export type ServerOptions = {
   workerId?: string;
   /** `127.0.0.1` in tests; defaults to `0.0.0.0`. */
   listenHost?: string;
-  /** Port for the internal RPC listener address advertised in the worker registry. Defaults to config. */
+  /** Host advertised in the worker registry for the internal RPC listener; defaults to the egress host. */
   advertiseHost?: string;
   /** Lets openid-client call `http://` IdPs and upstream authorization servers (tests only). */
   allowInsecureHttp?: boolean;
@@ -64,11 +64,11 @@ export type ServerOptions = {
   skipMigrationCheck?: boolean;
   /** Run the scheduler even when the role is not ui; `false` disables it for the ui role. */
   scheduler?: boolean;
-  /** Public path for CORS allowed origins besides the public URL. */
+  /** CORS allowed origins besides the public URL. */
   extraCorsOrigins?: string[];
   /** SSE keep-alive for MCP streams. */
   keepAliveMs?: number;
-  /** Extra health checks for tests. */
+  /** Replaces the printer of the generated bootstrap admin password (tests); defaults to stdout. */
   printBootstrapPassword?: (email: string, password: string) => void;
   /** Static asset directory; defaults to `public` next to the bundle. */
   publicDir?: string;
