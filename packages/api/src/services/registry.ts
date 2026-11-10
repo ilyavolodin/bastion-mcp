@@ -177,12 +177,16 @@ export const syncNow = async (ctx: WriteCtx, id: string, full: boolean) => {
   };
 };
 
+/** The policy stored in a `registry_policies` row, or the default when the source has none. */
+const policyOf = (row: Row | null | undefined): RegistryPolicy =>
+  row ? parseRegistryPolicy(row.policy) : DEFAULT_REGISTRY_POLICY;
+
 export const getPolicy = async (ctx: Pick<ReadCtx, 'deps'>, sourceId: string) => {
   await registrySources.require(ctx, sourceId);
   const row = await ctx.deps.store.get('registry_policies', sourceId);
   return {
     sourceId,
-    policy: row ? parseRegistryPolicy(row.policy) : DEFAULT_REGISTRY_POLICY,
+    policy: policyOf(row),
     updatedAt: row?.updatedAt ?? null,
   };
 };
@@ -249,7 +253,7 @@ const seesWholeRegistry = (principal: Pick<Principal, 'orgRole'>): boolean =>
 
 const policiesBySource = async (deps: ApiDeps): Promise<Map<string, RegistryPolicy>> => {
   const rows = await deps.store.list('registry_policies', { limit: 200 });
-  return new Map(rows.items.map((row) => [row.id, parseRegistryPolicy(row.policy)]));
+  return new Map(rows.items.map((row) => [row.id, policyOf(row)]));
 };
 
 const PAGES_TO_FILL = 8;
@@ -317,8 +321,7 @@ const findServer = async (
 };
 
 const loadPolicy = async (deps: ApiDeps, sourceId: string): Promise<RegistryPolicy> => {
-  const row = await deps.store.get('registry_policies', sourceId);
-  return row ? parseRegistryPolicy(row.policy) : DEFAULT_REGISTRY_POLICY;
+  return policyOf(await deps.store.get('registry_policies', sourceId));
 };
 
 export const serverDetail = async (
@@ -374,7 +377,7 @@ const planFor = async (
   sourceId: string,
   name: string,
   version: string,
-  prefer: 'remote' | 'package' | undefined,
+  prefer?: 'remote' | 'package',
 ): Promise<Planned> => {
   const row = await findServer(deps, sourceId, name, version);
   if (row.status === 'deleted') {
@@ -662,7 +665,7 @@ export const submitRequest = async (
   body: { sourceId: string; name: string; version: string; justification: string },
 ): Promise<Row> => {
   await registrySources.require(ctx, body.sourceId);
-  await planFor(ctx.deps, body.sourceId, body.name, body.version, undefined);
+  await planFor(ctx.deps, body.sourceId, body.name, body.version);
   const open = await ctx.tx.store.find('install_requests', {
     requesterId: ctx.principal.id,
     sourceId: body.sourceId,
@@ -739,13 +742,7 @@ export const approveInstallRequest = async (ctx: WriteCtx, id: string) => {
   const row = await requestById(ctx.deps, id);
   const request = requestOf(row);
   const source = sourceOf(await registrySources.require(ctx, request.sourceId));
-  const planned = await planFor(
-    ctx.deps,
-    request.sourceId,
-    request.serverName,
-    request.version,
-    undefined,
-  );
+  const planned = await planFor(ctx.deps, request.sourceId, request.serverName, request.version);
   const policy = await loadPolicy(ctx.deps, request.sourceId);
   const approvalCtx: ApprovalContext = {
     actor: actorOf(ctx.principal),
