@@ -127,6 +127,7 @@ describe('7.2 compiled endpoint over a mixed fixture (golden)', () => {
     const { installations } = mixed();
     const inner = engineFor(installations);
     const calls: Array<{ action: string; types: string[] }> = [];
+    const seen: string[][] = [];
     const policy: EndpointPolicy = {
       authorize: (request) => inner.authorize(request),
       filterVisible: (request, resources) => {
@@ -134,6 +135,12 @@ describe('7.2 compiled endpoint over a mixed fixture (golden)', () => {
           action: request.action,
           types: resources.map((r) => (r as { type: string }).type),
         });
+        seen.push(
+          resources.map(
+            (r) =>
+              (r as { uri?: string; name?: string }).uri ?? (r as { name?: string }).name ?? '',
+          ),
+        );
         return inner.filterVisible(request, resources);
       },
     };
@@ -141,5 +148,16 @@ describe('7.2 compiled endpoint over a mixed fixture (golden)', () => {
     expect(calls.map((c) => c.action)).toEqual(['seeTool', 'seePrompt', 'seeResource']);
     expect(calls.map((c) => c.types.length)).toEqual([5, 3, 9]);
     expect(calls[2]?.types.every((t) => t === 'Resource')).toBe(true);
+    expect(seen[2]).toEqual([
+      'file:///shared',
+      'file:///only-a',
+      'notes://welcome',
+      'file:///shared',
+      'file:///only-b',
+      'file:///only-a',
+      'repo://{o}/{r}',
+      'notes://page/{id}',
+      'file:///{p}',
+    ]);
   });
 });
