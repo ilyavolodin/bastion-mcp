@@ -18,6 +18,7 @@ import {
 } from '@bastion-mcp/api';
 import {
   bumpConfigVersion,
+  type ConfigScope,
   nextUpdatedAt,
   Prisma,
   type PrismaClient,
@@ -56,8 +57,6 @@ export interface CollectionStore {
   upsert(id: string, data: Record<string, unknown>): Promise<Row>;
   remove(id: string): Promise<boolean>;
 }
-
-type ConfigScope = 'org' | 'user' | 'team' | 'installation' | 'catalog' | 'endpoint';
 
 export type CollectionSpec = {
   collection: Collection;
