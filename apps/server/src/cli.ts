@@ -9,8 +9,6 @@ import { execute, parseArgs } from './cli/commands';
 export { checkConfig, execute, formatTable, parseArgs } from './cli/commands';
 export { exportConfig, importConfig } from './cli/config-io';
 
-type StartServer = (options?: Record<string, unknown>) => Promise<unknown>;
-
 /** True when argv names a command other than `serve` (so `main` should run the CLI instead of the server). */
 export const isCliCommand = (argv: readonly string[]): boolean => {
   const { command, flags } = parseArgs(argv);
@@ -27,11 +25,8 @@ const readStdin = async (): Promise<string> => {
 export const runCli = async (argv: readonly string[], env = process.env): Promise<number> => {
   const parsed = parseArgs(argv);
   if (parsed.command === 'serve' && !parsed.flags.has('help')) {
-    // The composition root writes ./server; it may not exist while this file is checked on its own.
-    // biome-ignore lint/suspicious/noTsIgnore: optional module
-    // @ts-ignore
-    const mod = (await import('./server')) as { startServer: StartServer };
-    await mod.startServer();
+    const { startServer } = await import('./server');
+    await startServer();
     return 0;
   }
   return execute(argv, env, {
