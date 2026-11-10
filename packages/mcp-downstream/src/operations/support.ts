@@ -25,7 +25,14 @@ import type {
 } from '@bastion-mcp/mcp-upstream';
 import { SPAN_ATTRS } from '@bastion-mcp/mcp-upstream';
 import type { InstallationData, McpRequestContext, ToolAnnotations } from '@bastion-mcp/policy';
-import type { EffectiveEndpoint, InstallationInfo } from '@bastion-mcp/router';
+import {
+  type EffectiveEndpoint,
+  type InstallationInfo,
+  resolveResourceUriWithSeen,
+  type SeenUriStore,
+  type UriIndex,
+  type UriTarget,
+} from '@bastion-mcp/router';
 import { SPAN_NAMES } from '@bastion-mcp/telemetry';
 import {
   context,
@@ -286,6 +293,19 @@ export const bindingOf = (
   name,
   args: upstreamArgs,
 });
+
+/** The installation that serves a resource URI, through the URI index and the seen-URI store (7.4); `undefined` when none does. */
+export const resolveResourceInstallation = async (
+  uriIndex: UriIndex,
+  installations: ReadonlyMap<string, InstallationInfo>,
+  uri: string,
+  seen: { store: SeenUriStore; principalId: string; endpointId: string },
+): Promise<{ target: UriTarget; installation: InstallationInfo } | undefined> => {
+  const resolved = await resolveResourceUriWithSeen(uriIndex, uri, seen);
+  if (!resolved.ok) return undefined;
+  const installation = installations.get(resolved.target.installationId);
+  return installation ? { target: resolved.target, installation } : undefined;
+};
 
 // --- guards (13) -------------------------------------------------------------------------------------------------------
 

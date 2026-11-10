@@ -2,13 +2,13 @@
 import { MS } from '@bastion-mcp/core';
 import { extractResourceContents, extractUriSegments } from '@bastion-mcp/guards';
 import { addedResourceContents, addedTemplateContents } from '@bastion-mcp/overrides';
-import { ResourceNotFoundError, resolveResourceUriWithSeen } from '@bastion-mcp/router';
+import { ResourceNotFoundError } from '@bastion-mcp/router';
 import { InvalidParamsError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
 import { runRoutedOperation } from './outcome';
 import { runRouted } from './routed';
-import { installationDataOf, retryParts } from './support';
+import { installationDataOf, resolveResourceInstallation, retryParts } from './support';
 
 const SKILL_SCHEME = 'skill://';
 const DEFAULT_READ_TTL_MS = MS.MINUTE;
@@ -27,16 +27,15 @@ export const createResourcesRead = (deps: OperationDeps): Operation => ({
         result: { ...skill, ttlMs: ctx.endpoint.ttlMs, cacheScope: 'private' },
       };
     }
-    const target = await resolveResourceUriWithSeen(ctx.endpoint.uriIndex, uri, {
-      store: deps.seenUris,
-      principalId: ctx.principal.id,
-      endpointId: ctx.endpoint.endpointId,
-    });
-    if (!target.ok) throw new ResourceNotFoundError(uri);
-    const installation = ctx.resolved.installations.get(target.target.installationId);
-    if (!installation) throw new ResourceNotFoundError(uri);
-    const upstreamUri = target.target.upstreamUri;
-    const hosted = target.target.hosted;
+    const routed = await resolveResourceInstallation(
+      ctx.endpoint.uriIndex,
+      ctx.resolved.installations,
+      uri,
+      { store: deps.seenUris, principalId: ctx.principal.id, endpointId: ctx.endpoint.endpointId },
+    );
+    if (!routed) throw new ResourceNotFoundError(uri);
+    const { installation } = routed;
+    const { upstreamUri, hosted } = routed.target;
     return runRoutedOperation(deps, ctx, 'resources/read', installation, async (record) => {
       const outcome = await runRouted(
         deps,

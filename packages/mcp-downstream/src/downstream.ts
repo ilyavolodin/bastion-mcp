@@ -11,7 +11,6 @@ import { InflightTracker, type InstallationRegistry } from '@bastion-mcp/mcp-ups
 import {
   EndpointCache,
   RedisSeenUriStore,
-  resolveResourceUriWithSeen,
   type SeenUriStore,
   type UpstreamItemSource,
 } from '@bastion-mcp/router';
@@ -38,7 +37,11 @@ import {
   type ReadCachePort,
 } from './operations/deps';
 import { createOperations, createOpRunner } from './operations/registry';
-import { installationDataOf, policyContextOf } from './operations/support';
+import {
+  installationDataOf,
+  policyContextOf,
+  resolveResourceInstallation,
+} from './operations/support';
 import {
   type CallLogPort,
   type CatalogInstallPort,
@@ -201,14 +204,18 @@ export const createDownstream = (deps: DownstreamDeps): Downstream => {
   });
 
   const canReadUri = async (rc: BastionRequestContext, uri: string) => {
-    const target = await resolveResourceUriWithSeen(rc.resolved.endpoint.uriIndex, uri, {
-      store: seenUris,
-      principalId: rc.principal.id,
-      endpointId: rc.resolved.endpoint.endpointId,
-    });
-    if (!target.ok) return { ok: false as const };
-    const installation = rc.resolved.installations.get(target.target.installationId);
-    if (!installation) return { ok: false as const };
+    const routed = await resolveResourceInstallation(
+      rc.resolved.endpoint.uriIndex,
+      rc.resolved.installations,
+      uri,
+      {
+        store: seenUris,
+        principalId: rc.principal.id,
+        endpointId: rc.resolved.endpoint.endpointId,
+      },
+    );
+    if (!routed) return { ok: false as const };
+    const { installation } = routed;
     // Cedar decides readability the same way `resources/read` does (10.3).
     const profile = deps.profiles ? await deps.profiles.profile(rc.principal) : {};
     const decision = deps.policy.current().authorize({
