@@ -12,7 +12,11 @@ import {
   UI_CLIENT_ID,
 } from '@bastion-mcp/core';
 import { createRouterRepository } from '@bastion-mcp/db';
-import { EndpointResolver, type ResolvedEndpoint } from '@bastion-mcp/mcp-downstream';
+import {
+  defaultToPolicyPrincipal,
+  EndpointResolver,
+  type ResolvedEndpoint,
+} from '@bastion-mcp/mcp-downstream';
 import { noopLogger } from '@bastion-mcp/mcp-upstream';
 import { type OverridesDocument, overridesSchema } from '@bastion-mcp/overrides';
 import type { EndpointPolicy, InstallationInfo } from '@bastion-mcp/router';
@@ -33,24 +37,6 @@ export type InstallationPortsContext = {
   policy: Pick<PolicyService, 'current'>;
   access?: UpstreamAccess | undefined;
 };
-
-/** Cedar principal of the caller, like the downstream default (`defaultToPolicyPrincipal`). */
-const toPolicyPrincipal = (principal: Principal, profile: { emailDomain?: string | undefined }) =>
-  principal.type === 'service'
-    ? {
-        kind: 'service' as const,
-        id: principal.id,
-        active: principal.active,
-        team: { id: principal.teams[0]?.teamId ?? '' },
-      }
-    : {
-        kind: 'user' as const,
-        id: principal.id,
-        role: principal.orgRole,
-        active: principal.active,
-        emailDomain: profile.emailDomain ?? '',
-        teams: principal.teams.map((t) => ({ id: t.teamId, role: t.role })),
-      };
 
 const INVALID_SPAN = { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 0 };
 
@@ -97,7 +83,7 @@ export const createInstallationApiPorts = (
       cache: worker.downstream.endpointCache,
       source: worker.runtime.lists,
       policy: { current: () => ctx.policy.current() as unknown as EndpointPolicy },
-      toPolicyPrincipal,
+      toPolicyPrincipal: defaultToPolicyPrincipal,
       profiles: createPrincipalProfiles(infra),
       org: { displayName: 'Bastion' },
       serverVersion: serverVersion(infra.config),
