@@ -1,4 +1,4 @@
-import { slugify } from '@bastion-mcp/core';
+import { omitUndefined, slugify } from '@bastion-mcp/core';
 import {
   type ApprovalStatus,
   approvalStatus,
@@ -108,7 +108,7 @@ export const updateVersion = async (
     if (clash.length > 0)
       throw new ConflictApiError('this version label already exists', { code: 'version_exists' });
   }
-  const changes = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
+  const changes = omitUndefined(body);
   const row = await ctx.tx.store.update('catalog_versions', versionId, {
     ...changes,
     // A changed spec invalidates the earlier automatic test (11.2).
