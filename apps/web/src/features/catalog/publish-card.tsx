@@ -18,8 +18,6 @@ type Props = {
   publishing: boolean;
   onPublish: () => void;
   disabledReason?: string | undefined;
-  entryId?: string | undefined;
-  noun?: string;
   /** A published entry with an unchanged version: the button saves the entry's fields instead of publishing. */
   saveOnly?: boolean;
 };
@@ -33,7 +31,6 @@ export function PublishCard({
   publishing,
   onPublish,
   disabledReason,
-  noun = 'v',
   saveOnly = false,
 }: Props) {
   const { me, role } = useAuth();
@@ -169,7 +166,7 @@ export function PublishCard({
             : 'Save changes'
           : publishing
             ? 'Publishing…'
-            : `Publish ${noun}${versionLabel}`}
+            : `Publish v${versionLabel}`}
       </Button>
       {saveOnly ? (
         <p className="m-0 text-caption text-muted">

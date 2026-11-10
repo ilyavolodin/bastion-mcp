@@ -360,7 +360,6 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
             canPublish={entryOnly ? dirty : passing}
             publishing={publish.isPending || saving}
             disabledReason={entryOnly ? 'Nothing changed yet.' : disabledReason}
-            entryId={entry?.id}
             onPublish={() => (entryOnly ? void save() : void onPublish())}
             {...(entryOnly ? { saveOnly: true } : {})}
           />

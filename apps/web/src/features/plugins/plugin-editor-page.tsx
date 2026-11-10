@@ -313,7 +313,6 @@ function Editor({ detail }: { detail: CatalogEntryDetail }) {
           draft={vis}
           onChange={(p) => setVis({ ...vis, ...p })}
           versionLabel={label}
-          noun={'v'}
           canPublish={
             version.status === 'draft' && isPassing(current.data?.testResult) && !needsApproval
           }
@@ -323,7 +322,6 @@ function Editor({ detail }: { detail: CatalogEntryDetail }) {
               ? 'An Admin approves the executable files with their diff before this publishes.'
               : 'Publish needs a passing test of this exact version.'
           }
-          entryId={entry.id}
           onPublish={() =>
             publish.mutate(
               { visibility: vis.visibility },
