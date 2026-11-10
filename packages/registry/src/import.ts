@@ -4,6 +4,7 @@ import {
   isRecord,
   parseServerSpec,
   type ServerSpec,
+  secretRef,
 } from '@bastion-mcp/core';
 import { ZodError } from 'zod';
 import { MAX_BODY_BYTES, readBodyCapped } from './body';
@@ -340,7 +341,7 @@ const importRemoteSnippet = (
       inject.push({
         to: 'header',
         name,
-        value: bearer ? `Bearer {{secret.${field}}}` : `{{secret.${field}}}`,
+        value: bearer ? `Bearer ${secretRef(field)}` : secretRef(field),
       });
       warnings.push(
         `header ${name} was turned into a per-user secret field; its value was discarded`,
@@ -406,7 +407,7 @@ export const importFromClientConfig = async (
     if (SECRET_NAME.test(name)) {
       const field = sanitizeVariableName(name);
       fields.push({ name: field, label: name });
-      inject.push({ to: 'env', name, value: `{{secret.${field}}}` });
+      inject.push({ to: 'env', name, value: secretRef(field) });
       warnings.push(`env ${name} was turned into a per-user secret field; its value was discarded`);
     } else {
       environmentVariables.push({ name, value });
