@@ -20,3 +20,20 @@ export const setSpec = (d: Draft, patch: Partial<SpecDraft>): Draft => ({
   ...d,
   spec: { ...d.spec, ...patch },
 });
+
+type ListKey = 'variables' | 'headers' | 'envVars' | 'args';
+
+/** The edit and remove callbacks of row `i` of one of the spec's row lists. */
+export const rowHandlers = <K extends ListKey>(
+  draft: Draft,
+  onChange: (d: Draft) => void,
+  key: K,
+  i: number,
+) => {
+  const rows: SpecDraft[K] = draft.spec[key];
+  return {
+    onChange: (next: SpecDraft[K][number]) =>
+      onChange(setSpec(draft, { [key]: rows.map((r, k) => (k === i ? next : r)) })),
+    onRemove: () => onChange(setSpec(draft, { [key]: rows.filter((_, k) => k !== i) })),
+  };
+};

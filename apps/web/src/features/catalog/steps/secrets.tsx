@@ -16,7 +16,7 @@ import {
   oauthClientSecretName,
   secretNamesOf,
 } from '../draft';
-import { type EditorProps, setSpec } from './props';
+import { type EditorProps, rowHandlers, setSpec } from './props';
 import { ArgRow, BindingRow, ReferenceList, RowCell } from './rows';
 
 /**
@@ -159,12 +159,7 @@ export function HeadersEditor({ draft, onChange, readOnly }: EditorProps) {
           spec={spec}
           readOnly={readOnly}
           listId={listId}
-          onChange={(next) =>
-            onChange(setSpec(draft, { headers: spec.headers.map((r, k) => (k === i ? next : r)) }))
-          }
-          onRemove={() =>
-            onChange(setSpec(draft, { headers: spec.headers.filter((_, k) => k !== i) }))
-          }
+          {...rowHandlers(draft, onChange, 'headers', i)}
         />
       ))}
     </section>
@@ -208,14 +203,7 @@ export function PackageSecrets({ draft, onChange, readOnly }: EditorProps) {
             spec={spec}
             readOnly={readOnly}
             listId={listId}
-            onChange={(next) =>
-              onChange(
-                setSpec(draft, { envVars: spec.envVars.map((r, k) => (k === i ? next : r)) }),
-              )
-            }
-            onRemove={() =>
-              onChange(setSpec(draft, { envVars: spec.envVars.filter((_, k) => k !== i) }))
-            }
+            {...rowHandlers(draft, onChange, 'envVars', i)}
           />
         ) : null,
       )}
@@ -228,10 +216,7 @@ export function PackageSecrets({ draft, onChange, readOnly }: EditorProps) {
             spec={spec}
             readOnly={readOnly}
             listId={listId}
-            onChange={(next) =>
-              onChange(setSpec(draft, { args: spec.args.map((r, k) => (k === i ? next : r)) }))
-            }
-            onRemove={() => onChange(setSpec(draft, { args: spec.args.filter((_, k) => k !== i) }))}
+            {...rowHandlers(draft, onChange, 'args', i)}
           />
         ) : null,
       )}
