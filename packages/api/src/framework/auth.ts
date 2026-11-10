@@ -10,7 +10,7 @@ import {
   SESSION_COOKIE,
 } from '@bastion-mcp/auth';
 import { SCOPES } from '@bastion-mcp/core';
-import type { PrincipalData, ResourceData } from '@bastion-mcp/policy';
+import type { PrincipalData } from '@bastion-mcp/policy';
 import type { FastifyRequest } from 'fastify';
 import { ForbiddenApiError } from '../errors';
 import type { ApiDeps } from '../ports';
@@ -99,6 +99,3 @@ export const toPolicyPrincipal = (principal: Principal): PrincipalData => {
     teams: principal.teams.map((t) => ({ id: t.teamId, role: t.role })),
   };
 };
-
-export const ORG_RESOURCE: ResourceData = { type: 'Org' };
-export const teamResource = (id: string): ResourceData => ({ type: 'Team', id });
