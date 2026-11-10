@@ -157,7 +157,6 @@ export function HeadersEditor({ draft, onChange, readOnly }: EditorProps) {
           index={i}
           row={row}
           spec={spec}
-          mode={spec.authMode}
           readOnly={readOnly}
           listId={listId}
           onChange={(next) =>
@@ -207,7 +206,6 @@ export function PackageSecrets({ draft, onChange, readOnly }: EditorProps) {
             index={i}
             row={row}
             spec={spec}
-            mode={mode}
             readOnly={readOnly}
             listId={listId}
             onChange={(next) =>
@@ -228,7 +226,6 @@ export function PackageSecrets({ draft, onChange, readOnly }: EditorProps) {
             index={i}
             row={row}
             spec={spec}
-            mode={mode}
             readOnly={readOnly}
             listId={listId}
             onChange={(next) =>

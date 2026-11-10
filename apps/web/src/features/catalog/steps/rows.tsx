@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
 import {
   type ArgDraft,
-  type AuthMode,
   type BindingDraft,
   HEADER_NAME,
   type SpecDraft,
@@ -145,10 +144,9 @@ export type RowProps<T> = {
   onRemove: () => void;
 };
 
-/** A row that may carry a credential: it needs the spec and the auth mode to name the secret. */
+/** A row that may carry a credential: it needs the spec to name the secret. */
 export type SecretRowProps<T> = RowProps<T> & {
   spec: SpecDraft;
-  mode: AuthMode;
   /** The id of the `datalist` that suggests `{{var.NAME}}` and `{{secret.NAME}}`. */
   listId: string;
 };
@@ -262,7 +260,6 @@ export function BindingRow({
   index,
   row,
   spec,
-  mode,
   readOnly,
   listId,
   onChange,
@@ -322,7 +319,7 @@ export function BindingRow({
           disabled={readOnly}
           title="A secret value is stored encrypted and injected by Bastion"
           onChange={(on) => {
-            const next = setRowSecret(row, on, secretNamesOf(spec), mode);
+            const next = setRowSecret(row, on, secretNamesOf(spec), spec.authMode);
             onChange(next);
           }}
         />
@@ -340,7 +337,6 @@ export function ArgRow({
   index,
   row,
   spec,
-  mode,
   readOnly,
   listId,
   onChange,
@@ -398,7 +394,7 @@ export function ArgRow({
           label="Secret"
           checked={row.secret}
           disabled={readOnly}
-          onChange={(on) => onChange(setRowSecret(row, on, secretNamesOf(spec), mode))}
+          onChange={(on) => onChange(setRowSecret(row, on, secretNamesOf(spec), spec.authMode))}
         />
         <RemoveCell
           label={`Remove argument ${row.name || row.value}`.trim()}

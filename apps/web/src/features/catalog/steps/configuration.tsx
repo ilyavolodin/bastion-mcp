@@ -87,7 +87,6 @@ export function ConfigurationStep({ draft, onChange, readOnly }: StepProps) {
                 index={i}
                 row={row}
                 spec={spec}
-                mode={spec.authMode}
                 readOnly={readOnly}
                 listId={listId}
                 onChange={(next) =>
@@ -124,7 +123,6 @@ export function ConfigurationStep({ draft, onChange, readOnly }: StepProps) {
                 index={i}
                 row={row}
                 spec={spec}
-                mode={spec.authMode}
                 readOnly={readOnly}
                 listId={listId}
                 onChange={(next) =>
