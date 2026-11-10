@@ -143,14 +143,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
   };
   const baseFetch = options.fetch ?? fetch;
   /** IdP, CIMD and upstream AS traffic goes through the SSRF guard (9.6, 23.3) unless a test replaces fetch. */
-  const outboundFetch = options.fetch
-    ? options.fetch
-    : options.allowInsecureHttp
-      ? createSafeFetch(baseFetch, fetchPolicy)
-      : createSafeFetch(baseFetch, {
-          addressPolicy: fetchPolicy.addressPolicy,
-          allowHttpHosts: fetchPolicy.allowHttpHosts,
-        });
+  const outboundFetch = options.fetch ?? createSafeFetch(baseFetch, fetchPolicy);
 
   // --- identity ---------------------------------------------------------------------------------------------
   const principalStore: PrincipalStore = repos.principals;
