@@ -79,7 +79,7 @@ const loadStateKeyring = async (keyStore: KeyStore): Promise<Keyring> =>
   buildStateKeyring(await keyStore.listStateKeys(), new Date());
 
 /** Cookie signing keys derived from the internal secret: identical on every replica (22.3). */
-export const deriveCookieKeys = (secret: string, previous?: string): string[] =>
+const deriveCookieKeys = (secret: string, previous?: string): string[] =>
   [secret, previous]
     .filter((s): s is string => typeof s === 'string' && s.length > 0)
     .map((s) => createHmac('sha256', s).update('bastion-oidc-cookies-v1').digest('hex'));

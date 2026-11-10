@@ -18,7 +18,7 @@ import { pollUntil } from '../poll';
 import { MAX_ERROR_CODE_CHARS, UPSTREAM_LIST_POLL_MS, UPSTREAM_LIST_TIMEOUT_MS } from '../timing';
 import { connectAsPrincipal, effectiveSlugOf } from './gateway-client';
 
-export type ListOutcome =
+type ListOutcome =
   | { status: 'ok'; items: UpstreamItems }
   | { status: 'degraded'; code: string; detail?: string };
 
@@ -86,7 +86,7 @@ const dropListCaches = async (infra: Infra, installationId: string): Promise<voi
 
 const COLD_START_CODES = new Set(['starting']);
 
-export const workerAccess = (infra: Infra, worker: WorkerServices): UpstreamAccess => {
+const workerAccess = (infra: Infra, worker: WorkerServices): UpstreamAccess => {
   const listItems = async (
     installationId: string,
     principalId: string,
@@ -151,7 +151,7 @@ const LIST_CALLS: readonly [
  * `createUiWorkerClient`: the ui-only implementation. It lists through the gateway's own endpoint as the user (see
  * `gateway-client.ts`), enabling a disabled (test) installation for the duration of the call.
  */
-export const createUiWorkerClient = (
+const createUiWorkerClient = (
   infra: Infra,
   auth: Pick<AuthServices, 'keyStore' | 'principalStore'>,
 ): UpstreamAccess => {

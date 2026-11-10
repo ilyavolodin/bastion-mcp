@@ -68,7 +68,7 @@ const stateCookie = (
   ].join('; ');
 
 /** What the sign-in page offers (9.1): the enabled IdPs and whether local password login is on. */
-export const loadSignInOptions = async (infra: UiDeps['infra']) => {
+const loadSignInOptions = async (infra: UiDeps['infra']) => {
   const all = await infra.repos.idpConnections.list();
   const connections = all.filter((c) => c.enabled);
   // 9.1: local login is on while "no IdP connection exists", so even a disabled connection switches it off.

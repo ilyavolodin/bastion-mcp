@@ -10,7 +10,7 @@ import { z } from 'zod';
 import type { Infra } from '../infra';
 import { CONFIG_IMPORT_TX_OPTIONS } from '../timing';
 
-export const CONFIG_FORMAT = 1;
+const CONFIG_FORMAT = 1;
 
 type Kind = 'date' | 'json' | 'jsonNullable' | 'plain';
 type ModelSpec = {
@@ -254,7 +254,7 @@ export const exportConfig = async (infra: Infra, now = new Date()): Promise<Conf
 
 const docSchema = z.looseObject({ format: z.literal(CONFIG_FORMAT) });
 
-export class ConfigImportError extends Error {}
+class ConfigImportError extends Error {}
 
 const fromImport = (spec: ModelSpec, raw: unknown, teams: Set<string>): Record<string, unknown> => {
   if (typeof raw !== 'object' || raw === null)

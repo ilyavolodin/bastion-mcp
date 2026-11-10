@@ -24,7 +24,7 @@ import {
   textFile,
 } from '@bastion-mcp/plugins';
 
-export const MANIFEST_FILE = 'bastion-plugin.json';
+const MANIFEST_FILE = 'bastion-plugin.json';
 
 const kebab = (value: string): string =>
   value

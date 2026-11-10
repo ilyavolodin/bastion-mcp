@@ -233,14 +233,14 @@ const documentSchema = z.object({
 });
 type BackupDocument = z.infer<typeof documentSchema>;
 
-export type RestoreMode = 'merge' | 'replace';
+type RestoreMode = 'merge' | 'replace';
 export type RestoreOptions = {
   mode: RestoreMode;
   dryRun?: boolean;
   /** The administrator performing it; a replace refuses to remove this account. */
   actorId?: string | null;
 };
-export type TableReport = {
+type TableReport = {
   /** Rows in the backup. */
   rows: number;
   /** Merge: rows that already exist and would be overwritten. Replace: rows the target has now (they go away). */

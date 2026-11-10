@@ -20,7 +20,7 @@ import { createResourceStore, loadResourceStoreMeta } from './resource-store';
 const isConflict = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
 
-export const createPublisher = (infra: Pick<Infra, 'publish'>): Publisher => ({
+const createPublisher = (infra: Pick<Infra, 'publish'>): Publisher => ({
   publish: (channel, message) => infra.publish(channel, message),
 });
 

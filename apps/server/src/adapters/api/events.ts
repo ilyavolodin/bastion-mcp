@@ -8,7 +8,7 @@ import { newId } from '@bastion-mcp/core';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
-export const EVENTS_CHANNEL = 'bastion:events';
+const EVENTS_CHANNEL = 'bastion:events';
 
 const envelope = z.object({
   origin: z.string(),

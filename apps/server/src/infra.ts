@@ -25,7 +25,7 @@ import { RedisPubSub } from './adapters/redis';
 import { createSecretStore } from './adapters/secret-store';
 import { defaultWorkerId, readServerEnv, type ServerEnv, type ServerOptions } from './config';
 
-export type AppLogger = Logger;
+type AppLogger = Logger;
 
 /** What every adapter and role needs: connections, crypto and repositories (CONTRIBUTING rule 6). */
 export type Infra = {

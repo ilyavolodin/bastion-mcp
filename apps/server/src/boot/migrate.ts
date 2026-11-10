@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS "_prisma_migrations" (
 export type BundledMigration = { name: string; sql: string; checksum: string };
 
 /** Where the SQL lives: `BASTION_MIGRATIONS_DIR`, `<app>/prisma/migrations` (image, build), or the repo checkout. */
-export const migrationsDir = (env: Record<string, string | undefined> = process.env): string => {
+const migrationsDir = (env: Record<string, string | undefined> = process.env): string => {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     env.BASTION_MIGRATIONS_DIR,

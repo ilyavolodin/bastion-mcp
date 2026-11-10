@@ -16,7 +16,7 @@ const KEY_BYTES = 32;
 /** Memory-hard cost (about 128 MiB per derivation): an offline guess costs the same as an online one. */
 const KDF = { N: 2 ** 17, r: 8, p: 1 } as const;
 const KDF_MAXMEM = 256 * 1024 * 1024;
-export const MIN_PASSPHRASE_LENGTH = 12;
+const MIN_PASSPHRASE_LENGTH = 12;
 /** Refuses to inflate more than this (a corrupted or hostile file). */
 const MAX_PLAIN_BYTES = 2 * 1024 * 1024 * 1024;
 

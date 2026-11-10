@@ -13,7 +13,7 @@ import { keyStoreOf } from './key-store';
 export const OFFICIAL_REGISTRY_URL = 'https://registry.modelcontextprotocol.io';
 
 /** Deterministic UUID so a restart never creates a second copy of a seeded row. */
-export const seedId = (name: string): string => {
+const seedId = (name: string): string => {
   const h = createHash('sha256').update(`bastion-seed:${name}`).digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 };

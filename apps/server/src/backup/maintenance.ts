@@ -10,7 +10,7 @@ import type { Redis } from 'ioredis';
 const KEY = 'bastion:maintenance';
 const CACHE_MS = 1_000;
 
-export type MaintenanceState = {
+type MaintenanceState = {
   enabled: boolean;
   /** ISO time it was turned on. */
   since: string | null;

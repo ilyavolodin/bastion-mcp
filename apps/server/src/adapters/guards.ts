@@ -20,7 +20,7 @@ import { watchConfig } from './config-watch';
 const riskStateSchema = z.object({ score: z.number(), updatedAt: z.number() });
 
 /** Redis-backed model-guard result cache (13.5, `guard:{instance}:{configHash}:{sha}` keys, 24 h TTL). */
-export const createGuardCache = (infra: Infra): GuardCache => ({
+const createGuardCache = (infra: Infra): GuardCache => ({
   get: (key) => infra.redis.get(key),
   async set(key, value, ttlSeconds) {
     await infra.redis.set(key, value, 'EX', ttlSeconds || TTL.guardCache);
@@ -28,7 +28,7 @@ export const createGuardCache = (infra: Infra): GuardCache => ({
 });
 
 /** Session risk store (13.7): `risk:{principalId}:{clientId}`, TTL 2 h. */
-export const createRiskStore = (infra: Infra): RiskStore => ({
+const createRiskStore = (infra: Infra): RiskStore => ({
   async get(principalId, clientId) {
     const raw = await infra.redis.get(redisKeys.risk(principalId, clientId));
     if (!raw) return null;

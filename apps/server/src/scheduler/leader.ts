@@ -1,6 +1,6 @@
 import pg from 'pg';
 
-export const SCHEDULER_LOCK_SQL = `SELECT pg_try_advisory_lock(hashtext('bastion-scheduler')) AS locked, pg_backend_pid() AS pid`;
+const SCHEDULER_LOCK_SQL = `SELECT pg_try_advisory_lock(hashtext('bastion-scheduler')) AS locked, pg_backend_pid() AS pid`;
 
 export type LeaderElectionOptions = {
   connectionString: string;

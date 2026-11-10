@@ -57,7 +57,7 @@ export interface CollectionStore {
   remove(id: string): Promise<boolean>;
 }
 
-export type ConfigScope = 'org' | 'user' | 'team' | 'installation' | 'catalog' | 'endpoint';
+type ConfigScope = 'org' | 'user' | 'team' | 'installation' | 'catalog' | 'endpoint';
 
 export type CollectionSpec = {
   collection: Collection;
@@ -208,7 +208,7 @@ export const translateError = (error: unknown, what: string): never => {
 
 // --- the generic collection -----------------------------------------------------------------------------------------
 
-export const delegateOf = (ctx: StoreContext, model: ModelMeta): AnyDelegate =>
+const delegateOf = (ctx: StoreContext, model: ModelMeta): AnyDelegate =>
   (ctx.db as unknown as Record<string, AnyDelegate>)[model.delegate] as AnyDelegate;
 
 export const versionOf = (row: DbRow): Date => {

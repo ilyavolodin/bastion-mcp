@@ -86,7 +86,7 @@ const flagString = (p: Parsed, name: string): string | undefined => {
   return typeof v === 'string' ? v : undefined;
 };
 
-export const isPurpose = (v: string | undefined): v is KeyringPurpose =>
+const isPurpose = (v: string | undefined): v is KeyringPurpose =>
   v !== undefined && (KEY_PURPOSES as readonly string[]).includes(v);
 
 const withInfra = async <T>(
@@ -122,7 +122,7 @@ const formatRestoreReport = (report: RestoreReport): string => {
   return rows.join('\n');
 };
 
-export type CheckRow = { check: string; ok: boolean; detail: string };
+type CheckRow = { check: string; ok: boolean; detail: string };
 
 /** `bastion check-config`: every row is independent, so one failure does not hide the others. */
 export const checkConfig = async (env: Env): Promise<CheckRow[]> => {
