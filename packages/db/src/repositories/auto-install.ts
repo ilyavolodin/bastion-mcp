@@ -109,6 +109,11 @@ export const createAutoInstallRepository = (
 ) => {
   const ctx = toContext(arg, options);
   const { db } = ctx;
+  const targetOf = async (policyId: string): Promise<AutoInstallTarget> => {
+    const policy = await db.autoInstallPolicy.findUnique({ where: { id: policyId } });
+    if (!policy) throw new NotFoundError('auto-install policy', policyId);
+    return autoInstallTargetSchema.parse(policy.target);
+  };
   return {
     async get(id: string): Promise<AutoInstallPolicyView | null> {
       const row = await db.autoInstallPolicy.findUnique({ where: { id } });
@@ -248,28 +253,19 @@ export const createAutoInstallRepository = (
       key: { policyId: string; subjectType: 'user' | 'team'; subjectId: string },
       run: (ctx: RepoContext) => Promise<{ installationId: string | null; result: string }>,
     ): Promise<ApplyOnceResult> {
+      const ledgerKey = {
+        policyId: key.policyId,
+        subjectType: key.subjectType,
+        subjectId: key.subjectId,
+      };
+      const where = { policyId_subjectType_subjectId: ledgerKey };
       return mutate(ctx, async (tx, unit) => {
         const inserted = await tx.autoInstallApplication.createMany({
-          data: [
-            {
-              policyId: key.policyId,
-              subjectType: key.subjectType,
-              subjectId: key.subjectId,
-              result: 'pending',
-            },
-          ],
+          data: [{ ...ledgerKey, result: 'pending' }],
           skipDuplicates: true,
         });
         if (inserted.count === 0) {
-          const existing = await tx.autoInstallApplication.findUniqueOrThrow({
-            where: {
-              policyId_subjectType_subjectId: {
-                policyId: key.policyId,
-                subjectType: key.subjectType,
-                subjectId: key.subjectId,
-              },
-            },
-          });
+          const existing = await tx.autoInstallApplication.findUniqueOrThrow({ where });
           return {
             applied: false,
             installationId: existing.installationId,
@@ -278,13 +274,7 @@ export const createAutoInstallRepository = (
         }
         const outcome = await run({ ...ctx, db: tx, unit });
         await tx.autoInstallApplication.update({
-          where: {
-            policyId_subjectType_subjectId: {
-              policyId: key.policyId,
-              subjectType: key.subjectType,
-              subjectId: key.subjectId,
-            },
-          },
+          where,
           data: { installationId: outcome.installationId, result: outcome.result },
         });
         return { applied: true, installationId: outcome.installationId, result: outcome.result };
@@ -310,9 +300,7 @@ export const createAutoInstallRepository = (
       policyId: string,
       opts: { afterId?: string; limit: number; onlyUnapplied?: boolean },
     ): Promise<string[]> {
-      const policy = await db.autoInstallPolicy.findUnique({ where: { id: policyId } });
-      if (!policy) throw new NotFoundError('auto-install policy', policyId);
-      const target = autoInstallTargetSchema.parse(policy.target);
+      const target = await targetOf(policyId);
       const out: string[] = [];
       const pageSize = Math.max(opts.limit, MIN_TARGET_PAGE_SIZE);
       let after = opts.afterId;
@@ -353,9 +341,7 @@ export const createAutoInstallRepository = (
 
     /** Teams a `team`-scope policy targets: the listed teams, or every team for `all` (11.5). */
     async listTargetTeams(policyId: string): Promise<string[]> {
-      const policy = await db.autoInstallPolicy.findUnique({ where: { id: policyId } });
-      if (!policy) throw new NotFoundError('auto-install policy', policyId);
-      const target = autoInstallTargetSchema.parse(policy.target);
+      const target = await targetOf(policyId);
       const rows = await db.team.findMany({
         where: target.all
           ? {}
