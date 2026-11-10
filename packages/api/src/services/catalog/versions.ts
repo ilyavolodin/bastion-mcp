@@ -13,7 +13,7 @@ import {
   sortFiles,
 } from '@bastion-mcp/plugins';
 import { ApiError, ConflictApiError, NotFoundApiError } from '../../errors';
-import type { ListQueryInput } from '../../framework/conventions';
+import { type ListQueryInput, parseSort } from '../../framework/conventions';
 import type { ApiDeps } from '../../ports';
 import type { VersionTestRun } from '../../ports/catalog';
 import type { Page, Row } from '../../ports/store';
@@ -45,9 +45,7 @@ export const listVersions = async (
     limit: query.limit,
     cursor: query.cursor,
     q: query.q,
-    sort: query.sort
-      ? { field: query.sort.replace(/^-/, ''), desc: query.sort.startsWith('-') }
-      : { field: 'createdAt', desc: true },
+    sort: parseSort(query.sort) ?? { field: 'createdAt', desc: true },
     where: { entryId },
   });
 };

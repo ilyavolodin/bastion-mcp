@@ -18,6 +18,7 @@ import {
   ValidationApiError,
 } from '../errors';
 import { toPolicyPrincipal } from '../framework/auth';
+import { parseSort } from '../framework/conventions';
 import type { ApiDeps } from '../ports';
 import type { SecretMeta } from '../ports/secrets';
 import type { Page, Row } from '../ports/store';
@@ -69,16 +70,11 @@ export const listInstallations = async (
     catalogEntryId?: string | undefined;
   },
 ): Promise<Page<Row>> => {
-  const sort = query.sort
-    ? query.sort.startsWith('-')
-      ? { field: query.sort.slice(1), desc: true }
-      : { field: query.sort, desc: false }
-    : undefined;
   const page = await ctx.deps.store.list('installations', {
     limit: query.limit,
     cursor: query.cursor,
     q: query.q,
-    sort,
+    sort: parseSort(query.sort),
     where: {
       ...(query.status ? { status: query.status } : {}),
       ...(query.catalogEntryId ? { catalogEntryId: query.catalogEntryId } : {}),
