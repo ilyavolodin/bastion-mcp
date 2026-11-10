@@ -37,7 +37,6 @@ export const recordOperationOutcome = (
   record: CallRecord,
   span: { traceId: string; spanId: string },
   installation: InstallationInfo | undefined,
-  method: string,
 ): void => {
   const active: Span | undefined = trace.getActiveSpan();
   active?.setAttribute(SPAN_ATTRS.callOutcome, record.outcome);
@@ -46,7 +45,10 @@ export const recordOperationOutcome = (
   try {
     deps.metrics.calls.add(1, callMetricLabels(record, installation));
   } catch (error) {
-    deps.logger.warn('metric could not be recorded', { method, error: String(error) });
+    deps.logger.warn('metric could not be recorded', {
+      method: record.method,
+      error: String(error),
+    });
   }
   writeCallLog(
     { callLog: deps.callLog, logger: deps.logger, newId: deps.newId, now: () => deps.clock.now() },
@@ -83,6 +85,6 @@ export const runRoutedOperation = async <T>(
     if (converted !== undefined) return converted;
     throw error;
   } finally {
-    recordOperationOutcome(deps, ctx, record, span, installation, method);
+    recordOperationOutcome(deps, ctx, record, span, installation);
   }
 };

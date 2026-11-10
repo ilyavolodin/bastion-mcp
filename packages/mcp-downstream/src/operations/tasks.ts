@@ -79,7 +79,7 @@ const taskOperation = (deps: OperationDeps, method: TaskMethod): Operation => ({
       record.fail(error);
       throw error;
     } finally {
-      if (!record.skipLog) recordOperationOutcome(deps, ctx, record, span, installation, method);
+      if (!record.skipLog) recordOperationOutcome(deps, ctx, record, span, installation);
     }
   },
 });
