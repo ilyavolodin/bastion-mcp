@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { DEFAULT_LIMIT, listQuerySchema, MAX_LIMIT, pageSchema } from '../framework/conventions';
 import { authz, defineRoute, type RouteDefinition, RouteReply } from '../framework/route';
 import { idParams } from '../schemas/common';
-import { callRecord, findingRecord, pageOf, untyped } from '../schemas/rows';
+import { callRecord, findingRecord, pageOf, sandboxRecord, untyped } from '../schemas/rows';
 import { auditChoice, renderAuditExport } from '../services/audit';
 import {
   callChoice,
@@ -131,6 +131,21 @@ export const observabilityRoutes: RouteDefinition[] = [
   statRoute('/stats/latency', 'Latency percentiles', 'latency', false),
   statRoute('/stats/guards', 'Guard verdicts', 'guardStats', false),
   statRoute('/stats/sandboxes', 'Sandbox starts and usage', 'sandboxStats', false),
+  defineRoute({
+    method: 'GET',
+    url: '/sandboxes',
+    tag: TAG,
+    summary: 'Sandboxes and remote connections the platform holds right now',
+    schema: {
+      query: z.object({ limit: pageQuery.limit }),
+      response: untyped(pageOf('SandboxPage', sandboxRecord)),
+    },
+    authz: authz.on('logs.org', org),
+    handler: async (ctx) => ({
+      ...(await ctx.deps.observability.calls.sandboxes({ limit: ctx.query.limit })),
+      nextCursor: null,
+    }),
+  }),
   defineRoute({
     method: 'GET',
     url: '/security/findings',

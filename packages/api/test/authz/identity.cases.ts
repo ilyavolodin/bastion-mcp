@@ -224,7 +224,15 @@ export const identityCases: AuthzCase[] = [
     route: 'GET /calls/{id}',
     request: (scope, actor) => get(`/calls/${callFor(scope, actor)}`),
   },
-  ...(['/stats/latency', '/stats/guards', '/stats/sandboxes', '/security/findings'] as const).map(
+  ...(
+    [
+      '/stats/latency',
+      '/stats/guards',
+      '/stats/sandboxes',
+      '/security/findings',
+      '/sandboxes',
+    ] as const
+  ).map(
     (path): AuthzCase => ({ rule: 'logs.org', route: `GET ${path}`, request: () => get(path) }),
   ),
   { rule: 'logs.org', route: 'GET /stats/calls', request: () => get('/stats/calls') },

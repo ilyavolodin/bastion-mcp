@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Bastion control-plane API",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "description": "REST API of the ui role (17). Errors are RFC 9457 problems; types live under https://bastion-mcp.github.io/errors."
   },
   "components": {
@@ -4452,6 +4452,85 @@
         ],
         "additionalProperties": {}
       },
+      "Sandbox": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "installationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "serverName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replica": {
+            "type": "number"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "driver": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "userId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "userName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastUsedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failureCount": {
+            "type": "number"
+          },
+          "lastError": {}
+        },
+        "required": [
+          "id",
+          "installationId",
+          "serverName",
+          "replica",
+          "kind",
+          "driver",
+          "state",
+          "userId",
+          "userName",
+          "startedAt",
+          "lastUsedAt",
+          "failureCount",
+          "lastError"
+        ],
+        "additionalProperties": {}
+      },
       "DriftReviewPage": {
         "type": "object",
         "properties": {
@@ -5011,6 +5090,28 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CallRecord"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "SandboxPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sandbox"
             }
           },
           "nextCursor": {
@@ -36106,6 +36207,97 @@
         }
       }
     },
+    "/sandboxes": {
+      "get": {
+        "summary": "Sandboxes and remote connections the platform holds right now",
+        "tags": [
+          "Observability"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/security/findings": {
       "get": {
         "summary": "Security findings (guards, drift, egress)",
@@ -36883,53 +37075,20 @@
                           ],
                           "additionalProperties": false
                         },
-                        "sandbox": {
+                        "drift": {
                           "type": "object",
                           "properties": {
-                            "defaultSize": {
+                            "autoApproveUpTo": {
                               "type": "string",
                               "enum": [
-                                "small",
-                                "medium",
-                                "large"
+                                "none",
+                                "low",
+                                "medium"
                               ]
-                            },
-                            "warmPool": {
-                              "type": "object",
-                              "properties": {
-                                "small": {
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 9007199254740991
-                                },
-                                "medium": {
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 9007199254740991
-                                },
-                                "large": {
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 9007199254740991
-                                }
-                              },
-                              "required": [
-                                "small",
-                                "medium",
-                                "large"
-                              ],
-                              "additionalProperties": false
-                            },
-                            "idleTimeoutMinutes": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 1440
                             }
                           },
                           "required": [
-                            "defaultSize",
-                            "warmPool",
-                            "idleTimeoutMinutes"
+                            "autoApproveUpTo"
                           ],
                           "additionalProperties": false
                         },
@@ -36969,7 +37128,7 @@
                         "audit",
                         "guards",
                         "modelGuards",
-                        "sandbox",
+                        "drift",
                         "registry",
                         "endpoints"
                       ],
@@ -37254,52 +37413,20 @@
                       "classifier"
                     ]
                   },
-                  "sandbox": {
+                  "drift": {
                     "type": "object",
                     "properties": {
-                      "defaultSize": {
+                      "autoApproveUpTo": {
                         "type": "string",
                         "enum": [
-                          "small",
-                          "medium",
-                          "large"
+                          "none",
+                          "low",
+                          "medium"
                         ]
-                      },
-                      "warmPool": {
-                        "type": "object",
-                        "properties": {
-                          "small": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          },
-                          "medium": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          },
-                          "large": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          }
-                        },
-                        "required": [
-                          "small",
-                          "medium",
-                          "large"
-                        ]
-                      },
-                      "idleTimeoutMinutes": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 1440
                       }
                     },
                     "required": [
-                      "defaultSize",
-                      "warmPool",
-                      "idleTimeoutMinutes"
+                      "autoApproveUpTo"
                     ]
                   },
                   "registry": {
@@ -37561,53 +37688,20 @@
                           ],
                           "additionalProperties": false
                         },
-                        "sandbox": {
+                        "drift": {
                           "type": "object",
                           "properties": {
-                            "defaultSize": {
+                            "autoApproveUpTo": {
                               "type": "string",
                               "enum": [
-                                "small",
-                                "medium",
-                                "large"
+                                "none",
+                                "low",
+                                "medium"
                               ]
-                            },
-                            "warmPool": {
-                              "type": "object",
-                              "properties": {
-                                "small": {
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 9007199254740991
-                                },
-                                "medium": {
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 9007199254740991
-                                },
-                                "large": {
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 9007199254740991
-                                }
-                              },
-                              "required": [
-                                "small",
-                                "medium",
-                                "large"
-                              ],
-                              "additionalProperties": false
-                            },
-                            "idleTimeoutMinutes": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 1440
                             }
                           },
                           "required": [
-                            "defaultSize",
-                            "warmPool",
-                            "idleTimeoutMinutes"
+                            "autoApproveUpTo"
                           ],
                           "additionalProperties": false
                         },
@@ -37647,7 +37741,7 @@
                         "audit",
                         "guards",
                         "modelGuards",
-                        "sandbox",
+                        "drift",
                         "registry",
                         "endpoints"
                       ],

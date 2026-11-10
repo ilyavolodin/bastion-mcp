@@ -42,19 +42,9 @@ describe('19.2 resolveOrgSettings', () => {
       'a non-positive token lifetime',
       { tokens: { ...ORG_SETTING_DEFAULTS.tokens, accessTtlSeconds: 0 } },
     ],
-    [
-      'an idle timeout above one day',
-      { sandbox: { ...ORG_SETTING_DEFAULTS.sandbox, idleTimeoutMinutes: 1441 } },
-    ],
     ['a malformed webhook url', { audit: { retentionDays: 1, webhookUrl: 'not a url' } }],
     ['a non-uuid default profile id', { guards: { orgDefaultProfileId: 'org-default' } }],
     ['an empty display name', { org: { displayName: '', timeZone: 'UTC' } }],
-    [
-      'a negative warm pool',
-      {
-        sandbox: { ...ORG_SETTING_DEFAULTS.sandbox, warmPool: { small: -1, medium: 0, large: 0 } },
-      },
-    ],
   ])('19.2 rejects %s', (_name, stored) => {
     expect(() => resolveOrgSettings(stored)).toThrow();
   });

@@ -17,6 +17,14 @@ const errorRateOf = (installationId: string): string => {
 };
 
 describe('Observability (15, 18.3)', () => {
+  it('15.5 lists the running sandboxes with the server each belongs to', async () => {
+    await renderRoute('/observability');
+    const list = await screen.findByRole('region', { name: 'Running sandboxes' });
+    expect(await within(list).findByRole('link', { name: 'Notion' })).toBeInTheDocument();
+    expect(within(list).getByText('Running')).toBeInTheDocument();
+    expect(within(list).getByText('Starting')).toBeInTheDocument();
+  });
+
   it('renders five panels, each with an accessible table toggle', async () => {
     const { user } = await renderRoute('/observability');
     for (const name of [

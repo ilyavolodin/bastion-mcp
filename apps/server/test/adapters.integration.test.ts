@@ -1,3 +1,4 @@
+import { ORG_SETTING_DEFAULTS } from '@bastion-mcp/core';
 import { type FakeModernServer, startFakeModernServer } from '@bastion-mcp/testkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createEndpointData } from '../src/adapters/downstream/endpoint-data';
@@ -136,7 +137,11 @@ describe.skipIf(!haveDocker())('adapters of the worker role against Postgres and
     const registry = createInstallationRegistry(worker.infra);
     const guards = createGuardService(worker.infra);
     await guards.ready();
-    const pins = createPinChecker(worker.infra, { installations: registry, guards });
+    const pins = createPinChecker(worker.infra, {
+      installations: registry,
+      guards,
+      settings: { get: () => ORG_SETTING_DEFAULTS },
+    });
     const tool = (description: string) => ({
       name: 'pinned',
       description,
@@ -162,6 +167,55 @@ describe.skipIf(!haveDocker())('adapters of the worker role against Postgres and
       title: 'Definition changed: pinned',
       data: { tool: 'pinned' },
     });
+  });
+
+  it('13.6 PinChecker accepts changes without a review when the org policy covers the server risk', async () => {
+    const registry = createInstallationRegistry(worker.infra);
+    const guards = createGuardService(worker.infra);
+    await guards.ready();
+    const policy = { autoApproveUpTo: 'low' as 'none' | 'low' | 'medium' };
+    const pins = createPinChecker(worker.infra, {
+      installations: registry,
+      guards,
+      settings: { get: () => ({ ...ORG_SETTING_DEFAULTS, drift: policy }) },
+    });
+    const tool = (description: string) => ({
+      name: 'auto_pinned',
+      description,
+      inputSchema: { type: 'object' },
+    });
+    // Bob's installation already carries pins from the test above and is only checked for hidden tools below, so
+    // this test leaves the installations other tests call through untouched.
+    const open = async () =>
+      (
+        await worker.infra.repos.driftReviews.list({
+          catalogVersionId: bob.versionId,
+          status: 'open',
+        })
+      ).items.filter((r) => r.itemKey === 'auto_pinned');
+    const entryId = (
+      await worker.infra.db.prisma.installation.findUniqueOrThrow({
+        where: { id: bob.installationId },
+        select: { catalogEntryId: true },
+      })
+    ).catalogEntryId as string;
+    const setRisk = (risk: string) =>
+      worker.infra.db.prisma.catalogEntry.update({ where: { id: entryId }, data: { risk } });
+
+    // Medium risk is above the limit "low": the new tool waits for a person.
+    await setRisk('medium');
+    expect(await pins.check(bob.installationId, [tool('v1')])).toMatchObject({ ok: false });
+    expect(await open()).toHaveLength(1);
+    // Raising the limit to cover it accepts the waiting review too, and the tool is served again.
+    policy.autoApproveUpTo = 'medium';
+    expect(await pins.check(bob.installationId, [tool('v1')])).toEqual({ ok: true });
+    expect(await open()).toHaveLength(0);
+    // A later change from the same server goes through at once ...
+    expect(await pins.check(bob.installationId, [tool('v2')])).toEqual({ ok: true });
+    // ... but high risk always needs a person.
+    await setRisk('high');
+    expect(await pins.check(bob.installationId, [tool('v3')])).toMatchObject({ ok: false });
+    expect(await open()).toHaveLength(1);
   });
 
   it('10.3 a forbid rule hides and blocks a tool for its subject once bastion:config reaches the worker', async () => {

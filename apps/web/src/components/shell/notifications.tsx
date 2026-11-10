@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Bell } from 'lucide-react';
+import * as React from 'react';
 import { useMarkNotificationRead, useNotifications } from '@/api/hooks';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/cn';
@@ -12,8 +13,30 @@ export function NotificationsBell() {
   const navigate = useNavigate();
   const items = q.data ?? [];
   const unread = items.filter((n) => !n.readAt).length;
+  const [open, setOpen] = React.useState(false);
+  // What was unread when the list opened keeps its dot while the popover is up, so the reader sees what is new.
+  const [fresh, setFresh] = React.useState<ReadonlySet<string>>(new Set());
+  const markRead = mark.mutateAsync;
+  const unreadIds = items.filter((n) => !n.readAt).map((n) => n.id);
+  const unreadKey = unreadIds.join(',');
+  // Showing a notification is reading it: once the list has been on screen for a moment, clear what it showed.
+  React.useEffect(() => {
+    if (!open || unreadKey === '') return;
+    const ids = unreadKey.split(',');
+    setFresh((prev) => new Set([...prev, ...ids]));
+    const timer = window.setTimeout(() => {
+      void Promise.all(ids.map((id) => markRead(id).catch(() => undefined)));
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [open, unreadKey, markRead]);
   return (
-    <Popover>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setFresh(new Set());
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -34,7 +57,7 @@ export function NotificationsBell() {
         {items.length === 0 ? (
           <p className="m-0 py-4 text-center text-muted">You are all caught up.</p>
         ) : (
-          <ul className="m-0 flex max-h-[360px] list-none flex-col gap-1 overflow-y-auto p-0">
+          <ul className="m-0 flex max-h-[360px] list-none flex-col gap-1 overflow-y-auto overflow-x-hidden p-0">
             {items.map((n) => (
               <li key={n.id} className="shrink-0">
                 <button
@@ -49,15 +72,19 @@ export function NotificationsBell() {
                     aria-hidden="true"
                     className={cn(
                       'mt-1.5 size-2 shrink-0 rounded-full',
-                      n.readAt ? 'bg-line' : 'bg-coral',
+                      n.readAt && !fresh.has(n.id) ? 'bg-line' : 'bg-coral',
                     )}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-label">
+                    <span className="block break-words text-label">
                       {n.title}
-                      {!n.readAt ? <span className="sr-only"> (unread)</span> : null}
+                      {!n.readAt || fresh.has(n.id) ? (
+                        <span className="sr-only"> (unread)</span>
+                      ) : null}
                     </span>
-                    <span className="block text-[13px] leading-5 text-muted">{n.body}</span>
+                    <span className="block break-words text-[13px] leading-5 text-muted">
+                      {n.body}
+                    </span>
                     <span className="block text-[11px] text-muted">
                       {formatRelative(n.createdAt)}
                     </span>

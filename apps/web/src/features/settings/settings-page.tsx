@@ -7,7 +7,13 @@ import { ModelGuardsSection } from './guards-section';
 import { IdpSection } from './idp-section';
 import { LimitsSection } from './limits-section';
 import { RegistrySection } from './registry-section';
-import { KmsSection, OrganizationSection, RetentionSection, SandboxesSection } from './sections';
+import {
+  KmsSection,
+  OrganizationSection,
+  RetentionSection,
+  SandboxesSection,
+  ToolChangesSection,
+} from './sections';
 import { SystemStatusSection } from './system-status';
 
 export const SECTIONS = [
@@ -16,6 +22,7 @@ export const SECTIONS = [
   ['kms', 'Encryption keys'],
   ['sandboxes', 'Sandboxes'],
   ['guards', 'Model guards'],
+  ['drift', 'Tool changes'],
   ['registry', 'Registry'],
   ['limits', 'Limits'],
   ['retention', 'Retention'],
@@ -37,6 +44,7 @@ const BODY: Record<Section, () => React.JSX.Element> = {
   kms: KmsSection,
   sandboxes: SandboxesSection,
   guards: ModelGuardsSection,
+  drift: ToolChangesSection,
   registry: RegistrySection,
   limits: LimitsSection,
   retention: RetentionSection,

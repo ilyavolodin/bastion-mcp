@@ -120,6 +120,25 @@ export const fakeObservabilityDeps = (_ctx: FakeCtx): Partial<ApiDeps> => ({
       latency: async () => series,
       guardStats: async () => series,
       sandboxStats: async () => series,
+      sandboxes: async () => ({
+        items: [
+          {
+            id: 's1',
+            installationId: 'i1',
+            serverName: 'Sentry',
+            replica: 0,
+            kind: 'sandbox',
+            driver: 'kubernetes',
+            state: 'ready',
+            userId: null,
+            userName: null,
+            startedAt: '2026-05-01T10:00:00.000Z',
+            lastUsedAt: '2026-05-01T10:05:00.000Z',
+            failureCount: 0,
+            lastError: null,
+          },
+        ],
+      }),
       findings: async () => ({
         items: [
           {

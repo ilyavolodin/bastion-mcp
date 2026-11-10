@@ -527,6 +527,10 @@ describe.skipIf(!haveDocker())('17 control-plane API over Postgres and Redis', (
     const findings = await api.call('GET', '/security/findings');
     expect(findings.status, JSON.stringify(findings.body)).toBe(200);
     expect(findings.body.items.map((f: { kind: string }) => f.kind)).toContain('guard_block');
+    expect(findings.body.items.every((f: object) => 'installationId' in f)).toBe(true);
+    const sandboxes = await api.call('GET', '/sandboxes');
+    expect(sandboxes.status, JSON.stringify(sandboxes.body)).toBe(200);
+    expect(Array.isArray(sandboxes.body.items)).toBe(true);
     const team = await api.call('POST', '/teams', {
       body: { slug: 'stats-team', displayName: 'Stats' },
     });

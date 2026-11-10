@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ERROR_BASE_URL } from './errors';
 
-export const API_VERSION = '1.0.0';
+export const API_VERSION = '2.0.0';
 
 export const problemSchema = z.object({
   type: z.string(),

@@ -577,6 +577,7 @@ export const ROUTE_ACTIONS: readonly RouteAction[] = [
       'GET /stats/guards',
       'GET /stats/sandboxes',
       'GET /security/findings',
+      'GET /sandboxes',
     ],
     action: 'logs.view',
     resource: 'Org',

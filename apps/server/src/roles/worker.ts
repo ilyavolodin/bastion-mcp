@@ -65,7 +65,7 @@ export const createWorker = async (
   const endpointData = createEndpointData(infra);
   const callLog = createCallLog(infra, settings);
   const profiles = createPrincipalProfiles(infra);
-  const pins = createPinChecker(infra, { installations, guards: deps.guards });
+  const pins = createPinChecker(infra, { installations, guards: deps.guards, settings });
 
   await Promise.all([
     deps.policy.ready?.() ?? deps.policy.rebuild(),

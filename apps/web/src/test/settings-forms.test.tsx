@@ -38,16 +38,15 @@ describe('Settings forms send what the API accepts (19.2)', () => {
     capture.stop();
   });
 
-  it('19.2 sandboxes: the whole sandbox object is sent', async () => {
+  it('19.2 tool changes: the auto-approval limit is sent as its own setting', async () => {
     const capture = captureRequests();
-    const { user } = await renderRoute('/settings?section=sandboxes');
-    await user.selectOptions(await screen.findByLabelText('Default size'), 'medium');
-    await user.click(screen.getByRole('button', { name: 'Save sandboxes' }));
+    const { user } = await renderRoute('/settings?section=drift');
+    await user.selectOptions(await screen.findByLabelText('Accept changes without review'), 'low');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
     const body = (await expectSent(capture, 'patch', '/settings')) as {
-      sandbox: { defaultSize: string; warmPool: object; idleTimeoutMinutes: number };
+      drift: { autoApproveUpTo: string };
     };
-    expect(body.sandbox.defaultSize).toBe('medium');
-    expect(body.sandbox.warmPool).toEqual({ small: 5, medium: 2, large: 0 });
+    expect(body.drift).toEqual({ autoApproveUpTo: 'low' });
     capture.stop();
   });
 

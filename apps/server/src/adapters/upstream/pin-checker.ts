@@ -2,6 +2,7 @@ import { computeDrift, type Definition, pinDefinition, pinKey } from '@bastion-m
 import type { InstallationRegistry, PinChecker } from '@bastion-mcp/mcp-upstream';
 import type { GuardService } from '../../contracts';
 import type { Infra } from '../../infra';
+import type { SettingsCache } from '../config-watch';
 
 const asDefinition = (tool: unknown): Definition =>
   ({ ...(tool as object), kind: 'tool' }) as Definition;
@@ -17,6 +18,7 @@ export const createPinChecker = (
   deps: {
     installations: Pick<InstallationRegistry, 'get'>;
     guards: Pick<GuardService, 'profiles'>;
+    settings: Pick<SettingsCache, 'get'>;
   },
 ): PinChecker => ({
   async check(installationId, tools) {
@@ -54,8 +56,17 @@ export const createPinChecker = (
     const changedItems = drift.items.filter((i) => i.change !== 'removed');
     if (changedItems.length === 0) return { ok: true };
 
+    // A server rated low enough for the org's policy takes its changes without a review, unless the guard
+    // profile says to block on drift: that is a stricter, deliberate choice.
+    const autoApprove =
+      onDrift !== 'block' &&
+      (await riskAllowed(infra, installation.catalogEntryId, deps.settings.get().drift));
+    const pending: typeof changedItems = [];
     for (const item of changedItems) {
-      if (!item.after || item.newPin === undefined) continue;
+      if (!item.after || item.newPin === undefined) {
+        pending.push(item);
+        continue;
+      }
       const { review, created } = await infra.repos.driftReviews.open(subject, {
         itemKind: 'tool',
         itemKey: item.name,
@@ -63,16 +74,61 @@ export const createPinChecker = (
         newHash: item.newPin,
         newDefinition: JSON.parse(JSON.stringify(item.after)) as Record<string, unknown>,
       });
+      if (autoApprove && (await autoApproveReview(infra, review.id))) continue;
+      pending.push(item);
       if (created)
         await notifyOwners(infra, installation.ownerUserId, review.id, installationId, item.name);
     }
+    if (pending.length === 0) return { ok: true };
 
-    const changed = changedItems.map((i) => i.name);
+    const changed = pending.map((i) => i.name);
     if (drift.installationDisabled) return { ok: false, changed, action: 'block' };
     if (onDrift === 'hideChanged') return { ok: false, changed, action: 'hideChanged' };
     return { ok: false, changed, action: 'warn' };
   },
 });
+
+const RISK_RANK = { low: 1, medium: 2, high: 3 } as const;
+const LIMIT_RANK = { none: 0, low: 1, medium: 2 } as const;
+
+/** Whether the org policy lets changes of this catalog entry through: its risk rating is within the limit. */
+const riskAllowed = async (
+  infra: Infra,
+  catalogEntryId: string | null,
+  policy: { autoApproveUpTo: keyof typeof LIMIT_RANK },
+): Promise<boolean> => {
+  if (policy.autoApproveUpTo === 'none' || !catalogEntryId) return false;
+  try {
+    const entry = await infra.db.prisma.catalogEntry.findUnique({
+      where: { id: catalogEntryId },
+      select: { risk: true },
+    });
+    const rank = RISK_RANK[entry?.risk as keyof typeof RISK_RANK];
+    return rank !== undefined && rank <= LIMIT_RANK[policy.autoApproveUpTo];
+  } catch (error) {
+    infra.logger.warn({ err: String(error) }, 'drift auto-approval risk lookup failed');
+    return false;
+  }
+};
+
+/** Approves a review as the platform; false when it could not (it stays open for a person). */
+const autoApproveReview = async (infra: Infra, reviewId: string): Promise<boolean> => {
+  try {
+    await infra.repos.driftReviews.decide(
+      reviewId,
+      {
+        status: 'approved',
+        decidedBy: null,
+        reason: 'Accepted automatically: the org policy accepts changes from low-risk servers.',
+      },
+      { actorType: 'system' },
+    );
+    return true;
+  } catch (error) {
+    infra.logger.warn({ err: String(error), reviewId }, 'drift auto-approval failed');
+    return false;
+  }
+};
 
 const notifyOwners = async (
   infra: Infra,
@@ -82,6 +138,11 @@ const notifyOwners = async (
   tool: string,
 ): Promise<void> => {
   try {
+    const server = await infra.db.prisma.installation.findUnique({
+      where: { id: installationId },
+      select: { displayName: true },
+    });
+    const serverName = server?.displayName ?? null;
     const admins = await infra.db.prisma.user.findMany({
       where: { orgRole: 'admin', status: 'active' },
       select: { id: true },
@@ -94,7 +155,15 @@ const notifyOwners = async (
         kind: 'drift',
         payload: {
           title: `Definition changed: ${tool}`,
-          data: { message: 'Review it on the Security page.', reviewId, installationId, tool },
+          data: {
+            message: serverName
+              ? `${serverName} changed this tool. Review it on the Security page.`
+              : 'Review it on the Security page.',
+            reviewId,
+            installationId,
+            tool,
+            serverName,
+          },
         },
       });
     }

@@ -129,6 +129,12 @@ describe('15.5 statistics and findings', () => {
     expect(ids((await api.call('admin', 'GET', '/security/findings')).body)).toEqual(['f1']);
     expect((await api.call('managerOwn', 'GET', '/security/findings')).status).toBe(403);
   });
+
+  it('15.5 lists the sandboxes the platform holds for admins and auditors only', async () => {
+    api = await buildTestApi();
+    expect(ids((await api.call('admin', 'GET', '/sandboxes')).body)).toEqual(['s1']);
+    expect((await api.call('managerOwn', 'GET', '/sandboxes')).status).toBe(403);
+  });
 });
 
 describe('15.6 audit', () => {

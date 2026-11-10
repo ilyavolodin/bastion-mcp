@@ -4,12 +4,17 @@ import { GenericContainer, type StartedTestContainer, Wait } from 'testcontainer
 
 /** True when a Docker daemon answers; integration suites use it to skip instead of failing. */
 export const dockerAvailable = (): boolean => {
-  try {
-    execFileSync('docker', ['info'], { stdio: 'ignore', timeout: 10_000 });
-    return true;
-  } catch {
-    return false;
+  // A busy machine (every package's tests start at once) can answer `docker info` slowly. A timeout must not be
+  // read as "no Docker": that would skip the integration suites silently and let the run pass without them.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      execFileSync('docker', ['info'], { stdio: 'ignore', timeout: 60_000 });
+      return true;
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'ETIMEDOUT') return false;
+    }
   }
+  return false;
 };
 
 export type TestPostgres = {

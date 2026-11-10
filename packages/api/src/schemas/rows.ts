@@ -571,6 +571,24 @@ export const findingRecord = z
   })
   .meta({ id: 'Finding' });
 
+export const sandboxRecord = z
+  .looseObject({
+    id: z.string(),
+    installationId: z.string().nullable(),
+    serverName: z.string().nullable(),
+    replica: z.number(),
+    kind: z.string(),
+    driver: z.string().nullable(),
+    state: z.string(),
+    userId: z.string().nullable(),
+    userName: z.string().nullable(),
+    startedAt: z.string().nullable(),
+    lastUsedAt: z.string().nullable(),
+    failureCount: z.number(),
+    lastError: z.unknown(),
+  })
+  .meta({ id: 'Sandbox' });
+
 /** For responses whose handler type is not worth mirroring: the runtime schema still documents the shape. */
 export const untyped = (schema: z.ZodType): z.ZodType<unknown, unknown> =>
   schema as unknown as z.ZodType<unknown, unknown>;

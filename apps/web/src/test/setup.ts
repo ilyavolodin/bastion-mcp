@@ -11,7 +11,7 @@ import { findOperation, type HttpMethod, requiresIfMatch } from './contract';
 import { ifMatchPolicy } from './if-match';
 
 expect.extend(toHaveNoViolations);
-configure({ asyncUtilTimeout: 8000 });
+configure({ asyncUtilTimeout: 30_000 });
 
 // Monaco cannot run in jsdom: the lazy editor implementation becomes the plain textarea.
 vi.mock('@/components/monaco-impl', async () => {

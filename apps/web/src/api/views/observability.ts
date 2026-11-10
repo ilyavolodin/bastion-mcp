@@ -345,21 +345,32 @@ export type Names = {
   installations: ReadonlyMap<string, string>;
 };
 
-export type FindingView = FindingRow & { subjectName: string | null };
+export type FindingView = FindingRow & {
+  /** The person (guard blocks) the finding is about; null for the others. */
+  subjectName: string | null;
+  /** The server the finding happened on, when the API could tell. */
+  serverId: string | null;
+  serverName: string | null;
+};
 
 /** A finding's subject is a person (guard blocks), an installation (drift) or an instance (egress); name what we can. */
 export const findingViews = (rows: readonly FindingRow[], names: Names): FindingView[] =>
-  rows.map((f) => ({
-    ...f,
-    subjectName:
-      f.subject === null
-        ? null
-        : f.kind === 'guard_block'
-          ? (names.users.get(f.subject) ?? null)
-          : f.kind === 'drift'
-            ? (names.installations.get(f.subject) ?? null)
-            : null,
-  }));
+  rows.map((f) => {
+    // Drift subjects are installations themselves; the others carry the installation next to the subject.
+    const serverId =
+      typeof f.installationId === 'string'
+        ? f.installationId
+        : f.kind === 'drift'
+          ? f.subject
+          : null;
+    return {
+      ...f,
+      subjectName:
+        f.kind === 'guard_block' && f.subject ? (names.users.get(f.subject) ?? null) : null,
+      serverId,
+      serverName: serverId ? (names.installations.get(serverId) ?? null) : null,
+    };
+  });
 
 // --- drift reviews -----------------------------------------------------------------------------------------------
 

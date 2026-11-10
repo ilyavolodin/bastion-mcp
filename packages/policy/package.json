@@ -8,7 +8,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
-    "test": "vitest run",
+    "test": "vitest run --exclude \"**/*.perf.test.ts\"",
+    "test:perf": "vitest run .perf.test",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {

@@ -1,15 +1,22 @@
 import { Link } from '@tanstack/react-router';
 import { Bar, BarChart, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis } from 'recharts';
-import { type StatsScope, useCallTotals, useLatency, useNames, useSandboxStats } from '@/api/hooks';
+import {
+  type StatsScope,
+  useCallTotals,
+  useLatency,
+  useNames,
+  useSandboxes,
+  useSandboxStats,
+} from '@/api/hooks';
 import type { GroupTotal, StatsRange } from '@/api/views/observability';
 import { ChartCard } from '@/components/chart-card';
 import { AutoSize, AXIS_TICK, ChartTooltip, dateLabel, GRID, hourLabel } from '@/components/charts';
-import { Legend, Tag } from '@/components/primitives';
+import { Card, CardHeader, Legend, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { HEALTH_LABEL, healthTone, StatusDot } from '@/components/status';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
-import { formatDuration, formatNumber } from '@/lib/format';
+import { formatDuration, formatNumber, formatRelative } from '@/lib/format';
 
 type Args = { range: StatsRange } & StatsScope;
 const axisLabel = (range: StatsRange) =>
@@ -397,5 +404,86 @@ export function SandboxPanel({ args, enabled = true }: { args: Args; enabled?: b
         )}
       </QueryBoundary>
     </ChartCard>
+  );
+}
+
+// --- Running sandboxes ------------------------------------------------------------------------------------
+const SANDBOX_STATE = {
+  starting: { tone: 'info', label: 'Starting' },
+  running: { tone: 'ok', label: 'Running' },
+  stopping: { tone: 'warn', label: 'Stopping' },
+  failed: { tone: 'bad', label: 'Failed' },
+} as const;
+
+/** Every sandbox and remote connection the platform holds now, so "is anything running?" has an answer. */
+export function RunningSandboxesPanel({ enabled = true }: { enabled?: boolean }) {
+  const q = useSandboxes(enabled);
+  if (!enabled) return null;
+  return (
+    <Card aria-label="Running sandboxes" className="gap-3 lg:col-span-2">
+      <CardHeader
+        title="Running sandboxes"
+        subtitle="What is running now, for which server. Updates every few seconds."
+      />
+      <QueryBoundary
+        query={q}
+        skeleton={<Skeleton className="h-[120px] w-full" />}
+        isEmpty={(d) => d.length === 0}
+        empty={
+          <p className="m-0 text-muted">Nothing is running. Servers start on their first call.</p>
+        }
+      >
+        {(rows) => (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-left text-[13px]">
+              <thead>
+                <tr className="text-caption text-muted">
+                  <th className="py-1.5 pr-3 font-medium">Server</th>
+                  <th className="py-1.5 pr-3 font-medium">State</th>
+                  <th className="py-1.5 pr-3 font-medium">Kind</th>
+                  <th className="py-1.5 pr-3 font-medium">Started</th>
+                  <th className="py-1.5 font-medium">Last call</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const st = SANDBOX_STATE[r.state as keyof typeof SANDBOX_STATE];
+                  return (
+                    <tr key={r.id} className="border-t border-line">
+                      <td className="py-2 pr-3">
+                        {r.installationId ? (
+                          <Link
+                            to="/servers/$id"
+                            params={{ id: r.installationId }}
+                            className="font-medium underline"
+                          >
+                            {r.serverName ?? 'Unknown server'}
+                          </Link>
+                        ) : (
+                          (r.serverName ?? 'Unknown server')
+                        )}
+                        {r.userName ? <span className="text-muted"> · {r.userName}</span> : null}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <Tag tone={st?.tone ?? 'info'}>{st?.label ?? r.state}</Tag>
+                      </td>
+                      <td className="py-2 pr-3 text-muted">
+                        {r.kind === 'sandbox' ? (r.driver ?? 'sandbox') : 'Remote connection'}
+                      </td>
+                      <td className="py-2 pr-3 text-muted">
+                        {r.startedAt ? formatRelative(r.startedAt) : 'Not yet'}
+                      </td>
+                      <td className="py-2 text-muted">
+                        {r.lastUsedAt ? formatRelative(r.lastUsedAt) : 'Never'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </QueryBoundary>
+    </Card>
   );
 }

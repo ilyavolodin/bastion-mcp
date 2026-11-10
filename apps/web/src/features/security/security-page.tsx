@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Link } from '@tanstack/react-router';
 import { ShieldAlert, ShieldCheck } from 'lucide-react';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
@@ -576,8 +577,19 @@ function RecentFindings({ range }: { range: StatsRange }) {
                   </span>
                 </span>
                 <span className="font-mono text-[12px]">{f.detail ?? 'No detail'}</span>
-                {f.subject ? (
-                  <span className="text-caption text-muted">{f.subjectName ?? f.subject}</span>
+                {f.serverId ? (
+                  <Link
+                    to="/servers/$id"
+                    params={{ id: f.serverId }}
+                    className="text-caption font-medium text-tangerine-ink underline"
+                  >
+                    {f.serverName ?? 'Unknown server'}
+                  </Link>
+                ) : f.kind === 'egress_denied' ? (
+                  <span className="text-caption text-muted">Server unknown (instance gone)</span>
+                ) : null}
+                {f.subjectName ? (
+                  <span className="text-caption text-muted">{f.subjectName}</span>
                 ) : null}
               </li>
             ))}

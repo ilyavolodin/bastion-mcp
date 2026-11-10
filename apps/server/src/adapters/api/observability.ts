@@ -12,6 +12,7 @@ import type {
   CallRecord,
   FindingRecord,
   Page,
+  SandboxRecord,
   StatsQuery,
   StatsSeries,
 } from '@bastion-mcp/api';
@@ -257,6 +258,53 @@ export const createCallReader = ({
       };
     },
 
+    /** Every instance that has not been removed, with the server and person it belongs to (8.6). */
+    async sandboxes(filter): Promise<{ items: SandboxRecord[] }> {
+      const rows = await prisma.$queryRaw<
+        {
+          id: string;
+          installation_id: string | null;
+          server_name: string | null;
+          replica: number;
+          kind: string;
+          driver: string | null;
+          state: string;
+          user_id: string | null;
+          user_name: string | null;
+          started_at: Date | null;
+          last_used_at: Date | null;
+          failure_count: number;
+          last_error: unknown;
+        }[]
+      >`
+        SELECT i.id::text AS id, i.installation_id::text AS installation_id, n.display_name AS server_name,
+               i.replica, i.kind, i.driver, i.state, i.user_id::text AS user_id, u.display_name AS user_name,
+               i.started_at, i.last_used_at, i.failure_count, i.last_error
+          FROM instances i
+          LEFT JOIN installations n ON n.id = i.installation_id
+          LEFT JOIN users u ON u.id = i.user_id
+         WHERE i.state <> 'absent'
+         ORDER BY i.started_at DESC NULLS LAST, i.id DESC
+         LIMIT ${filter.limit}`;
+      return {
+        items: rows.map((r) => ({
+          id: r.id,
+          installationId: r.installation_id,
+          serverName: r.server_name,
+          replica: r.replica,
+          kind: r.kind,
+          driver: r.driver,
+          state: r.state,
+          userId: r.user_id,
+          userName: r.user_name,
+          startedAt: iso(r.started_at),
+          lastUsedAt: iso(r.last_used_at),
+          failureCount: r.failure_count,
+          lastError: r.last_error,
+        })),
+      };
+    },
+
     /** Guard blocks, open drift reviews and denied egress, newest first (13, 13.6, 8.8). */
     async findings(filter): Promise<Page<FindingRecord>> {
       const from = filter.from ? new Date(filter.from) : new Date(0);
@@ -265,18 +313,27 @@ export const createCallReader = ({
       const before = cursor ? new Date(Number(cursor[0])) : to;
       const beforeId = cursor ? String(cursor[1]) : 'ffffffff-ffff-ffff-ffff-ffffffffffff';
       const rows = await prisma.$queryRaw<
-        { id: string; ts: Date; kind: string; subject: string | null; detail: string | null }[]
+        {
+          id: string;
+          ts: Date;
+          kind: string;
+          subject: string | null;
+          detail: string | null;
+          installation_id: string | null;
+        }[]
       >`
         SELECT * FROM (
           SELECT id::text AS id, ts, 'guard_block' AS kind, principal_id::text AS subject,
-                 COALESCE(item_name, method) AS detail
+                 COALESCE(item_name, method) AS detail, installation_id::text AS installation_id
             FROM call_log WHERE outcome = 'blocked' AND ts >= ${from} AND ts < ${to}
           UNION ALL
-          SELECT id::text, created_at, 'drift', installation_id::text, item_key
+          SELECT id::text, created_at, 'drift', installation_id::text, item_key, installation_id::text
             FROM drift_reviews WHERE status = 'open' AND created_at >= ${from} AND created_at < ${to}
           UNION ALL
-          SELECT id::text, ts, 'egress_denied', instance_id::text, host || ':' || port
-            FROM egress_events WHERE decision = 'deny' AND ts >= ${from} AND ts < ${to}
+          SELECT e.id::text, e.ts, 'egress_denied', e.instance_id::text, e.host || ':' || e.port,
+                 i.installation_id::text
+            FROM egress_events e LEFT JOIN instances i ON i.id = e.instance_id
+            WHERE e.decision = 'deny' AND e.ts >= ${from} AND e.ts < ${to}
         ) f
         WHERE (f.ts < ${before} OR (f.ts = ${before} AND f.id < ${beforeId}))
         ORDER BY f.ts DESC, f.id DESC
@@ -287,6 +344,7 @@ export const createCallReader = ({
         kind: r.kind,
         subject: r.subject,
         detail: r.detail,
+        installationId: r.installation_id,
       }));
       const last = rows.length > filter.limit ? rows[filter.limit - 1] : undefined;
       return {

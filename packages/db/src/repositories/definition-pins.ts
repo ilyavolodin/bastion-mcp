@@ -286,7 +286,12 @@ export const createDriftReviewRepository = (
      */
     decide(
       id: string,
-      decision: { status: 'approved' | 'rejected'; decidedBy: string; reason?: string | null },
+      /** `decidedBy` is null for a decision the platform takes by policy; the audit event names the actor. */
+      decision: {
+        status: 'approved' | 'rejected';
+        decidedBy: string | null;
+        reason?: string | null;
+      },
       audit?: AuditContext,
     ): Promise<DriftReviewView> {
       return mutate(ctx, async (tx, unit) => {

@@ -31,15 +31,8 @@ export const orgSettingsSchema = z.object({
     llmJudge: z.record(z.string(), z.unknown()).nullable(),
     classifier: z.record(z.string(), z.unknown()).nullable(),
   }),
-  sandbox: z.object({
-    defaultSize: z.enum(['small', 'medium', 'large']),
-    warmPool: z.object({
-      small: z.number().int().nonnegative(),
-      medium: z.number().int().nonnegative(),
-      large: z.number().int().nonnegative(),
-    }),
-    idleTimeoutMinutes: z.number().int().min(1).max(1440),
-  }),
+  /** Changed or new tools of a server whose catalog risk is at most this level are accepted without a review. */
+  drift: z.object({ autoApproveUpTo: z.enum(['none', 'low', 'medium']) }),
   registry: z.object({ defaultSourceEnabled: z.boolean() }),
   endpoints: z.object({ toolWarnThreshold: z.number().int().positive() }),
 });
@@ -56,11 +49,7 @@ export const ORG_SETTING_DEFAULTS: OrgSettings = {
   audit: { retentionDays: 365, webhookUrl: null },
   guards: { orgDefaultProfileId: null },
   modelGuards: { jev: null, llmJudge: null, classifier: null },
-  sandbox: {
-    defaultSize: 'small',
-    warmPool: { small: 5, medium: 2, large: 0 },
-    idleTimeoutMinutes: 15,
-  },
+  drift: { autoApproveUpTo: 'none' },
   registry: { defaultSourceEnabled: false },
   endpoints: { toolWarnThreshold: 40 },
 };

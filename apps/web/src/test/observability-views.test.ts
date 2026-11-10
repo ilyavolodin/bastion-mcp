@@ -171,11 +171,19 @@ describe('observability views (15.5, 13.6, 17.2)', () => {
       [
         { id: '1', ts: ts(0), kind: 'guard_block', subject: 'u-raj', detail: 'pg_run_query' },
         { id: '2', ts: ts(0), kind: 'drift', subject: 'i-sentry', detail: 'get_event' },
-        { id: '3', ts: ts(0), kind: 'egress_denied', subject: 'inst-1', detail: 'x:443' },
+        {
+          id: '3',
+          ts: ts(0),
+          kind: 'egress_denied',
+          subject: 'inst-1',
+          detail: 'x:443',
+          installationId: 'i-sentry',
+        },
       ],
       names,
     );
-    expect(out.map((f) => f.subjectName)).toEqual(['Raj Mehta', 'Sentry', null]);
+    expect(out.map((f) => f.subjectName)).toEqual(['Raj Mehta', null, null]);
+    expect(out.map((f) => f.serverName)).toEqual([null, 'Sentry', 'Sentry']);
   });
 
   it('formats previews and tracing links', () => {

@@ -326,13 +326,14 @@ describe('Catalog forms send what the API requires (17.2)', () => {
     await user.click(within(card).getByRole('button', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog', { name: /Edit auto-install policy/ });
     await user.click(within(dialog).getByRole('button', { name: 'Everyone' }));
-    const preview = (await expectSent(
-      capture,
-      'post',
-      /\/auto-install-policies\/ap-2\/preview$/,
-    )) as {
-      target: { all: boolean };
-    };
+    // The dialog previews once when it opens and again after the click; skip the opening one, which may still be
+    // in flight on a busy machine.
+    let preview: { target: { all: boolean } };
+    do {
+      preview = (await expectSent(capture, 'post', /\/auto-install-policies\/ap-2\/preview$/)) as {
+        target: { all: boolean };
+      };
+    } while (!preview.target.all);
     expect(preview.target.all).toBe(true);
     await user.selectOptions(within(dialog).getByLabelText('Mode'), 'default');
     await user.click(within(dialog).getByRole('button', { name: 'Save policy' }));

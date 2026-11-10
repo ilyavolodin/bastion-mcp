@@ -197,6 +197,16 @@ export const useSandboxStats = (args: StatsArgs, enabled = true) =>
       api.get('/stats/sandboxes', { query: rangeQuery(args.range), signal }).then(sandboxSeries),
   });
 
+/** The sandboxes and remote connections the platform holds right now; refreshed while the page is open. */
+export const useSandboxes = (enabled = true) =>
+  useQuery({
+    enabled,
+    queryKey: [...keys.stats, 'sandboxes-live'],
+    refetchInterval: 15_000,
+    queryFn: ({ signal }) =>
+      api.get('/sandboxes', { query: { limit: 200 }, signal }).then((r) => r.items),
+  });
+
 export const useGuardStats = (args: { range: StatsRange }) =>
   useQuery({
     queryKey: [...keys.stats, 'guards', args],

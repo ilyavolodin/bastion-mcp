@@ -537,8 +537,46 @@ const findings = (): Schemas['Finding'][] => {
       kind: 'egress_denied' as const,
       subject: e.instanceId,
       detail: `${e.host}:${e.port}`,
+      installationId: SEED_IDS.installation.notion,
     })),
   ].sort((a, b) => b.ts.localeCompare(a.ts) || b.id.localeCompare(a.id));
+};
+
+// --- sandboxes ----------------------------------------------------------------------------------------------------
+
+const sandboxes = (): Schemas['Sandbox'][] => {
+  const now = nowMs();
+  const base = {
+    kind: 'sandbox',
+    driver: 'kubernetes',
+    replica: 0,
+    failureCount: 0,
+    lastError: null,
+  };
+  return [
+    {
+      ...base,
+      id: 'inst-notion-1',
+      installationId: SEED_IDS.installation.notion,
+      serverName: 'Notion',
+      state: 'running',
+      userId: null,
+      userName: null,
+      startedAt: iso(now - 3 * HOUR),
+      lastUsedAt: iso(now - 4 * MIN),
+    },
+    {
+      ...base,
+      id: 'inst-postgres-1',
+      installationId: SEED_IDS.installation.postgres,
+      serverName: 'Postgres analytics',
+      state: 'starting',
+      userId: null,
+      userName: null,
+      startedAt: iso(now - 20_000),
+      lastUsedAt: null,
+    },
+  ];
 };
 
 // --- drift --------------------------------------------------------------------------------------------------------
@@ -615,6 +653,9 @@ export const observabilityHandlers = [
   route.get('/stats/sandboxes', ({ query }) =>
     sees() ? HttpResponse.json({ buckets: sandboxStats(query as Query) }) : forbidden(),
   ),
+  route.get('/sandboxes', () =>
+    sees() ? HttpResponse.json({ items: sandboxes(), nextCursor: null }) : forbidden(),
+  ),
   route.get('/security/findings', ({ url, query }) => {
     if (!sees()) return forbidden();
     const q = query as { from?: string; to?: string };
@@ -669,6 +710,7 @@ export const observabilitySamples: SampleFactory = (db) => {
     { method: 'get', path: `/stats/guards?bucket=day&from=${from}&to=${to}` },
     { method: 'get', path: `/stats/sandboxes?bucket=day&from=${from}&to=${to}` },
     { method: 'get', path: '/security/findings' },
+    { method: 'get', path: '/sandboxes?limit=200' },
     { method: 'get', path: '/drift-reviews?status=open' },
     {
       method: 'post',

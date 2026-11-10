@@ -33,6 +33,9 @@ export type StatsSeries = {
 
 export type FindingRecord = { id: string } & Record<string, unknown>;
 
+/** One sandbox (or remote connection) the instance manager tracks: what runs, for whom, and how it is doing. */
+export type SandboxRecord = { id: string } & Record<string, unknown>;
+
 export interface CallReader {
   list(filter: CallFilter): Promise<Page<CallRecord>>;
   get(id: string): Promise<CallRecord | null>;
@@ -40,6 +43,8 @@ export interface CallReader {
   latency(query: StatsQuery): Promise<StatsSeries>;
   guardStats(query: StatsQuery): Promise<StatsSeries>;
   sandboxStats(query: StatsQuery): Promise<StatsSeries>;
+  /** Instances that are not gone: starting, ready, idle, stopping or failed, newest start first. */
+  sandboxes(filter: { limit: number }): Promise<{ items: SandboxRecord[] }>;
   findings(filter: {
     from?: string | undefined;
     to?: string | undefined;

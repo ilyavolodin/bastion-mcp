@@ -6,7 +6,14 @@ import { PageHeader } from '@/components/page-header';
 import { Segmented } from '@/components/primitives';
 import { Select } from '@/components/ui/input';
 import { useSearchState } from '@/lib/search';
-import { HealthPanel, LatencyPanel, PeoplePanel, SandboxPanel, TrafficPanel } from './panels';
+import {
+  HealthPanel,
+  LatencyPanel,
+  PeoplePanel,
+  RunningSandboxesPanel,
+  SandboxPanel,
+  TrafficPanel,
+} from './panels';
 
 const searchSchema = z.object({
   range: z.enum(['1h', '24h', '7d']).catch('24h').default('24h'),
@@ -89,6 +96,7 @@ export function ObservabilityPage() {
         {scope === 'person' ? null : <PeoplePanel args={args} />}
         <LatencyPanel args={args} enabled={orgAllowed && scope !== 'person'} />
         {scope === 'person' ? null : <SandboxPanel args={args} enabled={orgAllowed} />}
+        {scope === 'person' || !orgAllowed ? null : <RunningSandboxesPanel />}
       </div>
     </>
   );

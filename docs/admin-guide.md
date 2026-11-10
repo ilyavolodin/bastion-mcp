@@ -348,8 +348,8 @@ touching ciphertexts (`POST /api/v1/system/kms/rotate`, Admin; see [rotating key
 | `bubblewrap` (default for `all`) | `bwrap` jails inside the Bastion container | `namespaces` | Needs unprivileged user namespaces; resource limits through cgroup v2 when writable, else `prlimit` plus RSS polling. |
 
 Catalog entries can require `minIsolation: gvisor` or `kata`, which blocks them on the bubblewrap driver. Remote
-installations need no sandbox. Org settings (`sandbox`): `defaultSize` (`small`), `warmPool` (5, 2, 0),
-`idleTimeoutMinutes` (15). Caps: `BASTION_MAX_RUNNING_INSTANCES_PER_USER` (10) and `BASTION_MAX_RUNNING_SANDBOXES`
+installations need no sandbox. Sandbox size, the warm pool and the runtime class are Helm values (`sandbox.sizes`, `sandbox.warmPool`); each server
+chooses its own size, defaulting to `small`. Caps: `BASTION_MAX_RUNNING_INSTANCES_PER_USER` (10) and `BASTION_MAX_RUNNING_SANDBOXES`
 (500). Sandboxes only reach the network through the egress proxy and its per-entry allowlist; `BASTION_CLUSTER_CIDRS`,
 loopback, link-local (including `169.254.169.254`), RFC 1918, CGNAT and IPv6 ULA are denied unless a CIDR entry
 allows them (8.8). Package mirrors (`BASTION_NPM_REGISTRY`, `BASTION_PYPI_INDEX_URL`) are reachable during install only.

@@ -8,7 +8,7 @@ test('Home renders with the endpoint and installation tiles', async ({ page }) =
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
   await expect(page.getByText(`https://${ORG_HOST}/mcp`)).toBeVisible();
-  await expect(page.getByRole('link', { name: /Postgres analytics/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Jira/ })).toBeVisible();
 });
 
 test('install a server from the Store', async ({ page }) => {

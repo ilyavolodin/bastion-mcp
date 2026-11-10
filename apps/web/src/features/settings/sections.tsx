@@ -1,7 +1,7 @@
 import { orgSettingsSchema } from '@bastion-mcp/core/org-settings';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as React from 'react';
-import { type FieldPath, type FieldValues, useForm } from 'react-hook-form';
+import { type FieldValues, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { usePatchSettings, useRotateKms, useSettings, useSystemStatus } from '@/api/hooks';
@@ -16,8 +16,15 @@ import { Input, Select } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { formatDate } from '@/lib/format';
 
+/** IANA zones the browser knows, plus UTC and whatever is saved now (so an older free-form value still shows). */
+const timeZoneOptions = (current: string | undefined): string[] => {
+  const known =
+    typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
+  return [...new Set(['UTC', ...known, ...(current ? [current] : [])])];
+};
+
 /** One settings card: loads `/settings`, edits a slice with a zod-validated form and PATCHes only that slice. */
-function useSection<T extends FieldValues>(key: 'org' | 'sandbox', schema: z.ZodType<T>) {
+function useSection<T extends FieldValues>(key: 'org' | 'drift', schema: z.ZodType<T>) {
   const settings = useSettings();
   const patch = usePatchSettings();
   const form = useForm<T>({
@@ -26,7 +33,7 @@ function useSection<T extends FieldValues>(key: 'org' | 'sandbox', schema: z.Zod
   });
   const submit = form.handleSubmit((v) =>
     patch
-      .mutateAsync({ [key]: v } as Partial<OrgSettings>)
+      .mutateAsync({ [key]: v } as unknown as Partial<OrgSettings>)
       .then(() => toast.success('Settings saved')),
   );
   return { settings, patch, form, submit };
@@ -75,12 +82,18 @@ export function OrganizationSection() {
                 help="Used for schedules and report boundaries"
               >
                 {({ id, describedBy, invalid }) => (
-                  <Input
+                  <Select
                     id={id}
                     aria-describedby={describedBy}
                     aria-invalid={invalid}
                     {...org.form.register('timeZone')}
-                  />
+                  >
+                    {timeZoneOptions(org.form.watch('timeZone')).map((tz) => (
+                      <option key={tz} value={tz}>
+                        {tz.replaceAll('_', ' ')}
+                      </option>
+                    ))}
+                  </Select>
                 )}
               </Field>
               <Button type="submit" disabled={org.patch.isPending}>
@@ -131,63 +144,52 @@ export function OrganizationSection() {
   );
 }
 
-export function SandboxesSection() {
-  const s = useSection<OrgSettings['sandbox']>('sandbox', shape.sandbox);
+export function ToolChangesSection() {
+  const s = useSection<OrgSettings['drift']>('drift', shape.drift);
   return (
     <QueryBoundary query={s.settings}>
       {() => (
-        <Card aria-label="Sandboxes" className="max-w-2xl gap-4">
-          <CardHeader title="Sandboxes" />
+        <Card aria-label="Tool changes" className="max-w-2xl gap-4">
+          <CardHeader title="Tool changes" />
           <form noValidate className="flex flex-col gap-4" onSubmit={s.submit}>
-            <Field label="Default size">
+            <p className="m-0 text-caption text-muted">
+              When a server changes a tool it was approved with, or adds one, the change waits on
+              the Security page until someone reviews it. Servers you trust can skip that step.
+            </p>
+            <Field
+              label="Accept changes without review"
+              help="Uses the risk rating set on each server in the catalog. High-risk servers always need a review, and so does any profile that blocks on changes."
+            >
               {({ id }) => (
-                <Select id={id} {...s.form.register('defaultSize')}>
-                  <option value="small">Small</option>
-                  <option value="medium">Medium</option>
-                  <option value="large">Large</option>
+                <Select id={id} {...s.form.register('autoApproveUpTo')}>
+                  <option value="none">Never: review every change</option>
+                  <option value="low">Low-risk servers only</option>
+                  <option value="medium">Low and medium-risk servers</option>
                 </Select>
               )}
             </Field>
-            <fieldset className="m-0 grid gap-4 border-0 p-0 sm:grid-cols-3">
-              <legend className="mb-1.5 text-[13px] font-medium">
-                Warm pool (idle sandboxes kept ready)
-              </legend>
-              {(['small', 'medium', 'large'] as const).map((k) => (
-                <Field key={k} label={k[0]?.toUpperCase() + k.slice(1)}>
-                  {({ id }) => (
-                    <Input
-                      id={id}
-                      type="number"
-                      min={0}
-                      {...s.form.register(`warmPool.${k}` as FieldPath<OrgSettings['sandbox']>, {
-                        valueAsNumber: true,
-                      })}
-                    />
-                  )}
-                </Field>
-              ))}
-            </fieldset>
-            <Field
-              label="Idle timeout (minutes)"
-              error={s.form.formState.errors.idleTimeoutMinutes?.message}
-            >
-              {({ id, describedBy, invalid }) => (
-                <Input
-                  id={id}
-                  type="number"
-                  aria-describedby={describedBy}
-                  aria-invalid={invalid}
-                  {...s.form.register('idleTimeoutMinutes', { valueAsNumber: true })}
-                />
-              )}
-            </Field>
             <Button type="submit" disabled={s.patch.isPending}>
-              Save sandboxes
+              Save
             </Button>
           </form>
         </Card>
       )}
     </QueryBoundary>
+  );
+}
+
+export function SandboxesSection() {
+  return (
+    <Card aria-label="Sandboxes" className="max-w-2xl gap-3">
+      <CardHeader title="Sandboxes" />
+      <p className="m-0 text-[13px] leading-5 text-muted">
+        A sandbox is the isolated container a server runs in. Each server picks its own size on its
+        Settings tab: small (up to 1 CPU, 512 MiB), medium (up to 2 CPU, 1 GiB) or large (up to 4
+        CPU, 4 GiB). The CPU and memory of each size, the warm pool of idle sandboxes kept ready,
+        and the runtime class are set in the Helm chart under <code>sandbox</code>. A server's idle
+        timeout is part of its own package settings.
+      </p>
+    </Card>
   );
 }
 

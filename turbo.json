@@ -21,6 +21,11 @@
         "TESTCONTAINERS_*"
       ]
     },
+    "test:perf": {
+      "dependsOn": ["^generate", "generate"],
+      "env": ["FUZZ_RUNS", "BASTION_SKIP_DOCKER", "BASTION_TEST_IMAGE", "BASTION_PERF_STRICT"],
+      "passThroughEnv": ["API_TEST_LOG", "BASTION_TEST_KEYCHAIN", "DOCKER_HOST", "TESTCONTAINERS_*"]
+    },
     "test:coverage": {
       "dependsOn": ["^generate", "generate"],
       "outputs": ["coverage/**"],
