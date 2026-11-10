@@ -44,6 +44,12 @@ const PAGE_ROWS = 500;
 const PAGE_ROWS_BY_TABLE: Record<string, number> = { blobs: 20 };
 const pageRows = (table: string): number => PAGE_ROWS_BY_TABLE[table] ?? PAGE_ROWS;
 
+/** The rows of a table as JSON documents, one page (`pageRows`) at a time, in order. */
+function* jsonPages(table: string, rows: Row[]): Generator<string> {
+  const size = pageRows(table);
+  for (let i = 0; i < rows.length; i += size) yield JSON.stringify(rows.slice(i, i + size));
+}
+
 const quote = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 const hexToBuffer = (value: unknown): Buffer => {
   if (typeof value !== 'string' || !value.startsWith('\\x')) {
@@ -108,14 +114,13 @@ type Clash = { key: string; count: number; ids: string[] };
 const findClashes = async (db: Queryable, table: string, rows: Row[]): Promise<Clash[]> => {
   if (rows.length === 0) return [];
   const pk = await primaryKey(db, table);
-  const size = pageRows(table);
   const out: Clash[] = [];
   for (const key of await uniqueKeys(db, table)) {
     const seen = new Map<string, string>();
-    for (let i = 0; i < rows.length; i += size) {
+    for (const page of jsonPages(table, rows)) {
       const found = await db.$queryRawUnsafe<{ row_id: string; id: string | null }[]>(
         `SELECT DISTINCT x.row_id::text AS row_id, to_jsonb(x)->>'id' AS id ${clashFrom(table, key, pk)}`,
-        JSON.stringify(rows.slice(i, i + size)),
+        page,
       );
       for (const f of found) seen.set(f.row_id, f.id ?? '');
     }
@@ -128,12 +133,11 @@ const findClashes = async (db: Queryable, table: string, rows: Row[]): Promise<C
 const removeClashes = async (db: Queryable, table: string, rows: Row[]): Promise<void> => {
   if (rows.length === 0) return;
   const pk = await primaryKey(db, table);
-  const size = pageRows(table);
   for (const key of await uniqueKeys(db, table)) {
-    for (let i = 0; i < rows.length; i += size) {
+    for (const page of jsonPages(table, rows)) {
       await db.$executeRawUnsafe(
         `DELETE FROM ${quote(table)} WHERE ctid IN (SELECT x.row_id ${clashFrom(table, key, pk)})`,
-        JSON.stringify(rows.slice(i, i + size)),
+        page,
       );
     }
   }
@@ -303,13 +307,12 @@ const countExisting = async (
   if (rows.length === 0) return 0;
   const pk = await primaryKey(db, table);
   const same = pk.map((c) => `x.${quote(c)} = s.${quote(c)}`).join(' AND ');
-  const size = pageRows(table);
   let total = 0;
-  for (let i = 0; i < rows.length; i += size) {
+  for (const page of jsonPages(table, rows)) {
     const r = await db.$queryRawUnsafe<{ n: number }[]>(
       `SELECT count(*)::int AS n FROM jsonb_populate_recordset(NULL::${quote(table)}, $1::jsonb) s
         WHERE EXISTS (SELECT 1 FROM ${quote(table)} x WHERE ${same})`,
-      JSON.stringify(rows.slice(i, i + size)),
+      page,
     );
     total += r[0]?.n ?? 0;
   }
@@ -333,10 +336,9 @@ const insertRows = async (tx: Queryable, table: string, rows: Row[], mode: Resto
         : 'DO NOTHING'
     }`;
   }
-  const size = pageRows(table);
-  for (let i = 0; i < rows.length; i += size) {
+  for (const page of jsonPages(table, rows)) {
     try {
-      await tx.$executeRawUnsafe(sql, JSON.stringify(rows.slice(i, i + size)));
+      await tx.$executeRawUnsafe(sql, page);
     } catch (error) {
       throw new RestoreRefusedError(
         `${table}: ${error instanceof Error ? error.message : String(error)}`,
