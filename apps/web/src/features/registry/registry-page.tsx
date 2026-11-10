@@ -139,11 +139,7 @@ function ServerCard({
         <Tag tone="surface">
           {s.sourceName} · v{s.version}
         </Tag>
-        {s.trust ? (
-          <Tag tone={s.trust === 'official' ? 'ok' : s.trust === 'internal' ? 'info' : 'neutral'}>
-            {TRUST_LABEL[s.trust] ?? s.trust}
-          </Tag>
-        ) : null}
+        {s.trust ? <Tag tone={trustTone(s.trust)}>{TRUST_LABEL[s.trust] ?? s.trust}</Tag> : null}
         {curate && hidden ? <Tag tone="warn">Hidden from members</Tag> : null}
       </div>
       {curate ? (
