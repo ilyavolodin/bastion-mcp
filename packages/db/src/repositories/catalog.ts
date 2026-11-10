@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   CATALOG_KINDS,
   CATALOG_STATUSES,
@@ -10,6 +9,7 @@ import {
   RISK_LEVELS,
   type ServerSpec,
   serverSpecSchema,
+  sha256,
   USER_OVERRIDE_LEVELS,
 } from '@bastion-mcp/core';
 import { z } from 'zod';
@@ -707,7 +707,7 @@ export const createBlobStore = (arg: PrismaLike | RepoContext, options?: RepoOpt
   const { db } = toContext(arg, options);
   return {
     async put(content: Uint8Array): Promise<string> {
-      const sha = createHash('sha256').update(content).digest();
+      const sha = sha256(content);
       await db.blob.createMany({
         data: [{ sha256: toBytes(sha), size: content.length, content: toBytes(content) }],
         skipDuplicates: true,
