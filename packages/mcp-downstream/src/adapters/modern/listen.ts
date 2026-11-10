@@ -14,9 +14,9 @@ import { type Logger, noopLogger, type UpstreamPort } from '../../ports';
 import type { Exchange, ListenAdapter, NotifyEvent, NotifyHubPort } from '../contracts';
 import { first, KEEPALIVE_MS, sendResponse, sseCommentFrame, sseMessageFrame } from '../shared';
 
-export const SUBSCRIPTION_ID_KEY = 'io.modelcontextprotocol/subscriptionId';
+const SUBSCRIPTION_ID_KEY = 'io.modelcontextprotocol/subscriptionId';
 const SERVER_INFO_KEY = 'io.modelcontextprotocol/serverInfo';
-export const DEFAULT_MAX_LISTEN_STREAMS = 1024;
+const DEFAULT_MAX_LISTEN_STREAMS = 1024;
 
 export type ListenAdapterDeps = {
   hub: NotifyHubPort;

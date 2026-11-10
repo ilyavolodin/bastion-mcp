@@ -46,7 +46,7 @@ import { toRpcErrorBody } from '../rpc';
 import type { ResolvedEndpoint } from '../types';
 import type { EndpointResolver } from './resolver';
 
-export const MAX_BODY_BYTES = 4 * 1024 * 1024;
+const MAX_BODY_BYTES = 4 * 1024 * 1024;
 
 export type HttpDeps = {
   verifier: TokenVerifierPort;

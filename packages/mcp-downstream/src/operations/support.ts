@@ -159,7 +159,7 @@ export const toolAnnotationsOf = (tool: Record<string, unknown> | undefined): To
 export const spanContextOf = (ctx: Pick<OpContext, 'trace'>): SpanContext =>
   trace.getSpanContext(context.active()) ?? ctx.trace;
 
-export const traceCarrierOf = (sc: SpanContext): { traceparent: string } => ({
+const traceCarrierOf = (sc: SpanContext): { traceparent: string } => ({
   traceparent: `00-${sc.traceId}-${sc.spanId}-${(sc.traceFlags & 0xff).toString(16).padStart(2, '0')}`,
 });
 

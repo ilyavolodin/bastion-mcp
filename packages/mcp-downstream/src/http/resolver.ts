@@ -40,7 +40,7 @@ export const endpointKey = (parsed: ParsedEndpointPath): string =>
 
 /** How long a slug that resolved to nothing keeps answering `null` without loading data (hidden is nonexistent). */
 export const NEGATIVE_TTL_MS = 5 * MS.SECOND;
-export const NEGATIVE_MAX = 10_000;
+const NEGATIVE_MAX = 10_000;
 
 export class EndpointResolver {
   private readonly resolved = new WeakMap<EffectiveEndpoint, ResolvedEndpoint>();

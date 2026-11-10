@@ -24,11 +24,7 @@ import type { Exchange, OpRunner } from '../contracts';
 import { first, inputRequiredPayload, isModernVersion, sseMessageFrame } from '../shared';
 import { modernOpContext } from './server';
 
-export const TASK_METHODS: ReadonlySet<string> = new Set([
-  'tasks/get',
-  'tasks/update',
-  'tasks/cancel',
-]);
+const TASK_METHODS: ReadonlySet<string> = new Set(['tasks/get', 'tasks/update', 'tasks/cancel']);
 
 const envelopeSchema = z.looseObject({
   [PROTOCOL_VERSION_META_KEY]: z.string(),

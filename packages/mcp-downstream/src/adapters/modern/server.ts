@@ -121,7 +121,7 @@ export const modernOpContext = (
 };
 
 /** Maps an operation outcome onto what an SDK handler returns. */
-export const toSdkResult = (outcome: OpOutcome<unknown>): JsonObject => {
+const toSdkResult = (outcome: OpOutcome<unknown>): JsonObject => {
   switch (outcome.kind) {
     case 'complete':
       return (isRecord(outcome.result) ? outcome.result : {}) as JsonObject;
@@ -133,7 +133,7 @@ export const toSdkResult = (outcome: OpOutcome<unknown>): JsonObject => {
 };
 
 /** JSON-RPC errors thrown inside SDK handlers: Bastion's errors keep their codes and `data` (6.9). */
-export const toProtocolError = (error: unknown): ProtocolError => {
+const toProtocolError = (error: unknown): ProtocolError => {
   const body = toRpcErrorBody(error);
   return new ProtocolError(body.code, body.message, body.data);
 };
@@ -148,7 +148,7 @@ const withRetryFields = (params: JsonObject, c: Pick<ServerContext, 'mcpReq'>): 
 };
 
 /** The low-level `Server` of one request (7.6 capabilities, instructions and cache hints from the endpoint). */
-export const buildLowLevelServer = (deps: ModernAdapterDeps): Server => {
+const buildLowLevelServer = (deps: ModernAdapterDeps): Server => {
   const rc = currentRequestContext();
   const endpoint = rc.resolved.endpoint;
   const hint = { ttlMs: endpoint.ttlMs, cacheScope: endpoint.cacheScope } as const;

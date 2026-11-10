@@ -52,7 +52,7 @@ const hashSchema = z.object({
 
 export const newSessionId = (): string => randomBytes(32).toString('base64url');
 
-export const closeMessage = JSON.stringify({ type: 'close' });
+const closeMessage = JSON.stringify({ type: 'close' });
 
 export class LegacySessionStore {
   constructor(
