@@ -2,6 +2,7 @@ import { canonicalJson, redisKeys, sha256Hex, TTL } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { CHUNK_OVERLAP, chunkText } from '../extract';
 import {
+  ACTIONS,
   type FetchLike,
   type GuardAction,
   type GuardCache,
@@ -27,7 +28,7 @@ const chunkVerdictSchema = z.object({
   score: z.number().optional(),
   label: z.string(),
   reason: z.string().optional(),
-  action: z.enum(['allow', 'warn', 'redact', 'quarantine', 'confirm', 'block']).optional(),
+  action: z.enum(ACTIONS).optional(),
   details: z.record(z.string(), z.unknown()).optional(),
 });
 export type ChunkVerdict = {
