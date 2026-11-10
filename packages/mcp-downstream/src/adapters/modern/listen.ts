@@ -72,6 +72,69 @@ const callPrincipal = (rc: BastionRequestContext): CallPrincipal => ({
 
 type Stream = { close: (graceful: boolean) => void };
 
+type ListenRequest = {
+  method: string | undefined;
+  headers: Exchange['req']['headers'];
+  body: unknown;
+};
+
+type ListenDecision =
+  | { ok: true; subscriptionId: string | number; filter: Filter }
+  | { ok: false; status: number; error: unknown; limitReached?: true };
+
+/** Whether a `subscriptions/listen` POST is acceptable, in the order the wire contract checks it. No I/O. */
+const parseListenRequest = (input: ListenRequest, atCapacity: boolean): ListenDecision => {
+  const { headers, body } = input;
+  const bodyId = (body as { id?: unknown } | null)?.id;
+  const classified = classifyExchange({ method: input.method ?? 'POST', headers, body });
+  if (classified.kind === 'reject') {
+    return {
+      ok: false,
+      status: classified.httpStatus,
+      error: rpcError(bodyId, classified.code, classified.message, classified.data),
+    };
+  }
+  const parsed = bodySchema.safeParse(body);
+  if (
+    classified.kind !== 'modern' ||
+    classified.messageKind !== 'request' ||
+    !parsed.success ||
+    first(headers['mcp-method']) !== 'subscriptions/listen'
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: rpcError(
+        bodyId,
+        JSONRPC_CODES.INVALID_REQUEST,
+        'Invalid subscriptions/listen request',
+      ),
+    };
+  }
+  const subscriptionId = parsed.data.id;
+  if (atCapacity) {
+    return {
+      ok: false,
+      status: 200,
+      error: rpcError(subscriptionId, JSONRPC_CODES.INTERNAL_ERROR, 'Subscription limit reached'),
+      limitReached: true,
+    };
+  }
+  const filter = filterSchema.safeParse(parsed.data.params?.notifications);
+  if (!filter.success || parsed.data.params?.notifications === undefined) {
+    return {
+      ok: false,
+      status: 200,
+      error: rpcError(
+        subscriptionId,
+        JSONRPC_CODES.INVALID_PARAMS,
+        "Invalid params: 'notifications' is required and must be a valid SubscriptionFilter",
+      ),
+    };
+  }
+  return { ok: true, subscriptionId, filter: filter.data };
+};
+
 export const createListenAdapter = (deps: ListenAdapterDeps): ListenAdapter => {
   const logger = deps.logger ?? noopLogger;
   const keepAliveMs = deps.keepAliveMs ?? KEEPALIVE_MS;
@@ -128,60 +191,27 @@ export const createListenAdapter = (deps: ListenAdapterDeps): ListenAdapter => {
   };
 
   const handle = async ({ req, res, body, rc }: Exchange): Promise<void> => {
-    const bodyId = (body as { id?: unknown } | null)?.id;
-    const classified = classifyExchange({
-      method: req.method ?? 'POST',
-      headers: req.headers,
-      body,
-    });
-    if (classified.kind === 'reject') {
-      writeJson(
-        res,
-        classified.httpStatus,
-        rpcError(bodyId, classified.code, classified.message, classified.data),
-      );
+    const decision = parseListenRequest(
+      { method: req.method, headers: req.headers, body },
+      open.size >= maxStreams,
+    );
+    if (!decision.ok) {
+      if (decision.limitReached) {
+        logger.warn('subscriptions/listen refused: subscription limit reached');
+      }
+      writeJson(res, decision.status, decision.error);
       return;
     }
-    const parsed = bodySchema.safeParse(body);
-    if (
-      classified.kind !== 'modern' ||
-      classified.messageKind !== 'request' ||
-      !parsed.success ||
-      first(req.headers['mcp-method']) !== 'subscriptions/listen'
-    ) {
-      writeJson(
-        res,
-        400,
-        rpcError(bodyId, JSONRPC_CODES.INVALID_REQUEST, 'Invalid subscriptions/listen request'),
-      );
-      return;
-    }
-    const subscriptionId = parsed.data.id;
-    if (open.size >= maxStreams) {
-      logger.warn('subscriptions/listen refused: subscription limit reached');
-      writeJson(
-        res,
-        200,
-        rpcError(subscriptionId, JSONRPC_CODES.INTERNAL_ERROR, 'Subscription limit reached'),
-      );
-      return;
-    }
-    const filter = filterSchema.safeParse(parsed.data.params?.notifications);
-    if (!filter.success || parsed.data.params?.notifications === undefined) {
-      writeJson(
-        res,
-        200,
-        rpcError(
-          subscriptionId,
-          JSONRPC_CODES.INVALID_PARAMS,
-          "Invalid params: 'notifications' is required and must be a valid SubscriptionFilter",
-        ),
-      );
-      return;
-    }
-    const { honored, installationByUri } = await honoredFilter(rc, filter.data);
+    const { subscriptionId } = decision;
+    const { honored, installationByUri } = await honoredFilter(rc, decision.filter);
     const endpoint = rc.resolved.endpoint;
     const principal = callPrincipal(rc);
+    const subscriptionArgs = (uri: string, installationId: string) => ({
+      installationId,
+      principal,
+      downstreamUri: uri,
+      endpointId: endpoint.endpointId,
+    });
 
     res.writeHead(200, {
       'content-type': 'text/event-stream',
@@ -239,12 +269,7 @@ export const createListenAdapter = (deps: ListenAdapterDeps): ListenAdapter => {
         }
         for (const [uri, installationId] of subscribed) {
           deps.upstream
-            .unsubscribeResource({
-              installationId,
-              principal,
-              downstreamUri: uri,
-              endpointId: endpoint.endpointId,
-            })
+            .unsubscribeResource(subscriptionArgs(uri, installationId))
             .catch((error: unknown) => {
               logger.warn('listen: unsubscribe failed', { error: String(error) });
             });
@@ -293,19 +318,9 @@ export const createListenAdapter = (deps: ListenAdapterDeps): ListenAdapter => {
     }
     for (const [uri, installationId] of installationByUri) {
       try {
-        await deps.upstream.subscribeResource({
-          installationId,
-          principal,
-          downstreamUri: uri,
-          endpointId: endpoint.endpointId,
-        });
+        await deps.upstream.subscribeResource(subscriptionArgs(uri, installationId));
         if (closed) {
-          await deps.upstream.unsubscribeResource({
-            installationId,
-            principal,
-            downstreamUri: uri,
-            endpointId: endpoint.endpointId,
-          });
+          await deps.upstream.unsubscribeResource(subscriptionArgs(uri, installationId));
         } else subscribed.set(uri, installationId);
       } catch (error) {
         logger.warn('listen: subscribe failed', { uri, error: String(error) });
