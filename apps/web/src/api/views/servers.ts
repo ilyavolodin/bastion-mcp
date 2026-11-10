@@ -14,13 +14,9 @@ export type StoreEntryDetail = Schemas['StoreEntryDetail'];
 export type Definitions = Res<'get', '/installations/{id}/tools'>;
 export type OverridePreview = Schemas['OverridePreview'];
 export type EgressEntry = Schemas['EgressEntry'];
-export type ClientConfig = Res<'get', '/endpoints/{id}/client-config'>;
 export type ClientKind = NonNullable<
   NonNullable<import('../schema').Query<'get', '/endpoints/{id}/client-config'>>['client']
 >;
-export type TryBody = Body<'post', '/installations/{id}/try'>;
-export type TryResult = Res<'post', '/installations/{id}/try'>;
-export type OverrideDocument = Body<'put', '/installations/{id}/overrides'>;
 
 // --- what a server spec says (8.1) ------------------------------------------------------------------------------
 
@@ -342,14 +338,6 @@ export const toDefinitionPairs = (preview: OverridePreview): DefinitionPair[] =>
       error: d.error ?? (d.status === 'invalid' ? 'invalid override' : null),
     };
   });
-
-/** The section of the override document an item of this kind lives in. */
-export const SECTION = {
-  tool: 'tools',
-  prompt: 'prompts',
-  resource: 'resources',
-  template: 'resourceTemplates',
-} as const;
 
 // --- egress (8.8) -----------------------------------------------------------------------------------------------
 
