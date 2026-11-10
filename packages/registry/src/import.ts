@@ -30,15 +30,17 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 
 const trimSlash = (value: string): string => value.replace(/\/+$/, '');
 
+type ResolverOptions = { fetch?: FetchFn; timeoutMs?: number; maxBodyBytes?: number };
+
 const fetchJson = async (
-  fetchFn: FetchFn,
   url: string,
-  timeoutMs: number,
+  options: ResolverOptions,
   signal: AbortSignal | undefined,
-  maxBodyBytes: number,
   accept = 'application/json',
 ): Promise<unknown> => {
-  const timeout = AbortSignal.timeout(timeoutMs);
+  const fetchFn = options.fetch ?? fetch;
+  const maxBodyBytes = options.maxBodyBytes ?? MAX_BODY_BYTES;
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   let response: Response;
   try {
     response = await fetchFn(url, {
@@ -69,8 +71,6 @@ const fetchJson = async (
   }
 };
 
-type ResolverOptions = { fetch?: FetchFn; timeoutMs?: number; maxBodyBytes?: number };
-
 /** npm packument lookup against `BASTION_NPM_REGISTRY` (or the public registry). */
 export const createNpmVersionResolver = (
   registryUrl: string,
@@ -81,11 +81,9 @@ export const createNpmVersionResolver = (
       ? `@${encodeURIComponent(identifier.slice(1))}`
       : encodeURIComponent(identifier);
     const body = await fetchJson(
-      options.fetch ?? fetch,
       `${trimSlash(registryUrl)}/${path}`,
-      options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      options,
       signal,
-      options.maxBodyBytes ?? MAX_BODY_BYTES,
       'application/vnd.npm.install-v1+json, application/json',
     );
     const tags = (body as { 'dist-tags'?: { latest?: unknown } } | null)?.['dist-tags'];
@@ -104,11 +102,9 @@ export const createPypiVersionResolver = (
   async latest(_runtime, identifier, signal) {
     const root = trimSlash(indexUrl).replace(/\/simple$/, '');
     const body = await fetchJson(
-      options.fetch ?? fetch,
       `${root}/pypi/${encodeURIComponent(identifier.toLowerCase())}/json`,
-      options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      options,
       signal,
-      options.maxBodyBytes ?? MAX_BODY_BYTES,
     );
     const version = (body as { info?: { version?: unknown } } | null)?.info?.version;
     if (typeof version !== 'string' || version.length === 0) {
