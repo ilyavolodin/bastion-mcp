@@ -18,14 +18,14 @@ export const marketplaces = new CrudService({
 });
 
 /** Policy id of a marketplace: the policy data lists each audience as visibility of this pseudo entry. */
-export const marketplaceEntryId = (id: string): string => `marketplace:${id}`;
+const marketplaceEntryId = (id: string): string => `marketplace:${id}`;
 
 /**
  * Reads authorize `seeCatalog` on the pseudo catalog entry `marketplace:{id}` whose visibility is the
  * marketplace audience, so the Cedar visibility policies decide who sees a marketplace (25.4). The
  * `PolicyDataSource` must emit that entry (owner team and audience) for every marketplace.
  */
-export const marketplaceResource = (row: Row): ResourceData =>
+const marketplaceResource = (row: Row): ResourceData =>
   catalogEntryResource({
     id: marketplaceEntryId(row.id),
     updatedAt: row.updatedAt,
@@ -46,7 +46,7 @@ export const writeChoice = async (input: AuthzInput): Promise<ResourceChoice> =>
   return ownerChoice(row);
 };
 
-export const ownerChoice = (row: Row | null): ResourceChoice =>
+const ownerChoice = (row: Row | null): ResourceChoice =>
   row && typeof row.ownerTeamId === 'string'
     ? { rule: 'marketplaces.write.team', resource: teamResource(row.ownerTeamId) }
     : { rule: 'marketplaces.write.org', resource: orgResource() };

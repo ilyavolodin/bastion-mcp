@@ -147,7 +147,7 @@ const defaultManifest = (entry: Row): PluginManifest =>
 const fileModeOf = (value: unknown): PluginFile['mode'] =>
   value === 'executable' ? 'executable' : 'file';
 
-export const loadContent = async (
+const loadContent = async (
   deps: ApiDeps,
   entry: Row,
   versionId: string,

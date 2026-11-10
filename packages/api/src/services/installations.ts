@@ -36,7 +36,7 @@ type CreateBody = zType.output<typeof installationCreateSchema>;
 type PatchBody = zType.output<typeof installationPatchSchema>;
 
 /** Reads an org setting row (`settings` collection, id = key, `value` = JSON) (19.2). */
-export const readSetting = async <T>(deps: ApiDeps, key: string, fallback: T): Promise<unknown> => {
+const readSetting = async <T>(deps: ApiDeps, key: string, fallback: T): Promise<unknown> => {
   const row = await deps.store.get('settings', key);
   return row && 'value' in row ? row.value : fallback;
 };
@@ -421,7 +421,7 @@ const viewerOf = async (ctx: ReadCtx, row: Row): Promise<PrincipalData> => {
   return ctx.subject;
 };
 
-export const compileInstallation = async (
+const compileInstallation = async (
   ctx: ReadCtx & { signal?: AbortSignal | undefined },
   row: Row,
 ): Promise<EffectiveEndpoint> => {

@@ -41,7 +41,7 @@ export type PolicyAnalysis = {
   matcher: AttrMatcher | null;
 };
 
-export type AttrMatcher = {
+type AttrMatcher = {
   attr: 'name' | 'uri';
   /** Segments between wildcards; one segment means an exact match. */
   segments: string[];

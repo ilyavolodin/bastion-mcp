@@ -24,7 +24,7 @@ export const customPolicies = new CrudService({
 });
 
 /** A rule is valid when it parses as a tool rule and compiles to Cedar (10.3). */
-export const assertRuleCompiles = (fields: Record<string, unknown>): void => {
+const assertRuleCompiles = (fields: Record<string, unknown>): void => {
   const parsed = toolRuleRowSchema.safeParse({ ...fields, id: 'candidate' });
   if (!parsed.success) {
     throw new ApiError('invalid_rule', 'the rule is not valid', 422, {

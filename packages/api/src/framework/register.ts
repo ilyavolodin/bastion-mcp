@@ -30,7 +30,7 @@ const headerOf = (req: FastifyRequest, name: string): string | undefined => {
 };
 
 /** `/catalog/{id}` -> `/catalog/:id` (Fastify syntax); `{path}` params carry encoded slashes. */
-export const toFastifyUrl = (url: string): string => url.replace(/\{([^}]+)\}/g, ':$1');
+const toFastifyUrl = (url: string): string => url.replace(/\{([^}]+)\}/g, ':$1');
 
 const rawInput = (req: FastifyRequest, state: RequestState, deps: ApiDeps): AuthzInput => ({
   params: (req.params ?? {}) as Record<string, string>,

@@ -66,7 +66,7 @@ export const sourceOf = (row: Row): RegistrySource => ({
 
 const REQUEST_STATUS = ['open', 'approved', 'rejected', 'cancelled'] as const;
 
-export const requestOf = (row: Row): InstallRequest => ({
+const requestOf = (row: Row): InstallRequest => ({
   id: row.id,
   requesterId: String(row.requesterId),
   sourceId: String(row.sourceId),
@@ -93,7 +93,7 @@ const requestFields = (r: InstallRequest): Record<string, unknown> => ({
   createdAt: r.createdAt.toISOString(),
 });
 
-export const actorOf = (principal: Principal): InstallActor => ({
+const actorOf = (principal: Principal): InstallActor => ({
   id: principal.id,
   orgRole: principal.orgRole,
   managedTeamIds: principal.teams.filter((t) => t.role === 'manager').map((t) => t.teamId),
@@ -221,7 +221,7 @@ const safeMap = (row: RegistryServerRow, prefer?: 'remote' | 'package'): Mapping
   }
 };
 
-export const serverSummary = (
+const serverSummary = (
   row: RegistryServerRow,
   source?: { name: string; trust: RegistryTrust; enabled: boolean },
 ) => ({
@@ -433,7 +433,7 @@ const uniqueSlug = async (
 };
 
 /** Creates or reuses the catalog entry, pins the version and creates the installation (11.7). */
-export const executePlan = async (
+const executePlan = async (
   ctx: WriteCtx,
   plan: InstallPlan,
   mapping: Planned['mapping'],
@@ -729,7 +729,7 @@ export const listRequests = async (
   return { items, nextCursor: page.nextCursor };
 };
 
-export const requestById = async (deps: ApiDeps, id: string): Promise<Row> => {
+const requestById = async (deps: ApiDeps, id: string): Promise<Row> => {
   const row = await deps.store.get('install_requests', id);
   if (!row) throw new NotFoundApiError('install request');
   return row;

@@ -6,7 +6,7 @@ const id = z.string().min(1).max(256);
 
 export const orgRoleSchema = z.enum(ORG_ROLES);
 export type OrgRole = z.infer<typeof orgRoleSchema>;
-export const teamRoleSchema = z.enum(TEAM_ROLES);
+const teamRoleSchema = z.enum(TEAM_ROLES);
 
 // --- principals ----------------------------------------------------------------------------------
 
@@ -16,7 +16,7 @@ const teamMembershipSchema = z.object({
   role: teamRoleSchema,
 });
 
-export const userPrincipalSchema = z.object({
+const userPrincipalSchema = z.object({
   kind: z.literal('user'),
   id,
   role: orgRoleSchema,
@@ -25,7 +25,7 @@ export const userPrincipalSchema = z.object({
   teams: z.array(teamMembershipSchema).default([]),
 });
 
-export const servicePrincipalSchema = z.object({
+const servicePrincipalSchema = z.object({
   kind: z.literal('service'),
   id,
   active: z.boolean().default(true),
@@ -71,7 +71,7 @@ export type InstallationData = z.infer<typeof installationSchema>;
 export type InstallationInput = z.input<typeof installationSchema>;
 
 /** Final tool annotations after overrides (10.2); missing hints take the MCP defaults. */
-export const toolAnnotationsSchema = z.object({
+const toolAnnotationsSchema = z.object({
   readOnlyHint: z.boolean().optional(),
   destructiveHint: z.boolean().optional(),
   openWorldHint: z.boolean().optional(),
@@ -112,9 +112,9 @@ export const resourceSchema = z.discriminatedUnion('type', [
 export type ResourceData = z.infer<typeof resourceSchema>;
 export type ResourceInput = z.input<typeof resourceSchema>;
 
-export type ToolResource = Extract<ResourceData, { type: 'Tool' }>;
-export type PromptResource = Extract<ResourceData, { type: 'Prompt' }>;
-export type ResourceResource = Extract<ResourceData, { type: 'Resource' }>;
+type ToolResource = Extract<ResourceData, { type: 'Tool' }>;
+type PromptResource = Extract<ResourceData, { type: 'Prompt' }>;
+type ResourceResource = Extract<ResourceData, { type: 'Resource' }>;
 export type VisibilityResource = ToolResource | PromptResource | ResourceResource;
 
 // --- request context -----------------------------------------------------------------------------
@@ -146,14 +146,14 @@ export const argConditionSchema = z.discriminatedUnion('op', [
 ]);
 export type ArgCondition = z.infer<typeof argConditionSchema>;
 
-export const ruleWhoSchema = z.object({
+const ruleWhoSchema = z.object({
   role: z.enum([...ORG_ROLES, 'manager']).optional(),
   teams: z.array(id).optional(),
   users: z.array(id).optional(),
   serviceAccounts: z.array(id).optional(),
 });
 
-export const ruleWhatSchema = z.object({
+const ruleWhatSchema = z.object({
   installationId: id.optional(),
   catalogEntryId: id.optional(),
   /** Tool name or glob; `*` is the only wildcard. */
@@ -167,7 +167,7 @@ export const ruleWhatSchema = z.object({
     .optional(),
 });
 
-export const ruleWhenSchema = z.object({
+const ruleWhenSchema = z.object({
   clientIds: z.array(z.string().min(1).max(512)).optional(),
   /** Local hours `from` (inclusive) to `to` (exclusive); wraps past midnight when `from > to`. */
   hours: z
@@ -193,7 +193,6 @@ export type ToolRuleRowInput = z.input<typeof toolRuleRowSchema>;
 // --- policy data (the PolicyDataSource payload) ----------------------------------------------------
 
 export const customPolicySchema = z.object({ id: z.string().min(1).max(128), cedar: z.string() });
-export type CustomPolicyData = z.infer<typeof customPolicySchema>;
 
 export const policyDataSchema = z.object({
   /** Entity id of the single organization (default `org`). */

@@ -11,7 +11,7 @@ export const limitRules = new CrudService({
 });
 
 /** Parses a stored or submitted rule; a bad one is a 422 with the zod issues. */
-export const assertRule = (fields: Record<string, unknown>): Rule => {
+const assertRule = (fields: Record<string, unknown>): Rule => {
   try {
     return parseRule({ id: 'candidate', ...fields });
   } catch (error) {

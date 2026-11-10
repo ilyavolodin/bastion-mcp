@@ -31,7 +31,7 @@ const TITLES: Record<number, string> = {
 
 const title = (status: number): string => TITLES[status] ?? 'Error';
 
-export const problemType = (code: string): string => `${ERROR_BASE_URL}/${code}`;
+const problemType = (code: string): string => `${ERROR_BASE_URL}/${code}`;
 
 export const makeProblem = (
   status: number,

@@ -8,7 +8,7 @@ import type { WriteCtx } from './crud';
  * plus a `_version` row bumped on every write. The version row is the ETag of `/settings`: a missing row
  * reads as the epoch, so even the first `PATCH` must send `If-Match` (17.1).
  */
-export const VERSION_ROW = '_version';
+const VERSION_ROW = '_version';
 export const EPOCH = '1970-01-01T00:00:00.000Z';
 
 export type SettingsView = { settings: OrgSettings; updatedAt: string };

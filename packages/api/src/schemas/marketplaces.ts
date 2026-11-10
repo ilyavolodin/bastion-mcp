@@ -5,7 +5,7 @@ import { nameSchema } from './common';
 
 const atLeastOne = (v: object) => Object.keys(v).length > 0;
 
-export const audienceSchema = z.object({
+const audienceSchema = z.object({
   org: z.boolean().default(false),
   teamIds: z.array(z.string().min(1)).default([]),
   userIds: z.array(z.string().min(1)).default([]),

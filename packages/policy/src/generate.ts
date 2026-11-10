@@ -11,9 +11,8 @@ import {
   toolRuleRowSchema,
 } from './types';
 
-export const entityRef = (type: string, id: string): string =>
-  `${NAMESPACE}::${type}::${cedarString(id)}`;
-export const actionRef = (action: string): string => entityRef('Action', action);
+const entityRef = (type: string, id: string): string => `${NAMESPACE}::${type}::${cedarString(id)}`;
+const actionRef = (action: string): string => entityRef('Action', action);
 
 const actionList = (actions: readonly string[]): string => `[${actions.map(actionRef).join(', ')}]`;
 
