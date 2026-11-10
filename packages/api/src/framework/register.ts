@@ -13,7 +13,13 @@ import { authenticate, toPolicyPrincipal } from './auth';
 import { checkPrecondition, etagOf } from './conventions';
 import { fingerprintOf, IdempotencyStore, validateKey } from './idempotency';
 import { makeProblem, toProblem } from './problem';
-import { type AuthzInput, type MutationTx, type RouteDefinition, RouteReply } from './route';
+import {
+  type AuthzInput,
+  type MutationTx,
+  type RouteDefinition,
+  RouteReply,
+  type SseSource,
+} from './route';
 import { assertRouteDeclarations, ruleOf } from './route-table';
 
 type RequestState = {
@@ -174,7 +180,7 @@ const run = async (
     },
   };
 
-  if (def.stream) return stream(def, base, state, req, reply, deps, abort);
+  if (def.stream) return stream(def, base, req, reply, deps, abort);
 
   const key = def.method === 'POST' ? headerOf(req, 'idempotency-key') : undefined;
   const fingerprint = key ? fingerprintOf(def.method, req.url, req.body) : '';
@@ -260,15 +266,12 @@ const run = async (
 const stream = async (
   def: RouteDefinition,
   base: Record<string, unknown>,
-  _state: RequestState,
   req: FastifyRequest,
   reply: FastifyReply,
   deps: ApiDeps,
   abort: AbortController,
 ): Promise<FastifyReply> => {
-  const source = (await (def.handler as (ctx: unknown) => unknown)(
-    base,
-  )) as import('./route').SseSource;
+  const source = (await (def.handler as (ctx: unknown) => unknown)(base)) as SseSource;
   reply.hijack();
   const raw = reply.raw;
   raw.writeHead(200, {
