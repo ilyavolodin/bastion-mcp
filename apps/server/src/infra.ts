@@ -1,12 +1,6 @@
 import { join } from 'node:path';
 import { ScimStoreConflictError } from '@bastion-mcp/auth';
-import {
-  type BastionConfig,
-  type Clock,
-  newId,
-  REDIS_CHANNELS,
-  systemClock,
-} from '@bastion-mcp/core';
+import { type BastionConfig, type Clock, REDIS_CHANNELS, systemClock } from '@bastion-mcp/core';
 import {
   createDb,
   createRepositories,
@@ -159,5 +153,3 @@ export const createInfra = (
     },
   };
 };
-
-export { newId };

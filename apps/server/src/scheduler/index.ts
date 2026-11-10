@@ -5,10 +5,6 @@ import { LeaderElection } from './leader';
 import { CRON, isTaskName, TASKS, type TaskName } from './tasks';
 import type { EnqueueOptions, SchedulerDeps, TaskContext } from './types';
 
-export { CRON, TASKS, type TaskName } from './tasks';
-export { rotateKeys } from './tasks/keys';
-export type { SchedulerDeps } from './types';
-
 export type Scheduler = {
   /** Starts the leader election loop; the leader runs cron and queued jobs. Idempotent. */
   start(): void;

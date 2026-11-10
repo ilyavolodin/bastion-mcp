@@ -457,5 +457,3 @@ export const createAuditReader = ({ prisma, repos }: ObservabilityDeps): AuditRe
       : { ok: false, checked: result.checked, brokenAtSeq: result.brokenAtSeq.toString() };
   },
 });
-
-export const toIso = iso;

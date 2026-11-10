@@ -1,4 +1,4 @@
-import { computeDrift, type Definition, pinDefinition, pinKey } from '@bastion-mcp/guards';
+import { computeDrift, type Definition, pinDefinition } from '@bastion-mcp/guards';
 import type { InstallationRegistry, PinChecker } from '@bastion-mcp/mcp-upstream';
 import type { GuardService } from '../../contracts';
 import type { Infra } from '../../infra';
@@ -171,5 +171,3 @@ const notifyOwners = async (
     infra.logger.warn({ err: String(error) }, 'drift notification failed');
   }
 };
-
-export { pinKey };

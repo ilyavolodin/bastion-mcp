@@ -18,7 +18,6 @@ import {
 } from '@bastion-mcp/api';
 import {
   bumpConfigVersion,
-  NIL_UUID,
   nextUpdatedAt,
   Prisma,
   type PrismaClient,
@@ -459,5 +458,3 @@ export const createCollection = (ctx: StoreContext, spec: CollectionSpec): Colle
     },
   };
 };
-
-export { NIL_UUID };

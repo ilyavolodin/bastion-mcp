@@ -2,7 +2,7 @@
  * Declarative mapping of API collections onto Prisma models (16.2, docs/port-matrix.md). Collections that are not a
  * plain table (settings, service account clients, OAuth grants, installation secrets) live in `custom.ts`.
  */
-import { type Collection, ConflictApiError, ValidationApiError } from '@bastion-mcp/api';
+import { ConflictApiError, ValidationApiError } from '@bastion-mcp/api';
 import { NIL_UUID, reindexCatalogSearch, type Tx } from '@bastion-mcp/db';
 import type { CollectionSpec, Db, DbRow, StoreContext } from './collection';
 import { isUuid } from './meta';
@@ -278,6 +278,3 @@ add({
   key: ['marketplaceId', 'catalogEntryId'],
   order: [{ marketplaceId: 'asc' }, { position: 'asc' }, { catalogEntryId: 'asc' }],
 });
-
-export const GENERIC_COLLECTIONS = new Set<Collection>(Object.keys(SPECS) as Collection[]);
-export type { DbRow };

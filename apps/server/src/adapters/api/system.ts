@@ -9,7 +9,7 @@ import {
   type SystemStatusPort,
   ValidationApiError,
 } from '@bastion-mcp/api';
-import { REDIS_CHANNELS, redisKeys } from '@bastion-mcp/core';
+import { REDIS_CHANNELS } from '@bastion-mcp/core';
 import { appendAuditEvent, Prisma } from '@bastion-mcp/db';
 import {
   generateEs256KeyPair,
@@ -249,5 +249,3 @@ export const createSystemStatus = (infra: Infra, deps: SystemStatusDeps): System
     },
   };
 };
-
-export { redisKeys };

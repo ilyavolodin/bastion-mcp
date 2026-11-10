@@ -21,7 +21,7 @@ import {
   permissionList,
   stack,
 } from './components';
-import { type Child, html, raw, type SafeHtml } from './html';
+import { html, raw, type SafeHtml } from './html';
 import { renderPage } from './layout';
 
 export type PageMessage = {
@@ -422,5 +422,3 @@ export const logoutDonePage = (): string =>
       linkButton({ href: '/auth/login', label: 'Sign in again', variant: 'primary' }),
     ])}`,
   });
-
-export type { Child };
