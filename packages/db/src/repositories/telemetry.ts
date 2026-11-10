@@ -14,7 +14,12 @@ import {
   mergeBuckets,
   percentileFromBuckets,
 } from '../latency';
-import { dropPartitionsBefore, ensurePartitions, type PartitionedTable } from '../partitions';
+import {
+  dropPartitionsBefore,
+  ensurePartitions,
+  PARTITIONED_TABLES,
+  type PartitionedTable,
+} from '../partitions';
 import {
   clampLimit,
   decodeCursor,
@@ -684,17 +689,16 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
         })
       ).count;
       const cutoff = new Date(now.getTime() - policy.logsRetentionDays * day);
-      const partitions = {
-        call_log: await dropPartitionsBefore(db, 'call_log', cutoff),
-        egress_events: await dropPartitionsBefore(db, 'egress_events', cutoff),
-        distribution_events: await dropPartitionsBefore(db, 'distribution_events', cutoff),
-      };
+      const partitions = { call_log: 0, egress_events: 0, distribution_events: 0 };
+      for (const table of PARTITIONED_TABLES) {
+        partitions[table] = await dropPartitionsBefore(db, table, cutoff);
+      }
       return { statsRows, partitions };
     },
 
     /** Creates the daily partitions the scheduler keeps 7 days ahead (15.5). */
     async ensurePartitionsAhead(daysAhead = PARTITION_DAYS_AHEAD): Promise<void> {
-      for (const table of ['call_log', 'egress_events', 'distribution_events'] as const) {
+      for (const table of PARTITIONED_TABLES) {
         await ensurePartitions(db, table, daysAhead);
       }
     },
