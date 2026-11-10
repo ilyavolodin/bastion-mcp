@@ -89,28 +89,27 @@ export const createPluginsHandler = (
 ): ((request: Request) => Promise<Response | undefined>) => {
   const clock = deps.clock ?? systemClock;
 
-  const record = async (
-    principal: PluginPrincipal,
-    marketplace: MarketplaceRow,
-    request: Request,
-    channel: DistributionEvent['channel'],
-    action: DistributionEvent['action'],
-    releaseSeq: number | null,
-  ): Promise<void> => {
-    try {
-      await deps.events.record({
-        ts: clock.now(),
-        principalId: principal.id,
-        marketplaceId: marketplace.id,
-        releaseSeq,
-        channel,
-        action,
-        userAgent: request.headers.get('user-agent'),
-      });
-    } catch {
-      // Usage accounting never blocks a fetch (25.9).
-    }
-  };
+  const recorderFor =
+    (principal: PluginPrincipal, marketplace: MarketplaceRow, request: Request) =>
+    async (
+      channel: DistributionEvent['channel'],
+      action: DistributionEvent['action'],
+      releaseSeq: number | null,
+    ): Promise<void> => {
+      try {
+        await deps.events.record({
+          ts: clock.now(),
+          principalId: principal.id,
+          marketplaceId: marketplace.id,
+          releaseSeq,
+          channel,
+          action,
+          userAgent: request.headers.get('user-agent'),
+        });
+      } catch {
+        // Usage accounting never blocks a fetch (25.9).
+      }
+    };
 
   const selectRelease = async (
     marketplace: MarketplaceRow,
@@ -139,6 +138,7 @@ export const createPluginsHandler = (
 
     const marketplace = await deps.marketplaces.getBySlug(route.slug);
     if (!marketplace || !(await deps.access.canView(principal, marketplace))) return notFound();
+    const record = recorderFor(principal, marketplace, request);
 
     if (route.kind === 'git') {
       const isRefs = route.rest === '/info/refs';
@@ -172,7 +172,7 @@ export const createPluginsHandler = (
         gitProtocol: request.headers.get('git-protocol'),
         body,
       });
-      if (isRefs) await record(principal, marketplace, request, 'git', 'git_fetch', latest.seq);
+      if (isRefs) await record('git', 'git_fetch', latest.seq);
       return response;
     }
 
@@ -187,7 +187,7 @@ export const createPluginsHandler = (
         host: deps.host,
         slug: marketplace.slug,
       });
-      await record(principal, marketplace, request, 'https', 'manifest_fetch', selected.seq);
+      await record('https', 'manifest_fetch', selected.seq);
       return new Response(Buffer.from(bytes), {
         status: 200,
         headers: {
@@ -202,7 +202,7 @@ export const createPluginsHandler = (
       (a) => archiveFileName(a.plugin, a.version) === route.file,
     );
     if (!archive) return notFound();
-    await record(principal, marketplace, request, 'https', 'archive_download', selected.seq);
+    await record('https', 'archive_download', selected.seq);
     return new Response(Buffer.from(archive.bytes), {
       status: 200,
       headers: {
