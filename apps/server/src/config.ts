@@ -68,8 +68,6 @@ export type ServerOptions = {
   extraCorsOrigins?: string[];
   /** SSE keep-alive for MCP streams. */
   keepAliveMs?: number;
-  /** Idle sweep and similar timing knobs for tests. */
-  timing?: { instanceIdleMs?: number; workerHeartbeatMs?: number };
   /** Extra health checks for tests. */
   printBootstrapPassword?: (email: string, password: string) => void;
   /** Static asset directory; defaults to `public` next to the bundle. */
