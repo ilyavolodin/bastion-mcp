@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { type BastionConfig, ConfigError, loadConfig, parseConfigFile } from '@bastion-mcp/core';
+import { type BastionConfig, loadConfig, parseConfigFile } from '@bastion-mcp/core';
 import { DEFAULT_SERVER_VERSION, defaultWorkerId } from './resource-env';
 
 type EnvSource = Record<string, string | undefined>;
@@ -35,21 +35,6 @@ export const loadServerConfig = (env: Record<string, string | undefined>): Basti
   const file = env.BASTION_CONFIG_FILE;
   const values = file ? parseConfigFile(readFileSync(file, 'utf8')) : {};
   return loadConfig(env, values);
-};
-
-/** Prints every error and exits non-zero (used by the CLI and `main`). */
-export const loadConfigOrExit = (env: Record<string, string | undefined>): BastionConfig => {
-  try {
-    return loadServerConfig(env);
-  } catch (error) {
-    if (error instanceof ConfigError) {
-      for (const issue of error.issues)
-        console.error(`config error: ${issue.path}: ${issue.message}`);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
-    process.exit(1);
-  }
 };
 
 export const publicHost = (config: BastionConfig): string => new URL(config.publicUrl).host;
