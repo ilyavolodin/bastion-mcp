@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router';
 import { Lock, X } from 'lucide-react';
 import type * as React from 'react';
 import { avatarColor } from '@/lib/avatar';
@@ -256,31 +255,6 @@ export function Segmented<T extends string>({
         </button>
       ))}
     </div>
-  );
-}
-
-export function LinkText({
-  to,
-  children,
-  className,
-  params,
-  search,
-}: {
-  to: string;
-  children: React.ReactNode;
-  className?: string;
-  params?: Record<string, string>;
-  search?: Record<string, unknown>;
-}) {
-  return (
-    <Link
-      to={to}
-      {...(params ? { params } : {})}
-      {...(search ? { search } : {})}
-      className={cn('text-label text-sky-ink no-underline hover:text-ink', className)}
-    >
-      {children}
-    </Link>
   );
 }
 

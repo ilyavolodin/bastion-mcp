@@ -120,5 +120,3 @@ export function useAuth(): AuthValue {
   if (!v) throw new Error('useAuth must be used inside <AuthProvider>');
   return v;
 }
-
-export const useRole = (): UiRole => useAuth().role;

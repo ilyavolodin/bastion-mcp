@@ -94,4 +94,3 @@ export type RiskLevel = Schemas['CatalogEntry']['risk'];
 export type CallOutcome = Schemas['CallRecord']['outcome'];
 export type PolicyEffect = Schemas['PolicyRule']['effect'];
 export type DriftPolicy = Schemas['CatalogEntry']['onDrift'];
-export type MarketplaceItemPolicy = Schemas['MarketplaceItem']['policy'];

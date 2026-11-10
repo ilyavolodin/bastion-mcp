@@ -8,7 +8,6 @@ import addFormats from 'ajv-formats';
 import openapi from '../../../../packages/api-client/openapi.json';
 
 export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
-const METHODS: HttpMethod[] = ['get', 'post', 'put', 'patch', 'delete'];
 
 type JsonSchema = Record<string, unknown>;
 type Operation = {
@@ -92,12 +91,6 @@ export const validateRequest = (op: OperationRef, body: unknown): Verdict => {
     return { ok: false, errors: [`no request body schema for ${op.method} ${op.template}`] };
   return verdict(compileSchema(`req:${op.method} ${op.template}`, schema), body);
 };
-
-/** Every operation of the document, for tests that walk them. */
-export const allOperations = (): OperationRef[] =>
-  Object.entries(doc.paths).flatMap(([template, item]) =>
-    METHODS.filter((method) => item[method] !== undefined).map((method) => ({ method, template })),
-  );
 
 /** Whether the operation answers a JSON body on success. */
 export const hasJsonResponse = (op: OperationRef): boolean => {

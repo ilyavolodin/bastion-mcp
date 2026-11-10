@@ -4,7 +4,7 @@
  * here (source names from `GET /registry-sources`, requester names from `GET /users`, "requested" from the caller's
  * open requests). Everything else is the generated schema type.
  */
-import type { Res, Schemas } from '../schema';
+import type { Schemas } from '../schema';
 import { REGISTRY_SYNC_SKEW_MS, REGISTRY_SYNC_TIMEOUT_MS } from '../timing';
 
 export type RegistryServer = Schemas['RegistryServer'];
@@ -12,7 +12,6 @@ export type RegistryServerDetail = Schemas['RegistryServerDetail'];
 export type InstallRequest = Schemas['InstallRequest'];
 export type RegistryInstallResult = Schemas['RegistryInstallResult'];
 export type RegistrySource = Schemas['RegistrySource'];
-export type RegistryServerPage = Res<'get', '/registry/servers'>;
 
 /** Labels of the runtimes a registry entry can run on (`runtimes` of the row). */
 export const RUNTIME_TAGS: Record<string, string> = {
