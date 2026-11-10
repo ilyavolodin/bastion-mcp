@@ -349,7 +349,6 @@ export class GuardPipeline {
       for (const o of outcomes) collect(o);
     }
 
-    // Session risk (13.7).
     const risk = await this.sessionRisk(input, profile, records, resolved);
     if (risk?.finding) resolved.push(risk.finding);
     const riskScore = risk?.score;

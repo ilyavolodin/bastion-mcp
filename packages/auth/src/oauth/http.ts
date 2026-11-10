@@ -37,7 +37,6 @@ export const withRedirectUriAsSent =
     return fetchFn(input, init);
   };
 
-/** Builds an openid-client Configuration bound to the injected fetch. */
 /** Metadata as zod parses it: optional members may be present with value undefined. */
 type LooseServerMetadata = {
   [K in keyof client.ServerMetadata]: client.ServerMetadata[K] | undefined;
@@ -47,6 +46,7 @@ type LooseServerMetadata = {
 const strictMetadata = (metadata: LooseServerMetadata): client.ServerMetadata =>
   omitUndefined(metadata) as client.ServerMetadata;
 
+/** Builds an openid-client Configuration bound to the injected fetch. */
 export const buildConfiguration = (
   metadata: LooseServerMetadata,
   clientId: string,
