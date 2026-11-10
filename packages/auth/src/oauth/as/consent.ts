@@ -19,7 +19,7 @@ export const redirectUriHostLabel = (redirectUri: string): string => {
   }
 };
 
-const safeLogo = (logoUri: unknown): string | null => {
+export const safeLogo = (logoUri: unknown): string | null => {
   if (typeof logoUri !== 'string') return null;
   try {
     return new URL(logoUri).protocol === 'https:' ? logoUri : null;

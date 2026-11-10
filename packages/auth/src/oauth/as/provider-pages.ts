@@ -1,3 +1,5 @@
+import { safeLogo } from './consent';
+
 /**
  * Page overrides of oidc-provider (device flow, logout, errors). The ui role supplies the renderers so the pages
  * share Bastion's templates and strict CSP; without them the provider's defaults (which load Google Fonts) apply.
@@ -29,15 +31,6 @@ type KoaLike = {
 const clientLabel = (ctx: KoaLike): string =>
   ctx.oidc.client?.clientName || ctx.oidc.client?.clientId || 'this app';
 
-const httpsLogo = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  try {
-    return new URL(value).protocol === 'https:' ? value : null;
-  } catch {
-    return null;
-  }
-};
-
 const deviceError = (err: unknown): 'wrong' | 'aborted' | 'other' | undefined => {
   if (!err) return undefined;
   const e = err as { name?: string; userCode?: unknown };
@@ -62,7 +55,7 @@ export const providerPageSources = (pages: ProviderPages) => ({
     ) => {
       ctx.body = pages.deviceConfirm({
         clientName: clientLabel(ctx),
-        logoUri: httpsLogo(client.logoUri),
+        logoUri: safeLogo(client.logoUri),
         userCode,
         form,
       });
