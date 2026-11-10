@@ -19,6 +19,7 @@ import {
   ensurePartitions,
   PARTITIONED_TABLES,
   type PartitionedTable,
+  withPartitionRetry,
 } from '../partitions';
 import {
   clampLimit,
@@ -36,20 +37,7 @@ import {
 
 // --- partition-aware inserts ------------------------------------------------------------------------------------------
 
-/** Runs an insert; when Postgres has no partition for the timestamp, creates today+7 days and retries once. */
-export const withPartitionRetry = async <T>(
-  db: PrismaLike,
-  table: PartitionedTable,
-  fn: () => Promise<T>,
-): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error) {
-    if (!/no partition of relation/i.test(String(error))) throw error;
-    await ensurePartitions(db, table, PARTITION_DAYS_AHEAD);
-    return fn();
-  }
-};
+export { withPartitionRetry } from '../partitions';
 
 // --- call_log: write side (15.5) ---------------------------------------------------------------------------------------
 
