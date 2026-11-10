@@ -25,7 +25,7 @@ import {
   OAuthProtocolError,
   toProtocolError,
 } from '../http';
-import { noopMetrics, type OAuthMetrics, type RefreshOutcome, withRefreshSpan } from '../metrics';
+import { noopMetrics, type OAuthMetrics, withRefreshSpan } from '../metrics';
 import {
   type Clock,
   type FetchFn,
@@ -346,19 +346,26 @@ export class UpstreamOAuthBroker {
       throw failure;
     }
     const scopes = response.scope ? response.scope.split(' ') : state.scopes;
-    await this.store(principal, installation.id, discovery.issuer, response, scopes);
+    await this.store({
+      principal,
+      installationId: installation.id,
+      issuer: discovery.issuer,
+      response,
+      scopes,
+    });
     await this.deps.redis.del(redisKeys.upstreamStepUp(principal.id, installation.id));
     return { installationId: installation.id, scopes };
   }
 
-  private async store(
-    principal: UpstreamPrincipal,
-    installationId: string,
-    issuer: string,
-    response: client.TokenEndpointResponse,
-    scopes: string[],
-    previous?: TokenBundle,
-  ): Promise<Date | null> {
+  private async store(args: {
+    principal: UpstreamPrincipal;
+    installationId: string;
+    issuer: string;
+    response: client.TokenEndpointResponse;
+    scopes: string[];
+    previous?: TokenBundle;
+  }): Promise<Date | null> {
+    const { principal, installationId, issuer, response, scopes, previous } = args;
     const bundle: TokenBundle = {
       accessToken: response.access_token,
       refreshToken: response.refresh_token ?? previous?.refreshToken ?? null,
@@ -485,7 +492,6 @@ export class UpstreamOAuthBroker {
     if (!row || row.status === 'reconnect_required') return null;
     const bundle = await this.loadBundle(principal, installation.id);
     if (!bundle?.refreshToken) return this.markReconnect(row);
-    let outcome: RefreshOutcome = 'failure';
     try {
       const discovery = await this.discover(installation.upstreamUrl);
       if (discovery.issuer !== row.issuer) return await this.markReconnect(row);
@@ -494,16 +500,15 @@ export class UpstreamOAuthBroker {
         resource: discovery.resource,
       });
       const scopes = response.scope ? response.scope.split(' ') : [...row.scopes];
-      const expiresAt = await this.store(
+      const expiresAt = await this.store({
         principal,
-        installation.id,
-        row.issuer,
+        installationId: installation.id,
+        issuer: row.issuer,
         response,
         scopes,
-        bundle,
-      );
-      outcome = 'success';
-      this.metrics.recordRefresh(outcome);
+        previous: bundle,
+      });
+      this.metrics.recordRefresh('success');
       return toAccessToken(
         { ...bundle, accessToken: response.access_token },
         { expiresAt, scopes },
