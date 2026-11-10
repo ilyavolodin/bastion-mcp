@@ -25,12 +25,6 @@ import { connectAsPrincipal, principalFor } from '../gateway-client';
 import { readStderrTail } from '../upstream/stderr';
 import { createUpstreamAccess, type UpstreamAccess } from '../upstream-access';
 
-export class NoWorkerError extends BastionError {
-  constructor(message = 'no worker is available to serve this request') {
-    super('UPSTREAM_UNAVAILABLE', message, { httpStatus: 503 });
-  }
-}
-
 export type InstallationPortsContext = {
   /** Present when this process hosts a worker (`BASTION_ROLE=all`). */
   worker?: WorkerServices | undefined;
