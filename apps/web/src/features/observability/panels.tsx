@@ -22,6 +22,27 @@ type Args = { range: StatsRange } & StatsScope;
 const axisLabel = (range: StatsRange) =>
   range === '7d' || range === '14d' || range === '90d' ? dateLabel : hourLabel;
 
+const CALLS_LEGEND: { label: string; color: string; shape: 'bar' }[] = [
+  { label: 'Succeeded', color: 'var(--sky)', shape: 'bar' },
+  { label: 'Errors', color: 'var(--coral)', shape: 'bar' },
+];
+
+/** A row's calls as a bar, `max` being the busiest row's calls: the succeeded part first, then the errors. */
+function CallsBar({ calls, errors, max }: { calls: number; errors: number; max: number }) {
+  return (
+    <span className="flex h-4 overflow-hidden rounded-sm bg-sunken" aria-hidden="true">
+      <span
+        className="block h-full"
+        style={{ width: `${((calls - errors) / max) * 100}%`, background: 'var(--sky)' }}
+      />
+      <span
+        className="block h-full"
+        style={{ width: `${(errors / max) * 100}%`, background: 'var(--coral)' }}
+      />
+    </span>
+  );
+}
+
 /** Totals per server with the server's name (the rollups group by installation id). */
 const useServerTotals = (args: Args) => {
   const totals = useCallTotals(args, 'installation');
@@ -38,14 +59,7 @@ export function TrafficPanel({ args }: { args: Args }) {
     <ChartCard
       title="Where calls go"
       interactive
-      legend={
-        <Legend
-          items={[
-            { label: 'Succeeded', color: 'var(--sky)', shape: 'bar' },
-            { label: 'Errors', color: 'var(--coral)', shape: 'bar' },
-          ]}
-        />
-      }
+      legend={<Legend items={CALLS_LEGEND} />}
       table={{
         columns: ['Server', 'Calls', 'Errors'],
         rows: (totals.data ?? []).map((t) => [named(t), t.calls, t.errors]),
@@ -66,19 +80,7 @@ export function TrafficPanel({ args }: { args: Args }) {
                 >
                   {named(t)}
                 </Link>
-                <span className="flex h-4 overflow-hidden rounded-sm bg-sunken" aria-hidden="true">
-                  <span
-                    className="block h-full"
-                    style={{
-                      width: `${((t.calls - t.errors) / max) * 100}%`,
-                      background: 'var(--sky)',
-                    }}
-                  />
-                  <span
-                    className="block h-full"
-                    style={{ width: `${(t.errors / max) * 100}%`, background: 'var(--coral)' }}
-                  />
-                </span>
+                <CallsBar calls={t.calls} errors={t.errors} max={max} />
                 <span className="text-right text-caption tabular-nums text-muted">
                   {formatNumber(t.calls)}
                 </span>
@@ -106,14 +108,7 @@ export function PeoplePanel({ args }: { args: Args }) {
     <ChartCard
       title="Busiest people"
       interactive
-      legend={
-        <Legend
-          items={[
-            { label: 'Succeeded', color: 'var(--sky)', shape: 'bar' },
-            { label: 'Errors', color: 'var(--coral)', shape: 'bar' },
-          ]}
-        />
-      }
+      legend={<Legend items={CALLS_LEGEND} />}
       table={{
         columns: ['Person', 'Calls', 'Errors'],
         rows: top.map((t) => [nameOf(t.group), t.calls, t.errors]),
@@ -142,19 +137,7 @@ export function PeoplePanel({ args }: { args: Args }) {
                 >
                   {nameOf(t.group)}
                 </Link>
-                <span className="flex h-4 overflow-hidden rounded-sm bg-sunken" aria-hidden="true">
-                  <span
-                    className="block h-full"
-                    style={{
-                      width: `${((t.calls - t.errors) / max) * 100}%`,
-                      background: 'var(--sky)',
-                    }}
-                  />
-                  <span
-                    className="block h-full"
-                    style={{ width: `${(t.errors / max) * 100}%`, background: 'var(--coral)' }}
-                  />
-                </span>
+                <CallsBar calls={t.calls} errors={t.errors} max={max} />
                 <span className="text-right text-caption tabular-nums text-muted">
                   {formatNumber(t.calls)}
                 </span>
