@@ -15,7 +15,12 @@ import {
   unwrapRequestState,
   wrapRequestState,
 } from '@bastion-mcp/core';
-import { extractStringLeaves, type ItemRef, type TextSegment } from '@bastion-mcp/guards';
+import {
+  extractStringLeaves,
+  type GuardRunResult,
+  type ItemRef,
+  type TextSegment,
+} from '@bastion-mcp/guards';
 import type { OperationContext } from '@bastion-mcp/limits';
 import { clientSupports, type InputRequestMap, SPAN_ATTRS } from '@bastion-mcp/mcp-upstream';
 import type { ResourceData } from '@bastion-mcp/policy';
@@ -174,11 +179,30 @@ const approvedByUser = (responses: Record<string, unknown> | undefined): boolean
   return isRecord(answer.content) && answer.content.approve === true;
 };
 
+/** What every step of one routed call needs: the ports, the request, what it routes to and the row being built. */
+type RoutedCall = { deps: OperationDeps; ctx: OpContext; spec: RoutedSpec; record: CallRecord };
+
+/** One guard run of the call's item, its records appended to the call-log row. */
+const guardPhase = async (
+  { deps, ctx, spec, record }: RoutedCall,
+  phase: 'request' | 'response',
+  segments: TextSegment[],
+): Promise<GuardRunResult> => {
+  const run = await runGuards(
+    deps,
+    ctx,
+    phase,
+    { installation: spec.installation, item: spec.item, method: spec.method },
+    segments,
+    spec.guardProfileId,
+  );
+  record.guardResults.push(...run.records);
+  return run;
+};
+
 /** Counts sampling requests going to the client against the `samplingRequests` quota (6.5, 14.1). */
 const chargeSampling = async (
-  deps: OperationDeps,
-  ctx: OpContext,
-  spec: RoutedSpec,
+  { deps, ctx, spec }: RoutedCall,
   inputRequests: InputRequestMap,
 ): Promise<void> => {
   const count = Object.values(inputRequests).filter(
@@ -210,9 +234,7 @@ export const runRouted = async (
   record: CallRecord,
 ): Promise<RoutedResult> => {
   const { installation } = spec;
-  record.installationId = installation.id;
-  record.catalogEntryId = installation.catalogEntryId;
-  record.catalogVersionId = installation.catalogVersionId;
+  const call: RoutedCall = { deps, ctx, spec, record };
   record.itemName = spec.downstreamName;
   record.upstreamName = spec.upstreamName;
   attr(SPAN_ATTRS.installationId, installation.id);
@@ -265,7 +287,7 @@ export const runRouted = async (
     }
   });
   try {
-    return await afterAdmission(deps, ctx, spec, retry, record, admission.meta);
+    return await afterAdmission(call, retry, admission.meta);
   } catch (error) {
     const code = (error as { mcpCode?: number }).mcpCode;
     if (code !== undefined && REFUNDABLE.has(code)) await admission.refund();
@@ -276,13 +298,11 @@ export const runRouted = async (
 };
 
 const afterAdmission = async (
-  deps: OperationDeps,
-  ctx: OpContext,
-  spec: RoutedSpec,
+  call: RoutedCall,
   retry: RetryParts,
-  record: CallRecord,
   limitsMeta: Record<string, unknown> | undefined,
 ): Promise<RoutedResult> => {
+  const { deps, ctx, spec, record } = call;
   const { installation } = spec;
 
   // 4. Request guards (13.1): arguments (or URI) and, on retries, the inputResponses text.
@@ -295,29 +315,16 @@ const afterAdmission = async (
     ...spec.request.root,
     ...(retry.inputResponses === undefined ? {} : { inputResponses: retry.inputResponses }),
   };
-  const guardRun = await runGuards(
-    deps,
-    ctx,
-    'request',
-    { installation, item: spec.item, method: spec.method },
-    segments,
-    spec.guardProfileId,
-  );
-  record.guardResults.push(...guardRun.records);
+  const guardRun = await guardPhase(call, 'request', segments);
   const applied = applyGuardResult(guardRun, root, segments);
   const guardedRoot = applied.value as JsonObject;
   const { inputResponses: guardedResponses, ...guardedRequest } = guardedRoot;
   const upstreamParams = spec.request.rebuild(guardedRequest);
-  record.bytesIn = byteSize(spec.request.bindArgs(upstreamParams));
-  record.argsPreview = spec.request.bindArgs(upstreamParams);
+  const boundArgs = spec.request.bindArgs(upstreamParams);
+  record.bytesIn = byteSize(boundArgs);
+  record.argsPreview = boundArgs;
 
-  const binding = bindingOf(
-    ctx,
-    installation.id,
-    spec.method,
-    spec.downstreamName,
-    spec.request.bindArgs(upstreamParams),
-  );
+  const binding = bindingOf(ctx, installation.id, spec.method, spec.downstreamName, boundArgs);
   const nowSeconds = Math.floor(deps.clock.now() / 1000);
   let confirmApproved = false;
   let stripRetry = false;
@@ -370,22 +377,13 @@ const afterAdmission = async (
   }
 
   if (spec.local) {
-    return finishComplete(
-      deps,
-      ctx,
-      spec,
-      record,
-      spec.local(upstreamParams),
-      applied.meta,
-      limitsMeta,
-    );
+    return finishComplete(call, spec.local(upstreamParams), applied.meta, limitsMeta);
   }
 
   // Cached public reads (6.7)
   if (spec.readKey !== undefined && !forUpstream && deps.reads) {
     const cached = await deps.reads.get(installation.id, spec.readKey);
-    if (isRecord(cached))
-      return finishComplete(deps, ctx, spec, record, cached, applied.meta, limitsMeta);
+    if (isRecord(cached)) return finishComplete(call, cached, applied.meta, limitsMeta);
   }
 
   // 5. Upstream, looping while Bastion can answer the input requests itself (6.5)
@@ -417,20 +415,12 @@ const afterAdmission = async (
       if (spec.readKey !== undefined && deps.reads) {
         await deps.reads.put(installation.id, spec.readKey, result).catch(() => false);
       }
-      return finishComplete(deps, ctx, spec, record, result, applied.meta, limitsMeta);
+      return finishComplete(call, result, applied.meta, limitsMeta);
     }
     // input_required: response-phase guards on the text the client would see (13.1)
     const inputRequests = outcome.inputRequests ?? {};
     const inputSegments = extractStringLeaves(inputRequests, 'inputRequests');
-    const inputRun = await runGuards(
-      deps,
-      ctx,
-      'response',
-      { installation, item: spec.item, method: spec.method },
-      inputSegments,
-      spec.guardProfileId,
-    );
-    record.guardResults.push(...inputRun.records);
+    const inputRun = await guardPhase(call, 'response', inputSegments);
     const guardedInput = applyGuardResult(inputRun, { inputRequests }, inputSegments);
     const checked = (guardedInput.value as { inputRequests: InputRequestMap }).inputRequests;
     const partition = partitionInputRequests(
@@ -442,7 +432,7 @@ const afterAdmission = async (
       params = { ...params, inputResponses: partition.local, requestState: outcome.requestState };
       continue;
     }
-    await chargeSampling(deps, ctx, spec, partition.forClient);
+    await chargeSampling(call, partition.forClient);
     record.outcome = 'input_required';
     return {
       kind: 'input_required',
@@ -455,25 +445,15 @@ const afterAdmission = async (
 };
 
 const finishComplete = async (
-  deps: OperationDeps,
-  ctx: OpContext,
-  spec: RoutedSpec,
-  record: CallRecord,
+  call: RoutedCall,
   upstreamResult: JsonObject,
   requestMeta: Record<string, unknown>,
   limitsMeta: Record<string, unknown> | undefined,
 ): Promise<RoutedResult> => {
+  const { deps, ctx, spec, record } = call;
   const transformed = spec.transform ? spec.transform(upstreamResult) : upstreamResult;
   const segments = spec.responseSegments(transformed);
-  const run = await runGuards(
-    deps,
-    ctx,
-    'response',
-    { installation: spec.installation, item: spec.item, method: spec.method },
-    segments,
-    spec.guardProfileId,
-  );
-  record.guardResults.push(...run.records);
+  const run = await guardPhase(call, 'response', segments);
   if (run.confirm && !run.block) {
     // The result cannot be held across an approval round without server-side storage: block (safe default, 13.2).
     throw new GuardBlockedError(
