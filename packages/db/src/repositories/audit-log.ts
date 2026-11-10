@@ -10,6 +10,7 @@ import {
   type RepoContext,
   type RepoOptions,
   toContext,
+  tsRange,
 } from './support';
 
 /** An `audit_events` row as the API exposes it: hashes as lowercase hex, `seq` as a bigint. */
@@ -70,9 +71,7 @@ const where = (f: AuditFilter): Prisma.AuditEventWhereInput => ({
   ...(f.targetType ? { targetType: f.targetType } : {}),
   ...(f.targetId ? { targetId: f.targetId } : {}),
   ...(f.requestId ? { requestId: f.requestId } : {}),
-  ...(f.from || f.to
-    ? { ts: { ...(f.from ? { gte: f.from } : {}), ...(f.to ? { lt: f.to } : {}) } }
-    : {}),
+  ...tsRange(f.from, f.to),
 });
 
 const seqCursor = (cursor: string | undefined): bigint | undefined => {

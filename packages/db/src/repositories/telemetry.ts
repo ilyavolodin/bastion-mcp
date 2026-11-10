@@ -22,16 +22,16 @@ import {
   withPartitionRetry,
 } from '../partitions';
 import {
-  clampLimit,
   decodeCursor,
-  encodeCursor,
   InvalidCursorError,
   type Paged,
   type PrismaLike,
+  paginate,
   type RepoContext,
   type RepoOptions,
   toContext,
   toJsonOrNull,
+  tsRange,
   ValidationError,
 } from './support';
 
@@ -201,6 +201,16 @@ const callCursor = (cursor: string | undefined): { ts: Date; id: string } | unde
   if (typeof ts !== 'number' || typeof id !== 'string') throw new InvalidCursorError();
   return { ts: new Date(ts), id };
 };
+
+/** Keyset condition of the newest-first `(ts, id)` order: rows strictly after the cursor row. */
+const beforeTsId = (cursor: { ts: Date; id: string } | undefined) =>
+  cursor ? { OR: [{ ts: { lt: cursor.ts } }, { ts: cursor.ts, id: { lt: cursor.id } }] } : {};
+
+/** Cursor of a row in the `(ts, id)` order: `[tsMillis, id]`. */
+const tsIdCursorOf = (row: { ts: Date; id: string }): (string | number)[] => [
+  row.ts.getTime(),
+  row.id,
+];
 
 // --- rollups (15.5) ----------------------------------------------------------------------------------------------------------
 
@@ -468,7 +478,6 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
     insertBatch,
 
     async list(filter: CallListFilter = {}): Promise<Paged<CallSummary>> {
-      const limit = clampLimit(filter.limit);
       const cursor = callCursor(filter.cursor);
       let principalIds: string[] | undefined;
       if (filter.teamIds) {
@@ -480,45 +489,35 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
         if (filter.principalId) principalIds = principalIds.filter((p) => p === filter.principalId);
       }
       const outcomes = filter.outcome === undefined ? undefined : [filter.outcome].flat();
-      const rows = await db.callLog.findMany({
-        where: {
-          AND: [
-            principalIds
-              ? { principalId: { in: principalIds } }
-              : filter.principalId
-                ? { principalId: filter.principalId }
-                : {},
-            filter.installationId ? { installationId: filter.installationId } : {},
-            filter.catalogEntryId ? { catalogEntryId: filter.catalogEntryId } : {},
-            filter.endpointId ? { endpointId: filter.endpointId } : {},
-            filter.clientId ? { clientId: filter.clientId } : {},
-            filter.method ? { method: filter.method } : {},
-            filter.itemName ? { itemName: filter.itemName } : {},
-            outcomes ? { outcome: { in: outcomes } } : {},
-            filter.from || filter.to
-              ? {
-                  ts: {
-                    ...(filter.from ? { gte: filter.from } : {}),
-                    ...(filter.to ? { lt: filter.to } : {}),
-                  },
-                }
-              : {},
-            cursor
-              ? { OR: [{ ts: { lt: cursor.ts } }, { ts: cursor.ts, id: { lt: cursor.id } }] }
-              : {},
-          ],
-        },
-        select: SUMMARY_SELECT,
-        orderBy: [{ ts: 'desc' }, { id: 'desc' }],
-        take: limit + 1,
-      });
-      const hasMore = rows.length > limit;
-      const items = rows.slice(0, limit);
-      const last = items[items.length - 1];
-      return {
-        items,
-        nextCursor: hasMore && last ? encodeCursor([last.ts.getTime(), last.id]) : null,
-      };
+      return paginate(
+        filter,
+        (take) =>
+          db.callLog.findMany({
+            where: {
+              AND: [
+                principalIds
+                  ? { principalId: { in: principalIds } }
+                  : filter.principalId
+                    ? { principalId: filter.principalId }
+                    : {},
+                filter.installationId ? { installationId: filter.installationId } : {},
+                filter.catalogEntryId ? { catalogEntryId: filter.catalogEntryId } : {},
+                filter.endpointId ? { endpointId: filter.endpointId } : {},
+                filter.clientId ? { clientId: filter.clientId } : {},
+                filter.method ? { method: filter.method } : {},
+                filter.itemName ? { itemName: filter.itemName } : {},
+                outcomes ? { outcome: { in: outcomes } } : {},
+                tsRange(filter.from, filter.to),
+                beforeTsId(cursor),
+              ],
+            },
+            select: SUMMARY_SELECT,
+            orderBy: [{ ts: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+        tsIdCursorOf,
+        (row) => row,
+      );
     },
 
     /** One call with previews and guard/policy details; pass `ts` to read a single partition. */
@@ -765,7 +764,6 @@ export const createEgressEventRepository = (
       limit?: number;
       cursor?: string;
     }): Promise<Paged<EgressEventView>> {
-      const limit = clampLimit(filter.limit);
       const cursor = callCursor(filter.cursor);
       let instanceIds: string[] | undefined;
       if (filter.installationId) {
@@ -777,44 +775,32 @@ export const createEgressEventRepository = (
         ).map((i) => i.id);
         if (filter.instanceId) instanceIds = instanceIds.filter((i) => i === filter.instanceId);
       }
-      const rows = await db.egressEvent.findMany({
-        where: {
-          AND: [
-            instanceIds
-              ? { instanceId: { in: instanceIds } }
-              : filter.instanceId
-                ? { instanceId: filter.instanceId }
-                : {},
-            filter.decision ? { decision: filter.decision } : {},
-            filter.from || filter.to
-              ? {
-                  ts: {
-                    ...(filter.from ? { gte: filter.from } : {}),
-                    ...(filter.to ? { lt: filter.to } : {}),
-                  },
-                }
-              : {},
-            cursor
-              ? { OR: [{ ts: { lt: cursor.ts } }, { ts: cursor.ts, id: { lt: cursor.id } }] }
-              : {},
-          ],
-        },
-        orderBy: [{ ts: 'desc' }, { id: 'desc' }],
-        take: limit + 1,
-      });
-      const hasMore = rows.length > limit;
-      const items = rows.slice(0, limit).map(
+      return paginate(
+        filter,
+        (take) =>
+          db.egressEvent.findMany({
+            where: {
+              AND: [
+                instanceIds
+                  ? { instanceId: { in: instanceIds } }
+                  : filter.instanceId
+                    ? { instanceId: filter.instanceId }
+                    : {},
+                filter.decision ? { decision: filter.decision } : {},
+                tsRange(filter.from, filter.to),
+                beforeTsId(cursor),
+              ],
+            },
+            orderBy: [{ ts: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+        tsIdCursorOf,
         (r): EgressEventView => ({
           ...r,
           bytesUp: r.bytesUp === null ? null : Number(r.bytesUp),
           bytesDown: r.bytesDown === null ? null : Number(r.bytesDown),
         }),
       );
-      const last = items[items.length - 1];
-      return {
-        items,
-        nextCursor: hasMore && last ? encodeCursor([last.ts.getTime(), last.id]) : null,
-      };
     },
   };
 };

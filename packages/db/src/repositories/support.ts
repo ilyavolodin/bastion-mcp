@@ -177,6 +177,13 @@ export const toPage = <T>(
   return { items, nextCursor: encodeCursor(cursorOf(last)) };
 };
 
+/** The `ts` range condition shared by the time-ordered logs: `from` inclusive, `to` exclusive. */
+export const tsRange = (
+  from: Date | undefined,
+  to: Date | undefined,
+): { ts?: { gte?: Date; lt?: Date } } =>
+  from || to ? { ts: { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) } } : {};
+
 export const idCursorOf = (row: { id: string }): (string | number)[] => [row.id];
 
 /**
