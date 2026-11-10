@@ -327,10 +327,7 @@ export class InstanceManager {
       await this.makeRoom(record);
       const handle = await this.claimSandbox(args, spec, progress, events);
       const updated = await this.bindSandbox(
-        record,
-        installation,
-        handle,
-        started,
+        { record, installation, handle, startedAt: started },
         events,
         progress,
       );
@@ -394,13 +391,16 @@ export class InstanceManager {
 
   /** Binding: the runner token and the sandbox reference are persisted so another worker can attach (21.2). */
   private async bindSandbox(
-    record: InstanceRecord,
-    installation: ResolvedInstallation,
-    handle: SandboxHandle,
-    startedAt: number,
+    binding: {
+      record: InstanceRecord;
+      installation: ResolvedInstallation;
+      handle: SandboxHandle;
+      startedAt: number;
+    },
     events: AcquireEvents,
     progress: StartProgress,
   ): Promise<InstanceRecord> {
+    const { record, installation, handle, startedAt } = binding;
     progress.enter('binding');
     events.add('bound');
     await this.deps.tokens.save(record.id, handle.ref.runnerToken);
@@ -502,12 +502,7 @@ export class InstanceManager {
       ...(this.deps.stderrSink ? { sink: this.deps.stderrSink } : {}),
       ...(this.deps.stderrLogger ? { logger: this.deps.stderrLogger } : {}),
     });
-    const continuations = new ContinuationRegistry({
-      redis: this.deps.redis,
-      workerId: this.deps.registry.workerId,
-      instanceId: record.id,
-      ...(this.deps.logger ? { logger: this.deps.logger } : {}),
-    });
+    const continuations = this.continuationsFor(record.id);
     const channel = await handle.runner.openStdio(signal);
     let session: UpstreamSession;
     try {
@@ -525,16 +520,7 @@ export class InstanceManager {
       throw error;
     }
     events.add('connected');
-    return this.makeLive(
-      args,
-      record,
-      installation,
-      session,
-      continuations,
-      startedAt,
-      handle,
-      stderr,
-    );
+    return this.makeLive({ args, record, session, continuations, startedAt, handle, stderr });
   }
 
   // --- remote legacy sessions ------------------------------------------------------------------------------------------
@@ -549,12 +535,7 @@ export class InstanceManager {
       [SPAN_ATTRS.installationId]: installation.installationId,
     };
     await this.telemetry.acquire(attributes, async (events) => {
-      const continuations = new ContinuationRegistry({
-        redis: this.deps.redis,
-        workerId: this.deps.registry.workerId,
-        instanceId: record.id,
-        ...(this.deps.logger ? { logger: this.deps.logger } : {}),
-      });
+      const continuations = this.continuationsFor(record.id);
       const started = this.clock.now();
       let session: UpstreamSession;
       try {
@@ -584,22 +565,34 @@ export class InstanceManager {
         : undefined;
       const updated: InstanceRecord = { ...record, remoteSession, startedAt: started };
       await this.deps.repo.save(updated);
-      this.register(this.makeLive(args, updated, installation, session, continuations, started));
+      this.register(
+        this.makeLive({ args, record: updated, session, continuations, startedAt: started }),
+      );
     });
   }
 
   // --- bookkeeping ---------------------------------------------------------------------------------------------------
 
-  private makeLive(
-    args: Pick<EnsureArgs, 'principal' | 'credential'>,
-    record: InstanceRecord,
-    installation: ResolvedInstallation,
-    session: UpstreamSession,
-    continuations: ContinuationRegistry,
-    startedAt: number,
-    handle?: SandboxHandle,
-    stderr?: StderrPipeline,
-  ): LiveInstance {
+  private continuationsFor(instanceId: string): ContinuationRegistry {
+    return new ContinuationRegistry({
+      redis: this.deps.redis,
+      workerId: this.deps.registry.workerId,
+      instanceId,
+      ...(this.deps.logger ? { logger: this.deps.logger } : {}),
+    });
+  }
+
+  private makeLive(live: {
+    args: Pick<EnsureArgs, 'installation' | 'principal' | 'credential'>;
+    record: InstanceRecord;
+    session: UpstreamSession;
+    continuations: ContinuationRegistry;
+    startedAt: number;
+    handle?: SandboxHandle;
+    stderr?: StderrPipeline;
+  }): LiveInstance {
+    const { args, record, session, continuations, startedAt, handle, stderr } = live;
+    const { installation } = args;
     const now = this.clock.now();
     return {
       id: record.id,
