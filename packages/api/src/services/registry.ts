@@ -435,23 +435,24 @@ const uniqueSlug = async (
   throw new ConflictApiError('could not find a free slug');
 };
 
-/** Creates or reuses the catalog entry, pins the version and creates the installation (11.7). */
-const executePlan = async (
+type PlanMapping = Planned['mapping'];
+
+/** Finds the registry's catalog entry or creates it, and adds the installing user to its visibility (11.7). */
+const ensureEntry = async (
   ctx: WriteCtx,
   plan: InstallPlan,
-  mapping: Planned['mapping'],
   trust: RegistryTrust,
-): Promise<{ entry: Row; version: Row; installation: Row }> => {
+): Promise<Row> => {
   const { catalogEntry: ce } = plan;
   const store = ctx.tx.store;
   const key = {
     registrySourceId: ce.source.registrySourceId,
     registryServerName: ce.source.serverName,
   };
-  let entry = (await store.find('catalog_entries', key))[0];
-  if (!entry) {
+  const existing = (await store.find('catalog_entries', key))[0];
+  if (!existing) {
     const slug = await uniqueSlug(ctx, 'catalog_entries', ce.slug, {});
-    entry = await store.insert('catalog_entries', {
+    return store.insert('catalog_entries', {
       id: ctx.deps.newId(),
       slug,
       kind: 'mcp_server',
@@ -471,35 +472,56 @@ const executePlan = async (
       createdBy: plan.installation.userId,
       createdAt: nowIso(ctx.deps),
     });
-  } else if (!JSON.stringify(entry.visibility).includes(plan.installation.userId)) {
-    const vis = (entry.visibility ?? { org: false, teamIds: [], userIds: [] }) as {
-      org?: boolean;
-      teamIds?: string[];
-      userIds?: string[];
-    };
-    entry = await store.update('catalog_entries', entry.id, {
-      visibility: { ...vis, userIds: [...(vis.userIds ?? []), plan.installation.userId] },
-    });
   }
-  let version = (
+  if (JSON.stringify(existing.visibility).includes(plan.installation.userId)) return existing;
+  const vis = (existing.visibility ?? { org: false, teamIds: [], userIds: [] }) as {
+    org?: boolean;
+    teamIds?: string[];
+    userIds?: string[];
+  };
+  return store.update('catalog_entries', existing.id, {
+    visibility: { ...vis, userIds: [...(vis.userIds ?? []), plan.installation.userId] },
+  });
+};
+
+/** Finds the pinned version of the entry or creates it as a draft (11.7). */
+const ensureVersion = async (
+  ctx: WriteCtx,
+  plan: InstallPlan,
+  mapping: PlanMapping,
+  entry: Row,
+): Promise<Row> => {
+  const { catalogEntry: ce } = plan;
+  const store = ctx.tx.store;
+  const existing = (
     await store.find('catalog_versions', { entryId: entry.id, label: ce.pinnedVersion })
   )[0];
-  if (!version) {
-    version = await store.insert('catalog_versions', {
-      id: ctx.deps.newId(),
-      entryId: entry.id,
-      label: ce.pinnedVersion,
-      serverSpec: mapping.spec,
-      installForm: mapping.form,
-      overrides: {},
-      limits: [],
-      runtime: { kind: ce.runtime },
-      status: 'draft',
-      testResult: null,
-      createdBy: plan.installation.userId,
-      createdAt: nowIso(ctx.deps),
-    });
-  }
+  if (existing) return existing;
+  return store.insert('catalog_versions', {
+    id: ctx.deps.newId(),
+    entryId: entry.id,
+    label: ce.pinnedVersion,
+    serverSpec: mapping.spec,
+    installForm: mapping.form,
+    overrides: {},
+    limits: [],
+    runtime: { kind: ce.runtime },
+    status: 'draft',
+    testResult: null,
+    createdBy: plan.installation.userId,
+    createdAt: nowIso(ctx.deps),
+  });
+};
+
+/** Creates the user's installation of the pinned version under a slug that is free for them (11.7). */
+const createInstallation = async (
+  ctx: WriteCtx,
+  plan: InstallPlan,
+  mapping: PlanMapping,
+  entry: Row,
+  version: Row,
+): Promise<Row> => {
+  const { catalogEntry: ce } = plan;
   const slug = await uniqueSlug(
     ctx,
     'installations',
@@ -510,7 +532,7 @@ const executePlan = async (
     },
   );
   const needsSetup = mapping.form.variables.length > 0 || mapping.form.secrets.length > 0;
-  const installation = await store.insert('installations', {
+  return ctx.tx.store.insert('installations', {
     id: ctx.deps.newId(),
     ownerType: 'user',
     ownerId: plan.installation.userId,
@@ -530,6 +552,18 @@ const executePlan = async (
     statusDetail: { automaticTest: plan.automaticTest },
     createdAt: nowIso(ctx.deps),
   });
+};
+
+/** Creates or reuses the catalog entry, pins the version and creates the installation (11.7). */
+const executePlan = async (
+  ctx: WriteCtx,
+  plan: InstallPlan,
+  mapping: PlanMapping,
+  trust: RegistryTrust,
+): Promise<{ entry: Row; version: Row; installation: Row }> => {
+  const entry = await ensureEntry(ctx, plan, trust);
+  const version = await ensureVersion(ctx, plan, mapping, entry);
+  const installation = await createInstallation(ctx, plan, mapping, entry, version);
   return { entry, version, installation };
 };
 
