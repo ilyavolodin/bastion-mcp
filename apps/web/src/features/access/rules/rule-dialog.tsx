@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { toast } from 'sonner';
-import { ApiError } from '@/api/client';
 import { useSavePolicyRule } from '@/api/hooks';
 import type { Body } from '@/api/schema';
 import {
@@ -14,13 +13,13 @@ import {
   whenChips,
   whoChips,
 } from '@/api/views/access';
-import { Field, FormError } from '@/components/form';
+import { Field, FormError, useFormErrors } from '@/components/form';
 import { Chip } from '@/components/primitives';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
-import { fieldErrors, serverFieldErrors } from '@/lib/form-errors';
+import { fieldErrors } from '@/lib/form-errors';
 import { pad2 } from '@/lib/format';
 import { CIDR, ruleFormSchema } from '../forms';
 import { useRuleLookups } from './lookups';
@@ -96,7 +95,8 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
   const [cidr, setCidr] = React.useState('');
   const [hoursFrom, setHoursFrom] = React.useState(String(DEFAULT_HOURS_FROM));
   const [hoursTo, setHoursTo] = React.useState(String(DEFAULT_HOURS_TO));
-  const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const form = useFormErrors();
+  const { errors } = form;
   const { name, priority, ownerTeamId, effect, who, what, when } = draft;
   const whoList = whoChips(who, lookups).filter((c) => c.key !== 'everyone');
   const whatList = whatChips(what, lookups).filter((c) => c.key !== 'any');
@@ -111,8 +111,8 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
       onSubmit={(e) => {
         e.preventDefault();
         const parsed = ruleFormSchema.safeParse({ name, priority, ownerTeamId });
-        if (!parsed.success) return setErrors(fieldErrors(parsed.error));
-        setErrors({});
+        if (!parsed.success) return form.set(fieldErrors(parsed.error));
+        form.clear();
         const body: Body<'post', '/policy-rules'> = {
           name: parsed.data.name,
           ownerTeamId: parsed.data.ownerTeamId || null,
@@ -130,12 +130,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
               toast.success('Rule saved');
               onDone();
             },
-            onError: (err) =>
-              setErrors(
-                err instanceof ApiError && err.errors.length > 0
-                  ? serverFieldErrors(err.errors)
-                  : { form: err.message },
-              ),
+            onError: form.fromServer,
           },
         );
       }}
@@ -380,11 +375,11 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
             if (e.key !== 'Enter' || !cidr.trim()) return;
             e.preventDefault();
             if (!CIDR.test(cidr.trim())) {
-              setErrors({ ...errors, cidr: 'Enter an IP address or a CIDR range' });
+              form.set({ ...errors, cidr: 'Enter an IP address or a CIDR range' });
               return;
             }
             const { cidr: _drop, ...rest } = errors;
-            setErrors(rest);
+            form.set(rest);
             setWhen({ ...when, ipCidrs: addTo(when.ipCidrs, cidr.trim()) });
             setCidr('');
           }}
