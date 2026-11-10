@@ -31,7 +31,7 @@ export const spanStatusFor = (
     ? { code: SpanStatusCode.ERROR, message: record.errorCode ?? record.outcome }
     : undefined;
 
-export const recordOperationOutcome = (
+const recordOperationOutcome = (
   deps: OperationDeps,
   ctx: OpContext,
   record: CallRecord,
@@ -61,7 +61,8 @@ export const recordOperationOutcome = (
 /**
  * The scaffold every operation that reaches an installation shares: a call record primed with the installation, the
  * body, failure classification and the row/metric/span outcome in a `finally`. `onError` may turn a failure into a
- * result (tool calls answer denials as results, 6.9); returning `undefined` rethrows.
+ * result (tool calls answer denials as results, 6.9); returning `undefined` rethrows. A body that sets `record.skipLog`
+ * leaves no row, metric point or span outcome (a non-terminal `tasks/get` poll, 6.8).
  */
 export const runRoutedOperation = async <T>(
   deps: OperationDeps,
@@ -85,6 +86,6 @@ export const runRoutedOperation = async <T>(
     if (converted !== undefined) return converted;
     throw error;
   } finally {
-    recordOperationOutcome(deps, ctx, record, span, installation);
+    if (!record.skipLog) recordOperationOutcome(deps, ctx, record, span, installation);
   }
 };
