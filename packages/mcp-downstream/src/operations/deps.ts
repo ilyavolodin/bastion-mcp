@@ -1,5 +1,5 @@
 import type { Principal } from '@bastion-mcp/auth';
-import type { DEFAULT_LIMIT_RULES, Keyring } from '@bastion-mcp/core';
+import type { Keyring } from '@bastion-mcp/core';
 import type { GuardPipeline } from '@bastion-mcp/guards';
 import { ORG_DEFAULT_PROFILE } from '@bastion-mcp/guards';
 import { compileRulesFor, defaultRules, type Limiter } from '@bastion-mcp/limits';
@@ -14,11 +14,9 @@ import type {
   GuardProfilePort,
   LimitRulesPort,
   Logger,
-  noopLogger,
   PolicyPort,
   PrincipalProfilePort,
   SkillsProvider,
-  systemClock,
   ToPolicyPrincipal,
   UpstreamPort,
 } from '../ports';
@@ -107,5 +105,3 @@ export const defaultGuardProfilePort: GuardProfilePort = {
 export const noopMetrics = (): BastionMetrics =>
   createMetrics(otelMetrics.getMeter('bastion-mcp-downstream'));
 export const defaultTracer = (): Tracer => trace.getTracer('bastion-mcp-downstream');
-
-export type { DEFAULT_LIMIT_RULES, noopLogger, systemClock };
