@@ -167,14 +167,20 @@ export const unknownArguments = (
   return Object.keys(args).filter((k) => !known.has(k));
 };
 
+/** The variable names of one `{expression}` of a URI template: the operator and the modifiers are not part of them. */
+const expressionNames = (expression: string): string[] =>
+  expression
+    .replace(/^[+#./;?&]/, '')
+    .split(',')
+    .map((p) => p.replace(/[*:]\d*$/, '').trim())
+    .filter(Boolean);
+
 /** The variables of an RFC 6570 URI template as the Try-it panel asks for them: `{id}`, `{+path}`, `{?q,page}`. */
 export const templateVariables = (uriTemplate: string): string[] => {
   const names: string[] = [];
   for (const [, expression] of uriTemplate.matchAll(/\{([^}]+)\}/g)) {
-    const inner = (expression ?? '').replace(/^[+#./;?&]/, '');
-    for (const part of inner.split(',')) {
-      const name = part.replace(/[*:]\d*$/, '').trim();
-      if (name && !names.includes(name)) names.push(name);
+    for (const name of expressionNames(expression ?? '')) {
+      if (!names.includes(name)) names.push(name);
     }
   }
   return names;
@@ -184,11 +190,7 @@ export const templateVariables = (uriTemplate: string): string[] => {
 export const expandTemplate = (uriTemplate: string, values: Record<string, string>): string =>
   uriTemplate.replace(/\{([^}]+)\}/g, (_all, expression: string) => {
     const operator = /^[+#./;?&]/.exec(expression)?.[0] ?? '';
-    const names = expression
-      .replace(/^[+#./;?&]/, '')
-      .split(',')
-      .map((p) => p.replace(/[*:]\d*$/, '').trim())
-      .filter(Boolean);
+    const names = expressionNames(expression);
     const encode = (v: string) =>
       operator === '+' || operator === '#' ? encodeURI(v) : encodeURIComponent(v);
     if (operator === '?' || operator === '&') {
