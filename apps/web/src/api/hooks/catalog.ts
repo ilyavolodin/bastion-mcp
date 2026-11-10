@@ -10,6 +10,7 @@ import {
   toVersionBody,
 } from '@/features/catalog/draft';
 import { fromBase64, toBase64 } from '@/lib/base64';
+import { sortKeys } from '@/lib/diff';
 import { asRecord } from '@/lib/json';
 import { api, fetchAll, LOOKUP_PAGES } from '../client';
 import type { Body, CatalogKind } from '../schema';
@@ -117,19 +118,9 @@ export const useCatalogVersion = (entryId: string | undefined, versionId: string
       api.get(`/catalog/${entryId ?? ''}/versions/${versionId ?? ''}`, { signal }),
   });
 
-const canonical = (v: unknown): unknown =>
-  Array.isArray(v)
-    ? v.map(canonical)
-    : v && typeof v === 'object'
-      ? Object.fromEntries(
-          Object.entries(v)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([k, x]) => [k, canonical(x)]),
-        )
-      : v;
 /** JSON equality that ignores key order. */
 const sameJson = (a: unknown, b: unknown) =>
-  JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+  JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
 const isDefaultOverrides = (doc: Record<string, unknown>) =>
   Object.keys(doc).length === 0 || sameJson(doc, { version: 1 });
 
