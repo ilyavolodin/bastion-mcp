@@ -3,7 +3,7 @@ import * as React from 'react';
 import { useTry } from '@/api/hooks';
 import type { DefinitionPair } from '@/api/views/servers';
 import { CodeEditor } from '@/components/code-editor';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Card, CardHeader, Segmented, Tag } from '@/components/primitives';
 import { ProblemAlert } from '@/components/problem';
 import { Button } from '@/components/ui/button';
@@ -332,11 +332,7 @@ export function TryIt({
                     {...(schema ? { jsonSchema: schema as Record<string, unknown> } : {})}
                     height={200}
                   />
-                  {parseError ? (
-                    <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-                      {parseError}
-                    </p>
-                  ) : null}
+                  <FormError message={parseError ?? undefined} />
                   {unknown.length > 0 ? (
                     <p role="note" className="m-0 text-caption text-muted">
                       The tool does not declare {unknown.map((u) => `“${u}”`).join(', ')}.

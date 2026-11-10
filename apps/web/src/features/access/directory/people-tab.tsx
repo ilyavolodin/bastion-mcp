@@ -5,6 +5,7 @@ import { ApiError } from '@/api/client';
 import { useDeactivateUser, useRoleMappingRules, useSetUserRole, useUsers } from '@/api/hooks';
 import { useAuth } from '@/auth/auth';
 import { EmptyState } from '@/components/empty-state';
+import { FormError } from '@/components/form';
 import { Avatar, Card, CardHeader, Chip, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
@@ -37,11 +38,7 @@ export function PeopleTab({ initialQuery }: { initialQuery?: string | undefined 
           ? ' IdP group mapping rules also set roles, at every sign-in, and replace a role chosen here.'
           : ''}
       </p>
-      {roleError ? (
-        <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-          {roleError}
-        </p>
-      ) : null}
+      <FormError message={roleError} />
       <div className="flex h-11 items-center gap-2.5 rounded-md bg-sunken px-3.5">
         <Search className="size-4 text-muted" aria-hidden="true" />
         <input

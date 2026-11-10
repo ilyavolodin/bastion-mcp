@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Segmented } from '@/components/primitives';
 import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/input';
@@ -261,11 +261,7 @@ export function AddedForm({
           be served as written.
         </p>
       ) : null}
-      {error ? (
-        <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-          {error}
-        </p>
-      ) : null}
+      <FormError message={error} />
       <div className="flex gap-2">
         <Button type="submit" size="sm">
           {editing ? 'Update item' : 'Add item'}

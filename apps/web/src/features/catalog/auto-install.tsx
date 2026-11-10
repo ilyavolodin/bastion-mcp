@@ -11,7 +11,7 @@ import {
 } from '@/api/hooks';
 import type { AutoInstallPreview, AutoInstallView, TargetChip } from '@/api/views/catalog';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { AvatarStrip, Card, CardHeader, Chip, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
@@ -280,11 +280,7 @@ export function PolicyDialog({
               }
             />
           </div>
-          {error ? (
-            <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-              {error}
-            </p>
-          ) : null}
+          <FormError message={error} />
           <Button type="submit" disabled={save.isPending}>
             Save policy
           </Button>

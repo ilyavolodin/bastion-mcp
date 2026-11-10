@@ -8,7 +8,7 @@ import {
 } from '@/api/hooks';
 import type { Schemas } from '@/api/schema';
 import { CodeEditor } from '@/components/code-editor';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Chip } from '@/components/primitives';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -147,11 +147,7 @@ export function CedarDialog({
               </ul>
               <TestBuilder onAdd={(t) => setTests([...tests, t])} />
             </div>
-            {error ? (
-              <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-                {error}
-              </p>
-            ) : null}
+            <FormError message={error} />
             <div className="flex gap-2">
               <Button
                 disabled={!name.trim() || !valid || save.isPending}

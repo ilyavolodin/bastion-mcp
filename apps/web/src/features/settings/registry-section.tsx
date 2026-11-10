@@ -14,7 +14,7 @@ import {
 } from '@/api/hooks';
 import { type RegistrySource, syncInfo, TRUST_LABEL, trustTone } from '@/api/views/registry';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Card, CardHeader, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
@@ -182,11 +182,7 @@ function AddSourceDialog({ open, onClose }: { open: boolean; onClose: () => void
               )}
             </Field>
           </div>
-          {error ? (
-            <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-              {error}
-            </p>
-          ) : null}
+          <FormError message={error} />
           <Button type="submit" disabled={create.isPending}>
             Add source
           </Button>
@@ -380,11 +376,7 @@ function PolicyDialog({ source, onClose }: { source: RegistrySource | null; onCl
               />
               <span className="text-label">Require a clean OSV malware check</span>
             </label>
-            {error ? (
-              <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-                {error}
-              </p>
-            ) : null}
+            <FormError message={error} />
             <Button type="submit" disabled={put.isPending}>
               Save policy
             </Button>

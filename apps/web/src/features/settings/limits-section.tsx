@@ -26,7 +26,7 @@ import {
   SUBJECT_LABEL,
 } from '@/api/views/settings';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Card, CardHeader, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
@@ -270,11 +270,7 @@ function LimitDialog({ editing, onClose }: { editing: LimitRule | 'new'; onClose
         />
         <span className="text-label">Enabled</span>
       </label>
-      {formError ? (
-        <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-          {formError}
-        </p>
-      ) : null}
+      <FormError message={formError} />
       <Button type="submit" disabled={create.isPending || patch.isPending}>
         Save limit
       </Button>

@@ -24,7 +24,7 @@ import { useAuth } from '@/auth/auth';
 import { ChartCard } from '@/components/chart-card';
 import { AutoSize, AXIS_TICK, ChartTooltip, dateLabel, GRID, hourLabel } from '@/components/charts';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { PageHeader } from '@/components/page-header';
 import {
   Card,
@@ -250,11 +250,7 @@ function DecisionDialog({
               />
             )}
           </Field>
-          {problem ? (
-            <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-              {problem}
-            </p>
-          ) : null}
+          <FormError message={problem} />
           <Button type="submit" variant={reject ? 'danger' : 'primary'} disabled={decide.isPending}>
             {reject ? 'Keep blocking' : 'Accept definition'}
           </Button>
@@ -413,11 +409,7 @@ function BulkApproveDialog({
               />
             )}
           </Field>
-          {problem ? (
-            <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-              {problem}
-            </p>
-          ) : null}
+          <FormError message={problem} />
           <Button type="submit" disabled={approve.isPending}>
             {approve.isPending ? 'Accepting…' : `Accept ${reviews.length}`}
           </Button>

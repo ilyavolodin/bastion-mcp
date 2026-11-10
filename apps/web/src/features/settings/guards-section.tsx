@@ -10,7 +10,7 @@ import {
   modelGuardsBody,
   modelGuardsToForm,
 } from '@/api/views/settings';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Card, CardHeader } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
@@ -170,11 +170,7 @@ export function ModelGuardsSection() {
                     ))}
                   </div>
                 ) : null}
-                {errors[k]?._ ? (
-                  <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-                    {errors[k]?._}
-                  </p>
-                ) : null}
+                <FormError message={errors[k]?._} />
               </fieldset>
             ))}
             <Button

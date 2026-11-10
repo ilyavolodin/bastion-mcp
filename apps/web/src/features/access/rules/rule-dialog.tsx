@@ -14,7 +14,7 @@ import {
   whenChips,
   whoChips,
 } from '@/api/views/access';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Chip } from '@/components/primitives';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -389,11 +389,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
             setCidr('');
           }}
         />
-        {errors.cidr ? (
-          <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-            {errors.cidr}
-          </p>
-        ) : null}
+        <FormError message={errors.cidr} />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
@@ -432,11 +428,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
         Forbid wins over permit. Use the policy simulator on this page to see how the rules decide
         for a given person and tool before you rely on them.
       </p>
-      {errors.form ? (
-        <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-          {errors.form}
-        </p>
-      ) : null}
+      <FormError message={errors.form} />
       <Button type="submit" disabled={save.isPending}>
         Save rule
       </Button>

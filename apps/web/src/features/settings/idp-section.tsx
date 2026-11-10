@@ -19,7 +19,7 @@ import {
 import { useAuth } from '@/auth/auth';
 import { CopyField } from '@/components/copy-field';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Card, CardHeader, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { StatusDot } from '@/components/status';
@@ -213,11 +213,7 @@ function IdpDialog({ editing, onClose }: { editing: IdpConnection | 'new'; onClo
           connection.
         </p>
       ) : null}
-      {formError ? (
-        <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-          {formError}
-        </p>
-      ) : null}
+      <FormError message={formError} />
       <Button type="submit" disabled={pending}>
         Save connection
       </Button>

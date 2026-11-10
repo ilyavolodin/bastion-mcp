@@ -26,7 +26,7 @@ import { useAuth } from '@/auth/auth';
 import { ClientConfigTabs } from '@/components/client-config';
 import { CopyField } from '@/components/copy-field';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Card, CardHeader, Chip, Tag } from '@/components/primitives';
 import { ProblemAlert } from '@/components/problem';
 import { QueryBoundary } from '@/components/query-boundary';
@@ -174,11 +174,7 @@ function EndpointDialog({
                 ) : null}
               </label>
             ))}
-            {form.formState.errors.installationIds ? (
-              <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-                {form.formState.errors.installationIds.message}
-              </p>
-            ) : null}
+            <FormError message={form.formState.errors.installationIds?.message} />
           </fieldset>
           <ToolCountWarning count={tools} threshold={me.org.toolWarnThreshold} />
           <Field
