@@ -76,6 +76,19 @@ export type ProvisioningPlan = {
   warnings: string[];
 };
 
+/** A plan that changes only the user (or nothing): no teams, memberships or warnings. Fresh arrays per call. */
+export const userOnlyPlan = (
+  user: UserChange,
+  events: ProvisioningEvent[] = [],
+): ProvisioningPlan => ({
+  user,
+  createTeams: [],
+  membershipUpserts: [],
+  membershipRemovals: [],
+  events,
+  warnings: [],
+});
+
 /** Repository port that applies a plan atomically (implemented by `@bastion-mcp/db`). */
 export interface ProvisioningRepository {
   applyPlan(plan: ProvisioningPlan): Promise<void>;

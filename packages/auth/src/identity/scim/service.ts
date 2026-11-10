@@ -9,6 +9,7 @@ import {
   reconcileMemberships,
   type UserChange,
   type UserState,
+  userOnlyPlan,
 } from '../provisioning/plan';
 import { type DesiredMembership, evaluateRules, type TeamRef } from '../provisioning/rules';
 import { parseScimFilter } from './filter';
@@ -215,8 +216,8 @@ export class ScimService {
       throw new ScimError(409, 'a user with this userName already exists', 'uniqueness');
     }
     const id = this.newId();
-    const plan: ProvisioningPlan = {
-      user: {
+    const plan = userOnlyPlan(
+      {
         kind: 'create',
         id,
         email: u.email,
@@ -227,12 +228,8 @@ export class ScimService {
         status: u.active ? 'active' : 'deactivated',
         scimExternalId: u.externalId,
       },
-      createTeams: [],
-      membershipUpserts: [],
-      membershipRemovals: [],
-      events: [{ type: 'user.created', userId: id, email: u.email }],
-      warnings: [],
-    };
+      [{ type: 'user.created', userId: id, email: u.email }],
+    );
     await this.deps.store.applyPlans([plan]);
     const created = await this.deps.store.getUser(id);
     if (!created) throw new ScimError(500, 'created user not found');
@@ -286,14 +283,7 @@ export class ScimService {
       : [];
     if (Object.keys(changes).length > 0) {
       await this.deps.store.applyPlans([
-        {
-          user: { kind: 'update', id: record.id, changes },
-          createTeams: [],
-          membershipUpserts: [],
-          membershipRemovals: [],
-          events,
-          warnings: [],
-        },
+        userOnlyPlan({ kind: 'update', id: record.id, changes }, events),
       ]);
     }
     // `active: false` = deactivate: tokens, sessions, instances and upstream tokens (9.1).
@@ -388,16 +378,7 @@ export class ScimService {
     const [first, ...others] = memberPlans;
     const plans: ProvisioningPlan[] = first
       ? [{ ...first, createTeams: [...first.createTeams, team] }, ...others]
-      : [
-          {
-            user: { kind: 'none', id: team.id },
-            createTeams: [team],
-            membershipUpserts: [],
-            membershipRemovals: [],
-            events: [],
-            warnings: [],
-          },
-        ];
+      : [{ ...userOnlyPlan({ kind: 'none', id: team.id }), createTeams: [team] }];
     await this.deps.store.applyPlans(plans);
     const created = await this.deps.store.getGroup(team.id);
     if (!created) throw new ScimError(500, 'created group not found');
