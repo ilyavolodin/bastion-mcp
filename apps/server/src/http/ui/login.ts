@@ -16,6 +16,7 @@ import {
 } from '@bastion-mcp/auth';
 import { BastionError, newId } from '@bastion-mcp/core';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { publicHost } from '../../config';
 import {
   forgotPasswordPage,
   type PageMessage,
@@ -283,7 +284,7 @@ export const registerLoginRoutes = async (
         forgotPasswordPage({
           idpNames: connections.map((c) => c.name),
           localEnabled,
-          host: new URL(infra.config.publicUrl).host,
+          host: publicHost(infra.config),
         }),
       );
     });

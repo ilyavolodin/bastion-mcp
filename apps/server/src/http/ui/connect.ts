@@ -10,6 +10,7 @@ import {
 } from '@bastion-mcp/auth';
 import type { FastifyInstance } from 'fastify';
 import { createInstallationLookup } from '../../adapters/auth';
+import { publicOrigin } from '../../config';
 import { connectPage } from '../pages/templates';
 import { ensureCsrf, errorPage, formCsrfOk, sendHtml, sessionPrincipal, type UiDeps } from './util';
 
@@ -22,7 +23,7 @@ export const registerConnectRoutes = async (app: FastifyInstance, deps: UiDeps) 
   const { logger } = infra;
   const lookup = createInstallationLookup(infra);
   // The auth URL builders take the public origin (scheme included), not a bare host.
-  const host = new URL(infra.config.publicUrl).origin;
+  const host = publicOrigin(infra.config);
 
   /** The installation's owner or a member of the owning team may connect their own account (9.6). */
   const mayConnect = async (installationId: string, userId: string, teams: readonly string[]) => {
