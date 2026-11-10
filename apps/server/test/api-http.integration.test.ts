@@ -708,7 +708,7 @@ describe.skipIf(!haveDocker())('17 control-plane API over Postgres and Redis', (
       bytesIn: 1,
       bytesOut: 2,
     });
-    await infra.repos.callLog.insertBatch([row('ok'), row('ok'), row('tool_error')] as never);
+    await infra.repos.callLog.insertBatch([row('ok'), row('ok'), row('rate_limited')] as never);
     await infra.repos.callLog.rollupAll(new Date(Date.now() + 120_000));
     const from = new Date(Date.now() - 600_000).toISOString();
     const to = new Date(Date.now() + 600_000).toISOString();
@@ -716,7 +716,7 @@ describe.skipIf(!haveDocker())('17 control-plane API over Postgres and Redis', (
       ['installation', installationId, 3],
       ['catalogEntry', catalogEntryId, 3],
       ['item', 'grouping__probe', 3],
-      ['outcome', 'tool_error', 1],
+      ['outcome', 'rate_limited', 1],
     ];
     for (const extra of [{}, { user: api.adminId }]) {
       for (const [groupBy, group, count] of expected) {
