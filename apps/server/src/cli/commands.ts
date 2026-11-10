@@ -223,6 +223,261 @@ export const formatTable = (rows: readonly CheckRow[]): string => {
     .join('\n');
 };
 
+type Handler = (parsed: Parsed, env: Env, io: Io) => Promise<number>;
+
+/** The `--email` of the two password commands and, with `--password-stdin`, the password read from stdin. */
+const emailAndPassword = async (
+  parsed: Parsed,
+  io: Io,
+  command: string,
+): Promise<{ email: string; password: string | undefined } | undefined> => {
+  const email = flagString(parsed, 'email');
+  if (!email) {
+    io.err(`${command} requires --email <address>`);
+    return undefined;
+  }
+  const password = parsed.flags.has('password-stdin') ? (await io.stdin()).trim() : undefined;
+  return { email, password };
+};
+
+const cmdMigrate: Handler = async (_parsed, env, io) => {
+  const config = loadServerConfig(env);
+  const result = await migrate(config.databaseUrl, { log: io.out });
+  io.out(
+    result.applied.length === 0
+      ? `database is up to date (${result.alreadyApplied} migrations applied)`
+      : `applied ${result.applied.length} migration(s): ${result.applied.join(', ')}`,
+  );
+  return 0;
+};
+
+const cmdCheckConfig: Handler = async (_parsed, env, io) => {
+  const rows = await checkConfig(env);
+  io.out(formatTable(rows));
+  return rows.every((r) => r.ok) ? 0 : 1;
+};
+
+const cmdCreateAdmin: Handler = async (parsed, env, io) => {
+  const credentials = await emailAndPassword(parsed, io, 'create-admin');
+  if (!credentials) return 2;
+  const { email, password } = credentials;
+  return await withInfra(env, async (infra) => {
+    const result = await bootstrapAdminUser(
+      infra,
+      (e, p) => io.out(`admin ${e} created; password (shown once): ${p}`),
+      { email, password },
+    );
+    if (!result.created) {
+      io.err(`no admin created: ${email} already exists or is invalid`);
+      return 1;
+    }
+    if (password !== undefined) io.out(`admin ${result.email} created`);
+    return 0;
+  });
+};
+
+const cmdResetPassword: Handler = async (parsed, env, io) => {
+  const credentials = await emailAndPassword(parsed, io, 'reset-password');
+  if (!credentials) return 2;
+  const { email, password } = credentials;
+  return await withInfra(env, async (infra) => {
+    const result = await resetPassword(infra, { email, password });
+    if (!result.ok) {
+      io.err(
+        result.reason === 'policy'
+          ? result.message
+          : result.reason === 'not_found'
+            ? `no account with the email ${email}`
+            : `${email} signs in through an identity provider and has no local password`,
+      );
+      return 1;
+    }
+    io.out(
+      result.generatedPassword === undefined
+        ? `password of ${result.email} reset`
+        : `password of ${result.email} reset; new password (shown once): ${result.generatedPassword}`,
+    );
+    io.out('all sessions and tokens of this user were revoked');
+    return 0;
+  });
+};
+
+const cmdSetRole: Handler = async (parsed, env, io) => {
+  const email = flagString(parsed, 'email');
+  const role = flagString(parsed, 'role');
+  if (!email || !role) {
+    io.err('set-role requires --email <address> and --role admin | auditor | member');
+    return 2;
+  }
+  return await withInfra(env, async (infra) => {
+    const result = await setRole(infra, { email, role });
+    if (!result.ok) {
+      io.err(
+        result.reason === 'invalid_role'
+          ? 'the role must be admin, auditor or member'
+          : result.reason === 'not_found'
+            ? `no account with the email ${email} (it is created when the person first signs in)`
+            : result.reason === 'deactivated'
+              ? `${email} is deactivated`
+              : 'this is the last active administrator: make somebody else an administrator first',
+      );
+      return 1;
+    }
+    io.out(
+      result.from === result.to
+        ? `${result.email} already is ${result.to}`
+        : `${result.email} is now ${result.to} (was ${result.from})`,
+    );
+    if (result.ruleManaged) {
+      io.out(
+        'note: IdP group mapping rules also set roles, at every sign-in; a role they set replaces this one',
+      );
+    }
+    return 0;
+  });
+};
+
+const cmdRotateKeys: Handler = async (parsed, env, io) => {
+  const purpose = flagString(parsed, 'purpose');
+  if (!isPurpose(purpose)) {
+    io.err(`rotate-keys requires --purpose ${KEY_PURPOSES.join(' | ')}`);
+    return 2;
+  }
+  return await withInfra(env, async (infra) => {
+    const result = await rotateKeys(infra, purpose, { force: parsed.flags.has('force') });
+    if (result.created !== undefined || result.retired.length > 0) {
+      await publishKeyChange(infra, [purpose]);
+    }
+    io.out(
+      result.created
+        ? `${purpose}: created key ${result.created}; retired ${result.retired.length} expired key(s)`
+        : `${purpose}: no rotation due (use --force to rotate anyway); retired ${result.retired.length}`,
+    );
+    return 0;
+  });
+};
+
+const cmdExportConfig: Handler = async (parsed, env, io) =>
+  await withInfra(env, async (infra) => {
+    const doc = await exportConfig(infra);
+    const text = `${JSON.stringify(doc, null, 2)}\n`;
+    const out = flagString(parsed, 'out');
+    if (out) {
+      writeFileSync(out, text, { mode: 0o600 });
+      io.out(`exported ${Object.keys(doc).length - 2} sections to ${out}`);
+    } else io.out(text);
+    return 0;
+  });
+
+const cmdImportConfig: Handler = async (parsed, env, io) => {
+  const file = flagString(parsed, 'file');
+  const text = file ? readFileSync(file, 'utf8') : await io.stdin();
+  let input: unknown;
+  try {
+    input = JSON.parse(text);
+  } catch {
+    io.err('import-config: input is not valid JSON');
+    return 2;
+  }
+  return await withInfra(env, async (infra) => {
+    const report = await importConfig(infra, input, { dryRun: parsed.flags.has('dry-run') });
+    io.out(`${report.dryRun ? 'validated' : 'imported'}: ${JSON.stringify(report.counts)}`);
+    return 0;
+  });
+};
+
+const cmdBackup: Handler = async (parsed, env, io) => {
+  const out = flagString(parsed, 'out');
+  if (!out) {
+    io.err('backup: --out <file> is required');
+    return 2;
+  }
+  const passphrase = await passphraseOf(parsed, env, io);
+  if (!passphrase) return 2;
+  return await withInfra(env, async (infra) => {
+    const report = await createBackup(infra, passphrase, { id: null });
+    writeFileSync(out, report.file, { mode: 0o600 });
+    io.out(`backup written to ${out} (${report.file.length} bytes)`);
+    io.out(`rows: ${JSON.stringify(report.counts)}`);
+    io.out('Keep the passphrase and the file apart. The file contains every secret.');
+    return 0;
+  });
+};
+
+const cmdRestore: Handler = async (parsed, env, io) => {
+  const file = flagString(parsed, 'file');
+  if (!file) {
+    io.err('restore: --file <backup> is required');
+    return 2;
+  }
+  const mode = flagString(parsed, 'mode') ?? 'merge';
+  if (mode !== 'merge' && mode !== 'replace') {
+    io.err('restore: --mode must be merge or replace');
+    return 2;
+  }
+  const passphrase = await passphraseOf(parsed, env, io);
+  if (!passphrase) return 2;
+  return await withInfra(env, async (infra) => {
+    try {
+      const { document } = await readBackup(readFileSync(file), passphrase);
+      const report = await restoreBackup(infra, createMaintenance(infra.redis), document, {
+        mode,
+        dryRun: parsed.flags.has('dry-run'),
+      });
+      io.out(
+        `${report.dryRun ? 'would restore' : 'restored'} (${mode}) backup from ${report.backup.createdAt}`,
+      );
+      io.out(formatRestoreReport(report));
+      for (const warning of report.warnings) io.out(`warning: ${warning}`);
+      if (!report.dryRun && mode === 'replace') {
+        io.out(
+          'Maintenance mode is still on. Check the instance, then run: bastion maintenance off',
+        );
+      }
+      return 0;
+    } catch (error) {
+      if (error instanceof RestoreRefusedError || error instanceof BackupFileError) {
+        io.err(`restore refused: ${error.message}`);
+        return 1;
+      }
+      throw error;
+    }
+  });
+};
+
+const cmdMaintenance: Handler = async (parsed, env, io) => {
+  const action = parsed.positional[0];
+  if (action !== 'on' && action !== 'off' && action !== 'status') {
+    io.err('maintenance: expected on, off or status');
+    return 2;
+  }
+  return await withInfra(env, async (infra) => {
+    const maintenance = createMaintenance(infra.redis);
+    const state =
+      action === 'status' ? await maintenance.get() : await maintenance.set(action === 'on', 'cli');
+    io.out(
+      state.enabled
+        ? `maintenance mode is ON since ${state.since} (by ${state.by})`
+        : 'maintenance mode is off',
+    );
+    return 0;
+  });
+};
+
+const HANDLERS: ReadonlyMap<string, Handler> = new Map([
+  ['migrate', cmdMigrate],
+  ['check-config', cmdCheckConfig],
+  ['create-admin', cmdCreateAdmin],
+  ['reset-password', cmdResetPassword],
+  ['set-role', cmdSetRole],
+  ['rotate-keys', cmdRotateKeys],
+  ['export-config', cmdExportConfig],
+  ['import-config', cmdImportConfig],
+  ['backup', cmdBackup],
+  ['restore', cmdRestore],
+  ['maintenance', cmdMaintenance],
+]);
+
 /** Runs one CLI command; returns the process exit code. `serve` is handled by the caller. */
 export const execute = async (argv: readonly string[], env: Env, io: Io): Promise<number> => {
   const parsed = parseArgs(argv);
@@ -231,233 +486,12 @@ export const execute = async (argv: readonly string[], env: Env, io: Io): Promis
     return 0;
   }
   try {
-    switch (parsed.command) {
-      case 'migrate': {
-        const config = loadServerConfig(env);
-        const result = await migrate(config.databaseUrl, { log: io.out });
-        io.out(
-          result.applied.length === 0
-            ? `database is up to date (${result.alreadyApplied} migrations applied)`
-            : `applied ${result.applied.length} migration(s): ${result.applied.join(', ')}`,
-        );
-        return 0;
-      }
-      case 'check-config': {
-        const rows = await checkConfig(env);
-        io.out(formatTable(rows));
-        return rows.every((r) => r.ok) ? 0 : 1;
-      }
-      case 'create-admin': {
-        const email = flagString(parsed, 'email');
-        if (!email) {
-          io.err('create-admin requires --email <address>');
-          return 2;
-        }
-        const password = parsed.flags.has('password-stdin') ? (await io.stdin()).trim() : undefined;
-        return await withInfra(env, async (infra) => {
-          const result = await bootstrapAdminUser(
-            infra,
-            (e, p) => io.out(`admin ${e} created; password (shown once): ${p}`),
-            { email, password },
-          );
-          if (!result.created) {
-            io.err(`no admin created: ${email} already exists or is invalid`);
-            return 1;
-          }
-          if (password !== undefined) io.out(`admin ${result.email} created`);
-          return 0;
-        });
-      }
-      case 'reset-password': {
-        const email = flagString(parsed, 'email');
-        if (!email) {
-          io.err('reset-password requires --email <address>');
-          return 2;
-        }
-        const password = parsed.flags.has('password-stdin') ? (await io.stdin()).trim() : undefined;
-        return await withInfra(env, async (infra) => {
-          const result = await resetPassword(infra, { email, password });
-          if (!result.ok) {
-            io.err(
-              result.reason === 'policy'
-                ? result.message
-                : result.reason === 'not_found'
-                  ? `no account with the email ${email}`
-                  : `${email} signs in through an identity provider and has no local password`,
-            );
-            return 1;
-          }
-          io.out(
-            result.generatedPassword === undefined
-              ? `password of ${result.email} reset`
-              : `password of ${result.email} reset; new password (shown once): ${result.generatedPassword}`,
-          );
-          io.out('all sessions and tokens of this user were revoked');
-          return 0;
-        });
-      }
-      case 'set-role': {
-        const email = flagString(parsed, 'email');
-        const role = flagString(parsed, 'role');
-        if (!email || !role) {
-          io.err('set-role requires --email <address> and --role admin | auditor | member');
-          return 2;
-        }
-        return await withInfra(env, async (infra) => {
-          const result = await setRole(infra, { email, role });
-          if (!result.ok) {
-            io.err(
-              result.reason === 'invalid_role'
-                ? 'the role must be admin, auditor or member'
-                : result.reason === 'not_found'
-                  ? `no account with the email ${email} (it is created when the person first signs in)`
-                  : result.reason === 'deactivated'
-                    ? `${email} is deactivated`
-                    : 'this is the last active administrator: make somebody else an administrator first',
-            );
-            return 1;
-          }
-          io.out(
-            result.from === result.to
-              ? `${result.email} already is ${result.to}`
-              : `${result.email} is now ${result.to} (was ${result.from})`,
-          );
-          if (result.ruleManaged) {
-            io.out(
-              'note: IdP group mapping rules also set roles, at every sign-in; a role they set replaces this one',
-            );
-          }
-          return 0;
-        });
-      }
-      case 'rotate-keys': {
-        const purpose = flagString(parsed, 'purpose');
-        if (!isPurpose(purpose)) {
-          io.err(`rotate-keys requires --purpose ${KEY_PURPOSES.join(' | ')}`);
-          return 2;
-        }
-        return await withInfra(env, async (infra) => {
-          const result = await rotateKeys(infra, purpose, { force: parsed.flags.has('force') });
-          if (result.created !== undefined || result.retired.length > 0) {
-            await publishKeyChange(infra, [purpose]);
-          }
-          io.out(
-            result.created
-              ? `${purpose}: created key ${result.created}; retired ${result.retired.length} expired key(s)`
-              : `${purpose}: no rotation due (use --force to rotate anyway); retired ${result.retired.length}`,
-          );
-          return 0;
-        });
-      }
-      case 'export-config': {
-        return await withInfra(env, async (infra) => {
-          const doc = await exportConfig(infra);
-          const text = `${JSON.stringify(doc, null, 2)}\n`;
-          const out = flagString(parsed, 'out');
-          if (out) {
-            writeFileSync(out, text, { mode: 0o600 });
-            io.out(`exported ${Object.keys(doc).length - 2} sections to ${out}`);
-          } else io.out(text);
-          return 0;
-        });
-      }
-      case 'import-config': {
-        const file = flagString(parsed, 'file');
-        const text = file ? readFileSync(file, 'utf8') : await io.stdin();
-        let input: unknown;
-        try {
-          input = JSON.parse(text);
-        } catch {
-          io.err('import-config: input is not valid JSON');
-          return 2;
-        }
-        return await withInfra(env, async (infra) => {
-          const report = await importConfig(infra, input, { dryRun: parsed.flags.has('dry-run') });
-          io.out(`${report.dryRun ? 'validated' : 'imported'}: ${JSON.stringify(report.counts)}`);
-          return 0;
-        });
-      }
-      case 'backup': {
-        const out = flagString(parsed, 'out');
-        if (!out) {
-          io.err('backup: --out <file> is required');
-          return 2;
-        }
-        const passphrase = await passphraseOf(parsed, env, io);
-        if (!passphrase) return 2;
-        return await withInfra(env, async (infra) => {
-          const report = await createBackup(infra, passphrase, { id: null });
-          writeFileSync(out, report.file, { mode: 0o600 });
-          io.out(`backup written to ${out} (${report.file.length} bytes)`);
-          io.out(`rows: ${JSON.stringify(report.counts)}`);
-          io.out('Keep the passphrase and the file apart. The file contains every secret.');
-          return 0;
-        });
-      }
-      case 'restore': {
-        const file = flagString(parsed, 'file');
-        if (!file) {
-          io.err('restore: --file <backup> is required');
-          return 2;
-        }
-        const mode = flagString(parsed, 'mode') ?? 'merge';
-        if (mode !== 'merge' && mode !== 'replace') {
-          io.err('restore: --mode must be merge or replace');
-          return 2;
-        }
-        const passphrase = await passphraseOf(parsed, env, io);
-        if (!passphrase) return 2;
-        return await withInfra(env, async (infra) => {
-          try {
-            const { document } = await readBackup(readFileSync(file), passphrase);
-            const report = await restoreBackup(infra, createMaintenance(infra.redis), document, {
-              mode,
-              dryRun: parsed.flags.has('dry-run'),
-            });
-            io.out(
-              `${report.dryRun ? 'would restore' : 'restored'} (${mode}) backup from ${report.backup.createdAt}`,
-            );
-            io.out(formatRestoreReport(report));
-            for (const warning of report.warnings) io.out(`warning: ${warning}`);
-            if (!report.dryRun && mode === 'replace') {
-              io.out(
-                'Maintenance mode is still on. Check the instance, then run: bastion maintenance off',
-              );
-            }
-            return 0;
-          } catch (error) {
-            if (error instanceof RestoreRefusedError || error instanceof BackupFileError) {
-              io.err(`restore refused: ${error.message}`);
-              return 1;
-            }
-            throw error;
-          }
-        });
-      }
-      case 'maintenance': {
-        const action = parsed.positional[0];
-        if (action !== 'on' && action !== 'off' && action !== 'status') {
-          io.err('maintenance: expected on, off or status');
-          return 2;
-        }
-        return await withInfra(env, async (infra) => {
-          const maintenance = createMaintenance(infra.redis);
-          const state =
-            action === 'status'
-              ? await maintenance.get()
-              : await maintenance.set(action === 'on', 'cli');
-          io.out(
-            state.enabled
-              ? `maintenance mode is ON since ${state.since} (by ${state.by})`
-              : 'maintenance mode is off',
-          );
-          return 0;
-        });
-      }
-      default:
-        io.err(`unknown command "${parsed.command}"\n\n${HELP}`);
-        return 2;
+    const handler = HANDLERS.get(parsed.command);
+    if (!handler) {
+      io.err(`unknown command "${parsed.command}"\n\n${HELP}`);
+      return 2;
     }
+    return await handler(parsed, env, io);
   } catch (error) {
     if (error instanceof ConfigError) {
       for (const issue of error.issues) io.err(`config error: ${issue.path}: ${issue.message}`);
