@@ -335,6 +335,38 @@ export const chooseTier = (from: Date, to: Date, now: Date = new Date()): StatsT
 
 const numberOf = (v: bigint | number | null): number => (v === null ? 0 : Number(v));
 
+type RawStatsRow = Record<string, unknown> & {
+  cnt: number;
+  err: number;
+  bytes: bigint | null;
+  lat: number[];
+};
+
+/** Maps one aggregated SQL row to a `StatsRow`: only the requested groups are present, `NIL_UUID` ids become null. */
+const toStatsRow = (r: RawStatsRow, groups: readonly string[]): StatsRow => {
+  const lat = mergeBuckets(r.lat, []);
+  const row: StatsRow = {
+    count: r.cnt,
+    errorCount: r.err,
+    bytesOut: numberOf(r.bytes),
+    p50: percentileFromBuckets(lat, 0.5),
+    p95: percentileFromBuckets(lat, 0.95),
+    p99: percentileFromBuckets(lat, 0.99),
+    latencyBuckets: lat,
+  };
+  if (groups.includes('time')) row.bucket = r.bucket as Date;
+  if (groups.includes('installation')) {
+    row.installationId = r.installation_id === NIL_UUID ? null : (r.installation_id as string);
+  }
+  if (groups.includes('catalogEntry')) {
+    row.catalogEntryId =
+      r.catalog_entry_id === NIL_UUID ? null : ((r.catalog_entry_id as string | null) ?? null);
+  }
+  if (groups.includes('item')) row.itemName = r.item_name as string;
+  if (groups.includes('outcome')) row.outcome = r.outcome as string;
+  return row;
+};
+
 export type RetentionPolicy = {
   /** `logs.retentionDays`: call_log, egress_events and distribution_events partitions older than this go. */
   logsRetentionDays: number;
@@ -567,20 +599,16 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
         query.outcome === undefined ? Prisma.empty : Prisma.sql`AND outcome = ${query.outcome}`,
       ];
       const where = Prisma.join(filters, ' ');
-      const colList =
+      // `Prisma.join` rejects an empty list, so the ungrouped query falls back to the constant column.
+      const joined =
         cols.length === 0
-          ? Prisma.sql`1 AS g`
+          ? undefined
           : Prisma.join(
               cols.map((c) => Prisma.raw(c)),
               ', ',
             );
-      const groupList =
-        cols.length === 0
-          ? Prisma.sql`g`
-          : Prisma.join(
-              cols.map((c) => Prisma.raw(c)),
-              ', ',
-            );
+      const colList = joined ?? Prisma.sql`1 AS g`;
+      const groupList = joined ?? Prisma.sql`g`;
       const joinOn =
         cols.length === 0
           ? Prisma.sql`h.g = a.g`
@@ -597,13 +625,7 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
               cols.map((c) => Prisma.sql`a.${Prisma.raw(c)}`),
               ', ',
             )},`;
-      type Raw = Record<string, unknown> & {
-        cnt: number;
-        err: number;
-        bytes: bigint | null;
-        lat: number[];
-      };
-      const raw = await db.$queryRaw<Raw[]>`
+      const raw = await db.$queryRaw<RawStatsRow[]>`
         WITH base AS (
           SELECT bucket, installation_id, catalog_entry_id, item_name, outcome, "count", error_count, bytes_out, latency_buckets
           FROM ${table} WHERE ${where}
@@ -621,32 +643,7 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
                  LEFT JOIN h ON ${joinOn} AND h.ord = g2.ord ORDER BY g2.ord) AS lat
         FROM a
         ORDER BY ${groupList}`;
-      const rows = raw.map((r): StatsRow => {
-        const lat = mergeBuckets(r.lat, []);
-        const row: StatsRow = {
-          count: r.cnt,
-          errorCount: r.err,
-          bytesOut: numberOf(r.bytes),
-          p50: percentileFromBuckets(lat, 0.5),
-          p95: percentileFromBuckets(lat, 0.95),
-          p99: percentileFromBuckets(lat, 0.99),
-          latencyBuckets: lat,
-        };
-        if (groups.includes('time')) row.bucket = r.bucket as Date;
-        if (groups.includes('installation')) {
-          row.installationId =
-            r.installation_id === NIL_UUID ? null : (r.installation_id as string);
-        }
-        if (groups.includes('catalogEntry')) {
-          row.catalogEntryId =
-            r.catalog_entry_id === NIL_UUID
-              ? null
-              : ((r.catalog_entry_id as string | null) ?? null);
-        }
-        if (groups.includes('item')) row.itemName = r.item_name as string;
-        if (groups.includes('outcome')) row.outcome = r.outcome as string;
-        return row;
-      });
+      const rows = raw.map((r) => toStatsRow(r, groups));
       return { tier, rows };
     },
 
