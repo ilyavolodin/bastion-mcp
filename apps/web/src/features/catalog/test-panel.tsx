@@ -15,7 +15,7 @@ import { StatusPill } from '@/components/status';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { type SpecDraft, secretNamesOf } from './draft';
+import { type SpecDraft, secretFieldsOf, secretNamesOf } from './draft';
 
 type Step = VersionTestRun['steps'][number];
 
@@ -92,13 +92,7 @@ export const testNeeds = (
   variables: (spec?.variables ?? [])
     .filter((v) => v.required && !v.default)
     .map((v) => ({ name: v.name, label: v.label || v.name })),
-  mySecrets:
-    spec?.authMode === 'userSecret'
-      ? secretNamesOf(spec).map((name) => ({
-          name,
-          label: spec.secretLabels[name]?.trim() || name,
-        }))
-      : [],
+  mySecrets: spec?.authMode === 'userSecret' ? secretFieldsOf(spec) : [],
   orgSecrets: spec?.authMode === 'orgSecret' ? secretNamesOf(spec) : [],
 });
 

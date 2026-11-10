@@ -9,7 +9,7 @@ import {
   BEARER_PREFIX,
   oauthClientSecretName,
   oauthTokenTemplate,
-  secretNamesOf,
+  secretFieldsOf,
   secretRefsOf,
 } from './secrets';
 import {
@@ -79,10 +79,7 @@ const authOf = (s: SpecDraft): ServerSpecBody['auth'] => {
     case 'userSecret':
       return {
         mode: 'userSecret',
-        fields: secretNamesOf(s).map((name) => ({
-          name,
-          label: s.secretLabels[name]?.trim() || name,
-        })),
+        fields: secretFieldsOf(s),
         inject: injectionsOf(s),
       };
     case 'oauth': {
@@ -194,10 +191,7 @@ export const installFormOf = (s: SpecDraft): InstallFormBody => ({
     ...(v.default ? { default: v.default } : {}),
     ...(splitChoices(v.choices).length ? { choices: splitChoices(v.choices) } : {}),
   })),
-  secrets:
-    s.authMode === 'userSecret'
-      ? secretNamesOf(s).map((name) => ({ name, label: s.secretLabels[name]?.trim() || name }))
-      : [],
+  secrets: s.authMode === 'userSecret' ? secretFieldsOf(s) : [],
 });
 
 const visibilityBody = (v: Visibility): Visibility => ({

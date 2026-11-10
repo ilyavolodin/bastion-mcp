@@ -153,3 +153,7 @@ export const addSecretArg = (s: SpecDraft): SpecDraft => {
   };
   return { ...s, args: [...s.args, row] };
 };
+
+/** The personal secrets of a spec with the label people see: the name when no label is set or it is blank. */
+export const secretFieldsOf = (s: SpecDraft): { name: string; label: string }[] =>
+  secretNamesOf(s).map((name) => ({ name, label: s.secretLabels[name]?.trim() || name }));
