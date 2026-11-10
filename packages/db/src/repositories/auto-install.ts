@@ -99,10 +99,10 @@ const targetWhere = (target: AutoInstallTarget): Prisma.UserWhereInput => {
   return or.length === 0 ? { id: { in: [] } } : { OR: or };
 };
 
-/** `auto_install_policies` and the idempotent `auto_install_applications` ledger (11.5). */
 /** `listTargetUsers` reads at least this many users per query. */
 const MIN_TARGET_PAGE_SIZE = 100;
 
+/** `auto_install_policies` and the idempotent `auto_install_applications` ledger (11.5). */
 export const createAutoInstallRepository = (
   arg: PrismaLike | RepoContext,
   options?: RepoOptions,

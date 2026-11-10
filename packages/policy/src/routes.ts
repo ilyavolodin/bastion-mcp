@@ -36,6 +36,10 @@ const g = (
   auditor: Grant,
 ): Record<RouteRole, Grant> => ({ admin, manager, member, auditor });
 
+/** The grant a service account holds on a row (10.1). */
+export const serviceAccountGrant = (row: Pick<RouteAction, 'grants' | 'serviceAccount'>): Grant =>
+  row.serviceAccount ?? row.grants.member;
+
 /**
  * Every management route area of 17.2 mapped to its Cedar action and the roles allowed (10.1). Where a
  * handler picks the resource from the request (for example the team being published to), there is one row
@@ -44,10 +48,6 @@ const g = (
  *
  * "manager" is a member who manages the team in scope; "scoped" always means that team or the caller's own.
  */
-/** The grant a service account holds on a row (10.1). */
-export const serviceAccountGrant = (row: Pick<RouteAction, 'grants' | 'serviceAccount'>): Grant =>
-  row.serviceAccount ?? row.grants.member;
-
 export const ROUTE_ACTIONS: readonly RouteAction[] = [
   // --- Session and self -------------------------------------------------------------------------------
   {
