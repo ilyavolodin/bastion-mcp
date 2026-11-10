@@ -22,7 +22,7 @@ export type ModelGuardDeps = {
 };
 
 /** The verdict for one chunk; cached as JSON. Never contains the scanned text. */
-export const chunkVerdictSchema = z.object({
+const chunkVerdictSchema = z.object({
   verdict: z.enum(VERDICTS),
   score: z.number().optional(),
   label: z.string(),
@@ -50,7 +50,7 @@ export const stateDetails = (input: GuardInput, text: string): Record<string, un
   chars: text.length,
 });
 
-export const configHashOf = (config: unknown, phase: string): string =>
+const configHashOf = (config: unknown, phase: string): string =>
   sha256Hex(canonicalJson({ config, phase })).slice(0, 32);
 
 export const mapLimit = async <T, R>(

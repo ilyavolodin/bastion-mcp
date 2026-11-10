@@ -5,7 +5,7 @@ import type { ResourceServerInfo } from './resource-server';
  * `@types/oidc-provider` lags the 9.12 runtime: these narrow views describe the parts of the runtime API
  * that Bastion uses and the typings omit. The cast is confined to this file.
  */
-export type RuntimeGrant = {
+type RuntimeGrant = {
   readonly accountId: string;
   readonly clientId: string;
   addOIDCScope(scope: string): void;
@@ -13,7 +13,7 @@ export type RuntimeGrant = {
   save(ttlSeconds?: number): Promise<string>;
 };
 
-export type RuntimeAccessToken = {
+type RuntimeAccessToken = {
   resourceServer: unknown;
   scope: string;
   readonly expiration: number;
@@ -21,7 +21,7 @@ export type RuntimeAccessToken = {
   save(): Promise<string>;
 };
 
-export type RuntimeSession = { destroy(): Promise<void> };
+type RuntimeSession = { destroy(): Promise<void> };
 
 export type RuntimeProvider = {
   Session: { findByUid(uid: string): Promise<RuntimeSession | undefined> };

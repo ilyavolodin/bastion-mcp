@@ -78,7 +78,7 @@ const dcrBody = z
   })
   .loose();
 
-export type DcrDecision =
+type DcrDecision =
   | { ok: true; body: Record<string, unknown> }
   | { ok: false; status: number; error: string; description: string; retryAfter?: number };
 

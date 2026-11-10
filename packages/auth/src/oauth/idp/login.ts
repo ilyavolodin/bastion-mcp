@@ -7,7 +7,6 @@ import {
   checkIssuerParameter,
   discoveryOptions,
   type OAuthHttpOptions,
-  OAuthProtocolError,
   selectClientAuth,
   toProtocolError,
   withRedirectUriAsSent,
@@ -257,5 +256,3 @@ export class IdpLogin extends IdpClients {
     };
   }
 }
-
-export { OAuthProtocolError };

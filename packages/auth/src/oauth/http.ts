@@ -10,12 +10,6 @@ export type OAuthHttpOptions = {
   allowInsecureHttp?: boolean;
 };
 
-export type ClientAuthKind =
-  | 'client_secret_basic'
-  | 'client_secret_post'
-  | 'private_key_jwt'
-  | 'none';
-
 const toCustomFetch =
   (fetchFn: FetchFn): client.CustomFetch =>
   (url, init) =>

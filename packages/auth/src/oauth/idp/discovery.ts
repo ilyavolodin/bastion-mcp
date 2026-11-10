@@ -9,7 +9,7 @@ const discoverySchema = z.object({
 });
 export type OidcDiscovery = z.infer<typeof discoverySchema>;
 
-export const wellKnownUrl = (discoveryUrl: string): string =>
+const wellKnownUrl = (discoveryUrl: string): string =>
   /\/\.well-known\/openid-configuration\/?$/.test(discoveryUrl)
     ? discoveryUrl
     : `${discoveryUrl.replace(/\/$/, '')}/.well-known/openid-configuration`;

@@ -47,7 +47,7 @@ import { openUpstreamState, sealUpstreamState } from './state';
 
 export type UpstreamPrincipal = { type: PrincipalType; id: string };
 
-export type OAuthAuthSpec = Extract<UpstreamAuthSpec, { mode: 'oauth' }>;
+type OAuthAuthSpec = Extract<UpstreamAuthSpec, { mode: 'oauth' }>;
 
 /** What the broker needs to know about an installation. */
 export type OAuthInstallation = {
@@ -135,7 +135,7 @@ const toAccessToken = (
   scopes: [...row.scopes],
 });
 
-export const unionScopes = (...lists: (readonly string[] | undefined)[]): string[] => [
+const unionScopes = (...lists: (readonly string[] | undefined)[]): string[] => [
   ...new Set(lists.flatMap((l) => (l ? [...l] : []))),
 ];
 
