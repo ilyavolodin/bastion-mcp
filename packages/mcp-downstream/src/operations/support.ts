@@ -1,7 +1,6 @@
 /** Shared building blocks of the operations: identities, Cedar inputs, upstream contexts, spans and guard application. */
 
 import {
-  canonicalDigest,
   isRecord,
   type RequestStateBinding,
   type TemplateContext,
@@ -287,8 +286,6 @@ export const bindingOf = (
   name,
   args: upstreamArgs,
 });
-
-export const argsDigest = (value: unknown): string => canonicalDigest(value).toString('hex');
 
 // --- guards (13) -------------------------------------------------------------------------------------------------------
 
