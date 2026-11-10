@@ -13,6 +13,7 @@ import {
 } from '@bastion-mcp/core';
 import { createRouterRepository } from '@bastion-mcp/db';
 import { EndpointResolver, type ResolvedEndpoint } from '@bastion-mcp/mcp-downstream';
+import { noopLogger } from '@bastion-mcp/mcp-upstream';
 import { type OverridesDocument, overridesSchema } from '@bastion-mcp/overrides';
 import type { EndpointPolicy, InstallationInfo } from '@bastion-mcp/router';
 import { serverVersion } from '../../config';
@@ -32,8 +33,6 @@ export type InstallationPortsContext = {
   policy: Pick<PolicyService, 'current'>;
   access?: UpstreamAccess | undefined;
 };
-
-const noopLogger = { debug() {}, info() {}, warn() {}, error() {} };
 
 /** Cedar principal of the caller, like the downstream default (`defaultToPolicyPrincipal`). */
 const toPolicyPrincipal = (principal: Principal, profile: { emailDomain?: string | undefined }) =>
