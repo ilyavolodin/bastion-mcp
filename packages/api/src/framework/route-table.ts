@@ -21,15 +21,6 @@ for (const rule of ROUTE_ACTIONS) {
 
 export const ruleOf = (id: string): RouteAction | undefined => ruleById.get(id);
 
-/** Every `(method, path)` the policy table lists, for the table-driven authorization test (23.3). */
-export const tableRoutes = (): Array<{ rule: RouteAction; method: string; path: string }> =>
-  ROUTE_ACTIONS.flatMap((rule) =>
-    rule.routes.flatMap(expandRouteString).map((entry) => {
-      const [method = '', path = ''] = entry.split(' ');
-      return { rule, method, path };
-    }),
-  );
-
 export class RouteDeclarationError extends Error {}
 
 /**
