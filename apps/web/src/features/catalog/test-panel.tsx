@@ -47,7 +47,7 @@ const ICON: Record<Step['status'], { tone: string; icon: React.ReactNode; label:
   },
 };
 
-export function StepList({ steps }: { steps: VersionTestRun['steps'] }) {
+function StepList({ steps }: { steps: VersionTestRun['steps'] }) {
   return (
     <ol aria-label="Test steps" className="m-0 flex list-none flex-col p-0">
       {steps.map((s) => {

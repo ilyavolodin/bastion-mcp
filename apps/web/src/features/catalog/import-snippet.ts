@@ -1,5 +1,5 @@
 /** Where an imported snippet runs: a remote URL, an npm package (`npx`) or a PyPI package (`uvx`). */
-export type ImportRuntime = 'remote' | 'npm' | 'python';
+type ImportRuntime = 'remote' | 'npm' | 'python';
 
 export type ImportedSource = {
   runtime: ImportRuntime;

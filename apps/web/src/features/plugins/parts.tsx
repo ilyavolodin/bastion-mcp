@@ -82,7 +82,7 @@ export function PluginCard({ p, showPolicy }: { p: PluginView; showPolicy?: bool
 }
 
 /** One dot per release, oldest first; the promoted release is marked, the one waiting for promotion is dashed. */
-export function ReleaseTimeline({ releases }: { releases: ReleaseView[] }) {
+function ReleaseTimeline({ releases }: { releases: ReleaseView[] }) {
   const n = releases.length;
   const x = (i: number) => (n === 1 ? 160 : 14 + (292 * i) / (n - 1));
   const promoted = releases.find((r) => r.promoted);
@@ -141,7 +141,7 @@ export function ReleaseTimeline({ releases }: { releases: ReleaseView[] }) {
 const CHANNEL_COLORS = ['var(--tangerine)', 'var(--sky)', 'var(--line-strong)', 'var(--teal)'];
 
 /** How the marketplace was fetched, per channel (25.9). */
-export function DistributionBar({ totals }: { totals: ChannelTotal[] }) {
+function DistributionBar({ totals }: { totals: ChannelTotal[] }) {
   if (totals.length === 0) {
     return <span className="text-caption text-muted">No fetches yet.</span>;
   }
@@ -177,7 +177,7 @@ export function DistributionBar({ totals }: { totals: ChannelTotal[] }) {
   );
 }
 
-export function MirrorStatus({ summary }: { summary: ReturnType<typeof mirrorSummary> }) {
+function MirrorStatus({ summary }: { summary: ReturnType<typeof mirrorSummary> }) {
   return (
     <div className="flex items-center gap-2 rounded-md bg-sunken px-3 py-2.5">
       <StatusDot tone={summary.tone} label={summary.label} hideLabel />

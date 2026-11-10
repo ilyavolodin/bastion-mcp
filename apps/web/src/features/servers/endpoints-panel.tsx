@@ -36,7 +36,7 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { useSlug } from '@/features/access/forms';
 
 /** The constraints of `endpointCreateSchema`: slug 2 to 40 of a-z 0-9 and dashes, name 1 to 200, 50 servers. */
-export const endpointFormSchema = z.object({
+const endpointFormSchema = z.object({
   displayName: z
     .string()
     .trim()
@@ -48,7 +48,7 @@ export const endpointFormSchema = z.object({
   instructions: z.string().max(8000, 'Up to 8000 characters'),
 });
 
-export function ToolCountWarning({ count, threshold }: { count: number; threshold: number }) {
+function ToolCountWarning({ count, threshold }: { count: number; threshold: number }) {
   if (count <= threshold) return null;
   return (
     <p

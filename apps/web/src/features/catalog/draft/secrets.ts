@@ -109,9 +109,9 @@ export const setRowSecret = <T extends { name: string; value: string; secret: bo
 };
 
 /** Prefix of the names given to secrets that an "Add secret" button creates: `SECRET_1`, `SECRET_2`... */
-export const SECRET_NAME_PREFIX = 'SECRET_';
+const SECRET_NAME_PREFIX = 'SECRET_';
 /** The command-line flag and secret name of the "Add secret argument" button. */
-export const DEFAULT_SECRET_ARG = { flag: '--token', secret: 'TOKEN' } as const;
+const DEFAULT_SECRET_ARG = { flag: '--token', secret: 'TOKEN' } as const;
 
 /**
  * The spec with one more header from a preset (9.5). A credential header needs a place the secret comes from: when

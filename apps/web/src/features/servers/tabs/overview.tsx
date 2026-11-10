@@ -21,7 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PHASE_COLOR } from '@/features/activity/call-detail';
 import { formatClock } from '@/lib/format';
 
-export function CapabilityMarkers({ c }: { c: CapabilityView }) {
+function CapabilityMarkers({ c }: { c: CapabilityView }) {
   return (
     <span className="flex gap-1.5">
       {c.overridden ? (

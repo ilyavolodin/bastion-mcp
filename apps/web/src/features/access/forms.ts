@@ -153,7 +153,7 @@ export const ruleFormSchema = z.object({
 
 // --- custom policies --------------------------------------------------------------------------------------------
 
-export type CustomPolicyBody = Body<'post', '/custom-policies'>;
+type CustomPolicyBody = Body<'post', '/custom-policies'>;
 export type PolicyTest = CustomPolicyBody['tests'][number];
 
 export const policyFormSchema = z.object({

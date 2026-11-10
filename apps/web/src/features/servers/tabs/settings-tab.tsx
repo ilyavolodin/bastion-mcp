@@ -22,13 +22,13 @@ const namesSchema = z.object({
 });
 type Names = z.infer<typeof namesSchema>;
 
-export const toNamesPatch = (v: Names): Body<'patch', '/installations/{id}'> => ({
+const toNamesPatch = (v: Names): Body<'patch', '/installations/{id}'> => ({
   displayName: v.displayName.trim(),
   toolPrefix: v.toolPrefix,
 });
 
 /** The variables an installation was set up with: values up to 4096 characters (`installationPatchSchema`). */
-export const toVariablesPatch = (
+const toVariablesPatch = (
   values: Record<string, string>,
 ): Body<'patch', '/installations/{id}'> => ({ variables: values });
 

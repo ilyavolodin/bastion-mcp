@@ -51,7 +51,7 @@ export function RowCell({
 }
 
 /** The checkbox cell ("Required", "Secret"): the box centred on the control line. */
-export function CheckCell({
+function CheckCell({
   label,
   checked,
   disabled,
@@ -81,7 +81,7 @@ export function CheckCell({
   );
 }
 
-export function RemoveCell({
+function RemoveCell({
   label,
   disabled,
   onClick,
@@ -108,10 +108,10 @@ export function RemoveCell({
   );
 }
 
-export const ROW = 'grid items-end gap-x-3 gap-y-2';
+const ROW = 'grid items-end gap-x-3 gap-y-2';
 
 /** A row card: the container the columns respond to, and one line for what is wrong with the row. */
-export function RowCard({
+function RowCard({
   label,
   error,
   children,
@@ -132,7 +132,7 @@ export function RowCard({
   );
 }
 
-export const nameProblem = (name: string): string | undefined =>
+const nameProblem = (name: string): string | undefined =>
   name && !TEMPLATE_NAME.test(name) ? 'Use letters, digits and underscore' : undefined;
 
 /** What a row of a list gets: its place in the list, its value, and how to change or remove it. */
@@ -177,7 +177,7 @@ export function VariableRow({
   onRemove,
 }: RowProps<VariableDraft>) {
   return (
-    <RowCard label={`Variable ${index + 1}`} error={nameProblem(v.name) ?? undefined}>
+    <RowCard label={`Variable ${index + 1}`} error={nameProblem(v.name)}>
       <div
         className={cn(
           ROW,

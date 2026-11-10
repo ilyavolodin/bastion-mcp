@@ -180,7 +180,7 @@ export function DeleteEntryDialog({
   );
 }
 
-export function StatusEntryDialog({
+function StatusEntryDialog({
   entry,
   status,
   open,
@@ -218,11 +218,7 @@ export function StatusEntryDialog({
 }
 
 /** The summary of a publish from the list: version, who gets it, risk, and that the test passed. */
-export function PublishEntryDialog({
-  entry,
-  open,
-  onOpenChange,
-}: Dialogs & { entry: CatalogEntryView }) {
+function PublishEntryDialog({ entry, open, onOpenChange }: Dialogs & { entry: CatalogEntryView }) {
   // The row turns into a published one when this returns, so the callback lives on the hook, not on the call.
   const publish = usePublishEntry(() => {
     toast.success(`${entry.displayName} v${entry.draftLabel} is in the Store`);

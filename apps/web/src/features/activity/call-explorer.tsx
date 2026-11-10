@@ -24,7 +24,7 @@ import { formatClock, formatDate, formatDuration } from '@/lib/format';
 import { useSearchState } from '@/lib/search';
 import { CallDetailPanel } from './call-detail';
 
-export const activitySearch = z.object({
+const activitySearch = z.object({
   user: z.coerce.string().optional(),
   team: z.coerce.string().optional(),
   server: z.coerce.string().optional(),
@@ -93,7 +93,7 @@ function TimelineStrip({
 }
 
 /** Up to `max` evenly spaced values of `times`, the first and the last always among them. */
-export const axisTicks = (times: readonly string[], max = 5): string[] => {
+const axisTicks = (times: readonly string[], max = 5): string[] => {
   if (times.length <= max) return [...times];
   const last = times.length - 1;
   return Array.from({ length: max }, (_, i) => times[Math.round((i * last) / (max - 1))] as string);
