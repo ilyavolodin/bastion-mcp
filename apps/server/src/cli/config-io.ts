@@ -5,9 +5,9 @@
  * column that may embed a secret id, `marketplaces.mirror`, is scrubbed). Users, teams, installations and tokens are not
  * part of it. Import is an idempotent upsert by id inside one transaction with an audit event.
  */
-import { appendAuditEvent, bumpConfigVersion, NIL_UUID, Prisma } from '@bastion-mcp/db';
+import { appendAuditEvent, type ConfigEvent, Prisma } from '@bastion-mcp/db';
 import { z } from 'zod';
-import type { Infra } from '../infra';
+import { bumpOrgAndCatalog, type Infra, publishConfigEvents } from '../infra';
 import { CONFIG_IMPORT_TX_OPTIONS } from '../timing';
 
 const CONFIG_FORMAT = 1;
@@ -304,7 +304,7 @@ export const importConfig = async (
   for (const { spec, rows } of plans) counts[spec.key] = rows.length;
   if (options.dryRun) return { counts, dryRun: true };
 
-  const events: { scope: string; id: string; version: bigint }[] = [];
+  let events: ConfigEvent[] = [];
   await infra.db.prisma.$transaction(async (tx) => {
     for (const { spec, rows } of plans) {
       const delegate = delegateOf(tx, spec.delegate);
@@ -324,15 +324,12 @@ export const importConfig = async (
         await delegate.upsert({ where, create: row, update: row });
       }
     }
-    events.push({
-      scope: 'org',
-      id: NIL_UUID,
-      version: await bumpConfigVersion(tx, 'org'),
-    });
-    for (const row of plans.find((p) => p.spec.key === 'catalogEntries')?.rows ?? []) {
-      const id = row.id as string;
-      events.push({ scope: 'catalog', id, version: await bumpConfigVersion(tx, 'catalog', id) });
-    }
+    events = await bumpOrgAndCatalog(
+      tx,
+      (plans.find((p) => p.spec.key === 'catalogEntries')?.rows ?? []).map(
+        (row) => row.id as string,
+      ),
+    );
     await appendAuditEvent(tx, {
       actorType: 'system',
       action: 'config.import',
@@ -340,13 +337,6 @@ export const importConfig = async (
       diff: { counts },
     });
   }, CONFIG_IMPORT_TX_OPTIONS);
-  for (const event of events) {
-    await infra.publish('bastion:config', {
-      topic: event.scope,
-      scope: event.scope,
-      id: event.id,
-      version: String(event.version),
-    });
-  }
+  await publishConfigEvents(infra, events);
   return { counts, dryRun: false };
 };

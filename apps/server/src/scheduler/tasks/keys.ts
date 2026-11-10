@@ -1,3 +1,4 @@
+import { REDIS_CHANNELS } from '@bastion-mcp/core';
 import {
   generateEs256KeyPair,
   generateStateKey,
@@ -23,7 +24,7 @@ export type RotationResult = {
 export const publishKeyChange = async (infra: Infra, purposes: readonly KeyringPurpose[]) => {
   for (const purpose of purposes) {
     const topic = purpose === 'state' ? 'state_keys' : 'signing_keys';
-    await infra.publish('bastion:config', { topic, scope: 'org', id: purpose });
+    await infra.publish(REDIS_CHANNELS.config, { topic, scope: 'org', id: purpose });
   }
 };
 

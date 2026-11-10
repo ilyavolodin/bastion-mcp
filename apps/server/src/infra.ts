@@ -2,10 +2,14 @@ import { join } from 'node:path';
 import { ScimStoreConflictError } from '@bastion-mcp/auth';
 import { type BastionConfig, type Clock, REDIS_CHANNELS, systemClock } from '@bastion-mcp/core';
 import {
+  bumpConfigVersion,
+  type ConfigEvent,
   createDb,
   createRepositories,
   createSecretRepository,
   type Db,
+  type DbExecutor,
+  NIL_UUID,
   type Repositories,
   type RepositoryDeps,
   withTransaction,
@@ -62,6 +66,31 @@ export const configMessage = (event: { scope: string; id: string; version?: bigi
     id: event.id,
     ...(event.version === undefined ? {} : { version: String(event.version) }),
   });
+
+/**
+ * Inside a bulk-write transaction: bumps the `org` config version, then `catalog` once per entry id (in the given
+ * order), and returns the events to hand to `publishConfigEvents` after the commit.
+ */
+export const bumpOrgAndCatalog = async (
+  tx: DbExecutor,
+  catalogIds: readonly string[],
+): Promise<ConfigEvent[]> => {
+  const events: ConfigEvent[] = [
+    { scope: 'org', id: NIL_UUID, version: await bumpConfigVersion(tx, 'org') },
+  ];
+  for (const id of catalogIds) {
+    events.push({ scope: 'catalog', id, version: await bumpConfigVersion(tx, 'catalog', id) });
+  }
+  return events;
+};
+
+/** After the commit: one `bastion:config` message per event, in order. */
+export const publishConfigEvents = async (
+  infra: Pick<Infra, 'publish'>,
+  events: readonly ConfigEvent[],
+): Promise<void> => {
+  for (const event of events) await infra.publish(REDIS_CHANNELS.config, configMessage(event));
+};
 
 export const createInfra = (
   config: BastionConfig,

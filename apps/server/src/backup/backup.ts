@@ -12,10 +12,10 @@
  * the target, so a backup restores on an installation with a different KMS key. Ids are preserved, which matters because
  * a dozen columns refer to a secret by id.
  */
-import { newId } from '@bastion-mcp/core';
-import { appendAuditEvent, bumpConfigVersion, NIL_UUID, type Prisma } from '@bastion-mcp/db';
+import { newId, REDIS_CHANNELS } from '@bastion-mcp/core';
+import { appendAuditEvent, type ConfigEvent, NIL_UUID, type Prisma } from '@bastion-mcp/db';
 import { z } from 'zod';
-import type { Infra } from '../infra';
+import { bumpOrgAndCatalog, type Infra, publishConfigEvents } from '../infra';
 import { BACKUP_TX_OPTIONS } from '../timing';
 import type { Maintenance } from './maintenance';
 import { type BackupHeader, openBackup, sealBackup } from './sealed-file';
@@ -465,7 +465,7 @@ export const restoreBackup = async (
   const secrets = prepared.find((s) => s.table.name === SECRETS_TABLE);
   if (secrets) secrets.rows = await sealSecretRows(infra, secrets.rows);
 
-  const events: { scope: string; id: string; version: bigint }[] = [];
+  let events: ConfigEvent[] = [];
   await infra.db.prisma.$transaction(async (tx) => {
     if (mode === 'replace') {
       for (const step of [...prepared].reverse()) {
@@ -483,11 +483,10 @@ export const restoreBackup = async (
                 (SELECT MAX(seq) IS NOT NULL FROM ${AUDIT_TABLE}))`,
       );
     }
-    events.push({ scope: 'org', id: NIL_UUID, version: await bumpConfigVersion(tx, 'org') });
-    for (const entry of document.tables.catalog_entries ?? []) {
-      const id = String(entry.id);
-      events.push({ scope: 'catalog', id, version: await bumpConfigVersion(tx, 'catalog', id) });
-    }
+    events = await bumpOrgAndCatalog(
+      tx,
+      (document.tables.catalog_entries ?? []).map((entry) => String(entry.id)),
+    );
     // Chains from the restored tail on a replace, from this instance's own log on a merge.
     await appendAuditEvent(tx, {
       actorType: options.actorId ? 'user' : 'system',
@@ -502,18 +501,11 @@ export const restoreBackup = async (
     });
   }, BACKUP_TX_OPTIONS);
 
-  for (const event of events) {
-    await infra.publish('bastion:config', {
-      topic: event.scope,
-      scope: event.scope,
-      id: event.id,
-      version: String(event.version),
-    });
-  }
+  await publishConfigEvents(infra, events);
   if (mode === 'replace') {
     // The authorization server and workers reload the restored signing and state keys.
     for (const topic of ['signing_keys', 'state_keys']) {
-      await infra.publish('bastion:config', { topic, scope: topic, id: NIL_UUID });
+      await infra.publish(REDIS_CHANNELS.config, { topic, scope: topic, id: NIL_UUID });
     }
   }
   return report;
