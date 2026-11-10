@@ -47,7 +47,6 @@ export const guardTestResultSchema = z.object({
 });
 
 export const modelGuardsSchema = orgSettingsSchema.shape.modelGuards;
-export const modelGuardsView = modelGuardsSchema.extend({ updatedAt: z.string().nullable() });
 
 /** The stored config of the three model guards, as the guards read it (13.5); every field passes through. */
 const modelGuardConfig = z.looseObject({

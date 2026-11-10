@@ -102,12 +102,6 @@ export const scimTokenCreateSchema = z.object({
   expiresInDays: z.number().int().positive().max(3650).optional(),
 });
 
-export const scimTokenCreatedSchema = z.looseObject({
-  id: z.string(),
-  updatedAt: z.string(),
-  token: z.string(),
-});
-
 export const oauthClientCreateSchema = z.object({
   clientId: z.string().min(1).max(2048),
   preApproved: z.boolean().default(false),
