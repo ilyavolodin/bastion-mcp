@@ -1,4 +1,10 @@
-import { type Injection, isRecord, parseServerSpec, type ServerSpec } from '@bastion-mcp/core';
+import {
+  type Injection,
+  isExactVersion,
+  isRecord,
+  parseServerSpec,
+  type ServerSpec,
+} from '@bastion-mcp/core';
 import { ZodError } from 'zod';
 import { MAX_BODY_BYTES, readBodyCapped } from './body';
 import {
@@ -150,8 +156,6 @@ const REJECTED_RUNNERS: Record<string, string> = {
 
 const SECRET_NAME = /(key|token|secret|password|passwd|credential|auth|bearer)/i;
 
-const EXACT = /^\d+(?:\.\d+)+(?:[-+._]?[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$/;
-
 const snippetSchema = {
   parse(input: unknown): Record<string, unknown> {
     let value = input;
@@ -287,14 +291,14 @@ const resolveVersion = async (
   warnings: string[],
 ): Promise<string> => {
   const { version } = parsed;
-  if (version && EXACT.test(version)) return version;
+  if (version && isExactVersion(version)) return version;
   if (version && version !== 'latest') {
     throw new RegistryMappingError(
       `version "${version}" of ${parsed.identifier} is a range or tag: Bastion pins one exact version`,
     );
   }
   const resolved = await resolver.latest(parsed.runtime, parsed.identifier, signal);
-  if (!EXACT.test(resolved)) {
+  if (!isExactVersion(resolved)) {
     throw new RegistryMappingError(`registry returned a non-exact version "${resolved}"`);
   }
   warnings.push(`version resolved to ${resolved} at import`);
