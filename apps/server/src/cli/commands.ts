@@ -32,22 +32,6 @@ export type Io = {
 
 export type Parsed = { command: string; flags: Map<string, string | true>; positional: string[] };
 
-export const COMMANDS = [
-  'serve',
-  'migrate',
-  'check-config',
-  'create-admin',
-  'reset-password',
-  'set-role',
-  'rotate-keys',
-  'export-config',
-  'import-config',
-  'backup',
-  'restore',
-  'maintenance',
-  'help',
-] as const;
-
 export const parseArgs = (argv: readonly string[]): Parsed => {
   const flags = new Map<string, string | true>();
   const positional: string[] = [];
