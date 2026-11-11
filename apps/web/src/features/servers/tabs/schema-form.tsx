@@ -9,6 +9,7 @@ import {
   parseNumber,
   textToList,
 } from '@/lib/json-schema-form';
+import { jsonText, useFollowedText } from '@/lib/use-followed-text';
 
 type Args = Record<string, unknown>;
 
@@ -24,16 +25,9 @@ function JsonValueField({
   disabled?: boolean | undefined;
   onChange: (v: unknown) => void;
 }) {
-  const [text, setText] = React.useState(value === undefined ? '' : JSON.stringify(value, null, 2));
+  // The value changes from outside with the JSON view: the text follows it, never overwriting what is being typed.
+  const { text, setText, markWritten } = useFollowedText(value, jsonText);
   const [error, setError] = React.useState<string | undefined>();
-  const written = React.useRef(value);
-  React.useEffect(() => {
-    // The value changed from outside (the JSON view): follow it, but never overwrite what is being typed.
-    if (JSON.stringify(value) !== JSON.stringify(written.current)) {
-      setText(value === undefined ? '' : JSON.stringify(value, null, 2));
-      written.current = value;
-    }
-  }, [value]);
   return (
     <Field
       label={`${field.label}${field.required ? ' *' : ''}`}
@@ -54,14 +48,14 @@ function JsonValueField({
             setText(t);
             if (t.trim() === '') {
               setError(undefined);
-              written.current = undefined;
+              markWritten(undefined);
               onChange(undefined);
               return;
             }
             try {
               const v = JSON.parse(t);
               setError(undefined);
-              written.current = v;
+              markWritten(v);
               onChange(v);
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Not valid JSON');
@@ -88,14 +82,7 @@ function ListField({
   disabled?: boolean | undefined;
   onChange: (v: unknown[] | undefined) => void;
 }) {
-  const [text, setText] = React.useState(listToText(value));
-  const written = React.useRef<unknown>(value);
-  React.useEffect(() => {
-    if (JSON.stringify(value) !== JSON.stringify(written.current)) {
-      setText(listToText(value));
-      written.current = value;
-    }
-  }, [value]);
+  const { text, setText, markWritten } = useFollowedText(value, listToText);
   return (
     <Field
       label={`${field.label}${field.required ? ' *' : ''}`}
@@ -112,7 +99,7 @@ function ListField({
           onChange={(e) => {
             setText(e.target.value);
             const list = textToList(e.target.value, field.itemKind);
-            written.current = list;
+            markWritten(list);
             onChange(list);
           }}
         />
