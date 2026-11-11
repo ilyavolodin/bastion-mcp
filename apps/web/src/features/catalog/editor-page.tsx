@@ -8,10 +8,7 @@ import {
   type CatalogEntryDetail,
   useCatalogEntry,
   useCatalogVersion,
-  useCreateCatalogEntry,
   usePublish,
-  useSaveDraft,
-  useSaveEntry,
   useTeamOptions,
 } from '@/api/hooks';
 import { bumpLabel, editableVersion, isPassing } from '@/api/views/catalog';
@@ -32,6 +29,7 @@ import {
   installFormOf,
   validateDraft,
 } from './draft';
+import { useCreateCatalogEntry, useSaveDraft, useSaveEntry } from './draft-hooks';
 import {
   AuthenticationStep,
   ConfigurationStep,
