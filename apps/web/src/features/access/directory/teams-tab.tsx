@@ -11,8 +11,9 @@ import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
+import { useSlug } from '@/hooks/use-slug';
 import { fieldErrors } from '@/lib/form-errors';
-import { SLUG_HELP, teamFormSchema, teamToBody, useSlug } from '../forms';
+import { SLUG_HELP, teamFormSchema, teamToBody } from '../forms';
 
 function DirectoryTeamCard({ team }: { team: TeamView }) {
   const { role } = useAuth();

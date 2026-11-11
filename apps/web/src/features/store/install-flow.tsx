@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
-import { useSlug } from '@/features/access/forms';
+import { useSlug } from '@/hooks/use-slug';
 import { openAuthorization } from '../servers/use-installation-action';
 
 type Step = 'setup' | 'connect' | 'ready';

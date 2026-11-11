@@ -34,7 +34,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select, Textarea } from '@/components/ui/input';
-import { useSlug } from '@/features/access/forms';
+import { useSlug } from '@/hooks/use-slug';
 
 /** The constraints of `endpointCreateSchema`: slug 2 to 40 of a-z 0-9 and dashes, name 1 to 200, 50 servers. */
 const endpointFormSchema = z.object({

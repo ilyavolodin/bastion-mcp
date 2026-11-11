@@ -12,10 +12,10 @@ import { Card, CardHeader } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { applyServerErrors } from '@/lib/form-errors';
 import { formatDate } from '@/lib/format';
 import { roleLabel } from '@/lib/roles';
 import { ConfirmDialog } from '../catalog/entry-actions';
-import { applyServerErrors } from '../settings/form-errors';
 
 /** The same rules the server enforces (9.1); the server stays the authority. */
 export const MIN_PASSWORD_LENGTH = 8;

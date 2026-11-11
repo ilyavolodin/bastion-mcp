@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { applyServerErrors } from './form-errors';
+import { applyServerErrors } from '@/lib/form-errors';
 
 /** Mirrors `idpCreateSchema` / `idpPatchSchema` of the API (packages/api/src/schemas/identity.ts). */
 const idpSchema = (creating: boolean) =>

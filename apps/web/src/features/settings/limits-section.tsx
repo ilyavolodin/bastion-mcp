@@ -33,7 +33,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { applyServerErrors } from './form-errors';
+import { applyServerErrors } from '@/lib/form-errors';
 
 const positive = (what: string) =>
   z

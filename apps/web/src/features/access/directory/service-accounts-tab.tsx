@@ -16,8 +16,9 @@ import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select, Textarea } from '@/components/ui/input';
+import { useSlug } from '@/hooks/use-slug';
 import { fieldErrors } from '@/lib/form-errors';
-import { SLUG_HELP, serviceAccountFormSchema, serviceAccountToBody, useSlug } from '../forms';
+import { SLUG_HELP, serviceAccountFormSchema, serviceAccountToBody } from '../forms';
 
 /** The client id and the one-time secret of a new or rotated service account credential. */
 function CredentialDialog({
