@@ -393,12 +393,15 @@ export const readBackup = async (
   return { document: parseDocument(document), header };
 };
 
-export const restoreBackup = async (
+type RestoreStep = ReturnType<typeof plan>[number];
+
+/** The refusals that come before anything is read from the database (newer schema, unsafe or unprepared replace). */
+const assertRestorable = async (
   infra: Infra,
   maintenance: Maintenance,
   document: BackupDocument,
   options: RestoreOptions,
-): Promise<RestoreReport> => {
+): Promise<void> => {
   const { mode } = options;
   const dryRun = options.dryRun === true;
   const target = await lastMigration(infra.db.prisma);
@@ -417,7 +420,16 @@ export const restoreBackup = async (
       );
     }
   }
-  const steps = plan(document, mode);
+};
+
+/** The per-table report with clash warnings; this is the whole of a dry run. */
+const previewRestore = async (
+  infra: Infra,
+  document: BackupDocument,
+  steps: RestoreStep[],
+  options: RestoreOptions,
+): Promise<RestoreReport> => {
+  const { mode } = options;
   const warnings: string[] = [];
   const tables: Record<string, TableReport> = {};
   for (const step of steps) {
@@ -449,15 +461,24 @@ export const restoreBackup = async (
       }
     }
   }
-  const report: RestoreReport = {
+  return {
     mode,
-    dryRun,
+    dryRun: options.dryRun === true,
     backup: { createdAt: document.createdAt, migration: document.migration },
     tables,
     warnings,
   };
-  if (dryRun) return report;
+};
 
+/** The write: one transaction (deletes on a replace, inserts, audit event); returns the events to publish after the commit. */
+const applyRestore = async (
+  infra: Infra,
+  document: BackupDocument,
+  steps: RestoreStep[],
+  report: RestoreReport,
+  options: RestoreOptions,
+): Promise<ConfigEvent[]> => {
+  const { mode } = options;
   const prepared = steps.map((s) => ({ ...s }));
   const secrets = prepared.find((s) => s.table.name === SECRETS_TABLE);
   if (secrets) secrets.rows = await sealSecretRows(infra, secrets.rows);
@@ -493,10 +514,26 @@ export const restoreBackup = async (
       targetId: newId(),
       diff: {
         backupCreatedAt: document.createdAt,
-        counts: Object.fromEntries(Object.entries(tables).map(([k, v]) => [k, v.rows])),
+        counts: Object.fromEntries(Object.entries(report.tables).map(([k, v]) => [k, v.rows])),
       },
     });
   }, BACKUP_TX_OPTIONS);
+  return events;
+};
+
+export const restoreBackup = async (
+  infra: Infra,
+  maintenance: Maintenance,
+  document: BackupDocument,
+  options: RestoreOptions,
+): Promise<RestoreReport> => {
+  const { mode } = options;
+  await assertRestorable(infra, maintenance, document, options);
+  const steps = plan(document, mode);
+  const report = await previewRestore(infra, document, steps, options);
+  if (report.dryRun) return report;
+
+  const events = await applyRestore(infra, document, steps, report, options);
 
   await publishConfigEvents(infra, events);
   if (mode === 'replace') {
