@@ -77,6 +77,10 @@ type Prepared = {
   resolved: ResolvedEndpoint;
   endpointPath: ParsedEndpointPath;
   origin: 'client' | 'plugin';
+  /** Request path without query and trailing slashes. */
+  pathname: string;
+  /** Absolute URL of the request under the public base URL. */
+  requestUrl: string;
 };
 
 const rpcError = (code: number, message: string, data?: Record<string, unknown>) => ({
@@ -88,6 +92,77 @@ const rpcError = (code: number, message: string, data?: Record<string, unknown>)
 const bearerToken = (authorization: string | undefined): string => {
   const match = /^Bearer\s+(.+)$/i.exec(authorization ?? '');
   return match?.[1] ?? '';
+};
+
+type JsonBody = { ok: true; body: unknown } | { ok: false; status: number; error: unknown };
+
+/** The parsed JSON body of a POST (undefined for other methods), or the answer to send instead (6.2). */
+const parseJsonBody = (req: FastifyRequest): JsonBody => {
+  if (req.method !== 'POST') return { ok: true, body: undefined };
+  if (!isJsonContentType(first(req.headers['content-type']) ?? '')) {
+    return {
+      ok: false,
+      status: 415,
+      error: rpcError(
+        JSONRPC_CODES.INVALID_REQUEST,
+        'Unsupported Media Type: Content-Type must be application/json',
+      ),
+    };
+  }
+  try {
+    const raw = req.body instanceof Buffer ? req.body : Buffer.alloc(0);
+    return { ok: true, body: JSON.parse(raw.toString('utf8')) as unknown };
+  } catch {
+    return { ok: false, status: 400, error: rpcError(JSONRPC_CODES.PARSE_ERROR, 'Parse error') };
+  }
+};
+
+const requestContextOf = (
+  prep: Prepared,
+  req: Pick<FastifyRequest, 'ip' | 'headers'>,
+  body: unknown,
+): BastionRequestContext => {
+  const meta = (body as { params?: { _meta?: unknown } } | undefined)?.params?._meta;
+  return {
+    principal: prep.principal,
+    authInfo: {
+      token: prep.token,
+      clientId: prep.principal.clientId ?? '',
+      scopes: [...prep.principal.scopes],
+    },
+    tokenHash: sha256Hex(prep.token),
+    resolved: prep.resolved,
+    endpointPath: prep.endpointPath,
+    requestUrl: prep.requestUrl,
+    path: prep.pathname,
+    ip: req.ip,
+    origin: prep.origin,
+    headers: req.headers,
+    ...(body === undefined ? {} : { body }),
+    ...(isRecord(meta) ? { meta } : {}),
+  };
+};
+
+const dispatch = async (deps: HttpDeps, exchange: Exchange): Promise<void> => {
+  const method = exchange.req.method ?? 'GET';
+  if (method !== 'POST') {
+    // Session operations of the 2025 transport; the modern era has none.
+    await deps.legacy.handle(exchange);
+    return;
+  }
+  if (first(exchange.req.headers['mcp-method']) === 'subscriptions/listen') {
+    await deps.listen.handle(exchange);
+    return;
+  }
+  if (isLegacy(exchange)) {
+    await deps.legacy.handle(exchange);
+    return;
+  }
+  if (isDirectExchange(exchange)) {
+    await deps.direct.handle(exchange);
+    return;
+  }
+  await deps.modern.node(exchange.req as never, exchange.res as never, exchange.body);
 };
 
 const toWebRequest = (req: FastifyRequest, baseUrl: string): Request => {
@@ -231,6 +306,8 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
         resolved,
         endpointPath: parsed,
         origin,
+        pathname,
+        requestUrl,
       });
       return false;
     };
@@ -241,47 +318,13 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
         await reply.code(500).send({ error: 'internal' });
         return;
       }
-      let body: unknown;
-      if (req.method === 'POST') {
-        if (!isJsonContentType(first(req.headers['content-type']) ?? '')) {
-          await reply
-            .code(415)
-            .send(
-              rpcError(
-                JSONRPC_CODES.INVALID_REQUEST,
-                'Unsupported Media Type: Content-Type must be application/json',
-              ),
-            );
-          return;
-        }
-        try {
-          const raw = req.body instanceof Buffer ? req.body : Buffer.alloc(0);
-          body = JSON.parse(raw.toString('utf8')) as unknown;
-        } catch {
-          await reply.code(400).send(rpcError(JSONRPC_CODES.PARSE_ERROR, 'Parse error'));
-          return;
-        }
+      const parsed = parseJsonBody(req);
+      if (!parsed.ok) {
+        await reply.code(parsed.status).send(parsed.error);
+        return;
       }
-      const pathname = (req.url.split('?')[0] ?? req.url).replace(/\/+$/, '') || '/';
-      const meta = (body as { params?: { _meta?: unknown } } | undefined)?.params?._meta;
-      const rc: BastionRequestContext = {
-        principal: prep.principal,
-        authInfo: {
-          token: prep.token,
-          clientId: prep.principal.clientId ?? '',
-          scopes: [...prep.principal.scopes],
-        },
-        tokenHash: sha256Hex(prep.token),
-        resolved: prep.resolved,
-        endpointPath: prep.endpointPath,
-        requestUrl: new URL(req.url, deps.baseUrl).toString(),
-        path: pathname,
-        ip: req.ip,
-        origin: prep.origin,
-        headers: req.headers,
-        ...(body === undefined ? {} : { body }),
-        ...(isRecord(meta) ? { meta } : {}),
-      };
+      const { body } = parsed;
+      const rc = requestContextOf(prep, req, body);
       // `request.raw.auth` is how the SDK receives the verified principal (`authInfo`).
       Object.assign(req.raw, { auth: rc.authInfo });
       reply.hijack();
@@ -289,7 +332,7 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
       await deps.track(() =>
         bastionRequestContext.run(rc, async () => {
           try {
-            await dispatch(exchange);
+            await dispatch(deps, exchange);
           } catch (error) {
             deps.logger.error('mcp exchange failed', { error: String(error) });
             if (!reply.raw.headersSent) {
@@ -304,28 +347,6 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
           }
         }),
       );
-    };
-
-    const dispatch = async (exchange: Exchange): Promise<void> => {
-      const method = exchange.req.method ?? 'GET';
-      if (method !== 'POST') {
-        // Session operations of the 2025 transport; the modern era has none.
-        await deps.legacy.handle(exchange);
-        return;
-      }
-      if (first(exchange.req.headers['mcp-method']) === 'subscriptions/listen') {
-        await deps.listen.handle(exchange);
-        return;
-      }
-      if (isLegacy(exchange)) {
-        await deps.legacy.handle(exchange);
-        return;
-      }
-      if (isDirectExchange(exchange)) {
-        await deps.direct.handle(exchange);
-        return;
-      }
-      await deps.modern.node(exchange.req as never, exchange.res as never, exchange.body);
     };
 
     for (const url of ['/mcp', '/mcp/e/:slug', '/mcp/i/:slug', '/mcp/c/:slug']) {
