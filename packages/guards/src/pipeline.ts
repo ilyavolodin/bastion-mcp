@@ -289,6 +289,82 @@ export const escalationFinding = (
   };
 };
 
+/** Risk added by this evaluation: the worst injection verdict of each guard, summed by `riskDelta` (13.7). */
+const riskDeltaOf = (
+  records: readonly GuardResultRecord[],
+  resolved: readonly ResolvedFinding[],
+): number => {
+  const verdicts: Verdict[] = [];
+  for (const rec of records) {
+    let worst: Verdict = 'clean';
+    for (const r of resolved) {
+      if (r.guard !== rec.guard || !INJECTION_CATEGORIES.includes(r.finding.category)) continue;
+      if (verdictRank(r.finding.verdict) > verdictRank(worst)) worst = r.finding.verdict;
+    }
+    verdicts.push(worst);
+  }
+  return riskDelta(verdicts);
+};
+
+/** Builds the run result from the resolved findings: strictest action, first block and confirm, quarantine targets (13.2). */
+const assembleResult = (
+  inputSegments: PipelineInput['segments'],
+  resolved: ResolvedFinding[],
+  records: GuardResultRecord[],
+  truncated: boolean,
+  riskScore: number | undefined,
+): GuardRunResult => {
+  const action = mostSevere(resolved.map((r) => r.action));
+  const result: GuardRunResult = {
+    action,
+    findings: resolved.filter((r) => r.finding.verdict !== 'clean' || r.action !== 'allow'),
+    redactions: resolved.filter((r) => r.action === 'redact').map((r) => r.finding),
+    records,
+    truncated,
+    asyncSettled: Promise.resolve(),
+  };
+  if (riskScore !== undefined) result.riskScore = riskScore;
+  const blocker = resolved.find((r) => r.action === 'block');
+  if (blocker !== undefined) {
+    result.block = {
+      guard: blocker.guard,
+      ruleId: blocker.finding.ruleId ?? blocker.finding.label,
+      label: blocker.finding.label,
+      ...(blocker.finding.reason === undefined ? {} : { reason: blocker.finding.reason }),
+    };
+  }
+  const confirmer = resolved.find((r) => r.action === 'confirm');
+  if (confirmer !== undefined) {
+    result.confirm = {
+      guard: confirmer.guard,
+      reason: confirmer.finding.reason ?? `${confirmer.finding.label} requires approval`,
+    };
+  }
+  const quarantined = resolved.filter((r) => r.action === 'quarantine');
+  if (quarantined.length > 0) {
+    const segments = new Set<number>();
+    for (const q of quarantined) {
+      const spans = q.finding.spans;
+      if (spans === undefined || spans.length === 0) {
+        inputSegments.forEach((s, i) => {
+          if (s.text !== '') segments.add(i);
+        });
+      } else {
+        for (const s of spans) segments.add(s.segment);
+      }
+    }
+    const top = quarantined.reduce((a, b) =>
+      (b.finding.score ?? 0) > (a.finding.score ?? 0) ? b : a,
+    );
+    result.quarantine = {
+      guard: top.guard,
+      segments: [...segments].sort((a, b) => a - b),
+      ...(top.finding.score === undefined ? {} : { score: top.finding.score }),
+    };
+  }
+  return result;
+};
+
 export class GuardPipeline {
   private readonly byType: Map<string, RegisteredGuard>;
   private readonly parsedConfigs = new WeakMap<object, unknown>();
@@ -353,7 +429,7 @@ export class GuardPipeline {
     if (risk?.finding) resolved.push(risk.finding);
     const riskScore = risk?.score;
 
-    const result = this.assemble(input, resolved, records, truncated, riskScore);
+    const result = assembleResult(input.segments, resolved, records, truncated, riskScore);
     result.asyncSettled = this.runAsync(asyncGuards, input, modelSegments, profile, external);
     return result;
   }
@@ -414,83 +490,9 @@ export class GuardPipeline {
       riskStore,
       input.principal.principalId,
       clientId,
-      this.deltaOf(records, findings),
+      riskDeltaOf(records, findings),
       this.deps.clock.now(),
     );
-  }
-
-  private deltaOf(
-    records: readonly GuardResultRecord[],
-    resolved: readonly ResolvedFinding[],
-  ): number {
-    const verdicts: Verdict[] = [];
-    for (const rec of records) {
-      let worst: Verdict = 'clean';
-      for (const r of resolved) {
-        if (r.guard !== rec.guard || !INJECTION_CATEGORIES.includes(r.finding.category)) continue;
-        if (verdictRank(r.finding.verdict) > verdictRank(worst)) worst = r.finding.verdict;
-      }
-      verdicts.push(worst);
-    }
-    return riskDelta(verdicts);
-  }
-
-  private assemble(
-    input: PipelineInput,
-    resolved: ResolvedFinding[],
-    records: GuardResultRecord[],
-    truncated: boolean,
-    riskScore: number | undefined,
-  ): GuardRunResult {
-    const action = mostSevere(resolved.map((r) => r.action));
-    const result: GuardRunResult = {
-      action,
-      findings: resolved.filter((r) => r.finding.verdict !== 'clean' || r.action !== 'allow'),
-      redactions: resolved.filter((r) => r.action === 'redact').map((r) => r.finding),
-      records,
-      truncated,
-      asyncSettled: Promise.resolve(),
-    };
-    if (riskScore !== undefined) result.riskScore = riskScore;
-    const blocker = resolved.find((r) => r.action === 'block');
-    if (blocker !== undefined) {
-      result.block = {
-        guard: blocker.guard,
-        ruleId: blocker.finding.ruleId ?? blocker.finding.label,
-        label: blocker.finding.label,
-        ...(blocker.finding.reason === undefined ? {} : { reason: blocker.finding.reason }),
-      };
-    }
-    const confirmer = resolved.find((r) => r.action === 'confirm');
-    if (confirmer !== undefined) {
-      result.confirm = {
-        guard: confirmer.guard,
-        reason: confirmer.finding.reason ?? `${confirmer.finding.label} requires approval`,
-      };
-    }
-    const quarantined = resolved.filter((r) => r.action === 'quarantine');
-    if (quarantined.length > 0) {
-      const segments = new Set<number>();
-      for (const q of quarantined) {
-        const spans = q.finding.spans;
-        if (spans === undefined || spans.length === 0) {
-          input.segments.forEach((s, i) => {
-            if (s.text !== '') segments.add(i);
-          });
-        } else {
-          for (const s of spans) segments.add(s.segment);
-        }
-      }
-      const top = quarantined.reduce((a, b) =>
-        (b.finding.score ?? 0) > (a.finding.score ?? 0) ? b : a,
-      );
-      result.quarantine = {
-        guard: top.guard,
-        segments: [...segments].sort((a, b) => a - b),
-        ...(top.finding.score === undefined ? {} : { score: top.finding.score }),
-      };
-    }
-    return result;
   }
 
   private runAsync(
