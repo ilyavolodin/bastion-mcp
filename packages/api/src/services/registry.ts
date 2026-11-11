@@ -754,14 +754,20 @@ export const listRequests = async (
   });
   if (actor.orgRole === 'admin' || actor.managedTeamIds.length === 0) return page;
   const items: Row[] = [];
+  const teamsByRequester = new Map<string, string[]>();
   for (const row of page.items) {
-    const requesterTeams = await teamIdsOf(ctx.deps, String(row.requesterId));
-    if (
-      row.requesterId === actor.id ||
-      actor.managedTeamIds.some((t) => requesterTeams.includes(t))
-    ) {
+    const requesterId = String(row.requesterId);
+    if (row.requesterId === actor.id) {
       items.push(row);
+      continue;
     }
+    let requesterTeams = teamsByRequester.get(requesterId);
+    if (!requesterTeams) {
+      requesterTeams = await teamIdsOf(ctx.deps, requesterId);
+      teamsByRequester.set(requesterId, requesterTeams);
+    }
+    const teams = requesterTeams;
+    if (actor.managedTeamIds.some((t) => teams.includes(t))) items.push(row);
   }
   return { items, nextCursor: page.nextCursor };
 };
