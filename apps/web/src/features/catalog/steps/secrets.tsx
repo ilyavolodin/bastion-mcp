@@ -56,8 +56,8 @@ export function SecretsSection({ draft, onChange, readOnly }: EditorProps) {
             className="grid items-end gap-x-3 gap-y-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto]"
           >
             <div className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[13px] font-medium leading-5">Secret</span>
-              <code className="flex h-11 items-center truncate font-mono text-[13px]">{name}</code>
+              <span className="text-body-sm font-medium leading-5">Secret</span>
+              <code className="flex h-11 items-center truncate font-mono text-body-sm">{name}</code>
             </div>
             {shared ? (
               <RowCell label={`Value of ${name}`}>

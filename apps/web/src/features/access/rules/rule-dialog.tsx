@@ -196,7 +196,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
             aria-pressed={effect === f}
             onClick={() => patch({ effect: f })}
             className={cn(
-              'h-9 flex-1 rounded-sm text-[13px] font-medium',
+              'h-9 flex-1 rounded-sm text-body-sm font-medium',
               effect === f
                 ? f === 'permit'
                   ? 'bg-mint-soft text-mint-ink'
@@ -209,7 +209,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
         ))}
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium">Who</span>
+        <span className="text-body-sm font-medium">Who</span>
         <ChipList chips={whoList} tone="info" onRemove={(c) => setWho(removeWho(who, c.key))} />
         <div className="flex flex-wrap gap-2">
           <AddSelect
@@ -240,7 +240,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
         {whoList.length === 0 ? <span className="text-caption text-muted">Everyone</span> : null}
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium">What</span>
+        <span className="text-body-sm font-medium">What</span>
         <ChipList chips={whatList} mono onRemove={(c) => setWhat(removeWhat(what, c.key))} />
         <div className="flex flex-wrap gap-2">
           <AddSelect
@@ -253,7 +253,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
             aria-label="Add a tool pattern"
             placeholder="+ tool pattern, e.g. delete_*"
             value={pattern}
-            className="h-9 w-56 text-[13px]"
+            className="h-9 w-56 text-body-sm"
             onChange={(e) => setPattern(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && pattern.trim()) {
@@ -281,7 +281,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
         {whatList.length === 0 ? <span className="text-caption text-muted">Any tool</span> : null}
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium">When</span>
+        <span className="text-body-sm font-medium">When</span>
         <ChipList
           chips={whenList}
           tone="berry"
@@ -316,7 +316,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
           <Select
             aria-label="Hours from"
             value={hoursFrom}
-            className="h-9 w-auto text-[13px]"
+            className="h-9 w-auto text-body-sm"
             onChange={(e) => setHoursFrom(e.target.value)}
           >
             {Array.from({ length: 24 }, (_, h) => (
@@ -329,7 +329,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
           <Select
             aria-label="Hours to"
             value={hoursTo}
-            className="h-9 w-auto text-[13px]"
+            className="h-9 w-auto text-body-sm"
             onChange={(e) => setHoursTo(e.target.value)}
           >
             {Array.from({ length: 25 }, (_, h) => (
@@ -353,7 +353,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
           aria-label="Add a client"
           placeholder="+ client id, e.g. claude-code"
           value={client}
-          className="h-9 text-[13px]"
+          className="h-9 text-body-sm"
           onChange={(e) => setClient(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && client.trim()) {
@@ -368,7 +368,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
           aria-invalid={Boolean(errors.cidr)}
           placeholder="+ IP range, e.g. 10.0.0.0/8"
           value={cidr}
-          className="h-9 text-[13px]"
+          className="h-9 text-body-sm"
           onChange={(e) => setCidr(e.target.value)}
           onKeyDown={(e) => {
             if (e.key !== 'Enter' || !cidr.trim()) return;

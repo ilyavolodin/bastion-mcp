@@ -8,6 +8,7 @@ import { extendTailwindMerge } from 'tailwind-merge';
 const twMerge = extendTailwindMerge<'zest-type'>({
   extend: {
     classGroups: {
+      'font-size': ['text-body-sm'],
       'zest-type': [
         'text-page-title',
         'text-card-title',

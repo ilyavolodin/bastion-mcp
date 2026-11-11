@@ -124,7 +124,7 @@ export function CedarDialog({
               <ul
                 role="alert"
                 aria-label="Policy errors"
-                className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-[13px] text-coral-ink"
+                className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-body-sm text-coral-ink"
               >
                 {problems.map((p) => (
                   <li key={p}>{p}</li>

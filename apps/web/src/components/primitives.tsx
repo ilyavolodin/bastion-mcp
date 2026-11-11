@@ -247,7 +247,7 @@ export function Segmented<T extends string>({
           aria-pressed={o.value === value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'inline-flex h-9 items-center gap-1.5 rounded-sm px-3 text-[13px] font-medium',
+            'inline-flex h-9 items-center gap-1.5 rounded-sm px-3 text-body-sm font-medium',
             o.value === value ? 'bg-grad-tangerine text-on-bright' : 'text-muted hover:text-ink',
           )}
         >
@@ -262,7 +262,7 @@ export function ReadOnlyNote({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 rounded-md bg-sunken px-3.5 py-3">
       <Lock className="size-4 shrink-0 text-muted" aria-hidden="true" />
-      <span className="flex-1 text-[13px] text-muted">{children}</span>
+      <span className="flex-1 text-body-sm text-muted">{children}</span>
     </div>
   );
 }

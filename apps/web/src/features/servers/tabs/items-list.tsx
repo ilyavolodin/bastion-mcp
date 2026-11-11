@@ -185,7 +185,7 @@ export function ItemsList({
                   onCheckedChange={(shown) => setHidden([d], !shown)}
                 />
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate font-mono text-[13px]">{d.name}</span>
+                  <span className="truncate font-mono text-body-sm">{d.name}</span>
                   <span className="truncate text-caption text-muted">{descriptionOf(d)}</span>
                 </div>
                 {d.kind !== 'tool' ? <Tag>{KIND_LABEL[d.kind]}</Tag> : null}

@@ -108,7 +108,7 @@ export function CatalogPage() {
                 type="button"
                 aria-pressed={s.kind === v}
                 onClick={() => setS({ kind: v })}
-                className={`h-9 rounded-full px-3.5 text-[13px] font-medium ${s.kind === v ? 'bg-ink text-canvas' : 'border border-line bg-surface'}`}
+                className={`h-9 rounded-full px-3.5 text-body-sm font-medium ${s.kind === v ? 'bg-ink text-canvas' : 'border border-line bg-surface'}`}
               >
                 {label}
               </button>

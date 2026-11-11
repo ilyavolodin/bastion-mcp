@@ -32,7 +32,7 @@ export function ClientConfigPanel({
   const json = cfg.config ? JSON.stringify(cfg.config, null, 2) : null;
   return (
     <div className="flex flex-col gap-3">
-      <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[13px] text-muted">
+      <ul className="m-0 flex list-none flex-col gap-1 p-0 text-body-sm text-muted">
         {cfg.instructions.map((line) => (
           <li key={line}>{line}</li>
         ))}
@@ -52,7 +52,7 @@ export function ClientConfigPanel({
               label={`${label} configuration`}
               tone="sunken"
               buttonLabel="Copy config"
-              className="[&>span:first-child]:text-[13px]"
+              className="[&>span:first-child]:text-body-sm"
             />
           </div>
         </div>
@@ -80,7 +80,7 @@ export function ClientConfigTabs({
             aria-pressed={client === c.id}
             onClick={() => setClient(c.id)}
             className={cn(
-              'inline-flex h-10 items-center gap-2 rounded-md px-3 text-[13px] font-medium',
+              'inline-flex h-10 items-center gap-2 rounded-md px-3 text-body-sm font-medium',
               client === c.id ? 'bg-tangerine-soft text-tangerine-ink' : 'bg-sunken text-ink',
             )}
           >

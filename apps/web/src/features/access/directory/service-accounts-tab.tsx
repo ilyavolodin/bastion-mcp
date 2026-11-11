@@ -112,7 +112,7 @@ export function ServiceAccountsTab() {
                 key={a.id}
                 className="flex items-center gap-3 border-b border-line py-3 last:border-b-0"
               >
-                <span className="flex-1 font-mono text-[13px] font-medium">{a.displayName}</span>
+                <span className="flex-1 font-mono text-body-sm font-medium">{a.displayName}</span>
                 <Chip>{teamName(a.teamId)}</Chip>
                 <span className="font-mono text-caption text-muted max-md:hidden">
                   {a.oauthClientId ?? 'no client'}

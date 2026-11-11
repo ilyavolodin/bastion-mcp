@@ -58,7 +58,7 @@ function TestResult({ result }: { result: IdpTestResult }) {
   return (
     <ul
       aria-label="Connection test"
-      className="m-0 flex list-none flex-col gap-1.5 rounded-md bg-sunken p-3 text-[13px]"
+      className="m-0 flex list-none flex-col gap-1.5 rounded-md bg-sunken p-3 text-body-sm"
     >
       {idpTestSteps(result).map((s) => (
         <li key={s.name} className="flex items-center gap-2">
@@ -185,7 +185,7 @@ function IdpDialog({ editing, onClose }: { editing: IdpConnection | 'new'; onClo
       </div>
       {text('scopes', 'Scopes', { help: 'Separated by spaces' })}
       <fieldset className="m-0 grid gap-3.5 border-0 p-0 sm:grid-cols-2">
-        <legend className="mb-1.5 text-[13px] font-medium">Claim names in the ID token</legend>
+        <legend className="mb-1.5 text-body-sm font-medium">Claim names in the ID token</legend>
         {text('claimEmail', 'Email claim', { placeholder: 'email' })}
         {text('claimName', 'Name claim', { placeholder: 'name' })}
         {text('claimGroups', 'Groups claim', { placeholder: 'groups' })}

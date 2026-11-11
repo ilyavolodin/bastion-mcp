@@ -183,7 +183,7 @@ export function OverrideForm({ kind, entry, disabled, onChange }: Props) {
       {isTool ? (
         <>
           <fieldset className="m-0 grid gap-3 border-0 p-0 sm:grid-cols-2">
-            <legend className="mb-1.5 text-[13px] font-medium">Annotations</legend>
+            <legend className="mb-1.5 text-body-sm font-medium">Annotations</legend>
             {TRI.map(([key, label]) => (
               <Field key={key} label={label}>
                 {({ id }) => (

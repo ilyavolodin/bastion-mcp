@@ -38,7 +38,7 @@ export function RoleBar() {
             aria-pressed={o.id === current}
             onClick={() => setPreviewRole(o.id === 'actual' ? null : (o.id as UiRole))}
             className={cn(
-              'inline-flex h-9 items-center gap-1.5 rounded-sm px-3.5 text-[13px] font-medium',
+              'inline-flex h-9 items-center gap-1.5 rounded-sm px-3.5 text-body-sm font-medium',
               o.id === current
                 ? 'bg-surface text-ink shadow-[0_0_0_1.5px_var(--tangerine-ink)]'
                 : 'text-muted',

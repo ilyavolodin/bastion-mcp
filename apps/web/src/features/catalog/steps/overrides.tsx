@@ -51,7 +51,7 @@ export function OverridesStep({ draft, onChange, readOnly }: StepProps) {
       ) : (
         <ul
           role="alert"
-          className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-[13px] text-coral-ink"
+          className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-body-sm text-coral-ink"
         >
           {v.issues.map((i) => (
             <li key={`${i.path}${i.message}`}>

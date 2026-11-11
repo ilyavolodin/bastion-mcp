@@ -149,7 +149,7 @@ function CallListItem({
           {formatClock(call.ts, true).slice(0, 8)}
         </span>
         <span className="flex min-w-0 flex-col">
-          <span className="truncate font-mono text-[13px] leading-5 font-semibold">
+          <span className="truncate font-mono text-body-sm leading-5 font-semibold">
             {callTitle(call)}
           </span>
           <span className="text-[11px] leading-4 text-muted">
@@ -159,7 +159,7 @@ function CallListItem({
         {people ? (
           <span className="flex min-w-0 items-center gap-2 max-lg:hidden">
             <Avatar name={personName} size={24} />
-            <span className="truncate text-[13px]">{personName}</span>
+            <span className="truncate text-body-sm">{personName}</span>
           </span>
         ) : null}
         <span className="flex items-center max-lg:hidden" title={formatDuration(call.durationMs)}>
@@ -241,7 +241,7 @@ export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: st
             options={installList.map(([id, label]) => ({ value: id, label }))}
           />
         ) : null}
-        <label className="inline-flex h-10 items-center rounded-md border border-line bg-surface px-3.5 text-[13px] font-medium">
+        <label className="inline-flex h-10 items-center rounded-md border border-line bg-surface px-3.5 text-body-sm font-medium">
           <span className="sr-only">Tool</span>
           <input
             type="search"
@@ -249,7 +249,7 @@ export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: st
             aria-label="Tool"
             value={s.item ?? ''}
             onChange={(e) => setS({ item: e.target.value || undefined })}
-            className="w-28 bg-transparent text-[13px] outline-none placeholder:text-ink"
+            className="w-28 bg-transparent text-body-sm outline-none placeholder:text-ink"
           />
         </label>
         <FilterSelect

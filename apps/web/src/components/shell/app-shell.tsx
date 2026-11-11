@@ -77,7 +77,7 @@ export function AppShell() {
               {!compact ? (
                 <p
                   role="note"
-                  className="m-0 rounded-md bg-sky-soft px-3.5 py-2.5 text-[13px] text-sky-ink md:hidden"
+                  className="m-0 rounded-md bg-sky-soft px-3.5 py-2.5 text-body-sm text-sky-ink md:hidden"
                 >
                   This screen is best on a wider display. Home, Store and Activity work here.
                 </p>

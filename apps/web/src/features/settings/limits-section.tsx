@@ -244,7 +244,7 @@ function LimitDialog({ editing, onClose }: { editing: LimitRule | 'new'; onClose
         'Comma separated ids; empty counts each one separately',
       )}
       <fieldset className="m-0 grid gap-3.5 border-0 p-0 sm:grid-cols-2">
-        <legend className="mb-1.5 text-[13px] font-medium">Narrow it to (optional)</legend>
+        <legend className="mb-1.5 text-body-sm font-medium">Narrow it to (optional)</legend>
         {text('tool', 'Tool', undefined, 'github__*')}
         {text('method', 'Method', undefined, 'tools/call')}
         {text('installationId', 'Installation id')}

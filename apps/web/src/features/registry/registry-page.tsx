@@ -281,7 +281,7 @@ function Requests() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-label">
                     {r.requesterName} ·{' '}
-                    <span className="font-mono text-[13px]">{r.serverName}</span>
+                    <span className="font-mono text-body-sm">{r.serverName}</span>
                   </div>
                   <div className="text-caption text-muted">
                     {r.reason} · {r.teamName ?? 'No team'} · {formatRelative(r.createdAt)}
@@ -374,7 +374,7 @@ function SourcesStrip({ isAdmin }: { isAdmin: boolean }) {
         active.map((src) => {
           const info = syncInfo(src);
           return (
-            <div key={src.id} className="flex flex-wrap items-center gap-2 text-[13px]">
+            <div key={src.id} className="flex flex-wrap items-center gap-2 text-body-sm">
               <span className="font-semibold">{src.name}</span>
               <Tag tone={trustTone(src.trust)}>{TRUST_LABEL[src.trust] ?? src.trust}</Tag>
               <span className="text-muted">

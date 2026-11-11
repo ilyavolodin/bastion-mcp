@@ -76,7 +76,7 @@ export function TrafficPanel({ args }: { args: Args }) {
               >
                 <Link
                   to={`/servers/${t.group}`}
-                  className="truncate text-[13px] font-medium no-underline"
+                  className="truncate text-body-sm font-medium no-underline"
                 >
                   {named(t)}
                 </Link>
@@ -133,7 +133,7 @@ export function PeoplePanel({ args }: { args: Args }) {
                 <Link
                   to="/observability"
                   search={{ range: args.range, scope: 'person', person: t.group } as never}
-                  className="truncate text-[13px] font-medium no-underline"
+                  className="truncate text-body-sm font-medium no-underline"
                 >
                   {nameOf(t.group)}
                 </Link>
@@ -201,7 +201,7 @@ export function HealthPanel({ args }: { args: Args }) {
                       tone === 'bad' && 'bg-coral',
                     )}
                   >
-                    <span className="truncate text-[13px] leading-[18px] font-semibold">
+                    <span className="truncate text-body-sm leading-[18px] font-semibold">
                       {named(i)}
                     </span>
                     <StatusDot
@@ -418,7 +418,7 @@ export function RunningSandboxesPanel({ enabled = true }: { enabled?: boolean })
       >
         {(rows) => (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse text-left text-[13px]">
+            <table className="w-full min-w-[560px] border-collapse text-left text-body-sm">
               <thead>
                 <tr className="text-caption text-muted">
                   <th className="py-1.5 pr-3 font-medium">Server</th>

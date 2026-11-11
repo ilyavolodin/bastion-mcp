@@ -301,7 +301,7 @@ function PolicyDialog({ source, onClose }: { source: RegistrySource | null; onCl
               )}
             </Field>
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-              <legend className="mb-1.5 text-[13px] font-medium">Allowed runtimes</legend>
+              <legend className="mb-1.5 text-body-sm font-medium">Allowed runtimes</legend>
               <div className="flex flex-wrap gap-4">
                 {RUNTIMES.map((r) => (
                   <label key={r} className="flex items-center gap-2 text-label">
@@ -332,7 +332,7 @@ function PolicyDialog({ source, onClose }: { source: RegistrySource | null; onCl
                   rows={3}
                   value={form.allowed}
                   onChange={(e) => setForm({ ...form, allowed: e.target.value })}
-                  className="rounded-md border border-line-strong bg-surface p-2 font-mono text-[13px]"
+                  className="rounded-md border border-line-strong bg-surface p-2 font-mono text-body-sm"
                 />
               )}
             </Field>
@@ -346,7 +346,7 @@ function PolicyDialog({ source, onClose }: { source: RegistrySource | null; onCl
                   rows={3}
                   value={form.blocked}
                   onChange={(e) => setForm({ ...form, blocked: e.target.value })}
-                  className="rounded-md border border-line-strong bg-surface p-2 font-mono text-[13px]"
+                  className="rounded-md border border-line-strong bg-surface p-2 font-mono text-body-sm"
                 />
               )}
             </Field>

@@ -145,7 +145,7 @@ export function CommandPalette() {
                     onSelect={() => go(`/servers/${server?.id}`, { tab: 'capabilities' })}
                   >
                     <Wrench className="size-4 text-muted" aria-hidden="true" />
-                    <span className="font-mono text-[13px]">{tool.name}</span>
+                    <span className="font-mono text-body-sm">{tool.name}</span>
                     <span className="ml-auto text-caption text-muted">{server?.displayName}</span>
                   </CommandItem>
                 ))}

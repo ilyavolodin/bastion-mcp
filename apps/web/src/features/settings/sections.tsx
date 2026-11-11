@@ -182,7 +182,7 @@ export function SandboxesSection() {
   return (
     <Card aria-label="Sandboxes" className="max-w-2xl gap-3">
       <CardHeader title="Sandboxes" />
-      <p className="m-0 text-[13px] leading-5 text-muted">
+      <p className="m-0 text-body-sm leading-5 text-muted">
         A sandbox is the isolated container a server runs in. Each server picks its own size on its
         Settings tab: small (up to 1 CPU, 512 MiB), medium (up to 2 CPU, 1 GiB) or large (up to 4
         CPU, 4 GiB). The CPU and memory of each size, the warm pool of idle sandboxes kept ready,

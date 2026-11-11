@@ -67,7 +67,7 @@ export function Stepper({
                 </span>
                 <span
                   className={cn(
-                    'text-[13px] leading-[16px] max-lg:whitespace-nowrap',
+                    'text-body-sm leading-[16px] max-lg:whitespace-nowrap',
                     isCurrent ? 'font-semibold text-ink' : 'font-medium',
                     !isDone && !isCurrent && 'text-muted',
                     s.id === readyId && !isCurrent && 'text-mint-ink',

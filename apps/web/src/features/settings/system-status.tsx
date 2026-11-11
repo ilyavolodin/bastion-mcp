@@ -63,7 +63,7 @@ export function SystemStatusSection() {
                           label={rollingOut ? 'Rolling out' : 'Healthy'}
                           hideLabel
                         />
-                        <span className="text-[13px] font-semibold">{r.id}</span>
+                        <span className="text-body-sm font-semibold">{r.id}</span>
                       </div>
                       <span className="text-[11px] leading-[14px] text-muted">
                         {r.version}
@@ -104,7 +104,7 @@ export function SystemStatusSection() {
                       className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3"
                       title={`${qu.name}: ${qu.depth} waiting${qu.oldestAgeSeconds === undefined ? '' : `, oldest ${qu.oldestAgeSeconds} s`}`}
                     >
-                      <span className="break-all text-[13px] font-medium">{qu.name}</span>
+                      <span className="break-all text-body-sm font-medium">{qu.name}</span>
                       <span
                         className="h-3 overflow-hidden rounded-sm bg-sunken"
                         role="progressbar"
@@ -130,16 +130,16 @@ export function SystemStatusSection() {
                     className="flex min-h-10 items-center gap-2.5 border-b border-line"
                   >
                     <StatusDot tone={c.ok ? 'ok' : 'bad'} label={c.ok ? 'OK' : 'Down'} hideLabel />
-                    <span className="flex-1 text-[13px] font-medium">{c.name}</span>
+                    <span className="flex-1 text-body-sm font-medium">{c.name}</span>
                     <span className="text-caption text-muted">{c.detail}</span>
                   </div>
                 ))}
                 <div className="flex min-h-10 items-center gap-2.5 border-b border-line">
-                  <span className="flex-1 text-[13px] font-medium">Active sandbox leases</span>
+                  <span className="flex-1 text-body-sm font-medium">Active sandbox leases</span>
                   <span className="text-caption text-muted">{s.leases.active}</span>
                 </div>
                 <div className="flex min-h-10 items-center gap-2.5">
-                  <span className="flex-1 text-[13px] font-medium">Config version</span>
+                  <span className="flex-1 text-body-sm font-medium">Config version</span>
                   <span className="font-mono text-caption text-muted">{s.configVersion}</span>
                 </div>
               </Card>
@@ -164,7 +164,7 @@ export function SystemStatusSection() {
                   key={src.sourceId}
                   className="grid grid-cols-[200px_minmax(0,1fr)] items-center gap-3 max-md:grid-cols-1"
                 >
-                  <span className="text-[13px] font-medium">{src.name}</span>
+                  <span className="text-body-sm font-medium">{src.name}</span>
                   <span className="flex flex-wrap items-center gap-2">
                     <StatusDot
                       tone={src.ok === null ? 'neutral' : src.ok ? 'ok' : 'bad'}

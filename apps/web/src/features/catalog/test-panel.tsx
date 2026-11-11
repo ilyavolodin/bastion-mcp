@@ -59,8 +59,8 @@ function StepList({ steps }: { steps: VersionTestRun['steps'] }) {
             >
               {i.icon}
             </span>
-            <span className="min-w-[200px] text-[13px] font-semibold">{stepLabel(s.id)}</span>
-            <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] text-muted">
+            <span className="min-w-[200px] text-body-sm font-semibold">{stepLabel(s.id)}</span>
+            <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-body-sm text-muted">
               {s.detail ?? i.label}
             </span>
           </li>
@@ -230,7 +230,7 @@ export function TestPanel({
             </Field>
           ))}
           {needs.orgSecrets.map((name) => (
-            <p key={name} className="m-0 text-[13px]">
+            <p key={name} className="m-0 text-body-sm">
               Shared secret <code>{name}</code>:{' '}
               {org.data?.has(name) ? (
                 <span className="font-medium text-mint-ink">set</span>
@@ -274,7 +274,7 @@ export function TestPanel({
           </p>
         ) : null}
         {t?.status === 'failed' ? (
-          <div role="alert" className="rounded-md bg-coral-soft p-3 text-[13px] text-ink">
+          <div role="alert" className="rounded-md bg-coral-soft p-3 text-body-sm text-ink">
             <p className="m-0 font-semibold text-coral-ink">The test failed</p>
             <p className="m-0 mt-1 whitespace-pre-wrap break-words">
               {reason ?? 'The run ended without a result.'}
@@ -303,13 +303,13 @@ export function TestPanel({
         {t?.status === 'passed' ? (
           <p
             role="status"
-            className="m-0 rounded-md bg-mint-soft p-3 text-[13px] font-medium text-mint-ink"
+            className="m-0 rounded-md bg-mint-soft p-3 text-body-sm font-medium text-mint-ink"
           >
             The test passed. Publish becomes available for exactly this version.
           </p>
         ) : null}
         {running && t?.status !== 'failed' && t?.status !== 'passed' ? (
-          <p role="status" className="m-0 text-[13px] text-muted">
+          <p role="status" className="m-0 text-body-sm text-muted">
             The test is running. This can take a minute when the server starts for the first time.
           </p>
         ) : null}

@@ -52,7 +52,7 @@ export function ChartCard({
       />
       {asTable ? (
         <div className="max-h-[320px] overflow-auto">
-          <table className="w-full border-collapse text-left text-[13px]">
+          <table className="w-full border-collapse text-left text-body-sm">
             <caption className="sr-only">{title}</caption>
             <thead>
               <tr>

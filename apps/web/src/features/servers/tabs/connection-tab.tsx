@@ -97,7 +97,7 @@ export function ConnectionTab({ installation: i }: { installation: InstallationV
             tone={connected ? 'ok' : 'warn'}
             label={connected ? 'Connected' : 'Not connected'}
           />
-          <dl className="m-0 grid grid-cols-[100px_1fr] gap-y-1.5 text-[13px]">
+          <dl className="m-0 grid grid-cols-[100px_1fr] gap-y-1.5 text-body-sm">
             <dt className="text-muted">Scopes</dt>
             <dd className="m-0 font-mono">
               {i.spec?.scopes.length ? i.spec.scopes.join(', ') : 'As the server asks'}
@@ -138,7 +138,7 @@ export function ConnectionTab({ installation: i }: { installation: InstallationV
               className="flex items-center gap-2.5 rounded-md bg-sunken px-3 py-2.5"
             >
               <KeyRound className="size-4 text-muted" aria-hidden="true" />
-              <span className="flex-1 font-mono text-[13px] font-medium">{s.name}</span>
+              <span className="flex-1 font-mono text-body-sm font-medium">{s.name}</span>
               <StatusDot tone={s.set ? 'ok' : 'warn'} label={s.set ? 'Set' : 'Not set'} />
               <Button variant="outline" size="xs" onClick={() => setReplacing(s.name)}>
                 {s.set ? 'Replace secret' : 'Add secret'}

@@ -180,6 +180,9 @@
   line-height: 20px;
   font-weight: 500;
 }
+@utility text-body-sm {
+  font-size: 13px;
+}
 @utility text-caption {
   font-size: 12px;
   line-height: 16px;

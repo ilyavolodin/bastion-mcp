@@ -61,7 +61,7 @@ export function DiffView({
     return (
       <div className={cn('grid gap-3 sm:grid-cols-2', className)} data-testid="diff-view">
         <Pane label={leftLabel} tone="plain">
-          <p className="m-0 font-mono text-[13px] leading-[21px]">
+          <p className="m-0 font-mono text-body-sm leading-[21px]">
             {words
               .filter((w) => w.type !== 'add')
               .map((w, i) =>
@@ -76,7 +76,7 @@ export function DiffView({
           </p>
         </Pane>
         <Pane label={rightLabel} tone={tone === 'danger' ? 'danger' : 'accent'}>
-          <p className="m-0 font-mono text-[13px] leading-[21px]">
+          <p className="m-0 font-mono text-body-sm leading-[21px]">
             {words
               .filter((w) => w.type !== 'del')
               .map((w, i) =>

@@ -21,7 +21,7 @@ export function FilterSelect({
   return (
     <label
       className={cn(
-        'relative inline-flex h-10 items-center rounded-md border border-line bg-surface text-[13px] font-medium text-ink',
+        'relative inline-flex h-10 items-center rounded-md border border-line bg-surface text-body-sm font-medium text-ink',
         className,
       )}
     >
@@ -29,7 +29,7 @@ export function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-full appearance-none rounded-md bg-transparent pl-3.5 pr-9 text-[13px] font-medium text-ink"
+        className="h-full appearance-none rounded-md bg-transparent pl-3.5 pr-9 text-body-sm font-medium text-ink"
       >
         {anyLabel !== null ? <option value="">{`${label}: ${anyLabel}`}</option> : null}
         {options.map((o) => (

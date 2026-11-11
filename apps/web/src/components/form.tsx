@@ -60,7 +60,7 @@ export function Field({
   const errId = error ? `${id}-err` : undefined;
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
-      <Label htmlFor={id} className="text-[13px] font-medium text-ink">
+      <Label htmlFor={id} className="text-body-sm font-medium text-ink">
         {label}
         {required ? <span className="text-coral-ink"> *</span> : null}
       </Label>

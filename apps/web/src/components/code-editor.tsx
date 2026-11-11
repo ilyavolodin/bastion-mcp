@@ -36,7 +36,7 @@ export function PlainEditor({
       onChange={(e) => onChange?.(e.target.value)}
       style={{ height }}
       className={cn(
-        'w-full rounded-md border border-line-strong bg-surface p-3 font-mono text-[13px] leading-5 text-ink',
+        'w-full rounded-md border border-line-strong bg-surface p-3 font-mono text-body-sm leading-5 text-ink',
         className,
       )}
     />

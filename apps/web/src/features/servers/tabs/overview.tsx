@@ -57,7 +57,7 @@ export function CapabilityRow({ c }: { c: CapabilityView }) {
         <span className="sr-only"> {c.kind}</span>
       </span>
       <div className="min-w-0 flex-1">
-        <div className="font-mono text-[13px] leading-5 font-semibold">{c.name}</div>
+        <div className="font-mono text-body-sm leading-5 font-semibold">{c.name}</div>
         <div className="truncate text-caption text-muted">{c.description}</div>
       </div>
       <CapabilityMarkers c={c} />
@@ -266,7 +266,7 @@ export function OverviewTab({
                   aria-hidden="true"
                 />
                 <div>
-                  <div className="text-[13px] leading-5 font-medium">
+                  <div className="text-body-sm leading-5 font-medium">
                     {c.outcome === 'blocked'
                       ? 'Blocked by guard'
                       : c.outcome === 'denied'

@@ -132,7 +132,7 @@ function Editor({
         {[...rejected, ...(preview.data?.rejected ?? [])].length ? (
           <ul
             role="alert"
-            className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-[13px] text-coral-ink"
+            className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-body-sm text-coral-ink"
           >
             {[...rejected, ...(preview.data?.rejected ?? [])].map((r) => (
               <li key={`${r.path}-${r.reason}`}>
@@ -159,7 +159,7 @@ function Editor({
               <ul
                 role="alert"
                 aria-label="Validation errors"
-                className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-[13px] text-coral-ink"
+                className="m-0 list-disc rounded-md bg-coral-soft py-3 pl-8 pr-3 text-body-sm text-coral-ink"
               >
                 {validation.issues.map((i) => (
                   <li key={`${i.path}-${i.message}`}>

@@ -40,7 +40,7 @@ export function RowCell({
     <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
       <Label
         htmlFor={id}
-        className={cn('text-[13px] font-medium leading-5 text-ink', hideLabel && 'sr-only')}
+        className={cn('text-body-sm font-medium leading-5 text-ink', hideLabel && 'sr-only')}
       >
         {label}
       </Label>
@@ -304,7 +304,7 @@ export function BindingRow({
               list={listId}
               aria-invalid={Boolean(valueBad)}
               disabled={readOnly}
-              className="font-mono text-[13px]"
+              className="font-mono text-body-sm"
               value={row.value}
               placeholder={
                 kind === 'header' ? 'Bearer {{secret.TOKEN}}' : 'a value, or {{var.NAME}}'
@@ -383,7 +383,7 @@ export function ArgRow({
               list={listId}
               aria-invalid={Boolean(valueBad)}
               disabled={readOnly}
-              className="font-mono text-[13px]"
+              className="font-mono text-body-sm"
               value={row.value}
               placeholder="a value, or {{var.NAME}}"
               onChange={(e) => onChange({ ...row, value: e.target.value })}

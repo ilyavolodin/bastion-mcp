@@ -84,7 +84,7 @@ function DirectoryTeamCard({ team }: { team: TeamView }) {
         <Select
           aria-label={`Add a person to ${team.name}`}
           value={adding}
-          className="h-9 text-[13px]"
+          className="h-9 text-body-sm"
           onChange={(e) => {
             setAdding('');
             if (e.target.value)

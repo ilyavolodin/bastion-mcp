@@ -211,7 +211,7 @@ export function InstallFlow({
                 />
               )}
             </Field>
-            <label className="flex items-center gap-2.5 text-[13px]">
+            <label className="flex items-center gap-2.5 text-body-sm">
               <Checkbox checked={pinned} onCheckedChange={(c) => setPinned(c === true)} />
               Stay on version {entry.version?.label ?? 'this version'} instead of following updates
             </label>

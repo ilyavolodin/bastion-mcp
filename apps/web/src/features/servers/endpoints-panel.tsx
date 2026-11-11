@@ -54,7 +54,7 @@ function ToolCountWarning({ count, threshold }: { count: number; threshold: numb
   return (
     <p
       role="status"
-      className="m-0 flex items-start gap-2 rounded-md bg-tangerine-soft p-3 text-[13px] text-tangerine-ink"
+      className="m-0 flex items-start gap-2 rounded-md bg-tangerine-soft p-3 text-body-sm text-tangerine-ink"
     >
       <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <span>
@@ -152,7 +152,7 @@ function EndpointDialog({
             )}
           </Field>
           <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-            <legend className="mb-1.5 text-[13px] font-medium">Servers</legend>
+            <legend className="mb-1.5 text-body-sm font-medium">Servers</legend>
             {installations.map((i) => (
               <label
                 key={i.id}

@@ -76,7 +76,7 @@ export function PeopleTab({ initialQuery }: { initialQuery?: string | undefined 
                   <Select
                     aria-label={`Role of ${u.name}`}
                     value={u.orgRole}
-                    className="h-9 w-28 text-[13px]"
+                    className="h-9 w-28 text-body-sm"
                     onChange={(e) => {
                       setRoleError(undefined);
                       setRole.mutate(

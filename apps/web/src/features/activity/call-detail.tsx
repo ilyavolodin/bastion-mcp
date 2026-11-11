@@ -45,7 +45,7 @@ export function GuardResultBlock({ result }: { result: GuardResult }) {
     >
       <div
         className={cn(
-          'flex items-center gap-2 text-[13px] font-semibold',
+          'flex items-center gap-2 text-body-sm font-semibold',
           flagged ? 'text-coral-ink' : 'text-ink',
         )}
       >
@@ -72,7 +72,7 @@ export function GuardResultBlock({ result }: { result: GuardResult }) {
 const Fact = ({ label, value }: { label: string; value: string }) => (
   <div className="flex flex-col gap-0.5">
     <dt className="text-caption text-muted">{label}</dt>
-    <dd className="m-0 text-[13px] font-medium">{value}</dd>
+    <dd className="m-0 text-body-sm font-medium">{value}</dd>
   </div>
 );
 
@@ -158,7 +158,7 @@ export function CallDetailPanel({
           {d.errorCode ? (
             <p
               role="alert"
-              className="m-0 rounded-md bg-tangerine-soft p-3 text-[13px] text-tangerine-ink"
+              className="m-0 rounded-md bg-tangerine-soft p-3 text-body-sm text-tangerine-ink"
             >
               <span className="font-mono">{d.errorCode}</span>
               {d.jsonrpcCode === null ? '' : ` (JSON-RPC ${d.jsonrpcCode})`}
@@ -170,7 +170,7 @@ export function CallDetailPanel({
               <span className="text-caption text-muted">No policy reason was recorded.</span>
             ) : (
               (d.policyReasons ?? []).map((r) => (
-                <div key={r} className="flex items-center gap-2 text-[13px]">
+                <div key={r} className="flex items-center gap-2 text-body-sm">
                   <Tag tone={d.outcome === 'denied' ? 'bad' : 'ok'}>
                     {d.outcome === 'denied' ? 'deny' : 'permit'}
                   </Tag>

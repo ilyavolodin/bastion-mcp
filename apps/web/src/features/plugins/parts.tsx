@@ -181,7 +181,7 @@ function MirrorStatus({ summary }: { summary: ReturnType<typeof mirrorSummary> }
   return (
     <div className="flex items-center gap-2 rounded-md bg-sunken px-3 py-2.5">
       <StatusDot tone={summary.tone} label={summary.label} hideLabel />
-      <span className="flex-1 text-[13px] font-medium">
+      <span className="flex-1 text-body-sm font-medium">
         {summary.target ? `${summary.target} mirror ${summary.label}` : summary.label}
       </span>
       {summary.target ? (

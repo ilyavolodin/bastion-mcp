@@ -293,7 +293,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
       {passing && s.step !== 'publish' ? (
         <div
           role="status"
-          className="flex flex-wrap items-center gap-3 rounded-lg bg-mint-soft px-4 py-3 text-[13px] font-medium text-mint-ink"
+          className="flex flex-wrap items-center gap-3 rounded-lg bg-mint-soft px-4 py-3 text-body-sm font-medium text-mint-ink"
         >
           <CircleCheck className="size-4 shrink-0" aria-hidden="true" />
           <span className="flex-1">This version passed its test: it is ready to publish.</span>
@@ -343,7 +343,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
           {s.step === 'publish' && entryOnly ? (
             <Card aria-label="Already published" className="gap-3">
               <CardHeader title="Already published" />
-              <p className="m-0 text-[13px] text-muted">
+              <p className="m-0 text-body-sm text-muted">
                 Version {version?.label} is live and you have not changed it, so there is nothing to
                 test or publish. Who gets it, risk and update settings save with Save changes. To
                 ship different content, change a step and run the test: that makes a new version.
@@ -433,7 +433,7 @@ function PublishSummary({
   return (
     <Card aria-label="Ready to publish" className="gap-3.5">
       <CardHeader title="Ready to publish" />
-      <dl className="m-0 grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]">
+      <dl className="m-0 grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-body-sm">
         <dt className="text-muted">Name</dt>
         <dd className="m-0 font-medium">{draft.displayName}</dd>
         <dt className="text-muted">Version</dt>
@@ -448,7 +448,7 @@ function PublishSummary({
       {passing ? (
         <p
           role="status"
-          className="m-0 flex items-center gap-2 text-[13px] font-medium text-mint-ink"
+          className="m-0 flex items-center gap-2 text-body-sm font-medium text-mint-ink"
         >
           <CircleCheck className="size-4" aria-hidden="true" />
           This exact version passed its test
@@ -456,16 +456,16 @@ function PublishSummary({
           publish.
         </p>
       ) : checking ? (
-        <p role="status" className="m-0 text-[13px] text-muted">
+        <p role="status" className="m-0 text-body-sm text-muted">
           Checking the test result of this version…
         </p>
       ) : (
         <div role="status" className="flex flex-col items-start gap-2">
-          <p className="m-0 flex items-center gap-2 text-[13px] font-medium text-coral-ink">
+          <p className="m-0 flex items-center gap-2 text-body-sm font-medium text-coral-ink">
             <CircleX className="size-4" aria-hidden="true" />
             {blocker.headline}
           </p>
-          <p className="m-0 text-[13px] text-muted">{blocker.hint}</p>
+          <p className="m-0 text-body-sm text-muted">{blocker.hint}</p>
         </div>
       )}
       <Button size="lg" className="w-full" disabled={!passing || publishing} onClick={onPublish}>

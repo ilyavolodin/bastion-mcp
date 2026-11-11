@@ -59,7 +59,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 function DialogError({ error }: { error: unknown }) {
   if (error instanceof ApiError && error.code === 'entry_in_use') {
     return (
-      <div role="alert" className="rounded-lg bg-coral-soft p-4 text-[13px] text-ink">
+      <div role="alert" className="rounded-lg bg-coral-soft p-4 text-body-sm text-ink">
         <p className="m-0 font-semibold text-coral-ink">This entry is in use</p>
         <p className="m-0 mt-0.5">{error.detail}</p>
       </div>
@@ -171,7 +171,7 @@ export function DeleteEntryDialog({
       onConfirm={() => del.mutate(entry.id)}
     >
       {draft ? null : (
-        <p className="m-0 text-[13px] text-muted">
+        <p className="m-0 text-body-sm text-muted">
           An entry that people have installed cannot be deleted: deprecate it to hide it from the
           Store, or remove the installations first.
         </p>
@@ -253,7 +253,7 @@ function PublishEntryDialog({ entry, open, onOpenChange }: Dialogs & { entry: Ca
         publish.mutate({ entryId: entry.id, versionId: entry.draftVersionId, visibility: v });
       }}
     >
-      <dl className="m-0 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]">
+      <dl className="m-0 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-body-sm">
         <dt className="text-muted">Version</dt>
         <dd className="m-0 font-medium">{entry.draftLabel}</dd>
         <dt className="text-muted">Who gets it</dt>
@@ -264,7 +264,7 @@ function PublishEntryDialog({ entry, open, onOpenChange }: Dialogs & { entry: Ca
         <dd className="m-0 font-medium">Passed for this exact version</dd>
       </dl>
       {nobody ? (
-        <p className="m-0 text-[13px] text-coral-ink">
+        <p className="m-0 text-body-sm text-coral-ink">
           Nobody can see this entry yet.{' '}
           <Link to={editorPath(entry)} search={{ step: 'publish' } as never}>
             Choose who gets it in the editor
