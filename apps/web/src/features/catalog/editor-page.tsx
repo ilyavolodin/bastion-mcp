@@ -78,6 +78,43 @@ export const stepOfPath = (path: string): StepId => {
   return 'source';
 };
 
+type TestStatus = 'running' | 'passed' | 'failed' | undefined;
+
+/** Why the version cannot be published yet: the headline of the Publish step and the hint under the Publish buttons. */
+export const publishBlocker = ({
+  hasEntry,
+  versionDirty,
+  status,
+  reason,
+}: {
+  hasEntry: boolean;
+  versionDirty: boolean;
+  status: TestStatus;
+  reason: string | undefined;
+}): { headline: string; hint: string } => {
+  if (!hasEntry)
+    return {
+      headline: 'This draft is not saved or tested yet.',
+      hint: 'Save the draft and run its test to publish it.',
+    };
+  if (versionDirty)
+    return {
+      headline: 'This version changed since its last test.',
+      hint: 'You changed this version since its last test. Save it and run the test again.',
+    };
+  if (status === 'failed')
+    return {
+      headline: `The last test failed${reason ? `: ${reason}` : '.'}`,
+      hint: 'The last test failed. Fix the problem and run the test again.',
+    };
+  if (status === 'running')
+    return { headline: 'The test is still running.', hint: 'The test is running.' };
+  return {
+    headline: 'This version has not been tested.',
+    hint: 'Publish needs a passing test of this exact version. Run the test.',
+  };
+};
+
 /** Everything that, when it changes, makes an earlier test stale: the saved version row (11.2). */
 const versionKey = (d: Draft): string =>
   JSON.stringify([
@@ -202,15 +239,12 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
       },
     );
   };
-  const disabledReason = !entry
-    ? 'Save the draft and run its test to publish it.'
-    : versionDirty
-      ? 'You changed this version since its last test. Save it and run the test again.'
-      : testRun?.status === 'running'
-        ? 'The test is running.'
-        : testRun?.status === 'failed'
-          ? 'The last test failed. Fix the problem and run the test again.'
-          : 'Publish needs a passing test of this exact version. Run the test.';
+  const blocker = publishBlocker({
+    hasEntry: Boolean(entry),
+    versionDirty,
+    status: testRun?.status,
+    reason: failureReason(testRun),
+  });
   return (
     <>
       <PageHeader
@@ -322,16 +356,12 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
             <PublishSummary
               draft={draft}
               label={label}
-              hasEntry={Boolean(entry)}
-              versionDirty={versionDirty}
               passing={passing}
-              status={testRun?.status}
-              reason={failureReason(testRun)}
               finishedAt={testRun?.finishedAt ?? null}
               onGoTest={() => setS({ step: 'test' })}
               onPublish={() => void onPublish()}
               publishing={publish.isPending || saving}
-              disabledReason={disabledReason}
+              blocker={blocker}
               checking={Boolean(draftVersion) && current.isPending}
             />
           ) : null}
@@ -359,7 +389,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
             versionLabel={label}
             canPublish={entryOnly ? dirty : passing}
             publishing={publish.isPending || saving}
-            disabledReason={entryOnly ? 'Nothing changed yet.' : disabledReason}
+            disabledReason={entryOnly ? 'Nothing changed yet.' : blocker.hint}
             onPublish={() => (entryOnly ? void save() : void onPublish())}
             {...(entryOnly ? { saveOnly: true } : {})}
           />
@@ -374,30 +404,22 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
 function PublishSummary({
   draft,
   label,
-  hasEntry,
-  versionDirty,
   passing,
-  status,
-  reason,
   finishedAt,
   onGoTest,
   onPublish,
   publishing,
-  disabledReason,
+  blocker,
   checking,
 }: {
   draft: Draft;
   label: string;
-  hasEntry: boolean;
-  versionDirty: boolean;
   passing: boolean;
-  status: 'running' | 'passed' | 'failed' | undefined;
-  reason: string | undefined;
   finishedAt: string | null;
   onGoTest: () => void;
   onPublish: () => void;
   publishing: boolean;
-  disabledReason: string;
+  blocker: { headline: string; hint: string };
   /** The version's test result is still loading: say nothing about it yet. */
   checking: boolean;
 }) {
@@ -443,17 +465,9 @@ function PublishSummary({
         <div role="status" className="flex flex-col items-start gap-2">
           <p className="m-0 flex items-center gap-2 text-[13px] font-medium text-coral-ink">
             <CircleX className="size-4" aria-hidden="true" />
-            {!hasEntry
-              ? 'This draft is not saved or tested yet.'
-              : versionDirty
-                ? 'This version changed since its last test.'
-                : status === 'failed'
-                  ? `The last test failed${reason ? `: ${reason}` : '.'}`
-                  : status === 'running'
-                    ? 'The test is still running.'
-                    : 'This version has not been tested.'}
+            {blocker.headline}
           </p>
-          <p className="m-0 text-[13px] text-muted">{disabledReason}</p>
+          <p className="m-0 text-[13px] text-muted">{blocker.hint}</p>
         </div>
       )}
       <Button size="lg" className="w-full" disabled={!passing || publishing} onClick={onPublish}>
