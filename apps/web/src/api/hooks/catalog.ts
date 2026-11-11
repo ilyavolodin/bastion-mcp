@@ -4,13 +4,15 @@ import {
   needsClientSecret,
   normalizeOverrides,
   oauthClientSecretName,
+  sameJson,
   secretNamesOf,
   toEntryCreateBody,
   toEntryPatchBody,
   toVersionBody,
+  versionChanged,
+  withStoredLockfile,
 } from '@/features/catalog/draft';
 import { fromBase64, toBase64 } from '@/lib/base64';
-import { sortKeys } from '@/lib/diff';
 import { asRecord } from '@/lib/json';
 import { api, fetchAll, LOOKUP_PAGES } from '../client';
 import type { Body, CatalogKind } from '../schema';
@@ -118,9 +120,6 @@ export const useCatalogVersion = (entryId: string | undefined, versionId: string
       api.get(`/catalog/${entryId ?? ''}/versions/${versionId ?? ''}`, { signal }),
   });
 
-/** JSON equality that ignores key order. */
-const sameJson = (a: unknown, b: unknown) =>
-  JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
 const isDefaultOverrides = (doc: Record<string, unknown>) =>
   Object.keys(doc).length === 0 || sameJson(doc, { version: 1 });
 
@@ -197,29 +196,9 @@ export const useSaveDraft = (entryId: string, version: CatalogVersion | undefine
           });
         return created;
       }
-      // The test stores the lockfile it captured on the draft (8.7): it is not the form's, so it is carried over
-      // when the package is unchanged, and never makes the spec look edited.
-      const stored = asRecord(version.serverSpec);
-      if (
-        body.serverSpec &&
-        stored.lockfile &&
-        !(body.serverSpec as Record<string, unknown>).lockfile
-      ) {
-        const same =
-          stored.identifier === (body.serverSpec as Record<string, unknown>).identifier &&
-          stored.version === (body.serverSpec as Record<string, unknown>).version;
-        if (same)
-          (body as { serverSpec: Record<string, unknown> }).serverSpec = {
-            ...body.serverSpec,
-            lockfile: stored.lockfile,
-          };
-      }
-      const changed =
-        version.label !== body.label ||
-        !sameJson(version.serverSpec, body.serverSpec) ||
-        !sameJson(version.installForm, body.installForm);
-      const saved = changed
-        ? await api.patch(`/catalog/${entryId}/versions/${version.id}`, body)
+      const patch = withStoredLockfile(body, asRecord(version.serverSpec));
+      const saved = versionChanged(version, patch)
+        ? await api.patch(`/catalog/${entryId}/versions/${version.id}`, patch)
         : version;
       if (!sameJson(normalizeOverrides(version.overrides), draft.overrides))
         await api.put(`/catalog/${entryId}/versions/${version.id}/overrides`, draft.overrides, {
