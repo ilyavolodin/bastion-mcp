@@ -1,6 +1,12 @@
 import { join } from 'node:path';
 import { ScimStoreConflictError } from '@bastion-mcp/auth';
-import { type BastionConfig, type Clock, REDIS_CHANNELS, systemClock } from '@bastion-mcp/core';
+import {
+  type BastionConfig,
+  type Clock,
+  errorMessage,
+  REDIS_CHANNELS,
+  systemClock,
+} from '@bastion-mcp/core';
 import {
   bumpConfigVersion,
   type ConfigEvent,
@@ -124,10 +130,7 @@ export const createInfra = (
     try {
       await redis.publish(channel, typeof message === 'string' ? message : JSON.stringify(message));
     } catch (error) {
-      logger.warn(
-        { err: error instanceof Error ? error.message : String(error), channel },
-        'publish failed',
-      );
+      logger.warn({ err: errorMessage(error), channel }, 'publish failed');
     }
   };
 
@@ -135,10 +138,7 @@ export const createInfra = (
     publishConfig: (event: { scope: string; id: string; version: bigint }) =>
       publish(REDIS_CHANNELS.config, configMessage(event)),
     onPublishError: (error: unknown) =>
-      logger.warn(
-        { err: error instanceof Error ? error.message : String(error) },
-        'config publish failed',
-      ),
+      logger.warn({ err: errorMessage(error) }, 'config publish failed'),
   };
   const deps: RepositoryDeps = {
     scimConflictError: (message) => new ScimStoreConflictError(message),

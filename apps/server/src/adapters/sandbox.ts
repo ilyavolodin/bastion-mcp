@@ -1,5 +1,5 @@
 import { networkInterfaces } from 'node:os';
-import { SandboxStartFailedError } from '@bastion-mcp/core';
+import { errorMessage, SandboxStartFailedError } from '@bastion-mcp/core';
 import { RedisEgressPolicyStore } from '@bastion-mcp/mcp-upstream';
 import {
   BubblewrapDriver,
@@ -114,7 +114,7 @@ export const createSandboxStack = async (infra: Infra): Promise<SandboxStack> =>
         detail: `namespace ${config.sandbox.namespace}, runtime class ${config.sandbox.runtimeClass}`,
       });
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = errorMessage(error);
       driver = new UnavailableDriver('kubernetes', reason);
       state = async () => ({ name: 'kubernetes', healthy: false, detail: reason });
     }
@@ -136,7 +136,7 @@ export const createSandboxStack = async (infra: Infra): Promise<SandboxStack> =>
           : { name: 'bubblewrap', healthy: false, detail: probe.error };
       };
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = errorMessage(error);
       driver = new UnavailableDriver('bubblewrap', reason);
       state = async () => ({ name: 'bubblewrap', healthy: false, detail: reason });
     }

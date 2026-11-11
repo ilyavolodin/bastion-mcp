@@ -19,7 +19,7 @@
  * background; `start` returns the running record at once.
  */
 import type { VersionTestPort, VersionTestRun } from '@bastion-mcp/api';
-import { newId, serverSpecSchema } from '@bastion-mcp/core';
+import { errorMessage, newId, serverSpecSchema } from '@bastion-mcp/core';
 import type { Infra } from '../infra';
 import { runFiles } from './version-test-files';
 import { isStale, parseRun, type RunAction, reduceRun, startRun } from './version-test-run';
@@ -79,7 +79,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
           apply({
             type: 'step-error',
             index,
-            message: error instanceof Error ? error.message : String(error),
+            message: errorMessage(error),
           });
         }
         await persist(versionId, run);
@@ -122,7 +122,7 @@ export const createVersionTestPort = (infra: Infra, deps: VersionTestDeps): Vers
         } catch (error) {
           apply({
             type: 'run-error',
-            message: error instanceof Error ? error.message : String(error),
+            message: errorMessage(error),
           });
         } finally {
           apply({ type: 'finish', at: nowIso() });

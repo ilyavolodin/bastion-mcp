@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type BastionError,
+  errorMessage,
   GuardBlockedError,
   isBastionError,
   PolicyDeniedError,
@@ -101,5 +102,20 @@ describe('6.9 error mapping', () => {
     expect(sanitizeUpstreamErrorMessage(long)).toHaveLength(2000);
     const withStack = 'boom\n    at fn (/srv/app.js:1:1)\n    at other (/srv/app.js:2:2)';
     expect(sanitizeUpstreamErrorMessage(withStack)).toBe('boom');
+  });
+});
+
+describe('errorMessage', () => {
+  it('uses the message of an Error', () => {
+    expect(errorMessage(new Error('boom'))).toBe('boom');
+    expect(errorMessage(new TypeError('bad'))).toBe('bad');
+  });
+
+  it('stringifies anything else', () => {
+    expect(errorMessage('plain')).toBe('plain');
+    expect(errorMessage(undefined)).toBe('undefined');
+    expect(errorMessage(null)).toBe('null');
+    expect(errorMessage(42)).toBe('42');
+    expect(errorMessage({ message: 'not an Error' })).toBe('[object Object]');
   });
 });

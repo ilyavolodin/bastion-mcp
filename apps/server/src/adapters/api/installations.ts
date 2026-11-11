@@ -8,6 +8,7 @@ import {
 import {
   BastionError,
   effectiveTeamSlug,
+  errorMessage,
   PROTOCOL_VERSIONS,
   UI_CLIENT_ID,
 } from '@bastion-mcp/core';
@@ -213,7 +214,7 @@ export const createInstallationApiPorts = (
     } catch (error) {
       if (error instanceof BastionError) throw error;
       return {
-        result: { error: error instanceof Error ? error.message : String(error) },
+        result: { error: errorMessage(error) },
         isError: true,
         durationMs: Math.round(performance.now() - started),
         callId: null,

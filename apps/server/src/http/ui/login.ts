@@ -14,7 +14,7 @@ import {
   SESSION_COOKIE,
   verifyLocalLogin,
 } from '@bastion-mcp/auth';
-import { BastionError, newId } from '@bastion-mcp/core';
+import { BastionError, errorMessage, newId } from '@bastion-mcp/core';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { publicHost } from '../../config';
 import type { AuthServices } from '../../contracts';
@@ -148,10 +148,7 @@ const provisionFromIdp = async (
     try {
       await options.onProvisioned(plan.events);
     } catch (error) {
-      logger.warn(
-        { err: error instanceof Error ? error.message : String(error) },
-        'provisioning hook failed',
-      );
+      logger.warn({ err: errorMessage(error) }, 'provisioning hook failed');
     }
   }
   return userId;
@@ -282,10 +279,7 @@ export const registerLoginRoutes = async (
         );
         return reply.header('cache-control', 'no-store').redirect(started.authorizationUrl, 302);
       } catch (error) {
-        logger.warn(
-          { err: error instanceof Error ? error.message : String(error) },
-          'idp login start failed',
-        );
+        logger.warn({ err: errorMessage(error) }, 'idp login start failed');
         return errorPage(reply, 400, 'This identity provider is not available.', {
           back: BACK_TO_SIGN_IN,
         });

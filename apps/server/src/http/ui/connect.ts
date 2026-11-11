@@ -1,4 +1,5 @@
 /** Per-user upstream OAuth pages and documents (9.6): /connect, the callback, client metadata and JWKS. */
+
 import {
   buildUpstreamClientMetadata,
   buildUpstreamJwksDocument,
@@ -8,6 +9,7 @@ import {
   UpstreamDiscoveryError,
   UpstreamStateError,
 } from '@bastion-mcp/auth';
+import { errorMessage } from '@bastion-mcp/core';
 import type { FastifyInstance } from 'fastify';
 import { createInstallationLookup } from '../../adapters/auth';
 import { publicOrigin } from '../../config';
@@ -96,10 +98,7 @@ export const registerConnectRoutes = async (app: FastifyInstance, deps: UiDeps) 
           }),
         );
       } catch (error) {
-        logger.warn(
-          { err: error instanceof Error ? error.message : String(error) },
-          'connect page failed',
-        );
+        logger.warn({ err: errorMessage(error) }, 'connect page failed');
         return errorPage(reply, 502, 'The server’s sign-in service could not be reached.');
       }
     });

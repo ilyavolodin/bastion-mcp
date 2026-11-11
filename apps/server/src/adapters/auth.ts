@@ -28,6 +28,7 @@ import {
   UpstreamOAuthBroker,
 } from '@bastion-mcp/auth';
 import {
+  errorMessage,
   type Keyring,
   REDIS_CHANNELS,
   redisKeys,
@@ -121,8 +122,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
   if (!scimStore) throw new Error('repositories were created without the SCIM conflict error');
   const timers: NodeJS.Timeout[] = [];
   const unsubscribers: (() => void)[] = [];
-  const log = (msg: string, err: unknown) =>
-    logger.warn({ err: err instanceof Error ? err.message : String(err) }, msg);
+  const log = (msg: string, err: unknown) => logger.warn({ err: errorMessage(err) }, msg);
 
   await ensureKeys(keyStore);
 

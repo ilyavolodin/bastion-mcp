@@ -5,7 +5,7 @@
  * a rollback publishes nothing.
  */
 import type { Publisher, Tx, UnitOfWork } from '@bastion-mcp/api';
-import { REDIS_CHANNELS } from '@bastion-mcp/core';
+import { errorMessage, REDIS_CHANNELS } from '@bastion-mcp/core';
 import {
   flushUnit,
   NIL_UUID,
@@ -42,10 +42,7 @@ export const createApiPersistence = async (
   const publishConfig = (event: { scope: string; id: string; version: bigint }) =>
     infra.publish(REDIS_CHANNELS.config, configMessage(event));
   const onPublishError = (error: unknown): void =>
-    infra.logger.warn(
-      { err: error instanceof Error ? error.message : String(error) },
-      'config publish failed',
-    );
+    infra.logger.warn({ err: errorMessage(error) }, 'config publish failed');
 
   const uow: UnitOfWork = {
     async run<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {

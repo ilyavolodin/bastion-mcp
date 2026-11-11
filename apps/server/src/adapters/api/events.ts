@@ -4,7 +4,7 @@
  * publishing replica delivers locally at once and ignores its own echo.
  */
 import type { ApiEvent, EventBus } from '@bastion-mcp/api';
-import { newId } from '@bastion-mcp/core';
+import { errorMessage, newId } from '@bastion-mcp/core';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
@@ -47,7 +47,7 @@ export const createEventBus = (deps: {
       try {
         handler(event);
       } catch (error) {
-        deps.onError?.(error instanceof Error ? error.message : String(error));
+        deps.onError?.(errorMessage(error));
       }
     }
   };
@@ -58,7 +58,7 @@ export const createEventBus = (deps: {
       try {
         await deps.redis.publish(EVENTS_CHANNEL, JSON.stringify({ origin, event }));
       } catch (error) {
-        deps.onError?.(error instanceof Error ? error.message : String(error));
+        deps.onError?.(errorMessage(error));
       }
     },
     subscribe(handler) {

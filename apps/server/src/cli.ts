@@ -1,9 +1,10 @@
 #!/usr/bin/env node
+import { pathToFileURL } from 'node:url';
 /**
  * `bastion` (20.1). `node dist/main.js <command>` and the `bastion` wrapper of the image dispatch here; the default
  * command is `serve`, which hands over to `startServer` of `./server`.
  */
-import { pathToFileURL } from 'node:url';
+import { errorMessage } from '@bastion-mcp/core';
 import { execute, parseArgs } from './cli/commands';
 
 export { checkConfig, execute, formatTable, parseArgs } from './cli/commands';
@@ -52,7 +53,7 @@ if (invokedDirectly()) {
       if (parseArgs(process.argv.slice(2)).command !== 'serve') process.exit(code);
     },
     (error) => {
-      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      process.stderr.write(`${errorMessage(error)}\n`);
       process.exit(1);
     },
   );

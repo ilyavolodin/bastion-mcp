@@ -1,4 +1,5 @@
 import { basename } from 'node:path';
+import { errorMessage } from '@bastion-mcp/core';
 import {
   discoverItems,
   extractSubtree,
@@ -137,9 +138,7 @@ export const syncPluginSource = async (
         });
         result.updated += 1;
       } catch (error) {
-        result.errors.push(
-          `${item.name ?? item.dir}: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        result.errors.push(`${item.name ?? item.dir}: ${errorMessage(error)}`);
       }
     }
     await infra.repos.pluginSources.recordSync(source.id, {
@@ -151,7 +150,7 @@ export const syncPluginSource = async (
       },
     });
   } catch (error) {
-    result.errors.push(error instanceof Error ? error.message : String(error));
+    result.errors.push(errorMessage(error));
     await infra.repos.pluginSources
       .recordSync(source.id, {
         lastCommit: source.lastCommit,

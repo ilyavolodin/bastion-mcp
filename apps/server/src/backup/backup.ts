@@ -12,7 +12,7 @@
  * the target, so a backup restores on an installation with a different KMS key. Ids are preserved, which matters because
  * a dozen columns refer to a secret by id.
  */
-import { newId, REDIS_CHANNELS } from '@bastion-mcp/core';
+import { errorMessage, newId, REDIS_CHANNELS } from '@bastion-mcp/core';
 import { appendAuditEvent, type ConfigEvent, NIL_UUID, type Prisma } from '@bastion-mcp/db';
 import { z } from 'zod';
 import { bumpOrgAndCatalog, type Infra, publishConfigEvents } from '../infra';
@@ -177,9 +177,9 @@ const openSecretRow = async (infra: Infra, row: Row): Promise<Row> => {
     }
   } catch (error) {
     throw new Error(
-      `cannot read secret ${String(row.id)} (${String(row.scope)}/${String(row.name)}) with the KMS: ${
-        error instanceof Error ? error.message : String(error)
-      }. A backup that cannot include every secret is not created.`,
+      `cannot read secret ${String(row.id)} (${String(row.scope)}/${String(row.name)}) with the KMS: ${errorMessage(
+        error,
+      )}. A backup that cannot include every secret is not created.`,
     );
   }
 };
@@ -340,10 +340,7 @@ const insertRows = async (tx: Queryable, table: string, rows: Row[], mode: Resto
     try {
       await tx.$executeRawUnsafe(sql, page);
     } catch (error) {
-      throw new RestoreRefusedError(
-        `${table}: ${error instanceof Error ? error.message : String(error)}`,
-        'conflict',
-      );
+      throw new RestoreRefusedError(`${table}: ${errorMessage(error)}`, 'conflict');
     }
   }
 };

@@ -1,3 +1,4 @@
+import { errorMessage } from '@bastion-mcp/core';
 import { Logger, makeWorkerUtils, type Runner, run, type WorkerUtils } from 'graphile-worker';
 import type { Infra } from '../infra';
 import { SCHEDULER_KEEPALIVE_MS, SCHEDULER_LEADER_RETRY_MS, SCHEDULER_POLL_MS } from '../timing';
@@ -85,10 +86,7 @@ export const createScheduler = (infra: Infra, deps: SchedulerDeps = {}): Schedul
         ...(crontab ? { crontab } : {}),
       });
       runner.promise.catch((error: unknown) =>
-        infra.logger.warn(
-          { err: error instanceof Error ? error.message : String(error) },
-          'job runner stopped',
-        ),
+        infra.logger.warn({ err: errorMessage(error) }, 'job runner stopped'),
       );
     },
     async onLost() {

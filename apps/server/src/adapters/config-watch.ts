@@ -1,4 +1,9 @@
-import { ORG_SETTING_DEFAULTS, type OrgSettings, REDIS_CHANNELS } from '@bastion-mcp/core';
+import {
+  errorMessage,
+  ORG_SETTING_DEFAULTS,
+  type OrgSettings,
+  REDIS_CHANNELS,
+} from '@bastion-mcp/core';
 import { z } from 'zod';
 import type { Infra } from '../infra';
 
@@ -36,10 +41,7 @@ export const watchConfig = (infra: Infra, handler: (event: ConfigMessage) => voi
     try {
       handler(event);
     } catch (error) {
-      infra.logger.warn(
-        { err: error instanceof Error ? error.message : String(error) },
-        'config handler failed',
-      );
+      infra.logger.warn({ err: errorMessage(error) }, 'config handler failed');
     }
   });
 
@@ -60,10 +62,7 @@ export class SettingsCache {
     try {
       this.current = await this.infra.repos.orgSettings.getAll();
     } catch (error) {
-      this.infra.logger.warn(
-        { err: error instanceof Error ? error.message : String(error) },
-        'org settings refresh failed',
-      );
+      this.infra.logger.warn({ err: errorMessage(error) }, 'org settings refresh failed');
     }
     return this.current;
   }

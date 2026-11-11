@@ -9,7 +9,7 @@ import {
   type SystemStatusPort,
   ValidationApiError,
 } from '@bastion-mcp/api';
-import { REDIS_CHANNELS } from '@bastion-mcp/core';
+import { errorMessage, REDIS_CHANNELS } from '@bastion-mcp/core';
 import { appendAuditEvent, Prisma } from '@bastion-mcp/db';
 import {
   generateEs256KeyPair,
@@ -129,7 +129,7 @@ export const createSystemStatus = (infra: Infra, deps: SystemStatusDeps): System
   const kmsStatus = async (): Promise<SystemStatus['kms']> => {
     const health = await infra.kms.health().catch((e: unknown) => ({
       ok: false,
-      detail: e instanceof Error ? e.message : String(e),
+      detail: errorMessage(e),
     }));
     const rotated = await redis.get(KMS_ROTATED_KEY).catch(() => null);
     return {
@@ -154,7 +154,7 @@ export const createSystemStatus = (infra: Infra, deps: SystemStatusDeps): System
         deps.driverState().catch((e: unknown) => ({
           name: 'unknown',
           healthy: false,
-          detail: e instanceof Error ? e.message : String(e),
+          detail: errorMessage(e),
         })),
         registrySync(),
         kmsStatus(),

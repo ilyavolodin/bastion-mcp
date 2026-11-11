@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { type BastionConfig, ConfigError } from '@bastion-mcp/core';
+import { type BastionConfig, ConfigError, errorMessage } from '@bastion-mcp/core';
 import { createKmsProvider, type KeyringPurpose } from '@bastion-mcp/secrets';
 import { Redis } from 'ioredis';
 import pg from 'pg';
@@ -144,7 +144,7 @@ export const checkConfig = async (env: Env): Promise<CheckRow[]> => {
       rows.push({
         check: 'configuration',
         ok: false,
-        detail: error instanceof Error ? error.message : String(error),
+        detail: errorMessage(error),
       });
     }
     return rows;
@@ -172,7 +172,7 @@ export const checkConfig = async (env: Env): Promise<CheckRow[]> => {
     rows.push({
       check: 'postgres',
       ok: false,
-      detail: error instanceof Error ? error.message : String(error),
+      detail: errorMessage(error),
     });
   } finally {
     await client.end().catch(() => undefined);
@@ -193,7 +193,7 @@ export const checkConfig = async (env: Env): Promise<CheckRow[]> => {
     rows.push({
       check: 'redis',
       ok: false,
-      detail: error instanceof Error ? error.message : String(error),
+      detail: errorMessage(error),
     });
   } finally {
     redis.disconnect();
@@ -210,7 +210,7 @@ export const checkConfig = async (env: Env): Promise<CheckRow[]> => {
     rows.push({
       check: `kms (${config.kms})`,
       ok: false,
-      detail: error instanceof Error ? error.message : String(error),
+      detail: errorMessage(error),
     });
   }
   return rows;
@@ -497,7 +497,7 @@ export const execute = async (argv: readonly string[], env: Env, io: Io): Promis
       for (const issue of error.issues) io.err(`config error: ${issue.path}: ${issue.message}`);
       return 1;
     }
-    io.err(error instanceof Error ? error.message : String(error));
+    io.err(errorMessage(error));
     return 1;
   }
 };
