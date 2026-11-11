@@ -1,4 +1,4 @@
-import { BastionError, newId } from '@bastion-mcp/core';
+import { BastionError, newId, omitUndefined } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { type AuditInput, appendAuditEvent } from '../audit';
 import { bumpConfigVersion, NIL_UUID } from '../config-version';
@@ -232,7 +232,7 @@ export const toJsonOrNull = (value: unknown): Prisma.InputJsonValue | typeof Pri
  * `exactOptionalPropertyTypes` (`x?: T`), which `apps/server` enables.
  */
 export const compact = <T extends object>(value: object): T =>
-  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
+  omitUndefined(value as Record<string, unknown>) as T;
 
 export const jsonObjectSchema = z.record(z.string(), z.unknown());
 export type JsonObject = z.infer<typeof jsonObjectSchema>;
