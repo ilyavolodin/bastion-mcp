@@ -2,13 +2,13 @@
 import { MS } from '@bastion-mcp/core';
 import { extractResourceContents, extractUriSegments } from '@bastion-mcp/guards';
 import { addedResourceContents, addedTemplateContents } from '@bastion-mcp/overrides';
-import { ResourceNotFoundError } from '@bastion-mcp/router';
+import { installationData, ResourceNotFoundError } from '@bastion-mcp/router';
 import { InvalidParamsError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
 import { runRoutedOperation } from './outcome';
 import { runRouted } from './routed';
-import { installationDataOf, resolveResourceInstallation, retryParts } from './support';
+import { resolveResourceInstallation, retryParts } from './support';
 
 const SKILL_SCHEME = 'skill://';
 const DEFAULT_READ_TTL_MS = MS.MINUTE;
@@ -48,7 +48,7 @@ export const createResourcesRead = (deps: OperationDeps): Operation => ({
           item: { kind: 'resource', name: uri },
           policy: {
             action: 'readResource',
-            resource: { type: 'Resource', installation: installationDataOf(installation), uri },
+            resource: { type: 'Resource', installation: installationData(installation), uri },
           },
           request: {
             root: { uri: upstreamUri },

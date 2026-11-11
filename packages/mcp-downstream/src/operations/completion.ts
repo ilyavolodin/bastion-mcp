@@ -2,20 +2,13 @@
 
 import { PolicyDeniedError } from '@bastion-mcp/core';
 import { SPAN_ATTRS } from '@bastion-mcp/mcp-upstream';
-import { ResourceNotFoundError, resolveResourceUri } from '@bastion-mcp/router';
+import { installationData, ResourceNotFoundError, resolveResourceUri } from '@bastion-mcp/router';
 import { SPAN_NAMES } from '@bastion-mcp/telemetry';
 import { InvalidParamsError, UnknownItemError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
 import { runRoutedOperation } from './outcome';
-import {
-  callPrincipalOf,
-  installationDataOf,
-  isRecord,
-  policyContextOf,
-  upstreamContextOf,
-  withSpan,
-} from './support';
+import { callPrincipalOf, isRecord, policyContextOf, upstreamContextOf, withSpan } from './support';
 
 export const createCompletion = (deps: OperationDeps): Operation => ({
   method: 'completion/complete',
@@ -68,7 +61,7 @@ export const createCompletion = (deps: OperationDeps): Operation => ({
             deps.policy.current().authorize({
               principal: deps.toPolicyPrincipal(ctx.principal, profile),
               action: 'complete',
-              resource: { ...resource, installation: installationDataOf(installation) },
+              resource: { ...resource, installation: installationData(installation) },
               context: policyContextOf(ctx, deps.clock.now()),
             }),
         );

@@ -168,7 +168,8 @@ export const selectInstallations = (
   return ordered;
 };
 
-const installationData = (i: InstallationInfo): InstallationData => {
+/** Cedar `Installation` entity data of an installation: its stored policy data, else id and owner by kind (10.4). */
+export const installationData = (i: InstallationInfo): InstallationData => {
   const data: InstallationData = i.policy ?? { id: i.id, catalogEntryId: i.catalogEntryId };
   if (i.policy) return data;
   if (i.owner.kind === 'user') data.ownerUserId = i.owner.id;

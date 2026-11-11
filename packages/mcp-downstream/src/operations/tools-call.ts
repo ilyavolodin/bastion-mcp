@@ -2,7 +2,7 @@
 import { isBastionError, toToolErrorResult } from '@bastion-mcp/core';
 import { extractRequestSegments, extractResultSegments } from '@bastion-mcp/guards';
 import { applyOutputTransform, type JsonValue, mapToolCall } from '@bastion-mcp/overrides';
-import { extractSeenUris } from '@bastion-mcp/router';
+import { extractSeenUris, installationData } from '@bastion-mcp/router';
 import { InvalidParamsError, UnknownItemError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
@@ -10,7 +10,6 @@ import { runRoutedOperation } from './outcome';
 import { runRouted } from './routed';
 import {
   callPrincipalOf,
-  installationDataOf,
   isRecord,
   needsInstallationVariables,
   retryParts,
@@ -76,7 +75,7 @@ export const createToolsCall = (deps: OperationDeps): Operation => ({
               action: 'callTool',
               resource: {
                 type: 'Tool',
-                installation: installationDataOf(installation),
+                installation: installationData(installation),
                 name,
                 annotations: hints,
               },

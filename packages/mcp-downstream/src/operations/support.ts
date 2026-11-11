@@ -24,7 +24,7 @@ import type {
   UpstreamNotification,
 } from '@bastion-mcp/mcp-upstream';
 import { SPAN_ATTRS } from '@bastion-mcp/mcp-upstream';
-import type { InstallationData, McpRequestContext, ToolAnnotations } from '@bastion-mcp/policy';
+import type { McpRequestContext, ToolAnnotations } from '@bastion-mcp/policy';
 import {
   type EffectiveEndpoint,
   type InstallationInfo,
@@ -81,18 +81,6 @@ export const needsInstallationVariables = (plan: { pinned?: unknown } | undefine
   plan?.pinned !== undefined && JSON.stringify(plan.pinned).includes('{{');
 
 // --- Cedar (10.4, 12.4) ------------------------------------------------------------------------------------------
-
-export const installationDataOf = (info: InstallationInfo): InstallationData => {
-  if (info.policy) return info.policy;
-  const data: InstallationData = { id: info.id, catalogEntryId: info.catalogEntryId };
-  if (info.owner.kind === 'user') data.ownerUserId = info.owner.id;
-  else if (info.owner.kind === 'team') data.ownerTeamId = info.owner.id;
-  else {
-    data.ownerServiceId = info.owner.id;
-    if (info.owner.teamId !== undefined) data.ownerServiceTeamId = info.owner.teamId;
-  }
-  return data;
-};
 
 const zoneFormats = new Map<string, Intl.DateTimeFormat>();
 /** Zones come from policy data; the memo stays bounded however many distinct ones appear. */

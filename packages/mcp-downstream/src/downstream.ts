@@ -10,6 +10,7 @@ import { FloodLimiter, type Limiter } from '@bastion-mcp/limits';
 import { InflightTracker, type InstallationRegistry } from '@bastion-mcp/mcp-upstream';
 import {
   EndpointCache,
+  installationData,
   RedisSeenUriStore,
   type SeenUriStore,
   type UpstreamItemSource,
@@ -37,11 +38,7 @@ import {
   type ReadCachePort,
 } from './operations/deps';
 import { createOperations, createOpRunner } from './operations/registry';
-import {
-  installationDataOf,
-  policyContextOf,
-  resolveResourceInstallation,
-} from './operations/support';
+import { policyContextOf, resolveResourceInstallation } from './operations/support';
 import {
   type CallLogPort,
   type CatalogInstallPort,
@@ -221,7 +218,7 @@ export const createDownstream = (deps: DownstreamDeps): Downstream => {
     const decision = deps.policy.current().authorize({
       principal: toPolicyPrincipal(rc.principal, profile),
       action: 'readResource',
-      resource: { type: 'Resource', installation: installationDataOf(installation), uri },
+      resource: { type: 'Resource', installation: installationData(installation), uri },
       context: policyContextOf(
         { principal: rc.principal, ip: rc.ip, path: rc.path, clientInfo: undefined },
         clock.now(),

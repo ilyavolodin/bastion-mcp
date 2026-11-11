@@ -1,6 +1,6 @@
 /** `resources/subscribe` and `resources/unsubscribe` (legacy only, 6.3, 6.6), and `logging/setLevel`. */
 import { PolicyDeniedError } from '@bastion-mcp/core';
-import { ResourceNotFoundError } from '@bastion-mcp/router';
+import { installationData, ResourceNotFoundError } from '@bastion-mcp/router';
 import { InvalidParamsError } from '../rpc';
 import {
   type JsonObject,
@@ -11,12 +11,7 @@ import {
 } from '../types';
 import type { OperationDeps } from './deps';
 import { runRoutedOperation } from './outcome';
-import {
-  callPrincipalOf,
-  installationDataOf,
-  policyContextOf,
-  resolveResourceInstallation,
-} from './support';
+import { callPrincipalOf, policyContextOf, resolveResourceInstallation } from './support';
 
 const subscription = (
   deps: OperationDeps,
@@ -45,7 +40,7 @@ const subscription = (
           const decision = deps.policy.current().authorize({
             principal: deps.toPolicyPrincipal(ctx.principal, profile),
             action: 'subscribeResource',
-            resource: { type: 'Resource', installation: installationDataOf(installation), uri },
+            resource: { type: 'Resource', installation: installationData(installation), uri },
             context: policyContextOf(ctx, deps.clock.now()),
           });
           record.policyReasons = decision.reasons;

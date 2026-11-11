@@ -1,6 +1,6 @@
 import type { InstallationInfo } from '@bastion-mcp/router';
+import { installationData as installationDataOf } from '@bastion-mcp/router';
 import { describe, expect, it } from 'vitest';
-import { installationDataOf } from '../src/operations/support';
 
 const info = (owner: InstallationInfo['owner'], policy?: InstallationInfo['policy']) =>
   ({
@@ -20,7 +20,7 @@ describe('10.4 installation data for Cedar', () => {
   });
 
   it('maps a team owner', () => {
-    expect(installationDataOf(info({ kind: 'team', id: 't1' }))).toEqual({
+    expect(installationDataOf(info({ kind: 'team', id: 't1', slug: 'ops' }))).toEqual({
       id: 'inst-1',
       catalogEntryId: 'cat-1',
       ownerTeamId: 't1',
@@ -43,6 +43,6 @@ describe('10.4 installation data for Cedar', () => {
 
   it('uses the stored policy data as it is when present', () => {
     const policy = { id: 'p', catalogEntryId: 'c', ownerUserId: 'x' };
-    expect(installationDataOf(info({ kind: 'team', id: 't1' }, policy))).toBe(policy);
+    expect(installationDataOf(info({ kind: 'team', id: 't1', slug: 'ops' }, policy))).toBe(policy);
   });
 });
