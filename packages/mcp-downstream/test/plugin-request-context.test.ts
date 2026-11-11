@@ -105,7 +105,9 @@ describe('6.2 the request context built for one /mcp exchange', () => {
     const res = await post(JSON.stringify(body), {}, '/mcp/i/github?x=1');
     expect(res?.statusCode).toBe(200);
     expect(res?.body).toBe('legacy');
-    const [{ exchange, raw }] = current.seen;
+    const seen = current.seen[0];
+    if (!seen) throw new Error('no exchange reached an adapter');
+    const { exchange, raw } = seen;
     const rc = exchange.rc;
     expect(rc.principal).toBe(principal);
     expect(rc.authInfo).toEqual({ token: 'tok-1', clientId: 'client-1', scopes: ['mcp', 'extra'] });
