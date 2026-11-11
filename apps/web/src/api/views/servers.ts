@@ -135,6 +135,49 @@ export type InstallationLookups = {
   versions?: ReadonlyMap<string, { running: string | null; latest: string | null }>;
 };
 
+type VersionsOf = { running: string | null; latest: string | null };
+
+/**
+ * The version each installation of a catalog entry runs, by installation id: the entry's newest published version
+ * (`currentOf`, by entry id; `null` when the entry could not be read) unless the installation is pinned, in which case
+ * the version it was installed at.
+ */
+export const runningVersions = (
+  rows: readonly Installation[],
+  currentOf: ReadonlyMap<string, string | null>,
+): Map<string, VersionsOf> => {
+  const versions = new Map<string, VersionsOf>();
+  for (const r of rows) {
+    if (!r.catalogEntryId) continue;
+    const latest = currentOf.get(r.catalogEntryId) ?? null;
+    versions.set(r.id, {
+      running: r.pinnedVersion ? r.catalogVersionId : (latest ?? r.catalogVersionId),
+      latest,
+    });
+  }
+  return versions;
+};
+
+/**
+ * The catalog versions to read, as `[versionId, entryId]` pairs: every running and newest version of the installations
+ * in `versions`, each id once, in order of first appearance. A version id shared by two entries is asked of the entry
+ * of the last installation that names it.
+ */
+export const versionsToFetch = (
+  rows: readonly Installation[],
+  versions: ReadonlyMap<string, VersionsOf>,
+): [versionId: string, entryId: string][] => {
+  const entryOf = new Map<string, string>();
+  for (const r of rows) if (!entryOf.has(r.id)) entryOf.set(r.id, r.catalogEntryId ?? '');
+  const wanted = new Map<string, string>();
+  for (const [id, v] of versions) {
+    for (const versionId of [v.running, v.latest]) {
+      if (versionId !== null) wanted.set(versionId, entryOf.get(id) ?? '');
+    }
+  }
+  return [...wanted];
+};
+
 export const toInstallationView = (
   row: Installation,
   lookups: InstallationLookups,
