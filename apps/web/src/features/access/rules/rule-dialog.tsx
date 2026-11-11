@@ -84,6 +84,48 @@ export function RuleDialog({
   );
 }
 
+const ROLE_OPTIONS = [
+  { value: 'member', label: 'Member' },
+  { value: 'manager', label: 'Manager' },
+  { value: 'auditor', label: 'Auditor' },
+  { value: 'admin', label: 'Admin' },
+];
+
+const TOOL_KIND_OPTIONS = [
+  { value: 'destructive', label: 'Destructive tools' },
+  { value: 'readOnly', label: 'Read-only tools' },
+  { value: 'openWorld', label: 'Open-world tools' },
+];
+
+/** A select that only adds: it always shows its placeholder, and choosing an option hands the value on. */
+function AddSelect({
+  label,
+  placeholder,
+  options,
+  onAdd,
+}: {
+  label: string;
+  placeholder: string;
+  options: { value: string; label: string }[];
+  onAdd: (value: string) => void;
+}) {
+  return (
+    <Select
+      aria-label={label}
+      value=""
+      className="h-9 w-auto text-[13px]"
+      onChange={(e) => e.target.value && onAdd(e.target.value)}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
 function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => void }) {
   const lookups = useRuleLookups();
   const save = useSavePolicyRule();
@@ -170,66 +212,30 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
         <span className="text-[13px] font-medium">Who</span>
         <ChipList chips={whoList} tone="info" onRemove={(c) => setWho(removeWho(who, c.key))} />
         <div className="flex flex-wrap gap-2">
-          <Select
-            aria-label="Add a team"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) =>
-              e.target.value && setWho({ ...who, teams: addTo(who.teams, e.target.value) })
-            }
-          >
-            <option value="">+ Team</option>
-            {lookups.teams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            aria-label="Add a role"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) =>
-              e.target.value && setWho({ ...who, role: e.target.value as RuleWho['role'] })
-            }
-          >
-            <option value="">+ Role</option>
-            <option value="member">Member</option>
-            <option value="manager">Manager</option>
-            <option value="auditor">Auditor</option>
-            <option value="admin">Admin</option>
-          </Select>
-          <Select
-            aria-label="Add a person"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) =>
-              e.target.value && setWho({ ...who, users: addTo(who.users, e.target.value) })
-            }
-          >
-            <option value="">+ Person</option>
-            {lookups.users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            aria-label="Add a service account"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) =>
-              e.target.value &&
-              setWho({ ...who, serviceAccounts: addTo(who.serviceAccounts, e.target.value) })
-            }
-          >
-            <option value="">+ Service account</option>
-            {lookups.serviceAccounts.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
+          <AddSelect
+            label="Add a team"
+            placeholder="+ Team"
+            options={lookups.teams.map((t) => ({ value: t.id, label: t.name }))}
+            onAdd={(v) => setWho({ ...who, teams: addTo(who.teams, v) })}
+          />
+          <AddSelect
+            label="Add a role"
+            placeholder="+ Role"
+            options={ROLE_OPTIONS}
+            onAdd={(v) => setWho({ ...who, role: v as RuleWho['role'] })}
+          />
+          <AddSelect
+            label="Add a person"
+            placeholder="+ Person"
+            options={lookups.users.map((u) => ({ value: u.id, label: u.name }))}
+            onAdd={(v) => setWho({ ...who, users: addTo(who.users, v) })}
+          />
+          <AddSelect
+            label="Add a service account"
+            placeholder="+ Service account"
+            options={lookups.serviceAccounts.map((sa) => ({ value: sa.id, label: sa.name }))}
+            onAdd={(v) => setWho({ ...who, serviceAccounts: addTo(who.serviceAccounts, v) })}
+          />
         </div>
         {whoList.length === 0 ? <span className="text-caption text-muted">Everyone</span> : null}
       </div>
@@ -237,19 +243,12 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
         <span className="text-[13px] font-medium">What</span>
         <ChipList chips={whatList} mono onRemove={(c) => setWhat(removeWhat(what, c.key))} />
         <div className="flex flex-wrap gap-2">
-          <Select
-            aria-label="Add a server"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) => e.target.value && setWhat({ ...what, installationId: e.target.value })}
-          >
-            <option value="">+ Server</option>
-            {lookups.installations.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.displayName}
-              </option>
-            ))}
-          </Select>
+          <AddSelect
+            label="Add a server"
+            placeholder="+ Server"
+            options={lookups.installations.map((i) => ({ value: i.id, label: i.displayName }))}
+            onAdd={(v) => setWhat({ ...what, installationId: v })}
+          />
           <Input
             aria-label="Add a tool pattern"
             placeholder="+ tool pattern, e.g. delete_*"
@@ -264,20 +263,20 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
               }
             }}
           />
-          <Select
-            aria-label="Add a tool kind"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) => {
-              const key = e.target.value as 'destructive' | 'readOnly' | 'openWorld' | '';
-              if (key) setWhat({ ...what, annotations: { ...what.annotations, [key]: true } });
-            }}
-          >
-            <option value="">+ Tool kind</option>
-            <option value="destructive">Destructive tools</option>
-            <option value="readOnly">Read-only tools</option>
-            <option value="openWorld">Open-world tools</option>
-          </Select>
+          <AddSelect
+            label="Add a tool kind"
+            placeholder="+ Tool kind"
+            options={TOOL_KIND_OPTIONS}
+            onAdd={(v) =>
+              setWhat({
+                ...what,
+                annotations: {
+                  ...what.annotations,
+                  [v as 'destructive' | 'readOnly' | 'openWorld']: true,
+                },
+              })
+            }
+          />
         </div>
         {whatList.length === 0 ? <span className="text-caption text-muted">Any tool</span> : null}
       </div>
