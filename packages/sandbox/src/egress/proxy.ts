@@ -4,7 +4,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { type Clock, systemClock } from '@bastion-mcp/core';
-import { type Span, SpanStatusCode, trace } from '@opentelemetry/api';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { SANDBOX_TIMEOUTS_MS } from '../timeouts';
 import { type EgressAuditEvent, type EgressAuditSink, shouldAudit } from './audit';
 import {
@@ -87,6 +87,48 @@ export type EgressProxy = {
   close(): Promise<void>;
 };
 
+type DenyTarget = { host: string; port: number; ip?: string | null | undefined };
+
+/**
+ * What a refusal says. A 403 or 502 carries what was blocked and how to change it as the reason phrase of the status
+ * line, because that is the one thing HTTP clients print (`ProxyError: 403 <phrase>`), and again in the body and in
+ * `X-Bastion-Egress-Detail`.
+ */
+const denyResponse = (
+  reason: DenyReason,
+  target?: DenyTarget,
+): { code: number; phrase: string; headers: Array<[string, string]>; body: string } => {
+  const detail = denyDetail(reason, target ?? { host: 'the host', port: 0 }).replace(
+    /[^\x20-\x7e]/g,
+    '?',
+  );
+  const informative = reason === 'not-allowlisted' || reason === 'ssrf-blocked';
+  const [code, phrase]: [number, string] =
+    reason === 'bad-credentials' || reason === 'unknown-instance'
+      ? [407, 'Proxy Authentication Required']
+      : reason === 'bad-request'
+        ? [400, 'Bad Request']
+        : reason === 'unresolvable' || reason === 'connect-failed'
+          ? [502, target ? detail : 'Bad Gateway']
+          : [403, informative && target ? detail : 'Forbidden'];
+  const body = `bastion egress: ${reason}: ${detail}\n`;
+  return {
+    code,
+    phrase,
+    headers: [
+      ['Content-Length', String(Buffer.byteLength(body))],
+      ['Content-Type', 'text/plain'],
+      ['X-Bastion-Egress-Reason', reason],
+      ['X-Bastion-Egress-Detail', detail],
+      ['Connection', 'close'],
+      ...(code === 407
+        ? [['Proxy-Authenticate', 'Basic realm="bastion-egress"'] satisfies [string, string]]
+        : []),
+    ],
+    body,
+  };
+};
+
 export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
   const resolver = options.resolver ?? systemResolver;
   const clock = options.clock ?? systemClock;
@@ -164,57 +206,6 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
       : { allowed: false, reason: decision.reason, resolvedIp };
   };
 
-  const startSpan = (
-    protocol: EgressProtocol,
-    host: string,
-    port: number,
-    instanceId: string,
-  ): Span =>
-    tracer().startSpan(`egress ${protocol === 'connect' ? 'CONNECT' : 'HTTP'} ${host}`, {
-      attributes: {
-        'bastion.instance.id': instanceId,
-        'net.peer.name': host,
-        'net.peer.port': port,
-      },
-    });
-
-  const finish = (input: {
-    span: Span;
-    startedAt: number;
-    identity: Identity;
-    protocol: EgressProtocol;
-    host: string;
-    port: number;
-    resolvedIp: string | null;
-    decision: 'allow' | 'deny';
-    reason: EgressAuditEvent['reason'];
-    counters: Counters;
-  }): void => {
-    const durationMs = clock.now() - input.startedAt;
-    input.span.setAttributes({
-      'bastion.egress.decision': input.decision,
-      'bastion.egress.reason': input.reason ?? '',
-      'bastion.egress.resolved_ip': input.resolvedIp ?? '',
-      'bastion.egress.bytes_up': input.counters.up,
-      'bastion.egress.bytes_down': input.counters.down,
-    });
-    if (input.decision === 'deny') input.span.setStatus({ code: SpanStatusCode.ERROR });
-    input.span.end();
-    emitAudit({
-      instanceId: input.identity.instanceId,
-      protocol: input.protocol,
-      host: input.host,
-      port: input.port,
-      resolvedIp: input.resolvedIp,
-      decision: input.decision,
-      ...(input.reason ? { reason: input.reason } : {}),
-      bytesUp: input.counters.up,
-      bytesDown: input.counters.down,
-      durationMs,
-      ts: input.startedAt,
-    });
-  };
-
   const identifyByHeader = (header: string | undefined) => async (): Promise<IdentifyResult> => {
     const creds = parseProxyAuthorization(header);
     if (!creds) return 'bad-credentials';
@@ -231,50 +222,20 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
       return policy ? { instanceId, policy } : 'unknown-instance';
     };
 
-  /**
-   * Refuses a request. A 403 or 502 carries what was blocked and how to change it as the reason phrase of the status
-   * line, because that is the one thing HTTP clients print (`ProxyError: 403 <phrase>`), and again in the body and in
-   * `X-Bastion-Egress-Detail`.
-   */
+  /** Writes a refusal as a status line, headers and body: to a raw socket (CONNECT) or to a response (plain HTTP). */
   const deny = (
     socket: net.Socket | http.ServerResponse,
     reason: DenyReason,
     target?: { host: string; port: number; ip?: string | null | undefined },
   ): void => {
-    const detail = denyDetail(reason, target ?? { host: 'the host', port: 0 }).replace(
-      /[^\x20-\x7e]/g,
-      '?',
-    );
-    const informative = reason === 'not-allowlisted' || reason === 'ssrf-blocked';
-    const status =
-      reason === 'bad-credentials' || reason === 'unknown-instance'
-        ? '407 Proxy Authentication Required'
-        : reason === 'bad-request'
-          ? '400 Bad Request'
-          : reason === 'unresolvable' || reason === 'connect-failed'
-            ? `502 ${target ? detail : 'Bad Gateway'}`
-            : `403 ${informative && target ? detail : 'Forbidden'}`;
-    const body = `bastion egress: ${reason}: ${detail}\n`;
-    const headers = [
-      `Content-Length: ${Buffer.byteLength(body)}`,
-      'Content-Type: text/plain',
-      `X-Bastion-Egress-Reason: ${reason}`,
-      `X-Bastion-Egress-Detail: ${detail}`,
-      'Connection: close',
-      ...(status.startsWith('407') ? ['Proxy-Authenticate: Basic realm="bastion-egress"'] : []),
-    ];
+    const { code, phrase, headers, body } = denyResponse(reason, target);
     if (socket instanceof http.ServerResponse) {
-      const code = Number(status.slice(0, 3));
-      socket.statusMessage = status.slice(4);
-      socket.writeHead(
-        code,
-        Object.fromEntries(
-          headers.map((h) => [h.slice(0, h.indexOf(': ')), h.slice(h.indexOf(': ') + 2)]),
-        ),
-      );
+      socket.statusMessage = phrase;
+      socket.writeHead(code, Object.fromEntries(headers));
       socket.end(body);
     } else {
-      socket.end(`HTTP/1.1 ${status}\r\n${headers.join('\r\n')}\r\n\r\n${body}`);
+      const lines = headers.map(([name, value]) => `${name}: ${value}`).join('\r\n');
+      socket.end(`HTTP/1.1 ${code} ${phrase}\r\n${lines}\r\n\r\n${body}`);
     }
   };
 
@@ -293,22 +254,46 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     ): boolean;
   } => {
     const counters: Counters = { up: 0, down: 0 };
-    const base = {
-      span: startSpan(protocol, host, port, identity.instanceId),
-      startedAt: clock.now(),
-      identity,
-      protocol,
-      host,
-      port,
-      counters,
-    };
+    const span = tracer().startSpan(
+      `egress ${protocol === 'connect' ? 'CONNECT' : 'HTTP'} ${host}`,
+      {
+        attributes: {
+          'bastion.instance.id': identity.instanceId,
+          'net.peer.name': host,
+          'net.peer.port': port,
+        },
+      },
+    );
+    const startedAt = clock.now();
     let settled = false;
     return {
       counters,
       settle(resolvedIp, decision, reason) {
         if (settled) return false;
         settled = true;
-        finish({ ...base, resolvedIp, decision, reason });
+        const durationMs = clock.now() - startedAt;
+        span.setAttributes({
+          'bastion.egress.decision': decision,
+          'bastion.egress.reason': reason ?? '',
+          'bastion.egress.resolved_ip': resolvedIp ?? '',
+          'bastion.egress.bytes_up': counters.up,
+          'bastion.egress.bytes_down': counters.down,
+        });
+        if (decision === 'deny') span.setStatus({ code: SpanStatusCode.ERROR });
+        span.end();
+        emitAudit({
+          instanceId: identity.instanceId,
+          protocol,
+          host,
+          port,
+          resolvedIp,
+          decision,
+          ...(reason ? { reason } : {}),
+          bytesUp: counters.up,
+          bytesDown: counters.down,
+          durationMs,
+          ts: startedAt,
+        });
         return true;
       },
     };
