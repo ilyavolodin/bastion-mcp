@@ -77,17 +77,15 @@ export function Simulator() {
   const [userId, setUserId] = React.useState('');
   const [installationId, setInstallationId] = React.useState('');
   const [action, setAction] = React.useState<'callTool' | 'getPrompt' | 'readResource'>('callTool');
-  const [tool, setTool] = React.useState('slack_post_message');
+  const [tool, setTool] = React.useState('');
   const person = users.data?.find((u) => u.id === userId);
   const installation = installs.data?.find((i) => i.id === installationId);
   React.useEffect(() => {
-    if (!userId && users.data?.[3]) setUserId(users.data[3].id);
+    if (!userId && users.data?.[0]) setUserId(users.data[0].id);
   }, [users.data, userId]);
   React.useEffect(() => {
     if (!installationId && installs.data?.length) {
-      setInstallationId(
-        (installs.data.find((i) => i.slug === 'slack') ?? installs.data[0])?.id ?? '',
-      );
+      setInstallationId(installs.data[0]?.id ?? '');
     }
   }, [installs.data, installationId]);
   const run = () => {

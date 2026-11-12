@@ -154,6 +154,13 @@ describe('Registry (11.6, 11.7)', () => {
 describe('Access (10, 18.3)', () => {
   it('10.4 the simulator highlights the deciding rule', async () => {
     const { user } = await renderRoute('/access');
+    await screen.findByRole('option', { name: /Ana Kim/ });
+    await user.selectOptions(screen.getByLabelText('Person'), 'u-ana');
+    await user.selectOptions(
+      screen.getByLabelText('Server'),
+      await screen.findByRole('option', { name: /Slack/ }),
+    );
+    await user.type(screen.getByLabelText('Tool'), 'slack_post_message');
     await user.click(await screen.findByRole('button', { name: /Simulate/ }));
     expect(await screen.findByText('Denied')).toBeInTheDocument();
     const deciding = document.querySelector('[data-deciding]');
