@@ -122,15 +122,18 @@ describe('11.3 version resolver request plumbing (characterization)', () => {
     await expect(pending).rejects.toBeInstanceOf(RegistryUnavailableError);
   });
 
-  it('pinned: createVersionResolver drops a timeoutMs of 0 and uses the default timeout', async () => {
-    const { fetch } = recording(() => json({ 'dist-tags': { latest: '2.0.0' } }));
+  it('11.3 createVersionResolver forwards an explicit timeoutMs of 0 (aborts at once)', async () => {
     const combined = createVersionResolver({
       npmRegistry: 'https://npm.example',
       pypiIndexUrl: 'https://pypi.example',
-      fetch,
+      fetch: async (_url, init) => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        if (init?.signal?.aborted) throw new Error('aborted');
+        return json({ 'dist-tags': { latest: '2.0.0' } });
+      },
       timeoutMs: 0,
     });
-    await expect(combined.latest('npm', 'x')).resolves.toBe('2.0.0');
+    await expect(combined.latest('npm', 'x')).rejects.toBeInstanceOf(RegistryUnavailableError);
   });
 
   it('createVersionResolver forwards a positive timeoutMs and its fetch to both resolvers', async () => {

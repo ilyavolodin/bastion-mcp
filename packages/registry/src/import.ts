@@ -123,7 +123,7 @@ export const createVersionResolver = (config: {
 }): VersionResolver => {
   const opts: ResolverOptions = {
     ...(config.fetch ? { fetch: config.fetch } : {}),
-    ...(config.timeoutMs ? { timeoutMs: config.timeoutMs } : {}),
+    ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
   };
   const npm = createNpmVersionResolver(config.npmRegistry, opts);
   const pypi = createPypiVersionResolver(config.pypiIndexUrl, opts);
