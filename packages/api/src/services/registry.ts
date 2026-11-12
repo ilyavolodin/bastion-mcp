@@ -474,12 +474,12 @@ const ensureEntry = async (
       createdAt: nowIso(ctx.deps),
     });
   }
-  if (JSON.stringify(existing.visibility).includes(plan.installation.userId)) return existing;
   const vis = (existing.visibility ?? { org: false, teamIds: [], userIds: [] }) as {
     org?: boolean;
     teamIds?: string[];
     userIds?: string[];
   };
+  if (vis.userIds?.includes(plan.installation.userId)) return existing;
   return store.update('catalog_entries', existing.id, {
     visibility: { ...vis, userIds: [...(vis.userIds ?? []), plan.installation.userId] },
   });
