@@ -214,6 +214,9 @@ export const runServer = async (
       ...listed.tools.map((t) => ({ ...(t as object), kind: 'tool' }) as Definition),
       ...listed.prompts.map((t) => ({ ...(t as object), kind: 'prompt' }) as Definition),
       ...listed.resources.map((t) => ({ ...(t as object), kind: 'resource' }) as Definition),
+      ...listed.resourceTemplates.map(
+        (t) => ({ ...(t as object), kind: 'template' }) as Definition,
+      ),
     ];
     const malicious: string[] = [];
     let suspicious = 0;

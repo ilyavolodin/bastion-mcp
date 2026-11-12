@@ -25,6 +25,7 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
   let worker: TestWorker;
   let upstream: FakeModernServer;
   let poisoned: Awaited<ReturnType<typeof startPoisonedServer>>;
+  let poisonedTemplate: Awaited<ReturnType<typeof startPoisonedServer>>;
   let authorId: string;
   const events: ApiEvent[] = [];
 
@@ -77,6 +78,7 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
     env = await createTestEnv();
     upstream = await startFakeModernServer();
     poisoned = await startPoisonedServer();
+    poisonedTemplate = await startPoisonedServer({ poison: 'template' });
     worker = await startTestWorker(env, {
       auth: (infra) =>
         ({
@@ -112,6 +114,7 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
     await worker?.stop();
     await upstream?.close();
     await poisoned?.close();
+    await poisonedTemplate?.close();
     await env?.cleanup();
   });
 
@@ -176,6 +179,28 @@ describe.skipIf(!haveDocker())('11.2/11.3 catalog TEST flow and try console', ()
     const run = await waitForRun(ports.tests, versionId);
     expect(run.status).toBe('failed');
     expect(run.steps.find((s) => s.id === 'scan')?.status).toBe('failed');
+    await bus.close();
+  });
+
+  it('13.6 a resource template description with hidden Unicode tag characters fails the test', async () => {
+    const guardService = guards();
+    await guardService.ready();
+    const bus = createEventBus({
+      redis: worker.infra.redis,
+      duplicate: worker.infra.duplicateRedis,
+    });
+    const ports = createCatalogApiPorts(worker.infra, authOf(), {
+      worker: worker.worker,
+      guards: guardService,
+      events: bus,
+    });
+    const { entryId, versionId } = await newVersion(poisonedTemplate.url, 'poisoned-template');
+    await ports.tests.start({ entryId, versionId, requestedBy: authorId });
+    const run = await waitForRun(ports.tests, versionId);
+    expect(run.status).toBe('failed');
+    const scan = run.steps.find((s) => s.id === 'scan');
+    expect(scan?.status).toBe('failed');
+    expect(scan?.detail).toContain('template page');
     await bus.close();
   });
 
