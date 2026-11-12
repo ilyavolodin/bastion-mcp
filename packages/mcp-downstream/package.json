@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run --exclude \"**/*.perf.test.ts\"",
     "test:perf": "vitest run .perf.test",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage --exclude \"**/*.perf.test.ts\""
   },
   "dependencies": {
     "@bastion-mcp/auth": "workspace:*",
