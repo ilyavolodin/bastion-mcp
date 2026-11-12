@@ -109,11 +109,17 @@ export const startServer = async (
     });
 
     const policy = createPolicyService(infra);
-    await policy.rebuild();
-    const stopPolicyWatch = policy.watch();
     const guards = createGuardService(infra);
     const limits = createLimitService(infra);
-    const stopLimitWatch = limits.watch();
+    // A process that hosts the worker lets `createWorker` ready and watch policy and limits (roles/worker.ts), once;
+    // only a ui-only process does it here. Nothing is served before `worker.start()`, so no config event is missed.
+    let stopPolicyWatch = (): void => undefined;
+    let stopLimitWatch = (): void => undefined;
+    if (!config.roles.worker) {
+      await policy.rebuild();
+      stopPolicyWatch = policy.watch();
+      stopLimitWatch = limits.watch();
+    }
 
     let worker: WorkerServices | undefined;
     if (config.roles.worker) {
