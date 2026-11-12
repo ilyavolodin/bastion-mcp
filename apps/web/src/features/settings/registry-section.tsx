@@ -69,6 +69,7 @@ function AddSourceDialog({ open, onClose }: { open: boolean; onClose: () => void
       onOpenChange={(o) => {
         if (!o) {
           setError(undefined);
+          setV(empty);
           onClose();
         }
       }}
