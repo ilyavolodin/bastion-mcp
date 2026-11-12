@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { getDb } from '@/mocks/db';
-import { captureRequests, expectSent } from './capture';
+import { captureRequests, expectSent, expectValidBody } from './capture';
 import { renderRoute } from './utils';
 
 /**
@@ -328,13 +328,18 @@ describe('Catalog forms send what the API requires (17.2)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Everyone' }));
     // The dialog previews once when it opens and again after the click; skip the opening one, which may still be
     // in flight on a busy machine.
-    let preview: { target: { all: boolean } };
-    do {
-      preview = (await expectSent(capture, 'post', /\/auto-install-policies\/ap-2\/preview$/)) as {
-        target: { all: boolean };
-      };
-    } while (!preview.target.all);
-    expect(preview.target.all).toBe(true);
+    // `capture.next` returns the last match at once, so a loop around it never yields to the event loop: wait on
+    // the captured calls instead, which times out normally.
+    const isEveryonePreview = (c: { method: string; path: string; body: unknown }) =>
+      c.method === 'post' &&
+      /\/auto-install-policies\/ap-2\/preview$/.test(c.path) &&
+      (c.body as { target: { all: boolean } }).target.all;
+    await waitFor(() => expect(capture.calls.some(isEveryonePreview)).toBe(true), {
+      timeout: 30_000,
+    });
+    const everyone = capture.calls.filter(isEveryonePreview).at(-1);
+    expect(everyone).toBeDefined();
+    if (everyone) expectValidBody(everyone);
     await user.selectOptions(within(dialog).getByLabelText('Mode'), 'default');
     await user.click(within(dialog).getByRole('button', { name: 'Save policy' }));
     expect(await expectSent(capture, 'patch', '/auto-install-policies/ap-2')).toMatchObject({
