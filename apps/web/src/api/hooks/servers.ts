@@ -254,6 +254,7 @@ export const usePreviewOverrides = () =>
 /** The overrides every installation of a catalog entry gets (set by an Admin or the entry's owner). */
 export const useEntryOverrides = (entryId: string) =>
   useQuery({
+    enabled: entryId !== '',
     queryKey: ['catalog', entryId, 'default-overrides'],
     queryFn: ({ signal }) => api.get(`/catalog/${entryId}/default-overrides`, { signal }),
   });

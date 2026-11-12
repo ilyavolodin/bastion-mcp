@@ -250,6 +250,19 @@ describe('Installation settings send what the API requires (17.2)', () => {
 });
 
 describe('Overrides and Try it send what the API requires (12.5)', () => {
+  it('12.5 an installation without a catalog entry never asks for the overrides of an empty entry id', async () => {
+    const capture = captureRequests();
+    await renderRoute('/servers/i-postgres?tab=overrides', {
+      prepare: (db) => {
+        const row = db.data.servers.installations.find((i) => i.id === 'i-postgres');
+        if (row) row.catalogEntryId = null;
+      },
+    });
+    await capture.next('get', '/installations/i-postgres/overrides');
+    expect(capture.calls.some((c) => c.path.includes('/catalog//'))).toBe(false);
+    capture.stop();
+  });
+
   it('12.5 the preview names the document, the layer and the installation', async () => {
     const capture = captureRequests();
     await renderRoute('/servers/i-postgres?tab=overrides');
