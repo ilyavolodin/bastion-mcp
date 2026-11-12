@@ -21,7 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PHASE_COLOR } from '@/features/activity/call-detail';
 import { formatClock } from '@/lib/format';
 
-export function CapabilityMarkers({ c }: { c: CapabilityView }) {
+function CapabilityMarkers({ c }: { c: CapabilityView }) {
   return (
     <span className="flex gap-1.5">
       {c.overridden ? (
@@ -57,7 +57,7 @@ export function CapabilityRow({ c }: { c: CapabilityView }) {
         <span className="sr-only"> {c.kind}</span>
       </span>
       <div className="min-w-0 flex-1">
-        <div className="font-mono text-[13px] leading-5 font-semibold">{c.name}</div>
+        <div className="font-mono text-body-sm leading-5 font-semibold">{c.name}</div>
         <div className="truncate text-caption text-muted">{c.description}</div>
       </div>
       <CapabilityMarkers c={c} />
@@ -266,7 +266,7 @@ export function OverviewTab({
                   aria-hidden="true"
                 />
                 <div>
-                  <div className="text-[13px] leading-5 font-medium">
+                  <div className="text-body-sm leading-5 font-medium">
                     {c.outcome === 'blocked'
                       ? 'Blocked by guard'
                       : c.outcome === 'denied'

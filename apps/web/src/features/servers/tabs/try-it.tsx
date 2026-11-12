@@ -3,7 +3,7 @@ import * as React from 'react';
 import { useTry } from '@/api/hooks';
 import type { DefinitionPair } from '@/api/views/servers';
 import { CodeEditor } from '@/components/code-editor';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Card, CardHeader, Segmented, Tag } from '@/components/primitives';
 import { ProblemAlert } from '@/components/problem';
 import { Button } from '@/components/ui/button';
@@ -18,10 +18,10 @@ import {
   templateVariables,
   unknownArguments,
 } from '@/lib/json-schema-form';
+import { resultBlocks, type TryKind } from '@/lib/try-result';
 import { SchemaForm } from './schema-form';
 
 type Args = Record<string, unknown>;
-type TryKind = 'tool' | 'prompt' | 'resource';
 
 const KIND_LABEL: Record<TryKind, string> = {
   tool: 'Tool',
@@ -32,6 +32,10 @@ const KIND_LABEL: Record<TryKind, string> = {
 /** The name AI tools use: the override's name, else the upstream one. */
 const finalName = (d: DefinitionPair): string =>
   typeof d.final?.name === 'string' ? d.final.name : d.name;
+
+/** The key an item is listed and chosen under: a resource by its name, the others by the name AI tools use. */
+const keyOf = (kind: TryKind, d: DefinitionPair): string =>
+  kind === 'resource' ? d.name : finalName(d);
 
 const served = (defs: DefinitionPair[], kinds: DefinitionPair['kind'][]) =>
   defs.filter((d) => kinds.includes(d.kind) && d.final !== null);
@@ -47,68 +51,9 @@ const promptArguments = (d: DefinitionPair | undefined): PromptArgument[] => {
 
 const CUSTOM_URI = '__custom__';
 
-/** What a call answered, in the form of what it is: text blocks, prompt messages, resource contents. */
+/** What a call answered, as markup: one block per part of the answer, and the raw response. */
 function ResultView({ kind, result }: { kind: TryKind; result: unknown }) {
-  const body = isRecord(result) ? result : {};
-  const blocks: { key: string; label: string; text: string }[] = [];
-  // A refusal (policy, a guard, limits, an unknown name) is a legitimate answer of a try: say it in words.
-  if (isRecord(body.error)) {
-    blocks.push({
-      key: 'error',
-      label: typeof body.error.code === 'string' ? body.error.code : 'Error',
-      text:
-        typeof body.error.message === 'string' ? body.error.message : JSON.stringify(body.error),
-    });
-  } else if (typeof body.error === 'string') {
-    blocks.push({ key: 'error', label: 'Error', text: body.error });
-  }
-  if (kind === 'tool' && Array.isArray(body.content)) {
-    body.content.forEach((c, i) => {
-      if (isRecord(c) && c.type === 'text' && typeof c.text === 'string') {
-        blocks.push({ key: `c${i}`, label: 'Text', text: c.text });
-      } else if (isRecord(c)) {
-        blocks.push({
-          key: `c${i}`,
-          label: String(c.type ?? 'Content'),
-          text: JSON.stringify(c, null, 2),
-        });
-      }
-    });
-    if (body.structuredContent !== undefined) {
-      blocks.push({
-        key: 'structured',
-        label: 'Structured',
-        text: JSON.stringify(body.structuredContent, null, 2),
-      });
-    }
-  }
-  if (kind === 'prompt' && Array.isArray(body.messages)) {
-    body.messages.forEach((m, i) => {
-      if (!isRecord(m)) return;
-      const content = isRecord(m.content) ? m.content : {};
-      blocks.push({
-        key: `m${i}`,
-        label: String(m.role ?? 'message'),
-        text: typeof content.text === 'string' ? content.text : JSON.stringify(m.content, null, 2),
-      });
-    });
-  }
-  if (kind === 'resource' && Array.isArray(body.contents)) {
-    body.contents.forEach((c, i) => {
-      if (!isRecord(c)) return;
-      const label = `${String(c.uri ?? 'resource')}${typeof c.mimeType === 'string' ? ` · ${c.mimeType}` : ''}`;
-      blocks.push({
-        key: `r${i}`,
-        label,
-        text:
-          typeof c.text === 'string'
-            ? c.text
-            : typeof c.blob === 'string'
-              ? `(${c.blob.length} characters of base64 data)`
-              : JSON.stringify(c, null, 2),
-      });
-    });
-  }
+  const blocks = resultBlocks(kind, result);
   return (
     <div className="flex flex-col gap-2" role="group" aria-label="Result">
       {blocks.map((b) => (
@@ -156,8 +101,7 @@ export function TryIt({
   const [kind, setKind] = React.useState<TryKind>(firstKind ?? 'tool');
   const items = available[kind];
   const [chosen, setChosen] = React.useState<string>('');
-  const item =
-    items.find((d) => (kind === 'resource' ? d.name : finalName(d)) === chosen) ?? items[0];
+  const item = items.find((d) => keyOf(kind, d) === chosen) ?? items[0];
 
   const [args, setArgs] = React.useState<Args>({});
   const [promptValues, setPromptValues] = React.useState<Record<string, string>>({});
@@ -176,7 +120,7 @@ export function TryIt({
   const schema = (
     kind === 'tool' && isRecord(item?.final?.inputSchema) ? item?.final?.inputSchema : undefined
   ) as JsonSchema | undefined;
-  const itemKey = `${kind}:${item ? (kind === 'resource' ? item.name : finalName(item)) : ''}`;
+  const itemKey = `${kind}:${item ? keyOf(kind, item) : ''}`;
 
   // A different item starts from what its own definition suggests, never from the previous item's values.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the chosen item changes
@@ -273,19 +217,11 @@ export function TryIt({
             {({ id }) => (
               <Select
                 id={id}
-                value={
-                  chosen === CUSTOM_URI
-                    ? CUSTOM_URI
-                    : item
-                      ? kind === 'resource'
-                        ? item.name
-                        : finalName(item)
-                      : ''
-                }
+                value={chosen === CUSTOM_URI ? CUSTOM_URI : item ? keyOf(kind, item) : ''}
                 onChange={(e) => setChosen(e.target.value)}
               >
                 {items.map((d) => {
-                  const key = kind === 'resource' ? d.name : finalName(d);
+                  const key = keyOf(kind, d);
                   return (
                     <option key={`${d.kind}-${key}`} value={key}>
                       {d.kind === 'template' ? `Template: ${key}` : key}
@@ -332,11 +268,7 @@ export function TryIt({
                     {...(schema ? { jsonSchema: schema as Record<string, unknown> } : {})}
                     height={200}
                   />
-                  {parseError ? (
-                    <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-                      {parseError}
-                    </p>
-                  ) : null}
+                  <FormError message={parseError ?? undefined} />
                   {unknown.length > 0 ? (
                     <p role="note" className="m-0 text-caption text-muted">
                       The tool does not declare {unknown.map((u) => `“${u}”`).join(', ')}.
@@ -415,7 +347,7 @@ export function TryIt({
       {problems.length > 0 ? (
         <ul
           role="alert"
-          className="m-0 list-disc rounded-md bg-coral-soft py-2.5 pl-8 pr-3 text-[13px] text-coral-ink"
+          className="m-0 list-disc rounded-md bg-coral-soft py-2.5 pl-8 pr-3 text-body-sm text-coral-ink"
         >
           {problems.map((p) => (
             <li key={p}>{p}</li>

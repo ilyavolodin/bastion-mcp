@@ -119,7 +119,7 @@ export function EntryDetail({
       {entry.version?.changelog ? (
         <section aria-label="What’s new" className="flex flex-col gap-1">
           <span className="text-overline">What’s new in {entry.version.label}</span>
-          <p className="m-0 text-[13px] text-muted">{entry.version.changelog}</p>
+          <p className="m-0 text-body-sm text-muted">{entry.version.changelog}</p>
         </section>
       ) : null}
 
@@ -164,7 +164,7 @@ export function EntryDetail({
 
       <RoleGate roles={['admin', 'manager']}>
         <div className="flex flex-col gap-2.5 rounded-md bg-sunken p-3.5">
-          <span className="text-[13px] font-semibold">Catalog entry</span>
+          <span className="text-body-sm font-semibold">Catalog entry</span>
           <div className="flex items-center gap-2.5">
             <span className="flex-1 text-caption text-muted">
               {entry.version ? `Current version ${entry.version.label}` : 'No published version'}

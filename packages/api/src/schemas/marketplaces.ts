@@ -1,12 +1,11 @@
 import { DESKTOP_INSTALLATION_MODES, MARKETPLACE_ITEM_POLICIES } from '@bastion-mcp/core';
 import { ROLLOUT_CLIENTS } from '@bastion-mcp/plugins';
 import { z } from 'zod';
-import { listQuerySchema } from '../framework/conventions';
 import { nameSchema } from './common';
 
 const atLeastOne = (v: object) => Object.keys(v).length > 0;
 
-export const audienceSchema = z.object({
+const audienceSchema = z.object({
   org: z.boolean().default(false),
   teamIds: z.array(z.string().min(1)).default([]),
   userIds: z.array(z.string().min(1)).default([]),
@@ -137,4 +136,3 @@ export const rolloutConfigSchema = z
 
 export const rolloutQuery = z.object({ client: z.enum(ROLLOUT_CLIENTS) });
 export const usageQuery = z.object({ from: z.string().optional(), to: z.string().optional() });
-export const marketplaceListQuery = listQuerySchema;

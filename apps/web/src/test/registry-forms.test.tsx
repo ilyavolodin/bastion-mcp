@@ -253,3 +253,64 @@ describe('Settings -> Registry (11.6, 11.7)', () => {
     expect(await within(dialog).findByText(/denied address/)).toBeInTheDocument();
   });
 });
+
+describe('Settings -> Registry add-source dialog (11.6)', () => {
+  it('11.6 closing the dialog without submitting forgets what was typed', async () => {
+    const { user } = await renderRoute('/settings?section=registry');
+    await user.click(await screen.findByRole('button', { name: 'Add source' }));
+    let dialog = await screen.findByRole('dialog', { name: /Add a registry source/ });
+    await user.type(within(dialog).getByLabelText(/^Name/), 'Abandoned');
+    await user.type(within(dialog).getByLabelText(/^Base URL/), 'https://abandoned.example');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Add source' }));
+    dialog = await screen.findByRole('dialog', { name: /Add a registry source/ });
+    expect(within(dialog).getByLabelText(/^Name/)).toHaveValue('');
+    expect(within(dialog).getByLabelText(/^Base URL/)).toHaveValue('');
+  });
+});
+
+describe('Registry dialogs show a failed submit (10.1, 11.7)', () => {
+  it('11.7 a request that fails without an API problem (network error) shows a message in the dialog', async () => {
+    server.use(http.post('*/api/v1/install-requests', () => HttpResponse.error()));
+    const { user } = await renderRoute('/registry');
+    await user.click((await card(/stripe/)).getByRole('button', { name: 'Install' }));
+    const dialog = await screen.findByRole('dialog', { name: /Request io\.github\.stripe\/mcp/ });
+    await user.type(within(dialog).getByLabelText(/What do you need it for/), 'Payments');
+    await user.click(within(dialog).getByRole('button', { name: 'Send request' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/\S/);
+  });
+
+  it('10.1 a reject the API refuses shows its message in the dialog', async () => {
+    server.use(
+      http.post('*/api/v1/install-requests/:id/reject', () =>
+        HttpResponse.json(
+          {
+            type: 'x',
+            title: 'Refused',
+            status: 409,
+            code: 'already_decided',
+            detail: 'Already decided',
+          },
+          { status: 409, headers: { 'content-type': 'application/problem+json' } },
+        ),
+      ),
+    );
+    const { user } = await renderRoute('/registry');
+    await user.click((await screen.findAllByRole('button', { name: 'Reject' }))[0] as HTMLElement);
+    const dialog = await screen.findByRole('dialog', { name: /Reject/ });
+    await user.type(within(dialog).getByLabelText(/Reason/), 'No');
+    await user.click(within(dialog).getByRole('button', { name: 'Reject request' }));
+    expect(await within(dialog).findByText('Already decided')).toBeInTheDocument();
+  });
+
+  it('10.1 a reject that fails with a network error shows a message in the dialog', async () => {
+    server.use(http.post('*/api/v1/install-requests/:id/reject', () => HttpResponse.error()));
+    const { user } = await renderRoute('/registry');
+    await user.click((await screen.findAllByRole('button', { name: 'Reject' }))[0] as HTMLElement);
+    const dialog = await screen.findByRole('dialog', { name: /Reject/ });
+    await user.type(within(dialog).getByLabelText(/Reason/), 'No');
+    await user.click(within(dialog).getByRole('button', { name: 'Reject request' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/\S/);
+  });
+});

@@ -6,7 +6,7 @@ import type { StatsQuery } from '../ports/observability';
 import { loadUserResource, orgResource, teamResource } from './resources';
 
 /** The user as a `User` resource; `null` when no such user exists. */
-export const userResourceFor = (
+const userResourceFor = (
   input: Pick<AuthzInput, 'deps'>,
   userId: string,
 ): Promise<ResourceData | null> => loadUserResource(input.deps, userId);

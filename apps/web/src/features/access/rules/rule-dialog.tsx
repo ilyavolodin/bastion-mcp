@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { toast } from 'sonner';
-import { ApiError } from '@/api/client';
 import { useSavePolicyRule } from '@/api/hooks';
 import type { Body } from '@/api/schema';
 import {
@@ -14,13 +13,13 @@ import {
   whenChips,
   whoChips,
 } from '@/api/views/access';
-import { Field } from '@/components/form';
+import { Field, FormError, useFormErrors } from '@/components/form';
 import { Chip } from '@/components/primitives';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
-import { fieldErrors, serverFieldErrors } from '@/lib/form-errors';
+import { fieldErrors } from '@/lib/form-errors';
 import { pad2 } from '@/lib/format';
 import { CIDR, ruleFormSchema } from '../forms';
 import { useRuleLookups } from './lookups';
@@ -85,6 +84,48 @@ export function RuleDialog({
   );
 }
 
+const ROLE_OPTIONS = [
+  { value: 'member', label: 'Member' },
+  { value: 'manager', label: 'Manager' },
+  { value: 'auditor', label: 'Auditor' },
+  { value: 'admin', label: 'Admin' },
+];
+
+const TOOL_KIND_OPTIONS = [
+  { value: 'destructive', label: 'Destructive tools' },
+  { value: 'readOnly', label: 'Read-only tools' },
+  { value: 'openWorld', label: 'Open-world tools' },
+];
+
+/** A select that only adds: it always shows its placeholder, and choosing an option hands the value on. */
+function AddSelect({
+  label,
+  placeholder,
+  options,
+  onAdd,
+}: {
+  label: string;
+  placeholder: string;
+  options: { value: string; label: string }[];
+  onAdd: (value: string) => void;
+}) {
+  return (
+    <Select
+      aria-label={label}
+      value=""
+      className="h-9 w-auto text-[13px]"
+      onChange={(e) => e.target.value && onAdd(e.target.value)}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
 function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => void }) {
   const lookups = useRuleLookups();
   const save = useSavePolicyRule();
@@ -96,7 +137,8 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
   const [cidr, setCidr] = React.useState('');
   const [hoursFrom, setHoursFrom] = React.useState(String(DEFAULT_HOURS_FROM));
   const [hoursTo, setHoursTo] = React.useState(String(DEFAULT_HOURS_TO));
-  const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const form = useFormErrors();
+  const { errors } = form;
   const { name, priority, ownerTeamId, effect, who, what, when } = draft;
   const whoList = whoChips(who, lookups).filter((c) => c.key !== 'everyone');
   const whatList = whatChips(what, lookups).filter((c) => c.key !== 'any');
@@ -111,8 +153,8 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
       onSubmit={(e) => {
         e.preventDefault();
         const parsed = ruleFormSchema.safeParse({ name, priority, ownerTeamId });
-        if (!parsed.success) return setErrors(fieldErrors(parsed.error));
-        setErrors({});
+        if (!parsed.success) return form.set(fieldErrors(parsed.error));
+        form.clear();
         const body: Body<'post', '/policy-rules'> = {
           name: parsed.data.name,
           ownerTeamId: parsed.data.ownerTeamId || null,
@@ -130,12 +172,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
               toast.success('Rule saved');
               onDone();
             },
-            onError: (err) =>
-              setErrors(
-                err instanceof ApiError && err.errors.length > 0
-                  ? serverFieldErrors(err.errors)
-                  : { form: err.message },
-              ),
+            onError: form.fromServer,
           },
         );
       }}
@@ -159,7 +196,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
             aria-pressed={effect === f}
             onClick={() => patch({ effect: f })}
             className={cn(
-              'h-9 flex-1 rounded-sm text-[13px] font-medium',
+              'h-9 flex-1 rounded-sm text-body-sm font-medium',
               effect === f
                 ? f === 'permit'
                   ? 'bg-mint-soft text-mint-ink'
@@ -172,94 +209,51 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
         ))}
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium">Who</span>
+        <span className="text-body-sm font-medium">Who</span>
         <ChipList chips={whoList} tone="info" onRemove={(c) => setWho(removeWho(who, c.key))} />
         <div className="flex flex-wrap gap-2">
-          <Select
-            aria-label="Add a team"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) =>
-              e.target.value && setWho({ ...who, teams: addTo(who.teams, e.target.value) })
-            }
-          >
-            <option value="">+ Team</option>
-            {lookups.teams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            aria-label="Add a role"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) =>
-              e.target.value && setWho({ ...who, role: e.target.value as RuleWho['role'] })
-            }
-          >
-            <option value="">+ Role</option>
-            <option value="member">Member</option>
-            <option value="manager">Manager</option>
-            <option value="auditor">Auditor</option>
-            <option value="admin">Admin</option>
-          </Select>
-          <Select
-            aria-label="Add a person"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) =>
-              e.target.value && setWho({ ...who, users: addTo(who.users, e.target.value) })
-            }
-          >
-            <option value="">+ Person</option>
-            {lookups.users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            aria-label="Add a service account"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) =>
-              e.target.value &&
-              setWho({ ...who, serviceAccounts: addTo(who.serviceAccounts, e.target.value) })
-            }
-          >
-            <option value="">+ Service account</option>
-            {lookups.serviceAccounts.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
+          <AddSelect
+            label="Add a team"
+            placeholder="+ Team"
+            options={lookups.teams.map((t) => ({ value: t.id, label: t.name }))}
+            onAdd={(v) => setWho({ ...who, teams: addTo(who.teams, v) })}
+          />
+          <AddSelect
+            label="Add a role"
+            placeholder="+ Role"
+            options={ROLE_OPTIONS}
+            onAdd={(v) => setWho({ ...who, role: v as RuleWho['role'] })}
+          />
+          <AddSelect
+            label="Add a person"
+            placeholder="+ Person"
+            options={lookups.users.map((u) => ({ value: u.id, label: u.name }))}
+            onAdd={(v) => setWho({ ...who, users: addTo(who.users, v) })}
+          />
+          <AddSelect
+            label="Add a service account"
+            placeholder="+ Service account"
+            options={lookups.serviceAccounts.map((sa) => ({ value: sa.id, label: sa.name }))}
+            onAdd={(v) => setWho({ ...who, serviceAccounts: addTo(who.serviceAccounts, v) })}
+          />
         </div>
         {whoList.length === 0 ? <span className="text-caption text-muted">Everyone</span> : null}
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium">What</span>
+        <span className="text-body-sm font-medium">What</span>
         <ChipList chips={whatList} mono onRemove={(c) => setWhat(removeWhat(what, c.key))} />
         <div className="flex flex-wrap gap-2">
-          <Select
-            aria-label="Add a server"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) => e.target.value && setWhat({ ...what, installationId: e.target.value })}
-          >
-            <option value="">+ Server</option>
-            {lookups.installations.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.displayName}
-              </option>
-            ))}
-          </Select>
+          <AddSelect
+            label="Add a server"
+            placeholder="+ Server"
+            options={lookups.installations.map((i) => ({ value: i.id, label: i.displayName }))}
+            onAdd={(v) => setWhat({ ...what, installationId: v })}
+          />
           <Input
             aria-label="Add a tool pattern"
             placeholder="+ tool pattern, e.g. delete_*"
             value={pattern}
-            className="h-9 w-56 text-[13px]"
+            className="h-9 w-56 text-body-sm"
             onChange={(e) => setPattern(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && pattern.trim()) {
@@ -269,25 +263,25 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
               }
             }}
           />
-          <Select
-            aria-label="Add a tool kind"
-            value=""
-            className="h-9 w-auto text-[13px]"
-            onChange={(e) => {
-              const key = e.target.value as 'destructive' | 'readOnly' | 'openWorld' | '';
-              if (key) setWhat({ ...what, annotations: { ...what.annotations, [key]: true } });
-            }}
-          >
-            <option value="">+ Tool kind</option>
-            <option value="destructive">Destructive tools</option>
-            <option value="readOnly">Read-only tools</option>
-            <option value="openWorld">Open-world tools</option>
-          </Select>
+          <AddSelect
+            label="Add a tool kind"
+            placeholder="+ Tool kind"
+            options={TOOL_KIND_OPTIONS}
+            onAdd={(v) =>
+              setWhat({
+                ...what,
+                annotations: {
+                  ...what.annotations,
+                  [v as 'destructive' | 'readOnly' | 'openWorld']: true,
+                },
+              })
+            }
+          />
         </div>
         {whatList.length === 0 ? <span className="text-caption text-muted">Any tool</span> : null}
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium">When</span>
+        <span className="text-body-sm font-medium">When</span>
         <ChipList
           chips={whenList}
           tone="berry"
@@ -322,7 +316,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
           <Select
             aria-label="Hours from"
             value={hoursFrom}
-            className="h-9 w-auto text-[13px]"
+            className="h-9 w-auto text-body-sm"
             onChange={(e) => setHoursFrom(e.target.value)}
           >
             {Array.from({ length: 24 }, (_, h) => (
@@ -335,7 +329,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
           <Select
             aria-label="Hours to"
             value={hoursTo}
-            className="h-9 w-auto text-[13px]"
+            className="h-9 w-auto text-body-sm"
             onChange={(e) => setHoursTo(e.target.value)}
           >
             {Array.from({ length: 25 }, (_, h) => (
@@ -359,7 +353,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
           aria-label="Add a client"
           placeholder="+ client id, e.g. claude-code"
           value={client}
-          className="h-9 text-[13px]"
+          className="h-9 text-body-sm"
           onChange={(e) => setClient(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && client.trim()) {
@@ -374,26 +368,22 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
           aria-invalid={Boolean(errors.cidr)}
           placeholder="+ IP range, e.g. 10.0.0.0/8"
           value={cidr}
-          className="h-9 text-[13px]"
+          className="h-9 text-body-sm"
           onChange={(e) => setCidr(e.target.value)}
           onKeyDown={(e) => {
             if (e.key !== 'Enter' || !cidr.trim()) return;
             e.preventDefault();
             if (!CIDR.test(cidr.trim())) {
-              setErrors({ ...errors, cidr: 'Enter an IP address or a CIDR range' });
+              form.set({ ...errors, cidr: 'Enter an IP address or a CIDR range' });
               return;
             }
             const { cidr: _drop, ...rest } = errors;
-            setErrors(rest);
+            form.set(rest);
             setWhen({ ...when, ipCidrs: addTo(when.ipCidrs, cidr.trim()) });
             setCidr('');
           }}
         />
-        {errors.cidr ? (
-          <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-            {errors.cidr}
-          </p>
-        ) : null}
+        <FormError message={errors.cidr} />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
@@ -432,11 +422,7 @@ function RuleForm({ rule, onDone }: { rule: PolicyRule | null; onDone: () => voi
         Forbid wins over permit. Use the policy simulator on this page to see how the rules decide
         for a given person and tool before you rely on them.
       </p>
-      {errors.form ? (
-        <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-          {errors.form}
-        </p>
-      ) : null}
+      <FormError message={errors.form} />
       <Button type="submit" disabled={save.isPending}>
         Save rule
       </Button>

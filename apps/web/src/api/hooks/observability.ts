@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { api, fetchAll } from '../client';
-import { STALE_LOOKUP_MS } from '../timing';
+import { POLL_SANDBOXES_MS, STALE_LOOKUP_MS } from '../timing';
 import {
   BUCKET_MS,
   bucketFor,
@@ -202,7 +202,7 @@ export const useSandboxes = (enabled = true) =>
   useQuery({
     enabled,
     queryKey: [...keys.stats, 'sandboxes-live'],
-    refetchInterval: 15_000,
+    refetchInterval: POLL_SANDBOXES_MS,
     queryFn: ({ signal }) =>
       api.get('/sandboxes', { query: { limit: 200 }, signal }).then((r) => r.items),
   });

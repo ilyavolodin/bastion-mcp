@@ -26,7 +26,7 @@ const syncDeps = (ctx: TaskContext) => {
 };
 
 /** Syncs one source, mirroring the registry into `registry_servers` and recording `last_sync` (11.6). */
-export const syncRegistrySource = async (
+const syncRegistrySource = async (
   ctx: TaskContext,
   source: RegistrySource,
   options: { full?: boolean } = {},

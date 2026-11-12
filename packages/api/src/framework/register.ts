@@ -13,7 +13,13 @@ import { authenticate, toPolicyPrincipal } from './auth';
 import { checkPrecondition, etagOf } from './conventions';
 import { fingerprintOf, IdempotencyStore, validateKey } from './idempotency';
 import { makeProblem, toProblem } from './problem';
-import { type AuthzInput, type MutationTx, type RouteDefinition, RouteReply } from './route';
+import {
+  type AuthzInput,
+  type MutationTx,
+  type RouteDefinition,
+  RouteReply,
+  type SseSource,
+} from './route';
 import { assertRouteDeclarations, ruleOf } from './route-table';
 
 type RequestState = {
@@ -30,7 +36,7 @@ const headerOf = (req: FastifyRequest, name: string): string | undefined => {
 };
 
 /** `/catalog/{id}` -> `/catalog/:id` (Fastify syntax); `{path}` params carry encoded slashes. */
-export const toFastifyUrl = (url: string): string => url.replace(/\{([^}]+)\}/g, ':$1');
+const toFastifyUrl = (url: string): string => url.replace(/\{([^}]+)\}/g, ':$1');
 
 const rawInput = (req: FastifyRequest, state: RequestState, deps: ApiDeps): AuthzInput => ({
   params: (req.params ?? {}) as Record<string, string>,
@@ -174,7 +180,7 @@ const run = async (
     },
   };
 
-  if (def.stream) return stream(def, base, state, req, reply, deps, abort);
+  if (def.stream) return stream(def, base, req, reply, deps);
 
   const key = def.method === 'POST' ? headerOf(req, 'idempotency-key') : undefined;
   const fingerprint = key ? fingerprintOf(def.method, req.url, req.body) : '';
@@ -199,40 +205,66 @@ const run = async (
     checkPrecondition(current, headerOf(req, 'if-match'));
   }
 
-  let result: unknown;
-  if (def.mutates) {
-    result = await deps.uow.run(async (tx) => {
-      let audits = 0;
-      const actor = {
-        actorType: state.principal.type,
-        actorId: state.principal.id,
-        ip: req.ip,
-        userAgent: headerOf(req, 'user-agent') ?? null,
-        requestId: String(req.id),
-      } as const;
-      const mtx: MutationTx = {
-        store: tx.store,
-        audit: async (event) => {
-          audits += 1;
-          await tx.audit({ ...event, ...actor });
-        },
-        afterCommit: (hook) => tx.afterCommit(hook),
-        configChanged: (topic) =>
-          tx.afterCommit(() =>
-            deps.publisher.publish(REDIS_CHANNELS.config, JSON.stringify({ topic })),
-          ),
-        emit: (event) => tx.afterCommit(() => deps.events.publish(event)),
-      };
-      const out = await (def.handler as (ctx: unknown) => unknown)({ ...base, tx: mtx });
-      if (audits === 0) {
-        throw new Error(`mutating route ${def.method} ${def.url} wrote no audit event`);
-      }
-      return out;
-    });
-  } else {
-    result = await (def.handler as (ctx: unknown) => unknown)(base);
-  }
+  const result = def.mutates
+    ? await runMutation(def, deps, state, req, base)
+    : await (def.handler as (ctx: unknown) => unknown)(base);
 
+  return sendResult(
+    def,
+    reply,
+    result,
+    key ? { principalId: state.principal.id, key, fingerprint } : undefined,
+    idempotency,
+  );
+};
+
+/** Runs a mutating handler in one transaction; it must write at least one audit event (17.1). */
+const runMutation = (
+  def: RouteDefinition,
+  deps: ApiDeps,
+  state: RequestState,
+  req: FastifyRequest,
+  base: Record<string, unknown>,
+): Promise<unknown> =>
+  deps.uow.run(async (tx) => {
+    let audits = 0;
+    const actor = {
+      actorType: state.principal.type,
+      actorId: state.principal.id,
+      ip: req.ip,
+      userAgent: headerOf(req, 'user-agent') ?? null,
+      requestId: String(req.id),
+    } as const;
+    const mtx: MutationTx = {
+      store: tx.store,
+      audit: async (event) => {
+        audits += 1;
+        await tx.audit({ ...event, ...actor });
+      },
+      afterCommit: (hook) => tx.afterCommit(hook),
+      configChanged: (topic) =>
+        tx.afterCommit(() =>
+          deps.publisher.publish(REDIS_CHANNELS.config, JSON.stringify({ topic })),
+        ),
+      emit: (event) => tx.afterCommit(() => deps.events.publish(event)),
+    };
+    const out = await (def.handler as (ctx: unknown) => unknown)({ ...base, tx: mtx });
+    if (audits === 0) {
+      throw new Error(`mutating route ${def.method} ${def.url} wrote no audit event`);
+    }
+    return out;
+  });
+
+type IdempotencySave = { principalId: string; key: string; fingerprint: string };
+
+/** Serializes the handler result: status, headers, raw and 204 answers, ETag, and the idempotency save. */
+const sendResult = async (
+  def: RouteDefinition,
+  reply: FastifyReply,
+  result: unknown,
+  save: IdempotencySave | undefined,
+  idempotency: IdempotencyStore,
+): Promise<FastifyReply> => {
   const wrapped = isReply(result) ? result : new RouteReply(result);
   const status = wrapped.options.status ?? def.status;
   for (const [name, value] of Object.entries(wrapped.options.headers ?? {}))
@@ -244,11 +276,11 @@ const run = async (
   const version = (parsed as { updatedAt?: unknown } | null)?.updatedAt;
   if (typeof version === 'string') reply.header('etag', etagOf(version));
   const payload = JSON.stringify(parsed);
-  if (key && status >= 200 && status < 300) {
+  if (save && status >= 200 && status < 300) {
     const headers: Record<string, string> = {};
     if (typeof version === 'string') headers.etag = etagOf(version);
-    await idempotency.save(state.principal.id, key, {
-      fingerprint,
+    await idempotency.save(save.principalId, save.key, {
+      fingerprint: save.fingerprint,
       status,
       body: payload,
       headers,
@@ -260,15 +292,11 @@ const run = async (
 const stream = async (
   def: RouteDefinition,
   base: Record<string, unknown>,
-  _state: RequestState,
   req: FastifyRequest,
   reply: FastifyReply,
   deps: ApiDeps,
-  abort: AbortController,
 ): Promise<FastifyReply> => {
-  const source = (await (def.handler as (ctx: unknown) => unknown)(
-    base,
-  )) as import('./route').SseSource;
+  const source = (await (def.handler as (ctx: unknown) => unknown)(base)) as SseSource;
   reply.hijack();
   const raw = reply.raw;
   raw.writeHead(200, {
@@ -302,7 +330,6 @@ const stream = async (
   cleanup = source.subscribe(emit, end);
   if (closed) cleanup();
   req.raw.on('close', () => {
-    abort.abort();
     clearTimeout(max);
     end();
   });

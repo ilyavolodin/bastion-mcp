@@ -1,4 +1,5 @@
 /** `prompts/get` (6.3): routed like a tool call, with prompt arguments and `messagesTransform` (12.4). */
+
 import { extractPromptSegments, extractRequestSegments } from '@bastion-mcp/guards';
 import {
   addedPromptResult,
@@ -6,6 +7,7 @@ import {
   mapPromptGet,
   missingPromptArguments,
 } from '@bastion-mcp/overrides';
+import { installationData } from '@bastion-mcp/router';
 import { InvalidParamsError, UnknownItemError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
@@ -13,7 +15,6 @@ import { runRoutedOperation } from './outcome';
 import { runRouted } from './routed';
 import {
   callPrincipalOf,
-  installationDataOf,
   isRecord,
   needsInstallationVariables,
   retryParts,
@@ -70,7 +71,7 @@ export const createPromptsGet = (deps: OperationDeps): Operation => ({
           item: { kind: 'prompt', name },
           policy: {
             action: 'getPrompt',
-            resource: { type: 'Prompt', installation: installationDataOf(installation), name },
+            resource: { type: 'Prompt', installation: installationData(installation), name },
           },
           request: {
             root: { arguments: mapped.arguments },

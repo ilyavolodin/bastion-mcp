@@ -184,12 +184,12 @@ function ReportTable({ report }: { report: Restore }) {
   const merge = report.mode === 'merge';
   return (
     <div className="flex flex-col gap-2">
-      <p className="m-0 text-[13px] font-medium">
+      <p className="m-0 text-body-sm font-medium">
         {report.dryRun ? 'Preview' : 'Restored'} ({report.mode}): backup of{' '}
         {formatDate(report.backup.createdAt)}
       </p>
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-[13px]">
+        <table className="w-full text-left text-body-sm">
           <thead>
             <tr className="text-caption text-muted">
               <th className="py-1 pr-4 font-medium">Table</th>
@@ -304,7 +304,7 @@ function RestoreCard() {
           )}
         </Field>
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-1 text-[13px] font-medium">How to restore</legend>
+          <legend className="mb-1 text-body-sm font-medium">How to restore</legend>
           <label className="flex items-start gap-2.5">
             <input
               type="radio"

@@ -14,8 +14,10 @@ import {
   SESSION_COOKIE,
   verifyLocalLogin,
 } from '@bastion-mcp/auth';
-import { BastionError, newId } from '@bastion-mcp/core';
+import { BastionError, errorMessage, newId } from '@bastion-mcp/core';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { publicHost } from '../../config';
+import type { AuthServices } from '../../contracts';
 import {
   forgotPasswordPage,
   type PageMessage,
@@ -68,7 +70,7 @@ const stateCookie = (
   ].join('; ');
 
 /** What the sign-in page offers (9.1): the enabled IdPs and whether local password login is on. */
-export const loadSignInOptions = async (infra: UiDeps['infra']) => {
+const loadSignInOptions = async (infra: UiDeps['infra']) => {
   const all = await infra.repos.idpConnections.list();
   const connections = all.filter((c) => c.enabled);
   // 9.1: local login is on while "no IdP connection exists", so even a disabled connection switches it off.
@@ -107,6 +109,51 @@ export const sendLoginPage = async (
   );
 };
 
+type IdpLoginResult = Awaited<ReturnType<AuthServices['idpLogin']['completeLogin']>>;
+
+/**
+ * Provisions the person an IdP vouched for (9.1): finds the existing user, plans and applies the changes, records a
+ * first login, keeps the IdP tokens and tells the provisioning hook. Returns the user id; a refusal is thrown.
+ */
+const provisionFromIdp = async (
+  { infra, auth }: UiDeps,
+  options: LoginOptions,
+  result: IdpLoginResult,
+): Promise<string> => {
+  const { repos, logger } = infra;
+  const { connection, profile, tokens } = result;
+  const existingId = await repos.scim?.findUserIdByEmail(profile.email);
+  const existing = existingId ? await repos.scim?.getUserState(existingId) : null;
+  const plan = planLogin({
+    connection,
+    claims: {
+      sub: profile.sub,
+      email: profile.email,
+      displayName: profile.name,
+      groups: profile.groups,
+    },
+    existingUser: existing ?? null,
+    rules: (await repos.scim?.listRules(connection.id)) ?? [],
+    teams: (await repos.scim?.listTeamRefs()) ?? [],
+    now: new Date(),
+    newId: () => newId(),
+  });
+  await repos.provisioning.applyPlan(plan, { actorType: 'system' });
+  const userId = plan.user.id;
+  if (plan.user.kind === 'create') await repos.users.recordLogin(userId, new Date());
+  if (connection.storeRefreshToken || tokens.refreshToken) {
+    await auth.idpTokens.save(userId, connection.id, tokens);
+  }
+  if (options.onProvisioned && plan.events.length > 0) {
+    try {
+      await options.onProvisioned(plan.events);
+    } catch (error) {
+      logger.warn({ err: errorMessage(error) }, 'provisioning hook failed');
+    }
+  }
+  return userId;
+};
+
 export const registerLoginRoutes = async (
   app: FastifyInstance,
   deps: UiDeps,
@@ -133,39 +180,7 @@ export const registerLoginRoutes = async (
     const query = req.raw.url?.split('?')[1] ?? '';
     try {
       const result = await auth.idpLogin.completeLogin(idpConnectionId, query, state);
-      const { connection, profile, tokens } = result;
-      const existingId = await repos.scim?.findUserIdByEmail(profile.email);
-      const existing = existingId ? await repos.scim?.getUserState(existingId) : null;
-      const plan = planLogin({
-        connection,
-        claims: {
-          sub: profile.sub,
-          email: profile.email,
-          displayName: profile.name,
-          groups: profile.groups,
-        },
-        existingUser: existing ?? null,
-        rules: (await repos.scim?.listRules(connection.id)) ?? [],
-        teams: (await repos.scim?.listTeamRefs()) ?? [],
-        now: new Date(),
-        newId: () => newId(),
-      });
-      await repos.provisioning.applyPlan(plan, { actorType: 'system' });
-      const userId = plan.user.id;
-      if (plan.user.kind === 'create') await repos.users.recordLogin(userId, new Date());
-      if (connection.storeRefreshToken || tokens.refreshToken) {
-        await auth.idpTokens.save(userId, connection.id, tokens);
-      }
-      if (options.onProvisioned && plan.events.length > 0) {
-        try {
-          await options.onProvisioned(plan.events);
-        } catch (error) {
-          logger.warn(
-            { err: error instanceof Error ? error.message : String(error) },
-            'provisioning hook failed',
-          );
-        }
-      }
+      const userId = await provisionFromIdp(deps, options, result);
       await startSession(deps, reply, userId);
       return reply.header('cache-control', 'no-store').redirect(safeReturnTo(result.returnTo), 302);
     } catch (error) {
@@ -264,10 +279,7 @@ export const registerLoginRoutes = async (
         );
         return reply.header('cache-control', 'no-store').redirect(started.authorizationUrl, 302);
       } catch (error) {
-        logger.warn(
-          { err: error instanceof Error ? error.message : String(error) },
-          'idp login start failed',
-        );
+        logger.warn({ err: errorMessage(error) }, 'idp login start failed');
         return errorPage(reply, 400, 'This identity provider is not available.', {
           back: BACK_TO_SIGN_IN,
         });
@@ -283,7 +295,7 @@ export const registerLoginRoutes = async (
         forgotPasswordPage({
           idpNames: connections.map((c) => c.name),
           localEnabled,
-          host: new URL(infra.config.publicUrl).host,
+          host: publicHost(infra.config),
         }),
       );
     });

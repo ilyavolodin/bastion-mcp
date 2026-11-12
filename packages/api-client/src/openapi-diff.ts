@@ -52,40 +52,23 @@ const variants = (schema: Obj): Obj[] =>
 
 type Direction = 'request' | 'response';
 
-/**
- * Request side: clients send data, so tightening (new required property, narrower type or enum) breaks them.
- * Response side: clients read data, so loosening (removed property, wider type) breaks them.
- */
-const compareSchema = (
-  ctx: Ctx,
-  before: Json | undefined,
-  after: Json | undefined,
-  direction: Direction,
-  where: string,
-  seen: Set<string> = new Set(),
-): void => {
-  const b = resolveRef(ctx.before, before);
-  const a = resolveRef(ctx.after, after);
-  const key = `${where}|${str(obj(before).$ref) ?? ''}|${str(obj(after).$ref) ?? ''}`;
-  if (seen.has(key)) return;
-  seen.add(key);
-  const push = (kind: Change['kind'], message: string): void => {
-    ctx.out.push({ kind, where, message });
-  };
+type Push = (kind: Change['kind'], message: string) => void;
 
+const compareTypes = (b: Obj, a: Obj, direction: Direction, push: Push): void => {
   const bTypes = typesOf(b);
   const aTypes = typesOf(a);
-  if (bTypes.length > 0 && aTypes.length > 0) {
-    const removed = bTypes.filter((t) => !aTypes.includes(t));
-    const added = aTypes.filter((t) => !bTypes.includes(t));
-    if (direction === 'request' && removed.length > 0) {
-      push('breaking', `request type no longer accepts ${removed.join(', ')}`);
-    }
-    if (direction === 'response' && added.length > 0) {
-      push('breaking', `response may now be ${added.join(', ')}`);
-    }
+  if (bTypes.length === 0 || aTypes.length === 0) return;
+  const removed = bTypes.filter((t) => !aTypes.includes(t));
+  const added = aTypes.filter((t) => !bTypes.includes(t));
+  if (direction === 'request' && removed.length > 0) {
+    push('breaking', `request type no longer accepts ${removed.join(', ')}`);
   }
+  if (direction === 'response' && added.length > 0) {
+    push('breaking', `response may now be ${added.join(', ')}`);
+  }
+};
 
+const compareEnums = (b: Obj, a: Obj, direction: Direction, push: Push): void => {
   const bEnum = arr(b.enum);
   const aEnum = arr(a.enum);
   if (bEnum.length > 0 && aEnum.length > 0) {
@@ -100,7 +83,16 @@ const compareSchema = (
   } else if (bEnum.length === 0 && aEnum.length > 0 && direction === 'request') {
     push('breaking', 'request values are now restricted to an enum');
   }
+};
 
+/** Properties that stayed are compared through `recurse`, in the order they appear before the change. */
+const compareProperties = (
+  b: Obj,
+  a: Obj,
+  direction: Direction,
+  push: Push,
+  recurse: (name: string, before: Json | undefined, after: Json | undefined) => void,
+): void => {
   const bProps = obj(b.properties);
   const aProps = obj(a.properties);
   const bRequired = arr(b.required).map(String);
@@ -110,7 +102,7 @@ const compareSchema = (
       if (direction === 'response') push('breaking', `response property ${name} was removed`);
       continue;
     }
-    compareSchema(ctx, bProps[name], aProps[name], direction, `${where}.${name}`, seen);
+    recurse(name, bProps[name], aProps[name]);
   }
   for (const name of Object.keys(aProps)) {
     if (name in bProps) continue;
@@ -130,25 +122,71 @@ const compareSchema = (
       push('breaking', `response property ${name} is no longer always present`);
     }
   }
+};
 
+/** `anyOf`/`oneOf` alternatives are paired by position and compared through `recurse`. */
+const compareVariants = (
+  b: Obj,
+  a: Obj,
+  direction: Direction,
+  push: Push,
+  recurse: (index: number, before: Obj, after: Obj) => void,
+): void => {
+  const bVariants = variants(b);
+  const aVariants = variants(a);
+  if (bVariants.length === 0 || aVariants.length === 0) return;
+  if (direction === 'request' && aVariants.length < bVariants.length) {
+    push('breaking', 'request no longer accepts every previous alternative');
+  }
+  if (direction === 'response' && aVariants.length > bVariants.length) {
+    push('breaking', 'response has new alternatives');
+  }
+  const shared = Math.min(bVariants.length, aVariants.length);
+  for (let i = 0; i < shared; i += 1) {
+    const bv = bVariants[i];
+    const av = aVariants[i];
+    if (bv !== undefined && av !== undefined) recurse(i, bv, av);
+  }
+};
+
+/**
+ * Request side: clients send data, so tightening (new required property, narrower type or enum) breaks them.
+ * Response side: clients read data, so loosening (removed property, wider type) breaks them.
+ * The rules run in a fixed order (types, enums, properties, items, alternatives), which fixes the report order.
+ */
+const compareSchema = (
+  ctx: Ctx,
+  before: Json | undefined,
+  after: Json | undefined,
+  direction: Direction,
+  where: string,
+  seen: Set<string> = new Set(),
+): void => {
+  const b = resolveRef(ctx.before, before);
+  const a = resolveRef(ctx.after, after);
+  // Cycle guard: a $ref pair already being compared further up this path is a recursive schema; cut it off.
+  const refs = `${str(obj(before).$ref) ?? ''}|${str(obj(after).$ref) ?? ''}`;
+  const key = refs === '|' ? undefined : refs;
+  if (key !== undefined) {
+    if (seen.has(key)) return;
+    seen.add(key);
+  }
+  const push: Push = (kind, message) => {
+    ctx.out.push({ kind, where, message });
+  };
+
+  compareTypes(b, a, direction, push);
+  compareEnums(b, a, direction, push);
+  compareProperties(b, a, direction, push, (name, bp, ap) =>
+    compareSchema(ctx, bp, ap, direction, `${where}.${name}`, seen),
+  );
   if (b.items !== undefined && a.items !== undefined) {
     compareSchema(ctx, b.items, a.items, direction, `${where}[]`, seen);
   }
-
-  const bVariants = variants(b);
-  const aVariants = variants(a);
-  if (bVariants.length > 0 && aVariants.length > 0) {
-    if (direction === 'request' && aVariants.length < bVariants.length) {
-      push('breaking', 'request no longer accepts every previous alternative');
-    }
-    if (direction === 'response' && aVariants.length > bVariants.length) {
-      push('breaking', 'response has new alternatives');
-    }
-    const shared = Math.min(bVariants.length, aVariants.length);
-    for (let i = 0; i < shared; i += 1) {
-      compareSchema(ctx, bVariants[i], aVariants[i], direction, `${where}|${i}`, seen);
-    }
-  }
+  compareVariants(b, a, direction, push, (i, bv, av) =>
+    compareSchema(ctx, bv, av, direction, `${where}|${i}`, seen),
+  );
+  if (key !== undefined) seen.delete(key);
 };
 
 const paramKey = (p: Obj): string => `${str(p.in) ?? ''}:${str(p.name) ?? ''}`;

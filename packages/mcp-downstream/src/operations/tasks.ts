@@ -2,17 +2,17 @@
 
 import { extractResultSegments, extractStringLeaves, type TextSegment } from '@bastion-mcp/guards';
 import { type TaskIdPayload, unwrapTaskId } from '@bastion-mcp/mcp-upstream';
-import { byteSize, CallRecord } from '../observability/call-log';
+import { byteSize, type CallRecord } from '../observability/call-log';
 import { InvalidParamsError } from '../rpc';
 import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
-import { recordOperationOutcome } from './outcome';
+import { runRoutedOperation } from './outcome';
 import {
   applyGuardResult,
   callPrincipalOf,
+  type GuardSubject,
   isRecord,
   runGuards,
-  spanContextOf,
   upstreamContextOf,
   withMeta,
 } from './support';
@@ -40,47 +40,47 @@ const taskOperation = (deps: OperationDeps, method: TaskMethod): Operation => ({
     const installation = ctx.resolved.installations.get(payload.i);
     // A task of an installation this endpoint does not serve looks like any invalid id.
     if (!installation) throw new InvalidParamsError('invalid taskId');
-    const record = new CallRecord(method, deps.clock.now());
-    const span = spanContextOf(ctx);
-    record.installationId = installation.id;
-    record.catalogEntryId = installation.catalogEntryId;
-    record.catalogVersionId = installation.catalogVersionId;
-    record.itemName = taskId.slice(0, 12);
     const subject = { installation, item: { kind: 'tool' as const, name: 'task' }, method };
-    try {
-      let sendParams: JsonObject = { ...params };
-      if (isRecord(params.inputResponses)) {
-        // inputResponses sent with tasks/update pass the request guards (6.8).
-        const segments = extractStringLeaves(params.inputResponses, 'inputResponses');
-        const run = await runGuards(deps, ctx, 'request', subject, segments);
-        record.guardResults.push(...run.records);
-        const applied = applyGuardResult(run, { inputResponses: params.inputResponses }, segments);
-        sendParams = { ...sendParams, ...(applied.value as JsonObject) };
-      }
-      const principal = await callPrincipalOf(deps, ctx);
-      const outcome = await deps.upstream.executeTask({
-        method,
-        params: sendParams,
-        ctx: upstreamContextOf(ctx, principal, installation.id, { downstreamName: taskId }),
-      });
-      if (outcome.kind !== 'complete') throw new InvalidParamsError('unexpected task outcome');
-      let result = isRecord(outcome.result) ? outcome.result : {};
-      if (method === 'tasks/get')
-        result = await guardTaskResult(deps, ctx, subject, record, result);
-      const status = typeof result.status === 'string' ? result.status : undefined;
-      record.bytesOut = byteSize(result);
-      // One row per task with its final status (6.8).
-      record.resultPreview = { taskStatus: status };
-      if (status === 'failed') record.outcome = 'error';
-      if (status !== undefined && !TERMINAL.has(status) && method === 'tasks/get')
-        record.skipLog = true;
-      return { kind: 'complete', result };
-    } catch (error) {
-      record.fail(error);
-      throw error;
-    } finally {
-      if (!record.skipLog) recordOperationOutcome(deps, ctx, record, span, installation, method);
-    }
+    return runRoutedOperation(
+      deps,
+      ctx,
+      method,
+      installation,
+      async (record): Promise<OpOutcome<JsonObject>> => {
+        let sendParams: JsonObject = { ...params };
+        if (isRecord(params.inputResponses)) {
+          // inputResponses sent with tasks/update pass the request guards (6.8).
+          const segments = extractStringLeaves(params.inputResponses, 'inputResponses');
+          const run = await runGuards(deps, ctx, 'request', subject, segments);
+          record.guardResults.push(...run.records);
+          const applied = applyGuardResult(
+            run,
+            { inputResponses: params.inputResponses },
+            segments,
+          );
+          sendParams = { ...sendParams, ...(applied.value as JsonObject) };
+        }
+        const principal = await callPrincipalOf(deps, ctx);
+        const outcome = await deps.upstream.executeTask({
+          method,
+          params: sendParams,
+          ctx: upstreamContextOf(ctx, principal, installation.id, { downstreamName: taskId }),
+        });
+        if (outcome.kind !== 'complete') throw new InvalidParamsError('unexpected task outcome');
+        let result = isRecord(outcome.result) ? outcome.result : {};
+        if (method === 'tasks/get')
+          result = await guardTaskResult(deps, ctx, subject, record, result);
+        const status = typeof result.status === 'string' ? result.status : undefined;
+        record.bytesOut = byteSize(result);
+        // One row per task with its final status (6.8).
+        record.resultPreview = { taskStatus: status };
+        if (status === 'failed') record.outcome = 'error';
+        if (status !== undefined && !TERMINAL.has(status) && method === 'tasks/get')
+          record.skipLog = true;
+        return { kind: 'complete', result };
+      },
+      { itemName: taskId.slice(0, 12) },
+    );
   },
 });
 
@@ -88,11 +88,7 @@ const taskOperation = (deps: OperationDeps, method: TaskMethod): Operation => ({
 const guardTaskResult = async (
   deps: OperationDeps,
   ctx: OpContext,
-  subject: {
-    installation: import('@bastion-mcp/router').InstallationInfo;
-    item: { kind: 'tool'; name: string };
-    method: string;
-  },
+  subject: GuardSubject,
   record: CallRecord,
   result: JsonObject,
 ): Promise<JsonObject> => {

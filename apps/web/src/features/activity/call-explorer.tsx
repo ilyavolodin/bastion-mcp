@@ -24,7 +24,7 @@ import { formatClock, formatDate, formatDuration } from '@/lib/format';
 import { useSearchState } from '@/lib/search';
 import { CallDetailPanel } from './call-detail';
 
-export const activitySearch = z.object({
+const activitySearch = z.object({
   user: z.coerce.string().optional(),
   team: z.coerce.string().optional(),
   server: z.coerce.string().optional(),
@@ -41,6 +41,28 @@ const OUTCOME_OPTIONS = (Object.keys(OUTCOME) as CallOutcome[]).map((o) => ({
 
 const RANGE_LABEL = { '1h': 'Last hour', '24h': 'Last 24 hours', '7d': 'Last 7 days' } as const;
 
+/** The outcomes of a strip slot, bottom to top: they color the bars and the legend. */
+const SERIES: {
+  key: 'ok' | 'upstreamError' | 'denied' | 'blocked';
+  label: string;
+  color: string;
+}[] = [
+  { key: 'ok', label: 'Succeeded', color: 'var(--mint)' },
+  { key: 'upstreamError', label: 'Upstream error', color: 'var(--sun)' },
+  { key: 'denied', label: 'Denied by policy', color: 'var(--berry-ink)' },
+  { key: 'blocked', label: 'Blocked by guard', color: 'var(--coral-ink)' },
+];
+
+/** A bucket's time: the date for a week, the clock otherwise. */
+const bucketLabel = (range: keyof typeof RANGE_LABEL, t: string) =>
+  range === '7d' ? formatDate(t) : formatClock(t);
+
+/** The columns of the call list; the header row and every list row must use the same ones. */
+const listColumns = (people: boolean) =>
+  people
+    ? 'grid-cols-[72px_minmax(0,1.6fr)_minmax(0,1fr)_110px_150px]'
+    : 'grid-cols-[72px_minmax(0,2fr)_110px_150px]';
+
 /** Outcome-colored strip: each slot is a stack of that slot's outcomes, tallest = busiest. */
 function TimelineStrip({
   buckets,
@@ -50,23 +72,17 @@ function TimelineStrip({
   range: keyof typeof RANGE_LABEL;
 }) {
   const max = Math.max(1, ...buckets.map((b) => b.calls));
-  const label = (t: string) => (range === '7d' ? formatDate(t) : formatClock(t));
   // Up to five evenly spaced labels, first and last included: the bars alone say nothing about when.
   const ticks = axisTicks(buckets.map((b) => b.t));
   return (
     <div aria-hidden="true">
       <div className="flex h-16 items-end gap-0.5">
         {buckets.map((b) => {
-          const parts: [number, string][] = [
-            [b.ok, 'var(--mint)'],
-            [b.upstreamError, 'var(--sun)'],
-            [b.denied, 'var(--berry-ink)'],
-            [b.blocked, 'var(--coral-ink)'],
-          ];
+          const parts: [number, string][] = SERIES.map((x) => [b[x.key], x.color]);
           return (
             <div
               key={b.t}
-              title={`${range === '7d' ? formatDate(b.t) : formatClock(b.t)}: ${b.calls} calls`}
+              title={`${bucketLabel(range, b.t)}: ${b.calls} calls`}
               className="flex flex-1 flex-col-reverse gap-px"
               style={{ height: `${(b.calls / max) * 100}%` }}
             >
@@ -85,7 +101,7 @@ function TimelineStrip({
       </div>
       <div className="mt-1 flex justify-between text-caption tabular-nums text-muted">
         {ticks.map((t) => (
-          <span key={t}>{label(t)}</span>
+          <span key={t}>{bucketLabel(range, t)}</span>
         ))}
       </div>
     </div>
@@ -93,7 +109,7 @@ function TimelineStrip({
 }
 
 /** Up to `max` evenly spaced values of `times`, the first and the last always among them. */
-export const axisTicks = (times: readonly string[], max = 5): string[] => {
+const axisTicks = (times: readonly string[], max = 5): string[] => {
   if (times.length <= max) return [...times];
   const last = times.length - 1;
   return Array.from({ length: max }, (_, i) => times[Math.round((i * last) / (max - 1))] as string);
@@ -123,9 +139,7 @@ function CallListItem({
         aria-pressed={selected}
         className={cn(
           'grid min-h-14 w-full items-center gap-3 border-b border-line px-5 text-left',
-          people
-            ? 'grid-cols-[72px_minmax(0,1.6fr)_minmax(0,1fr)_110px_150px]'
-            : 'grid-cols-[72px_minmax(0,2fr)_110px_150px]',
+          listColumns(people),
           'max-lg:grid-cols-[64px_minmax(0,1fr)_auto]',
           call.outcome === 'blocked' && 'bg-coral-soft/50',
           selected && 'bg-tangerine-soft',
@@ -135,7 +149,7 @@ function CallListItem({
           {formatClock(call.ts, true).slice(0, 8)}
         </span>
         <span className="flex min-w-0 flex-col">
-          <span className="truncate font-mono text-[13px] leading-5 font-semibold">
+          <span className="truncate font-mono text-body-sm leading-5 font-semibold">
             {callTitle(call)}
           </span>
           <span className="text-[11px] leading-4 text-muted">
@@ -145,7 +159,7 @@ function CallListItem({
         {people ? (
           <span className="flex min-w-0 items-center gap-2 max-lg:hidden">
             <Avatar name={personName} size={24} />
-            <span className="truncate text-[13px]">{personName}</span>
+            <span className="truncate text-body-sm">{personName}</span>
           </span>
         ) : null}
         <span className="flex items-center max-lg:hidden" title={formatDuration(call.durationMs)}>
@@ -227,7 +241,7 @@ export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: st
             options={installList.map(([id, label]) => ({ value: id, label }))}
           />
         ) : null}
-        <label className="inline-flex h-10 items-center rounded-md border border-line bg-surface px-3.5 text-[13px] font-medium">
+        <label className="inline-flex h-10 items-center rounded-md border border-line bg-surface px-3.5 text-body-sm font-medium">
           <span className="sr-only">Tool</span>
           <input
             type="search"
@@ -235,7 +249,7 @@ export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: st
             aria-label="Tool"
             value={s.item ?? ''}
             onChange={(e) => setS({ item: e.target.value || undefined })}
-            className="w-28 bg-transparent text-[13px] outline-none placeholder:text-ink"
+            className="w-28 bg-transparent text-body-sm outline-none placeholder:text-ink"
           />
         </label>
         <FilterSelect
@@ -259,20 +273,11 @@ export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: st
       <ChartCard
         title="Calls over time"
         className="gap-2.5 px-5 py-4"
-        legend={
-          <Legend
-            items={[
-              { label: 'Succeeded', color: 'var(--mint)' },
-              { label: 'Upstream error', color: 'var(--sun)' },
-              { label: 'Denied by policy', color: 'var(--berry-ink)' },
-              { label: 'Blocked by guard', color: 'var(--coral-ink)' },
-            ]}
-          />
-        }
+        legend={<Legend items={SERIES} />}
         table={{
           columns: ['Time', 'Calls', 'Succeeded', 'Upstream error', 'Denied', 'Blocked'],
           rows: buckets.map((b) => [
-            s.range === '7d' ? formatDate(b.t) : formatClock(b.t),
+            bucketLabel(s.range, b.t),
             b.calls,
             b.ok,
             b.upstreamError,
@@ -296,9 +301,7 @@ export function CallExplorer({ fixedInstallationId }: { fixedInstallationId?: st
           <div
             className={cn(
               'grid h-11 items-center gap-3 border-b border-line px-5 text-overline',
-              showPeople
-                ? 'grid-cols-[72px_minmax(0,1.6fr)_minmax(0,1fr)_110px_150px]'
-                : 'grid-cols-[72px_minmax(0,2fr)_110px_150px]',
+              listColumns(showPeople),
               'max-lg:hidden',
             )}
             aria-hidden="true"

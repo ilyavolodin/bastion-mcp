@@ -8,11 +8,17 @@ import {
 import {
   BastionError,
   effectiveTeamSlug,
+  errorMessage,
   PROTOCOL_VERSIONS,
   UI_CLIENT_ID,
 } from '@bastion-mcp/core';
 import { createRouterRepository } from '@bastion-mcp/db';
-import { EndpointResolver, type ResolvedEndpoint } from '@bastion-mcp/mcp-downstream';
+import {
+  defaultToPolicyPrincipal,
+  EndpointResolver,
+  type ResolvedEndpoint,
+} from '@bastion-mcp/mcp-downstream';
+import { noopLogger } from '@bastion-mcp/mcp-upstream';
 import { type OverridesDocument, overridesSchema } from '@bastion-mcp/overrides';
 import type { EndpointPolicy, InstallationInfo } from '@bastion-mcp/router';
 import { serverVersion } from '../../config';
@@ -25,12 +31,6 @@ import { connectAsPrincipal, principalFor } from '../gateway-client';
 import { readStderrTail } from '../upstream/stderr';
 import { createUpstreamAccess, type UpstreamAccess } from '../upstream-access';
 
-export class NoWorkerError extends BastionError {
-  constructor(message = 'no worker is available to serve this request') {
-    super('UPSTREAM_UNAVAILABLE', message, { httpStatus: 503 });
-  }
-}
-
 export type InstallationPortsContext = {
   /** Present when this process hosts a worker (`BASTION_ROLE=all`). */
   worker?: WorkerServices | undefined;
@@ -38,26 +38,6 @@ export type InstallationPortsContext = {
   policy: Pick<PolicyService, 'current'>;
   access?: UpstreamAccess | undefined;
 };
-
-const noopLogger = { debug() {}, info() {}, warn() {}, error() {} };
-
-/** Cedar principal of the caller, like the downstream default (`defaultToPolicyPrincipal`). */
-const toPolicyPrincipal = (principal: Principal, profile: { emailDomain?: string | undefined }) =>
-  principal.type === 'service'
-    ? {
-        kind: 'service' as const,
-        id: principal.id,
-        active: principal.active,
-        team: { id: principal.teams[0]?.teamId ?? '' },
-      }
-    : {
-        kind: 'user' as const,
-        id: principal.id,
-        role: principal.orgRole,
-        active: principal.active,
-        emailDomain: profile.emailDomain ?? '',
-        teams: principal.teams.map((t) => ({ id: t.teamId, role: t.role })),
-      };
 
 const INVALID_SPAN = { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 0 };
 
@@ -104,7 +84,7 @@ export const createInstallationApiPorts = (
       cache: worker.downstream.endpointCache,
       source: worker.runtime.lists,
       policy: { current: () => ctx.policy.current() as unknown as EndpointPolicy },
-      toPolicyPrincipal,
+      toPolicyPrincipal: defaultToPolicyPrincipal,
       profiles: createPrincipalProfiles(infra),
       org: { displayName: 'Bastion' },
       serverVersion: serverVersion(infra.config),
@@ -234,7 +214,7 @@ export const createInstallationApiPorts = (
     } catch (error) {
       if (error instanceof BastionError) throw error;
       return {
-        result: { error: error instanceof Error ? error.message : String(error) },
+        result: { error: errorMessage(error) },
         isError: true,
         durationMs: Math.round(performance.now() - started),
         callId: null,

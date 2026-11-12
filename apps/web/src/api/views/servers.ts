@@ -14,13 +14,9 @@ export type StoreEntryDetail = Schemas['StoreEntryDetail'];
 export type Definitions = Res<'get', '/installations/{id}/tools'>;
 export type OverridePreview = Schemas['OverridePreview'];
 export type EgressEntry = Schemas['EgressEntry'];
-export type ClientConfig = Res<'get', '/endpoints/{id}/client-config'>;
 export type ClientKind = NonNullable<
   NonNullable<import('../schema').Query<'get', '/endpoints/{id}/client-config'>>['client']
 >;
-export type TryBody = Body<'post', '/installations/{id}/try'>;
-export type TryResult = Res<'post', '/installations/{id}/try'>;
-export type OverrideDocument = Body<'put', '/installations/{id}/overrides'>;
 
 // --- what a server spec says (8.1) ------------------------------------------------------------------------------
 
@@ -137,6 +133,49 @@ export type InstallationLookups = {
    * installation that is not pinned follows the entry's current version, whatever version it was installed at.
    */
   versions?: ReadonlyMap<string, { running: string | null; latest: string | null }>;
+};
+
+type VersionsOf = { running: string | null; latest: string | null };
+
+/**
+ * The version each installation of a catalog entry runs, by installation id: the entry's newest published version
+ * (`currentOf`, by entry id; `null` when the entry could not be read) unless the installation is pinned, in which case
+ * the version it was installed at.
+ */
+export const runningVersions = (
+  rows: readonly Installation[],
+  currentOf: ReadonlyMap<string, string | null>,
+): Map<string, VersionsOf> => {
+  const versions = new Map<string, VersionsOf>();
+  for (const r of rows) {
+    if (!r.catalogEntryId) continue;
+    const latest = currentOf.get(r.catalogEntryId) ?? null;
+    versions.set(r.id, {
+      running: r.pinnedVersion ? r.catalogVersionId : (latest ?? r.catalogVersionId),
+      latest,
+    });
+  }
+  return versions;
+};
+
+/**
+ * The catalog versions to read, as `[versionId, entryId]` pairs: every running and newest version of the installations
+ * in `versions`, each id once, in order of first appearance. A version id shared by two entries is asked of the entry
+ * of the last installation that names it.
+ */
+export const versionsToFetch = (
+  rows: readonly Installation[],
+  versions: ReadonlyMap<string, VersionsOf>,
+): [versionId: string, entryId: string][] => {
+  const entryOf = new Map<string, string>();
+  for (const r of rows) if (!entryOf.has(r.id)) entryOf.set(r.id, r.catalogEntryId ?? '');
+  const wanted = new Map<string, string>();
+  for (const [id, v] of versions) {
+    for (const versionId of [v.running, v.latest]) {
+      if (versionId !== null) wanted.set(versionId, entryOf.get(id) ?? '');
+    }
+  }
+  return [...wanted];
 };
 
 export const toInstallationView = (
@@ -342,14 +381,6 @@ export const toDefinitionPairs = (preview: OverridePreview): DefinitionPair[] =>
       error: d.error ?? (d.status === 'invalid' ? 'invalid override' : null),
     };
   });
-
-/** The section of the override document an item of this kind lives in. */
-export const SECTION = {
-  tool: 'tools',
-  prompt: 'prompts',
-  resource: 'resources',
-  template: 'resourceTemplates',
-} as const;
 
 // --- egress (8.8) -----------------------------------------------------------------------------------------------
 

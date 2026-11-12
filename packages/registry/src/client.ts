@@ -124,6 +124,20 @@ export type RegistryClient = {
   ): Promise<RegistryEntry>;
 };
 
+/** Waits `ms`, rejecting at once as an unavailable registry when `signal` aborts; the timer is always cleared. */
+const abortableDelay = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const fail = (): void => {
+      clearTimeout(timer);
+      reject(new RegistryUnavailableError('registry request failed', { cause: signal?.reason }));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', fail);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', fail, { once: true });
+  });
+
 export const createRegistryClient = (options: RegistryClientOptions): RegistryClient => {
   const base = options.baseUrl.replace(/\/+$/, '');
   const fetchFn = options.fetch ?? fetch;
@@ -143,7 +157,7 @@ export const createRegistryClient = (options: RegistryClientOptions): RegistryCl
           error instanceof RegistryUnavailableError &&
           (status === undefined || status === 429 || status >= 500);
         if (!transient || attempt >= retries || signal?.aborted) throw error;
-        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * 2 ** attempt));
+        await abortableDelay(retryDelayMs * 2 ** attempt, signal);
       }
     }
   };

@@ -7,8 +7,8 @@ import { changeLocalPassword } from '@bastion-mcp/auth';
 import type { AuthServices } from '../../contracts';
 import type { Infra } from '../../infra';
 
-export const PASSWORD_CHANGE_MAX_FAILURES = 5;
-export const PASSWORD_CHANGE_WINDOW_S = 900;
+const PASSWORD_CHANGE_MAX_FAILURES = 5;
+const PASSWORD_CHANGE_WINDOW_S = 900;
 
 export const createAccountPorts = (
   infra: Infra,

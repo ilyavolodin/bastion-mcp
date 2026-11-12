@@ -170,7 +170,7 @@ export function StorePage() {
               aria-pressed={c === category}
               onClick={() => setSearch({ c: c === 'All' ? undefined : c })}
               className={cn(
-                'h-9 rounded-full px-3.5 text-[13px] font-medium',
+                'h-9 rounded-full px-3.5 text-body-sm font-medium',
                 c === category ? 'bg-ink text-canvas' : 'border border-line bg-surface text-ink',
               )}
             >

@@ -12,10 +12,10 @@ import { Card, CardHeader } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { applyServerErrors } from '@/lib/form-errors';
 import { formatDate } from '@/lib/format';
 import { roleLabel } from '@/lib/roles';
 import { ConfirmDialog } from '../catalog/entry-actions';
-import { applyServerErrors } from '../settings/form-errors';
 
 /** The same rules the server enforces (9.1); the server stays the authority. */
 export const MIN_PASSWORD_LENGTH = 8;
@@ -159,7 +159,7 @@ export function ConnectedAppsCard() {
                 className="flex flex-wrap items-center gap-3 border-b border-line py-3 last:border-b-0"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-mono text-[13px]">{g.clientId}</div>
+                  <div className="truncate font-mono text-body-sm">{g.clientId}</div>
                   <div className="text-caption text-muted">
                     {g.scopes.map((s) => SCOPE_WORDS[s] ?? s).join(', ') || 'Sign-in only'} ·
                     authorized {formatDate(g.createdAt)}

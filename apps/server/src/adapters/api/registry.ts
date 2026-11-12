@@ -13,13 +13,13 @@ import {
 import type { Infra } from '../../infra';
 
 /** `registry_servers` rows typed with `ServerJson` (the db default parser keeps them as plain objects). */
-export const createServerStore = (infra: Infra): RegistryServerStore =>
+const createServerStore = (infra: Infra): RegistryServerStore =>
   createRegistryServerStore<ServerJson>(infra.db.prisma, {
     parseServerJson: (raw) => serverJsonSchema.parse(raw) as ServerJson,
   }) as unknown as RegistryServerStore;
 
 /** Resolves the auth header secret of a registry source (`registry_sources.auth_secret_id`, 11.6). */
-export const createRegistrySecretResolver = (infra: Infra): SecretResolver => ({
+const createRegistrySecretResolver = (infra: Infra): SecretResolver => ({
   async resolve(secretId) {
     return (await infra.secretStore.revealById(secretId)) ?? undefined;
   },

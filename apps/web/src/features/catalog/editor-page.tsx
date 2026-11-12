@@ -8,10 +8,7 @@ import {
   type CatalogEntryDetail,
   useCatalogEntry,
   useCatalogVersion,
-  useCreateCatalogEntry,
   usePublish,
-  useSaveDraft,
-  useSaveEntry,
   useTeamOptions,
 } from '@/api/hooks';
 import { bumpLabel, editableVersion, isPassing } from '@/api/views/catalog';
@@ -32,6 +29,7 @@ import {
   installFormOf,
   validateDraft,
 } from './draft';
+import { useCreateCatalogEntry, useSaveDraft, useSaveEntry } from './draft-hooks';
 import {
   AuthenticationStep,
   ConfigurationStep,
@@ -76,6 +74,43 @@ export const stepOfPath = (path: string): StepId => {
   if (/^serverSpec\/egress/.test(p)) return 'network';
   if (/^overrides/.test(p)) return 'overrides';
   return 'source';
+};
+
+type TestStatus = 'running' | 'passed' | 'failed' | undefined;
+
+/** Why the version cannot be published yet: the headline of the Publish step and the hint under the Publish buttons. */
+export const publishBlocker = ({
+  hasEntry,
+  versionDirty,
+  status,
+  reason,
+}: {
+  hasEntry: boolean;
+  versionDirty: boolean;
+  status: TestStatus;
+  reason: string | undefined;
+}): { headline: string; hint: string } => {
+  if (!hasEntry)
+    return {
+      headline: 'This draft is not saved or tested yet.',
+      hint: 'Save the draft and run its test to publish it.',
+    };
+  if (versionDirty)
+    return {
+      headline: 'This version changed since its last test.',
+      hint: 'You changed this version since its last test. Save it and run the test again.',
+    };
+  if (status === 'failed')
+    return {
+      headline: `The last test failed${reason ? `: ${reason}` : '.'}`,
+      hint: 'The last test failed. Fix the problem and run the test again.',
+    };
+  if (status === 'running')
+    return { headline: 'The test is still running.', hint: 'The test is running.' };
+  return {
+    headline: 'This version has not been tested.',
+    hint: 'Publish needs a passing test of this exact version. Run the test.',
+  };
 };
 
 /** Everything that, when it changes, makes an earlier test stale: the saved version row (11.2). */
@@ -202,15 +237,12 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
       },
     );
   };
-  const disabledReason = !entry
-    ? 'Save the draft and run its test to publish it.'
-    : versionDirty
-      ? 'You changed this version since its last test. Save it and run the test again.'
-      : testRun?.status === 'running'
-        ? 'The test is running.'
-        : testRun?.status === 'failed'
-          ? 'The last test failed. Fix the problem and run the test again.'
-          : 'Publish needs a passing test of this exact version. Run the test.';
+  const blocker = publishBlocker({
+    hasEntry: Boolean(entry),
+    versionDirty,
+    status: testRun?.status,
+    reason: failureReason(testRun),
+  });
   return (
     <>
       <PageHeader
@@ -261,7 +293,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
       {passing && s.step !== 'publish' ? (
         <div
           role="status"
-          className="flex flex-wrap items-center gap-3 rounded-lg bg-mint-soft px-4 py-3 text-[13px] font-medium text-mint-ink"
+          className="flex flex-wrap items-center gap-3 rounded-lg bg-mint-soft px-4 py-3 text-body-sm font-medium text-mint-ink"
         >
           <CircleCheck className="size-4 shrink-0" aria-hidden="true" />
           <span className="flex-1">This version passed its test: it is ready to publish.</span>
@@ -311,7 +343,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
           {s.step === 'publish' && entryOnly ? (
             <Card aria-label="Already published" className="gap-3">
               <CardHeader title="Already published" />
-              <p className="m-0 text-[13px] text-muted">
+              <p className="m-0 text-body-sm text-muted">
                 Version {version?.label} is live and you have not changed it, so there is nothing to
                 test or publish. Who gets it, risk and update settings save with Save changes. To
                 ship different content, change a step and run the test: that makes a new version.
@@ -322,16 +354,12 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
             <PublishSummary
               draft={draft}
               label={label}
-              hasEntry={Boolean(entry)}
-              versionDirty={versionDirty}
               passing={passing}
-              status={testRun?.status}
-              reason={failureReason(testRun)}
               finishedAt={testRun?.finishedAt ?? null}
               onGoTest={() => setS({ step: 'test' })}
               onPublish={() => void onPublish()}
               publishing={publish.isPending || saving}
-              disabledReason={disabledReason}
+              blocker={blocker}
               checking={Boolean(draftVersion) && current.isPending}
             />
           ) : null}
@@ -359,8 +387,7 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
             versionLabel={label}
             canPublish={entryOnly ? dirty : passing}
             publishing={publish.isPending || saving}
-            disabledReason={entryOnly ? 'Nothing changed yet.' : disabledReason}
-            entryId={entry?.id}
+            disabledReason={entryOnly ? 'Nothing changed yet.' : blocker.hint}
             onPublish={() => (entryOnly ? void save() : void onPublish())}
             {...(entryOnly ? { saveOnly: true } : {})}
           />
@@ -375,30 +402,22 @@ function Editor({ detail }: { detail: CatalogEntryDetail | null }) {
 function PublishSummary({
   draft,
   label,
-  hasEntry,
-  versionDirty,
   passing,
-  status,
-  reason,
   finishedAt,
   onGoTest,
   onPublish,
   publishing,
-  disabledReason,
+  blocker,
   checking,
 }: {
   draft: Draft;
   label: string;
-  hasEntry: boolean;
-  versionDirty: boolean;
   passing: boolean;
-  status: 'running' | 'passed' | 'failed' | undefined;
-  reason: string | undefined;
   finishedAt: string | null;
   onGoTest: () => void;
   onPublish: () => void;
   publishing: boolean;
-  disabledReason: string;
+  blocker: { headline: string; hint: string };
   /** The version's test result is still loading: say nothing about it yet. */
   checking: boolean;
 }) {
@@ -414,7 +433,7 @@ function PublishSummary({
   return (
     <Card aria-label="Ready to publish" className="gap-3.5">
       <CardHeader title="Ready to publish" />
-      <dl className="m-0 grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]">
+      <dl className="m-0 grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-body-sm">
         <dt className="text-muted">Name</dt>
         <dd className="m-0 font-medium">{draft.displayName}</dd>
         <dt className="text-muted">Version</dt>
@@ -429,7 +448,7 @@ function PublishSummary({
       {passing ? (
         <p
           role="status"
-          className="m-0 flex items-center gap-2 text-[13px] font-medium text-mint-ink"
+          className="m-0 flex items-center gap-2 text-body-sm font-medium text-mint-ink"
         >
           <CircleCheck className="size-4" aria-hidden="true" />
           This exact version passed its test
@@ -437,24 +456,16 @@ function PublishSummary({
           publish.
         </p>
       ) : checking ? (
-        <p role="status" className="m-0 text-[13px] text-muted">
+        <p role="status" className="m-0 text-body-sm text-muted">
           Checking the test result of this version…
         </p>
       ) : (
         <div role="status" className="flex flex-col items-start gap-2">
-          <p className="m-0 flex items-center gap-2 text-[13px] font-medium text-coral-ink">
+          <p className="m-0 flex items-center gap-2 text-body-sm font-medium text-coral-ink">
             <CircleX className="size-4" aria-hidden="true" />
-            {!hasEntry
-              ? 'This draft is not saved or tested yet.'
-              : versionDirty
-                ? 'This version changed since its last test.'
-                : status === 'failed'
-                  ? `The last test failed${reason ? `: ${reason}` : '.'}`
-                  : status === 'running'
-                    ? 'The test is still running.'
-                    : 'This version has not been tested.'}
+            {blocker.headline}
           </p>
-          <p className="m-0 text-[13px] text-muted">{disabledReason}</p>
+          <p className="m-0 text-body-sm text-muted">{blocker.hint}</p>
         </div>
       )}
       <Button size="lg" className="w-full" disabled={!passing || publishing} onClick={onPublish}>

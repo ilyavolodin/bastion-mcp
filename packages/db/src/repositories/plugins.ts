@@ -5,19 +5,16 @@ import {
   isValidMarketplaceSlug,
   MARKETPLACE_ITEM_POLICIES,
   newId,
-  PARTITION_DAYS_AHEAD,
 } from '@bastion-mcp/core';
 import { z } from 'zod';
-import { ensurePartitions } from '../partitions';
+import { withPartitionRetry } from '../partitions';
 import {
   type AuditContext,
   assertIfMatch,
   assertSwapped,
   bytesToHex,
-  ConflictError,
   etagOf,
   hexToBytes,
-  isUniqueViolation,
   jsonObjectSchema,
   mutate,
   NotFoundError,
@@ -618,26 +615,24 @@ export const createReleaseStore = (arg: PrismaLike | RepoContext, options?: Repo
         version: record.items[i]?.version ?? '',
       }));
       return mutate(ctx, async (tx, unit) => {
-        try {
-          await tx.marketplaceRelease.create({
-            data: {
-              marketplaceId,
-              seq: record.seq,
-              items: toJson(items),
-              gitCommit: record.gitCommit,
-              claudeManifestSha256: hexToBytes(record.claudeManifestSha256),
-              agentsManifestSha256: hexToBytes(record.agentsManifestSha256),
-              archives: toJson(record.archives),
-              createdBy,
-              createdAt: new Date(record.releaseTime),
-            },
-          });
-        } catch (error) {
-          if (isUniqueViolation(error)) {
-            throw new ConflictError('release already exists', { marketplaceId, seq: record.seq });
-          }
-          throw error;
-        }
+        await orConflict(
+          'release',
+          () =>
+            tx.marketplaceRelease.create({
+              data: {
+                marketplaceId,
+                seq: record.seq,
+                items: toJson(items),
+                gitCommit: record.gitCommit,
+                claudeManifestSha256: hexToBytes(record.claudeManifestSha256),
+                agentsManifestSha256: hexToBytes(record.agentsManifestSha256),
+                archives: toJson(record.archives),
+                createdBy,
+                createdAt: new Date(record.releaseTime),
+              },
+            }),
+          { marketplaceId, seq: record.seq },
+        );
         unit.audit(audit, {
           action: 'marketplace.release',
           targetType: 'marketplace',
@@ -674,13 +669,7 @@ export const createDistributionEventSink = (
     });
   const record = async (events: readonly DistributionEventRecord[]): Promise<void> => {
     if (events.length === 0) return;
-    try {
-      await insert(events);
-    } catch (error) {
-      if (!/no partition/i.test(String(error))) throw error;
-      await ensurePartitions(db, 'distribution_events', PARTITION_DAYS_AHEAD);
-      await insert(events);
-    }
+    await withPartitionRetry(db, 'distribution_events', () => insert(events));
   };
   return {
     record: (event: DistributionEventRecord): Promise<void> => record([event]),

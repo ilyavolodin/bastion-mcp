@@ -16,7 +16,7 @@ const singleInstallationId = (ctx: OpContext): string | undefined => {
 };
 
 /** Forwards `method` to the installation of a single-installation endpoint; used by skills and unknown methods. */
-export const forwardToInstallation = async (
+const forwardToInstallation = async (
   deps: OperationDeps,
   ctx: OpContext,
   method: string,

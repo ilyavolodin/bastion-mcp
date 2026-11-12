@@ -34,7 +34,7 @@ export type OutboundTarget = { url: URL; address: string; family: 4 | 6 };
  * Validates the URL and resolves its host ONCE; the caller must connect to the returned address (8.8, 8.9).
  * Throws OutboundDeniedError unless the URL is https (or http to an admin-allowed address) and public.
  */
-export const resolveOutboundTarget = async (
+const resolveOutboundTarget = async (
   raw: string,
   policy: OutboundPolicy = {},
 ): Promise<OutboundTarget> => {
@@ -71,7 +71,7 @@ export type PinnedDispatcherPool = {
   close(): Promise<void>;
 };
 
-export const createPinnedDispatcherPool = (): PinnedDispatcherPool => {
+const createPinnedDispatcherPool = (): PinnedDispatcherPool => {
   const agents = new Map<string, Agent>();
   return {
     get(target) {

@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../client';
 import { toMe } from '../me';
-import type { BodyOf } from '../schema';
 import { STALE_LONG_MS } from '../timing';
 import type { CallViewer } from '../views/observability';
 import { toNotification, toQuota } from '../views/session';
@@ -21,10 +20,6 @@ export const useViewer = (): CallViewer | undefined => {
   const me = useMe().data;
   return me ? { id: me.id, orgRole: me.orgRole, teams: me.teams } : undefined;
 };
-
-/** `PATCH /me` edits the display name only (17.2); the theme stays in the browser. */
-export const useUpdateMe = () =>
-  useApiMutation((patch: BodyOf<'patch', '/me'>) => api.patch('/me', patch), [keys.me]);
 
 export const useNotifications = () =>
   useQuery({

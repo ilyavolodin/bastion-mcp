@@ -31,7 +31,7 @@ export const upstreamTokenSweep: TaskFn = async ({ infra, deps, now }) => {
 };
 
 /** 13.6: installations whose definitions are pinned (directly or through their catalog version). */
-export const pinnedInstallationIds = async (
+const pinnedInstallationIds = async (
   prisma: import('@bastion-mcp/db').PrismaClient,
 ): Promise<string[]> => {
   const rows = await prisma.$queryRaw<{ id: string }[]>`

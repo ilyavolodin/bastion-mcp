@@ -12,10 +12,10 @@
  * the target, so a backup restores on an installation with a different KMS key. Ids are preserved, which matters because
  * a dozen columns refer to a secret by id.
  */
-import { newId } from '@bastion-mcp/core';
-import { appendAuditEvent, bumpConfigVersion, NIL_UUID, type Prisma } from '@bastion-mcp/db';
+import { errorMessage, newId, REDIS_CHANNELS } from '@bastion-mcp/core';
+import { appendAuditEvent, type ConfigEvent, NIL_UUID, type Prisma } from '@bastion-mcp/db';
 import { z } from 'zod';
-import type { Infra } from '../infra';
+import { bumpOrgAndCatalog, type Infra, publishConfigEvents } from '../infra';
 import { BACKUP_TX_OPTIONS } from '../timing';
 import type { Maintenance } from './maintenance';
 import { type BackupHeader, openBackup, sealBackup } from './sealed-file';
@@ -43,6 +43,12 @@ const PAGE_ROWS = 500;
 /** `blobs` rows can be large; read and write them in small pages. */
 const PAGE_ROWS_BY_TABLE: Record<string, number> = { blobs: 20 };
 const pageRows = (table: string): number => PAGE_ROWS_BY_TABLE[table] ?? PAGE_ROWS;
+
+/** The rows of a table as JSON documents, one page (`pageRows`) at a time, in order. */
+function* jsonPages(table: string, rows: Row[]): Generator<string> {
+  const size = pageRows(table);
+  for (let i = 0; i < rows.length; i += size) yield JSON.stringify(rows.slice(i, i + size));
+}
 
 const quote = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 const hexToBuffer = (value: unknown): Buffer => {
@@ -108,14 +114,13 @@ type Clash = { key: string; count: number; ids: string[] };
 const findClashes = async (db: Queryable, table: string, rows: Row[]): Promise<Clash[]> => {
   if (rows.length === 0) return [];
   const pk = await primaryKey(db, table);
-  const size = pageRows(table);
   const out: Clash[] = [];
   for (const key of await uniqueKeys(db, table)) {
     const seen = new Map<string, string>();
-    for (let i = 0; i < rows.length; i += size) {
+    for (const page of jsonPages(table, rows)) {
       const found = await db.$queryRawUnsafe<{ row_id: string; id: string | null }[]>(
         `SELECT DISTINCT x.row_id::text AS row_id, to_jsonb(x)->>'id' AS id ${clashFrom(table, key, pk)}`,
-        JSON.stringify(rows.slice(i, i + size)),
+        page,
       );
       for (const f of found) seen.set(f.row_id, f.id ?? '');
     }
@@ -128,12 +133,11 @@ const findClashes = async (db: Queryable, table: string, rows: Row[]): Promise<C
 const removeClashes = async (db: Queryable, table: string, rows: Row[]): Promise<void> => {
   if (rows.length === 0) return;
   const pk = await primaryKey(db, table);
-  const size = pageRows(table);
   for (const key of await uniqueKeys(db, table)) {
-    for (let i = 0; i < rows.length; i += size) {
+    for (const page of jsonPages(table, rows)) {
       await db.$executeRawUnsafe(
         `DELETE FROM ${quote(table)} WHERE ctid IN (SELECT x.row_id ${clashFrom(table, key, pk)})`,
-        JSON.stringify(rows.slice(i, i + size)),
+        page,
       );
     }
   }
@@ -173,9 +177,9 @@ const openSecretRow = async (infra: Infra, row: Row): Promise<Row> => {
     }
   } catch (error) {
     throw new Error(
-      `cannot read secret ${String(row.id)} (${String(row.scope)}/${String(row.name)}) with the KMS: ${
-        error instanceof Error ? error.message : String(error)
-      }. A backup that cannot include every secret is not created.`,
+      `cannot read secret ${String(row.id)} (${String(row.scope)}/${String(row.name)}) with the KMS: ${errorMessage(
+        error,
+      )}. A backup that cannot include every secret is not created.`,
     );
   }
 };
@@ -233,14 +237,14 @@ const documentSchema = z.object({
 });
 type BackupDocument = z.infer<typeof documentSchema>;
 
-export type RestoreMode = 'merge' | 'replace';
+type RestoreMode = 'merge' | 'replace';
 export type RestoreOptions = {
   mode: RestoreMode;
   dryRun?: boolean;
   /** The administrator performing it; a replace refuses to remove this account. */
   actorId?: string | null;
 };
-export type TableReport = {
+type TableReport = {
   /** Rows in the backup. */
   rows: number;
   /** Merge: rows that already exist and would be overwritten. Replace: rows the target has now (they go away). */
@@ -303,13 +307,12 @@ const countExisting = async (
   if (rows.length === 0) return 0;
   const pk = await primaryKey(db, table);
   const same = pk.map((c) => `x.${quote(c)} = s.${quote(c)}`).join(' AND ');
-  const size = pageRows(table);
   let total = 0;
-  for (let i = 0; i < rows.length; i += size) {
+  for (const page of jsonPages(table, rows)) {
     const r = await db.$queryRawUnsafe<{ n: number }[]>(
       `SELECT count(*)::int AS n FROM jsonb_populate_recordset(NULL::${quote(table)}, $1::jsonb) s
         WHERE EXISTS (SELECT 1 FROM ${quote(table)} x WHERE ${same})`,
-      JSON.stringify(rows.slice(i, i + size)),
+      page,
     );
     total += r[0]?.n ?? 0;
   }
@@ -333,15 +336,11 @@ const insertRows = async (tx: Queryable, table: string, rows: Row[], mode: Resto
         : 'DO NOTHING'
     }`;
   }
-  const size = pageRows(table);
-  for (let i = 0; i < rows.length; i += size) {
+  for (const page of jsonPages(table, rows)) {
     try {
-      await tx.$executeRawUnsafe(sql, JSON.stringify(rows.slice(i, i + size)));
+      await tx.$executeRawUnsafe(sql, page);
     } catch (error) {
-      throw new RestoreRefusedError(
-        `${table}: ${error instanceof Error ? error.message : String(error)}`,
-        'conflict',
-      );
+      throw new RestoreRefusedError(`${table}: ${errorMessage(error)}`, 'conflict');
     }
   }
 };
@@ -394,12 +393,15 @@ export const readBackup = async (
   return { document: parseDocument(document), header };
 };
 
-export const restoreBackup = async (
+type RestoreStep = ReturnType<typeof plan>[number];
+
+/** The refusals that come before anything is read from the database (newer schema, unsafe or unprepared replace). */
+const assertRestorable = async (
   infra: Infra,
   maintenance: Maintenance,
   document: BackupDocument,
   options: RestoreOptions,
-): Promise<RestoreReport> => {
+): Promise<void> => {
   const { mode } = options;
   const dryRun = options.dryRun === true;
   const target = await lastMigration(infra.db.prisma);
@@ -418,7 +420,16 @@ export const restoreBackup = async (
       );
     }
   }
-  const steps = plan(document, mode);
+};
+
+/** The per-table report with clash warnings; this is the whole of a dry run. */
+const previewRestore = async (
+  infra: Infra,
+  document: BackupDocument,
+  steps: RestoreStep[],
+  options: RestoreOptions,
+): Promise<RestoreReport> => {
+  const { mode } = options;
   const warnings: string[] = [];
   const tables: Record<string, TableReport> = {};
   for (const step of steps) {
@@ -450,20 +461,29 @@ export const restoreBackup = async (
       }
     }
   }
-  const report: RestoreReport = {
+  return {
     mode,
-    dryRun,
+    dryRun: options.dryRun === true,
     backup: { createdAt: document.createdAt, migration: document.migration },
     tables,
     warnings,
   };
-  if (dryRun) return report;
+};
 
+/** The write: one transaction (deletes on a replace, inserts, audit event); returns the events to publish after the commit. */
+const applyRestore = async (
+  infra: Infra,
+  document: BackupDocument,
+  steps: RestoreStep[],
+  report: RestoreReport,
+  options: RestoreOptions,
+): Promise<ConfigEvent[]> => {
+  const { mode } = options;
   const prepared = steps.map((s) => ({ ...s }));
   const secrets = prepared.find((s) => s.table.name === SECRETS_TABLE);
   if (secrets) secrets.rows = await sealSecretRows(infra, secrets.rows);
 
-  const events: { scope: string; id: string; version: bigint }[] = [];
+  let events: ConfigEvent[] = [];
   await infra.db.prisma.$transaction(async (tx) => {
     if (mode === 'replace') {
       for (const step of [...prepared].reverse()) {
@@ -481,11 +501,10 @@ export const restoreBackup = async (
                 (SELECT MAX(seq) IS NOT NULL FROM ${AUDIT_TABLE}))`,
       );
     }
-    events.push({ scope: 'org', id: NIL_UUID, version: await bumpConfigVersion(tx, 'org') });
-    for (const entry of document.tables.catalog_entries ?? []) {
-      const id = String(entry.id);
-      events.push({ scope: 'catalog', id, version: await bumpConfigVersion(tx, 'catalog', id) });
-    }
+    events = await bumpOrgAndCatalog(
+      tx,
+      (document.tables.catalog_entries ?? []).map((entry) => String(entry.id)),
+    );
     // Chains from the restored tail on a replace, from this instance's own log on a merge.
     await appendAuditEvent(tx, {
       actorType: options.actorId ? 'user' : 'system',
@@ -495,23 +514,32 @@ export const restoreBackup = async (
       targetId: newId(),
       diff: {
         backupCreatedAt: document.createdAt,
-        counts: Object.fromEntries(Object.entries(tables).map(([k, v]) => [k, v.rows])),
+        counts: Object.fromEntries(Object.entries(report.tables).map(([k, v]) => [k, v.rows])),
       },
     });
   }, BACKUP_TX_OPTIONS);
+  return events;
+};
 
-  for (const event of events) {
-    await infra.publish('bastion:config', {
-      topic: event.scope,
-      scope: event.scope,
-      id: event.id,
-      version: String(event.version),
-    });
-  }
+export const restoreBackup = async (
+  infra: Infra,
+  maintenance: Maintenance,
+  document: BackupDocument,
+  options: RestoreOptions,
+): Promise<RestoreReport> => {
+  const { mode } = options;
+  await assertRestorable(infra, maintenance, document, options);
+  const steps = plan(document, mode);
+  const report = await previewRestore(infra, document, steps, options);
+  if (report.dryRun) return report;
+
+  const events = await applyRestore(infra, document, steps, report, options);
+
+  await publishConfigEvents(infra, events);
   if (mode === 'replace') {
     // The authorization server and workers reload the restored signing and state keys.
     for (const topic of ['signing_keys', 'state_keys']) {
-      await infra.publish('bastion:config', { topic, scope: topic, id: NIL_UUID });
+      await infra.publish(REDIS_CHANNELS.config, { topic, scope: topic, id: NIL_UUID });
     }
   }
   return report;

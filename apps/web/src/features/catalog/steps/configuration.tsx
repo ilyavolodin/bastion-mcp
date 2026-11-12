@@ -2,8 +2,8 @@ import { Plus } from 'lucide-react';
 import * as React from 'react';
 import { Card, CardHeader } from '@/components/primitives';
 import { Button } from '@/components/ui/button';
-import { type ArgDraft, type BindingDraft, emptyVariable, type VariableDraft } from '../draft';
-import { type StepProps, setSpec } from './props';
+import { type ArgDraft, type BindingDraft, emptyVariable } from '../draft';
+import { rowHandlers, type StepProps, setSpec } from './props';
 import { ArgRow, BindingRow, ReferenceList, VariableRow } from './rows';
 
 const newEnv = (): BindingDraft => ({ name: '', value: '', secret: false });
@@ -13,8 +13,6 @@ export function ConfigurationStep({ draft, onChange, readOnly }: StepProps) {
   const spec = draft.spec;
   const vars = spec.variables;
   const listId = React.useId();
-  const updateVar = (i: number, next: VariableDraft) =>
-    onChange(setSpec(draft, { variables: vars.map((v, k) => (k === i ? next : v)) }));
   const isPackage = spec.type === 'package';
   return (
     <>
@@ -49,8 +47,7 @@ export function ConfigurationStep({ draft, onChange, readOnly }: StepProps) {
             row={v}
             index={i}
             readOnly={readOnly}
-            onChange={(next) => updateVar(i, next)}
-            onRemove={() => onChange(setSpec(draft, { variables: vars.filter((_, k) => k !== i) }))}
+            {...rowHandlers(draft, onChange, 'variables', i)}
           />
         ))}
       </Card>
@@ -87,17 +84,9 @@ export function ConfigurationStep({ draft, onChange, readOnly }: StepProps) {
                 index={i}
                 row={row}
                 spec={spec}
-                mode={spec.authMode}
                 readOnly={readOnly}
                 listId={listId}
-                onChange={(next) =>
-                  onChange(
-                    setSpec(draft, { envVars: spec.envVars.map((r, k) => (k === i ? next : r)) }),
-                  )
-                }
-                onRemove={() =>
-                  onChange(setSpec(draft, { envVars: spec.envVars.filter((_, k) => k !== i) }))
-                }
+                {...rowHandlers(draft, onChange, 'envVars', i)}
               />
             ))}
           </Card>
@@ -124,15 +113,9 @@ export function ConfigurationStep({ draft, onChange, readOnly }: StepProps) {
                 index={i}
                 row={row}
                 spec={spec}
-                mode={spec.authMode}
                 readOnly={readOnly}
                 listId={listId}
-                onChange={(next) =>
-                  onChange(setSpec(draft, { args: spec.args.map((r, k) => (k === i ? next : r)) }))
-                }
-                onRemove={() =>
-                  onChange(setSpec(draft, { args: spec.args.filter((_, k) => k !== i) }))
-                }
+                {...rowHandlers(draft, onChange, 'args', i)}
               />
             ))}
           </Card>

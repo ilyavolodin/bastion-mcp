@@ -76,6 +76,31 @@ type Group = (typeof GROUPS)[keyof typeof GROUPS];
 const groupOf = (value: string | undefined): Group | undefined =>
   value === undefined ? undefined : (GROUPS as Record<string, Group>)[value];
 
+type RollupGroup = Exclude<Group, 'user'>;
+type RollupRow = {
+  installationId?: string | null | undefined;
+  catalogEntryId?: string | null | undefined;
+  itemName?: string | null | undefined;
+  outcome?: string | null | undefined;
+};
+
+/** The field of a rollup row that a grouping reads (the rollups carry no person). */
+const ROLLUP_FIELD: Record<RollupGroup, (r: RollupRow) => string | null | undefined> = {
+  installation: (r) => r.installationId,
+  catalogEntry: (r) => r.catalogEntryId,
+  item: (r) => r.itemName,
+  outcome: (r) => r.outcome,
+};
+
+/** The call-log column that a grouping reads. */
+const LOG_COLUMN: Record<Group, Prisma.Sql> = {
+  installation: Prisma.sql`c.installation_id::text`,
+  catalogEntry: Prisma.sql`c.catalog_entry_id::text`,
+  item: Prisma.sql`c.item_name`,
+  outcome: Prisma.sql`c.outcome`,
+  user: Prisma.sql`c.principal_id::text`,
+};
+
 export type ObservabilityDeps = {
   prisma: PrismaClient;
   repos: Pick<Repositories, 'callLog' | 'auditLog'>;
@@ -115,16 +140,7 @@ export const createCallReader = ({
     return {
       buckets: rows.map((r) => ({
         ts: (r.bucket ?? from).toISOString(),
-        group:
-          group === 'installation'
-            ? (r.installationId ?? null)
-            : group === 'catalogEntry'
-              ? (r.catalogEntryId ?? null)
-              : group === 'item'
-                ? (r.itemName ?? null)
-                : group === 'outcome'
-                  ? (r.outcome ?? null)
-                  : null,
+        group: group ? (ROLLUP_FIELD[group](r) ?? null) : null,
         values: pick({
           count: r.count,
           errorCount: r.errorCount,
@@ -145,18 +161,7 @@ export const createCallReader = ({
     const { from, to } = rangeOf(q, nowDate());
     const tier = tierFor(q, from, to);
     const group = groupOf(q.groupBy);
-    const col =
-      group === 'installation'
-        ? Prisma.sql`c.installation_id::text`
-        : group === 'catalogEntry'
-          ? Prisma.sql`c.catalog_entry_id::text`
-          : group === 'item'
-            ? Prisma.sql`c.item_name`
-            : group === 'outcome'
-              ? Prisma.sql`c.outcome`
-              : group === 'user'
-                ? Prisma.sql`c.principal_id::text`
-                : Prisma.sql`NULL::text`;
+    const col = group ? LOG_COLUMN[group] : Prisma.sql`NULL::text`;
     const inTeam = q.teamId
       ? Prisma.sql`AND c.principal_id IN (SELECT user_id FROM team_memberships WHERE team_id = ${q.teamId}::uuid)`
       : Prisma.empty;
@@ -457,5 +462,3 @@ export const createAuditReader = ({ prisma, repos }: ObservabilityDeps): AuditRe
       : { ok: false, checked: result.checked, brokenAtSeq: result.brokenAtSeq.toString() };
   },
 });
-
-export const toIso = iso;

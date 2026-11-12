@@ -60,7 +60,7 @@ export const storeListQuery = listQuerySchema.extend({
 });
 
 /** What the installer fills in (11.4): plain variables and per-user secrets, as `deriveInstallForm` produces them. */
-export const installFormVariable = z.looseObject({
+const installFormVariable = z.looseObject({
   name: z.string(),
   label: z.string().optional(),
   description: z.string().optional(),
@@ -68,7 +68,7 @@ export const installFormVariable = z.looseObject({
   default: z.string().optional(),
   choices: z.array(z.string()).optional(),
 });
-export const installFormSecret = z.looseObject({
+const installFormSecret = z.looseObject({
   name: z.string(),
   label: z.string().optional(),
   description: z.string().optional(),
@@ -126,7 +126,7 @@ export const approveBodySchema = optionalBody(
   }),
 );
 
-export const importBodySchema = z.discriminatedUnion('kind', [
+const importBodySchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('server_json'),
     serverJson: z.union([z.string(), z.record(z.string(), z.unknown())]),

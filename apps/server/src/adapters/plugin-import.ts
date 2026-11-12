@@ -16,7 +16,7 @@ import {
 import type { Infra } from '../infra';
 import { draftFromFiles } from './plugin-content';
 
-export class GitUrlDeniedError extends BastionError {
+class GitUrlDeniedError extends BastionError {
   constructor(message: string) {
     super('VALIDATION_FAILED', message, { httpStatus: 422 });
   }
@@ -27,7 +27,7 @@ export class GitUrlDeniedError extends BastionError {
  * public (or inside `BASTION_PRIVATE_UPSTREAM_CIDRS`). `allowInsecureHttp` (tests only) also permits http and local
  * paths.
  */
-export const assertGitUrl = async (infra: Infra, raw: string): Promise<void> => {
+const assertGitUrl = async (infra: Infra, raw: string): Promise<void> => {
   if (infra.options.allowInsecureHttp && existsSync(raw)) return;
   let url: URL;
   try {

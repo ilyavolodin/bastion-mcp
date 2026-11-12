@@ -688,6 +688,57 @@ describe.skipIf(!haveDocker())('17 control-plane API over Postgres and Redis', (
     expect(outcomes).toEqual({ ok: 2, tool_error: 1 });
   });
 
+  it('15.5 statistics group by installation, catalog entry, item and outcome, from the rollups and from the call log', async () => {
+    const installationId = newId();
+    const catalogEntryId = newId();
+    const ts = new Date(Date.now() - 60_000);
+    const row = (outcome: string) => ({
+      id: newId(),
+      ts,
+      durationMs: 5,
+      principalType: 'user',
+      principalId: api.adminId,
+      installationId,
+      catalogEntryId,
+      method: 'tools/call',
+      itemName: 'grouping__probe',
+      outcome,
+      eraDown: '2025-11-25',
+      coldStart: false,
+      bytesIn: 1,
+      bytesOut: 2,
+    });
+    await infra.repos.callLog.insertBatch([row('ok'), row('ok'), row('rate_limited')] as never);
+    await infra.repos.callLog.rollupAll(new Date(Date.now() + 120_000));
+    const from = new Date(Date.now() - 600_000).toISOString();
+    const to = new Date(Date.now() + 600_000).toISOString();
+    const expected: [string, string, number][] = [
+      ['installation', installationId, 3],
+      ['catalogEntry', catalogEntryId, 3],
+      ['item', 'grouping__probe', 3],
+      ['outcome', 'rate_limited', 1],
+    ];
+    for (const extra of [{}, { user: api.adminId }]) {
+      for (const [groupBy, group, count] of expected) {
+        const res = await api.call('GET', '/stats/calls', {
+          query: { groupBy, bucket: 'minute', from, to, ...extra },
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const total = (res.body.buckets as { group: string | null; values: { count: number } }[])
+          .filter((b) => b.group === group)
+          .reduce((n, b) => n + b.values.count, 0);
+        expect([groupBy, extra, total]).toEqual([groupBy, extra, count]);
+      }
+    }
+    const ungrouped = await api.call('GET', '/stats/calls', {
+      query: { bucket: 'minute', from, to },
+    });
+    expect(ungrouped.status, JSON.stringify(ungrouped.body)).toBe(200);
+    expect(
+      (ungrouped.body.buckets as { group: string | null }[]).every((b) => b.group === null),
+    ).toBe(true);
+  });
+
   it('18.1 SSE: an event published on another replica reaches the stream of this one; audience and type filters apply', async () => {
     const port = await freePort();
     await api.app.listen({ port, host: '127.0.0.1' });

@@ -4,7 +4,7 @@ import type { Infra } from '../infra';
 export type PrintPassword = (email: string, password: string) => void;
 
 /** Prints the one-time block on stdout. Never routed through the logger (22.3). */
-export const printToStdout: PrintPassword = (email, password) => {
+const printToStdout: PrintPassword = (email, password) => {
   process.stdout.write(
     [
       '',

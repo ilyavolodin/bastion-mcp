@@ -41,7 +41,7 @@ export type PolicyAnalysis = {
   matcher: AttrMatcher | null;
 };
 
-export type AttrMatcher = {
+type AttrMatcher = {
   attr: 'name' | 'uri';
   /** Segments between wildcards; one segment means an exact match. */
   segments: string[];
@@ -80,32 +80,43 @@ const conjuncts = (node: Json): Json[] => {
   return [node];
 };
 
+/** The literal segments of a `like` pattern, split at its wildcards. */
+const segmentsOf = (pattern: Json[]): string[] => {
+  const segments = [''];
+  for (const element of pattern) {
+    if (element === 'Wildcard') segments.push('');
+    else if (isRecord(element) && typeof element.Literal === 'string') {
+      segments[segments.length - 1] += element.Literal;
+    }
+  }
+  return segments;
+};
+
+/** The matcher one conjunct states (`resource.name == "x"` or `resource.name like "x*"`), if it states one. */
+const matcherOf = (node: Json): AttrMatcher | null => {
+  if (!isRecord(node)) return null;
+  const eq = node['=='];
+  if (isRecord(eq)) {
+    const attr = isResourceAttr(eq.left);
+    const right = eq.right;
+    if (attr && isRecord(right) && typeof right.Value === 'string') {
+      return { attr, segments: [right.Value] };
+    }
+  }
+  const like = node.like;
+  if (isRecord(like) && Array.isArray(like.pattern)) {
+    const attr = isResourceAttr(like.left);
+    if (attr) return { attr, segments: segmentsOf(like.pattern as Json[]) };
+  }
+  return null;
+};
+
 const findMatcher = (policy: PolicyJson): AttrMatcher | null => {
   for (const clause of policy.conditions) {
     if (clause.kind !== 'when') continue;
     for (const node of conjuncts(clause.body)) {
-      if (!isRecord(node)) continue;
-      const eq = node['=='];
-      if (isRecord(eq)) {
-        const attr = isResourceAttr(eq.left);
-        const right = eq.right;
-        if (attr && isRecord(right) && typeof right.Value === 'string') {
-          return { attr, segments: [right.Value] };
-        }
-      }
-      const like = node.like;
-      if (isRecord(like) && Array.isArray(like.pattern)) {
-        const attr = isResourceAttr(like.left);
-        if (!attr) continue;
-        const segments = [''];
-        for (const element of like.pattern as Json[]) {
-          if (element === 'Wildcard') segments.push('');
-          else if (isRecord(element) && typeof element.Literal === 'string') {
-            segments[segments.length - 1] += element.Literal;
-          }
-        }
-        return { attr, segments };
-      }
+      const matcher = matcherOf(node);
+      if (matcher) return matcher;
     }
   }
   return null;

@@ -3,7 +3,7 @@ import { ERROR_BASE_URL } from './errors';
 
 export const API_VERSION = '2.0.0';
 
-export const problemSchema = z.object({
+const problemSchema = z.object({
   type: z.string(),
   title: z.string(),
   status: z.number().int(),
@@ -55,7 +55,7 @@ const REF = /#\/components\/schemas\/([A-Za-z0-9_.-]+)/g;
  * Drops component schemas no operation reaches (zod registers every named schema for input and output; only the
  * variants that a route uses belong in the document).
  */
-export const pruneUnusedSchemas = (doc: OpenApiDoc): void => {
+const pruneUnusedSchemas = (doc: OpenApiDoc): void => {
   const schemas = (doc.components?.schemas ?? {}) as Record<string, unknown>;
   const used = new Set<string>(['Problem']);
   const visit = (value: unknown): void => {

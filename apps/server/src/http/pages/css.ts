@@ -139,7 +139,7 @@ input:disabled{opacity:.6;cursor:not-allowed}
 @media (forced-colors:active){.btn{border:1px solid ButtonText}.card{border:1px solid CanvasText}}
 `;
 
-export const buildPagesCss = (): string =>
+const buildPagesCss = (): string =>
   [
     fontFaces(),
     `:root{${themeVars('light')};${fixedVars()};color-scheme:light}`,

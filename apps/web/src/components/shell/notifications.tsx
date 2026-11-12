@@ -82,7 +82,7 @@ export function NotificationsBell() {
                         <span className="sr-only"> (unread)</span>
                       ) : null}
                     </span>
-                    <span className="block break-words text-[13px] leading-5 text-muted">
+                    <span className="block break-words text-body-sm leading-5 text-muted">
                       {n.body}
                     </span>
                     <span className="block text-[11px] text-muted">

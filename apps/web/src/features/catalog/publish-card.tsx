@@ -18,8 +18,6 @@ type Props = {
   publishing: boolean;
   onPublish: () => void;
   disabledReason?: string | undefined;
-  entryId?: string | undefined;
-  noun?: string;
   /** A published entry with an unchanged version: the button saves the entry's fields instead of publishing. */
   saveOnly?: boolean;
 };
@@ -33,7 +31,6 @@ export function PublishCard({
   publishing,
   onPublish,
   disabledReason,
-  noun = 'v',
   saveOnly = false,
 }: Props) {
   const { me, role } = useAuth();
@@ -142,7 +139,7 @@ export function PublishCard({
       ) : null}
       <RoleGate roles={['admin']}>
         <div className="flex flex-col gap-2">
-          <span className="text-[13px] font-semibold">Risk</span>
+          <span className="text-body-sm font-semibold">Risk</span>
           <div role="group" aria-label="Risk" className="flex gap-1 rounded-md bg-sunken p-1">
             {(['low', 'medium', 'high'] as const).map((r) => (
               <button
@@ -150,7 +147,7 @@ export function PublishCard({
                 type="button"
                 aria-pressed={draft.risk === r}
                 onClick={() => onChange({ risk: r })}
-                className={`h-9 flex-1 rounded-sm text-[13px] capitalize ${draft.risk === r ? 'bg-surface font-semibold shadow-[0_0_0_1.5px_var(--tangerine-ink)]' : 'text-muted'}`}
+                className={`h-9 flex-1 rounded-sm text-body-sm capitalize ${draft.risk === r ? 'bg-surface font-semibold shadow-[0_0_0_1.5px_var(--tangerine-ink)]' : 'text-muted'}`}
               >
                 {r}
               </button>
@@ -169,7 +166,7 @@ export function PublishCard({
             : 'Save changes'
           : publishing
             ? 'Publishing…'
-            : `Publish ${noun}${versionLabel}`}
+            : `Publish v${versionLabel}`}
       </Button>
       {saveOnly ? (
         <p className="m-0 text-caption text-muted">

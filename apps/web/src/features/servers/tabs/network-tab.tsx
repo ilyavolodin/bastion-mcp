@@ -28,7 +28,7 @@ export function NetworkTab({ installation: i }: { installation: InstallationView
                     key={h.host}
                     title={h.reason}
                     className={cn(
-                      'inline-flex h-8 items-center gap-2 rounded-full px-3 text-[13px] font-medium',
+                      'inline-flex h-8 items-center gap-2 rounded-full px-3 text-body-sm font-medium',
                       h.status === 'allowed' ? 'bg-sunken' : 'bg-coral-soft text-coral-ink',
                     )}
                   >

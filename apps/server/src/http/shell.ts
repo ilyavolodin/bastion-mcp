@@ -36,7 +36,7 @@ const isSpaRoute = (path: string): boolean =>
   path.startsWith('/plugins/marketplace/') ||
   path.startsWith('/plugins/edit/');
 
-export const resolvePublicDir = (override?: string): string | undefined => {
+const resolvePublicDir = (override?: string): string | undefined => {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     override,
@@ -48,7 +48,7 @@ export const resolvePublicDir = (override?: string): string | undefined => {
 };
 
 /** `default-src 'self'`, no inline scripts; inline styles are allowed because the component library sets `style` attributes. */
-export const CSP_DIRECTIVES = {
+const CSP_DIRECTIVES = {
   'default-src': ["'self'"],
   'script-src': ["'self'"],
   'style-src': ["'self'", "'unsafe-inline'"],

@@ -71,7 +71,7 @@ export function PageHeader({
       {back ? (
         <Link
           to={back.to}
-          className="inline-flex items-center gap-1.5 self-start text-[13px] font-medium text-muted no-underline hover:text-ink"
+          className="inline-flex items-center gap-1.5 self-start text-body-sm font-medium text-muted no-underline hover:text-ink"
         >
           <ChevronLeft className="size-3.5" aria-hidden="true" />
           {back.label}

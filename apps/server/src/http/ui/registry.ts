@@ -11,6 +11,7 @@ import {
 } from '@bastion-mcp/registry';
 import type { InstallationInfo } from '@bastion-mcp/router';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { publicHost } from '../../config';
 import type { AuthServices } from '../../contracts';
 import type { Infra } from '../../infra';
 
@@ -46,7 +47,7 @@ export const registerSubregistryRoutes = async (
   const router = createRouterRepository<OverridesDocument>(infra.db.prisma, {
     parseOverrides: (raw) => overridesSchema.parse(raw),
   });
-  const host = new URL(infra.config.publicUrl).host;
+  const host = publicHost(infra.config);
   const scheme = new URL(infra.config.publicUrl).protocol === 'http:' ? 'http' : 'https';
 
   const inputFor = async (principal: Principal): Promise<SubregistryInput> => {

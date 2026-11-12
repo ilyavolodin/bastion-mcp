@@ -88,7 +88,7 @@ export const cimdReachable = (host: string): boolean => {
  * How we authenticate at a CIMD-capable AS: `private_key_jwt` unless the AS lists its methods without it, then
  * `none`; null when it accepts neither.
  */
-export const cimdAuthMethod = (discovery: UpstreamDiscovery): 'private_key_jwt' | 'none' | null => {
+const cimdAuthMethod = (discovery: UpstreamDiscovery): 'private_key_jwt' | 'none' | null => {
   const methods = discovery.tokenEndpointAuthMethods;
   if (!methods || methods.includes('private_key_jwt')) return 'private_key_jwt';
   return methods.includes('none') ? 'none' : null;

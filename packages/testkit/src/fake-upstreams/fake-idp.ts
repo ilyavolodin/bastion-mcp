@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createLocalJWKSet, exportJWK, generateKeyPair, type JWK, jwtVerify, SignJWT } from 'jose';
+import { readBody } from '../http';
 
 /** A local OIDC IdP built with jose + node:http (login, refresh, RFC 8693 exchange, jwt-bearer OBO). */
 export type FakeIdpBehavior = {
@@ -48,9 +49,7 @@ export type FakeIdp = {
 };
 
 const parseForm = async (req: IncomingMessage): Promise<Record<string, string>> => {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
-  return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8')));
+  return Object.fromEntries(new URLSearchParams((await readBody(req)).toString('utf8')));
 };
 
 const json = (res: ServerResponse, status: number, body: unknown) => {

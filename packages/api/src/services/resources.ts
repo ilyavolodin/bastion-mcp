@@ -67,6 +67,15 @@ export const installationResource = (row: Row, entry?: Row | null): ResourceData
   };
 };
 
+/** A service-owned installation row with the team of its service account, which Cedar needs (10.1). */
+export const withServiceTeam = async (deps: ApiDeps, row: Row): Promise<Row> => {
+  if (row.ownerType !== 'service' || typeof row.ownerId !== 'string') return row;
+  const account = await deps.store.get('service_accounts', row.ownerId);
+  return account && typeof account.teamId === 'string'
+    ? { ...row, ownerServiceTeamId: account.teamId }
+    : row;
+};
+
 /** Loads an installation resource, with its catalog entry attributes; `null` when it does not exist. */
 export const loadInstallationResource = async (
   deps: ApiDeps,
@@ -78,14 +87,7 @@ export const loadInstallationResource = async (
     typeof row.catalogEntryId === 'string'
       ? await deps.store.get('catalog_entries', row.catalogEntryId)
       : null;
-  let enriched = row;
-  if (row.ownerType === 'service' && typeof row.ownerId === 'string') {
-    const account = await deps.store.get('service_accounts', row.ownerId);
-    if (account && typeof account.teamId === 'string') {
-      enriched = { ...row, ownerServiceTeamId: account.teamId };
-    }
-  }
-  return installationResource(enriched, entry);
+  return installationResource(await withServiceTeam(deps, row), entry);
 };
 
 /** The user as a Cedar `User` resource (registry request approval and secrets use it, 10.1). */

@@ -4,12 +4,13 @@ import type {
   InstallFormBody,
   ServerSpecBody,
 } from '@/api/views/catalog';
+import { sortKeys } from '@/lib/diff';
 import { asList, asRecord, asString } from '@/lib/json';
 import {
   BEARER_PREFIX,
   oauthClientSecretName,
   oauthTokenTemplate,
-  secretNamesOf,
+  secretFieldsOf,
   secretRefsOf,
 } from './secrets';
 import {
@@ -79,10 +80,7 @@ const authOf = (s: SpecDraft): ServerSpecBody['auth'] => {
     case 'userSecret':
       return {
         mode: 'userSecret',
-        fields: secretNamesOf(s).map((name) => ({
-          name,
-          label: s.secretLabels[name]?.trim() || name,
-        })),
+        fields: secretFieldsOf(s),
         inject: injectionsOf(s),
       };
     case 'oauth': {
@@ -194,10 +192,7 @@ export const installFormOf = (s: SpecDraft): InstallFormBody => ({
     ...(v.default ? { default: v.default } : {}),
     ...(splitChoices(v.choices).length ? { choices: splitChoices(v.choices) } : {}),
   })),
-  secrets:
-    s.authMode === 'userSecret'
-      ? secretNamesOf(s).map((name) => ({ name, label: s.secretLabels[name]?.trim() || name }))
-      : [],
+  secrets: s.authMode === 'userSecret' ? secretFieldsOf(s) : [],
 });
 
 const visibilityBody = (v: Visibility): Visibility => ({
@@ -235,6 +230,35 @@ export const toVersionBody = (d: Draft): VersionCreateBody => ({
   installForm: installFormOf(d.spec),
   changelog: null,
 });
+
+/** JSON equality that ignores key order. */
+export const sameJson = (a: unknown, b: unknown) =>
+  JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
+
+/**
+ * The test stores the lockfile it captured on the draft's spec (8.7): it is not the form's, so it is carried over
+ * from the stored spec when the package is unchanged, and never makes the spec look edited.
+ */
+export const withStoredLockfile = (
+  body: VersionCreateBody,
+  stored: Record<string, unknown>,
+): VersionCreateBody => {
+  const spec = body.serverSpec as Record<string, unknown> | undefined;
+  if (!spec || !stored.lockfile || spec.lockfile) return body;
+  const same = stored.identifier === spec.identifier && stored.version === spec.version;
+  return same
+    ? {
+        ...body,
+        serverSpec: { ...spec, lockfile: stored.lockfile } as VersionCreateBody['serverSpec'],
+      }
+    : body;
+};
+
+/** Whether saving needs to patch the stored version: any patch of the spec invalidates its test (11.2). */
+export const versionChanged = (version: CatalogVersion, body: VersionCreateBody): boolean =>
+  version.label !== body.label ||
+  !sameJson(version.serverSpec, body.serverSpec) ||
+  !sameJson(version.installForm, body.installForm);
 
 // --- stored rows to a draft ----------------------------------------------------------------------------------------
 

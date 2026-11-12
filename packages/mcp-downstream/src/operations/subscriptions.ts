@@ -1,6 +1,6 @@
 /** `resources/subscribe` and `resources/unsubscribe` (legacy only, 6.3, 6.6), and `logging/setLevel`. */
 import { PolicyDeniedError } from '@bastion-mcp/core';
-import { ResourceNotFoundError, resolveResourceUriWithSeen } from '@bastion-mcp/router';
+import { installationData, ResourceNotFoundError } from '@bastion-mcp/router';
 import { InvalidParamsError } from '../rpc';
 import {
   type JsonObject,
@@ -11,7 +11,7 @@ import {
 } from '../types';
 import type { OperationDeps } from './deps';
 import { runRoutedOperation } from './outcome';
-import { callPrincipalOf, installationDataOf, policyContextOf } from './support';
+import { callPrincipalOf, policyContextOf, resolveResourceInstallation } from './support';
 
 const subscription = (
   deps: OperationDeps,
@@ -21,14 +21,14 @@ const subscription = (
   async run(params: JsonObject, ctx: OpContext): Promise<OpOutcome<JsonObject>> {
     const uri = params.uri;
     if (typeof uri !== 'string' || uri === '') throw new InvalidParamsError('uri is required');
-    const target = await resolveResourceUriWithSeen(ctx.endpoint.uriIndex, uri, {
-      store: deps.seenUris,
-      principalId: ctx.principal.id,
-      endpointId: ctx.endpoint.endpointId,
-    });
-    if (!target.ok) throw new ResourceNotFoundError(uri);
-    const installation = ctx.resolved.installations.get(target.target.installationId);
-    if (!installation) throw new ResourceNotFoundError(uri);
+    const routed = await resolveResourceInstallation(
+      ctx.endpoint.uriIndex,
+      ctx.resolved.installations,
+      uri,
+      { store: deps.seenUris, principalId: ctx.principal.id, endpointId: ctx.endpoint.endpointId },
+    );
+    if (!routed) throw new ResourceNotFoundError(uri);
+    const { installation } = routed;
     return runRoutedOperation(
       deps,
       ctx,
@@ -40,7 +40,7 @@ const subscription = (
           const decision = deps.policy.current().authorize({
             principal: deps.toPolicyPrincipal(ctx.principal, profile),
             action: 'subscribeResource',
-            resource: { type: 'Resource', installation: installationDataOf(installation), uri },
+            resource: { type: 'Resource', installation: installationData(installation), uri },
             context: policyContextOf(ctx, deps.clock.now()),
           });
           record.policyReasons = decision.reasons;

@@ -69,8 +69,3 @@ export const keys = {
   marketplaces: ['marketplaces'] as const,
   approvals: ['approvals'] as const,
 };
-
-export const useInvalidate = () => {
-  const qc = useQueryClient();
-  return (key: readonly unknown[]) => qc.invalidateQueries({ queryKey: key });
-};

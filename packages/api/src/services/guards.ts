@@ -15,7 +15,7 @@ export const guardProfiles = new CrudService({
 });
 
 /** Rebuilds the profile the guard pipeline reads from a stored row (13). */
-export const profileOf = (row: Row): GuardProfile => {
+const profileOf = (row: Row): GuardProfile => {
   const parsed = guardProfileSchema.safeParse({ ...row, profileId: row.id });
   if (!parsed.success) {
     throw new ApiError('invalid_profile', 'the stored guard profile is invalid', 500);

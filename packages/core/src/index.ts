@@ -7,6 +7,7 @@ export * from './cursor';
 export * from './errors';
 export * from './ids';
 export * from './json';
+export * from './latency';
 export * from './naming';
 export * from './net';
 export * from './org-settings';

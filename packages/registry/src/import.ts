@@ -1,4 +1,11 @@
-import { type Injection, isRecord, parseServerSpec, type ServerSpec } from '@bastion-mcp/core';
+import {
+  type Injection,
+  isExactVersion,
+  isRecord,
+  parseServerSpec,
+  type ServerSpec,
+  secretRef,
+} from '@bastion-mcp/core';
 import { ZodError } from 'zod';
 import { MAX_BODY_BYTES, readBodyCapped } from './body';
 import {
@@ -23,15 +30,17 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 
 const trimSlash = (value: string): string => value.replace(/\/+$/, '');
 
+type ResolverOptions = { fetch?: FetchFn; timeoutMs?: number; maxBodyBytes?: number };
+
 const fetchJson = async (
-  fetchFn: FetchFn,
   url: string,
-  timeoutMs: number,
+  options: ResolverOptions,
   signal: AbortSignal | undefined,
-  maxBodyBytes: number,
   accept = 'application/json',
 ): Promise<unknown> => {
-  const timeout = AbortSignal.timeout(timeoutMs);
+  const fetchFn = options.fetch ?? fetch;
+  const maxBodyBytes = options.maxBodyBytes ?? MAX_BODY_BYTES;
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   let response: Response;
   try {
     response = await fetchFn(url, {
@@ -58,11 +67,11 @@ const fetchJson = async (
   try {
     return JSON.parse(text);
   } catch (error) {
-    throw new RegistryUnavailableError('package registry answered invalid JSON', { cause: error });
+    throw new RegistryInvalidResponseError('package registry answered invalid JSON', {
+      cause: error,
+    });
   }
 };
-
-type ResolverOptions = { fetch?: FetchFn; timeoutMs?: number; maxBodyBytes?: number };
 
 /** npm packument lookup against `BASTION_NPM_REGISTRY` (or the public registry). */
 export const createNpmVersionResolver = (
@@ -74,11 +83,9 @@ export const createNpmVersionResolver = (
       ? `@${encodeURIComponent(identifier.slice(1))}`
       : encodeURIComponent(identifier);
     const body = await fetchJson(
-      options.fetch ?? fetch,
       `${trimSlash(registryUrl)}/${path}`,
-      options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      options,
       signal,
-      options.maxBodyBytes ?? MAX_BODY_BYTES,
       'application/vnd.npm.install-v1+json, application/json',
     );
     const tags = (body as { 'dist-tags'?: { latest?: unknown } } | null)?.['dist-tags'];
@@ -97,11 +104,9 @@ export const createPypiVersionResolver = (
   async latest(_runtime, identifier, signal) {
     const root = trimSlash(indexUrl).replace(/\/simple$/, '');
     const body = await fetchJson(
-      options.fetch ?? fetch,
       `${root}/pypi/${encodeURIComponent(identifier.toLowerCase())}/json`,
-      options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      options,
       signal,
-      options.maxBodyBytes ?? MAX_BODY_BYTES,
     );
     const version = (body as { info?: { version?: unknown } } | null)?.info?.version;
     if (typeof version !== 'string' || version.length === 0) {
@@ -120,7 +125,7 @@ export const createVersionResolver = (config: {
 }): VersionResolver => {
   const opts: ResolverOptions = {
     ...(config.fetch ? { fetch: config.fetch } : {}),
-    ...(config.timeoutMs ? { timeoutMs: config.timeoutMs } : {}),
+    ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
   };
   const npm = createNpmVersionResolver(config.npmRegistry, opts);
   const pypi = createPypiVersionResolver(config.pypiIndexUrl, opts);
@@ -149,8 +154,6 @@ const REJECTED_RUNNERS: Record<string, string> = {
 };
 
 const SECRET_NAME = /(key|token|secret|password|passwd|credential|auth|bearer)/i;
-
-const EXACT = /^\d+(?:\.\d+)+(?:[-+._]?[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$/;
 
 const snippetSchema = {
   parse(input: unknown): Record<string, unknown> {
@@ -287,14 +290,14 @@ const resolveVersion = async (
   warnings: string[],
 ): Promise<string> => {
   const { version } = parsed;
-  if (version && EXACT.test(version)) return version;
+  if (version && isExactVersion(version)) return version;
   if (version && version !== 'latest') {
     throw new RegistryMappingError(
       `version "${version}" of ${parsed.identifier} is a range or tag: Bastion pins one exact version`,
     );
   }
   const resolved = await resolver.latest(parsed.runtime, parsed.identifier, signal);
-  if (!EXACT.test(resolved)) {
+  if (!isExactVersion(resolved)) {
     throw new RegistryMappingError(`registry returned a non-exact version "${resolved}"`);
   }
   warnings.push(`version resolved to ${resolved} at import`);
@@ -336,7 +339,7 @@ const importRemoteSnippet = (
       inject.push({
         to: 'header',
         name,
-        value: bearer ? `Bearer {{secret.${field}}}` : `{{secret.${field}}}`,
+        value: bearer ? `Bearer ${secretRef(field)}` : secretRef(field),
       });
       warnings.push(
         `header ${name} was turned into a per-user secret field; its value was discarded`,
@@ -402,7 +405,7 @@ export const importFromClientConfig = async (
     if (SECRET_NAME.test(name)) {
       const field = sanitizeVariableName(name);
       fields.push({ name: field, label: name });
-      inject.push({ to: 'env', name, value: `{{secret.${field}}}` });
+      inject.push({ to: 'env', name, value: secretRef(field) });
       warnings.push(`env ${name} was turned into a per-user secret field; its value was discarded`);
     } else {
       environmentVariables.push({ name, value });

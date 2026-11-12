@@ -16,6 +16,8 @@ export const BACKUP_TIMEOUT_MS = 10 * MINUTE;
 
 /** System status refreshes this often while the screen is open. */
 export const POLL_SYSTEM_MS = 30 * SECOND;
+/** The running sandboxes and remote connections are re-read this often while the observability screen is open. */
+export const POLL_SANDBOXES_MS = 15 * SECOND;
 /** A version whose automatic test is running is re-read this often. */
 export const POLL_TEST_RUN_MS = 800;
 /** A registry source is re-read this often while a sync the user asked for has not reported back. */

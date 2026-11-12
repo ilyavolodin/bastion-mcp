@@ -33,10 +33,10 @@ export const csvCell = (value: unknown): string => {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 
-export const csvRow = (event: AuditEventView): string =>
+const csvRow = (event: AuditEventView): string =>
   COLUMNS.map((column) => csvCell(event[column])).join(',');
 
-export const csvHeader = (): string => COLUMNS.join(',');
+const csvHeader = (): string => COLUMNS.join(',');
 
 export type ExportFormat = 'csv' | 'json';
 

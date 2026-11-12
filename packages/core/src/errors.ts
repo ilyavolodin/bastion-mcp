@@ -137,3 +137,7 @@ export const sanitizeUpstreamErrorMessage = (message: string): string => {
   const firstLines = message.split('\n').filter((line) => !/^\s+at\s/.test(line));
   return firstLines.join('\n').trimEnd().slice(0, MAX_UPSTREAM_ERROR_MESSAGE);
 };
+
+/** The text of a caught value: an `Error`'s message, otherwise the value stringified. */
+export const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);

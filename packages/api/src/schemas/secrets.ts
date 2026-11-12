@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { ownerScopeSchema } from './common';
 
-export const secretScopeSchema = ownerScopeSchema;
+const secretScopeSchema = ownerScopeSchema;
 
-export const secretNameSchema = z
+const secretNameSchema = z
   .string()
   .min(1)
   .max(128)

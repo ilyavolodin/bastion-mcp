@@ -3,6 +3,7 @@ import type { CapabilityKind } from '@/api/views/servers';
 import { Field } from '@/components/form';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { jsonText, useFollowedText } from '@/lib/use-followed-text';
 
 type Entry = Record<string, unknown>;
 type Props = {
@@ -28,15 +29,8 @@ function JsonField({
   disabled?: boolean | undefined;
   onValid: (v: unknown) => void;
 }) {
-  const [text, setText] = React.useState(value === undefined ? '' : JSON.stringify(value, null, 2));
+  const { text, setText, markWritten } = useFollowedText(value, jsonText);
   const [error, setError] = React.useState<string | undefined>();
-  const last = React.useRef(value);
-  React.useEffect(() => {
-    if (JSON.stringify(value) !== JSON.stringify(last.current)) {
-      setText(value === undefined ? '' : JSON.stringify(value, null, 2));
-      last.current = value;
-    }
-  }, [value]);
   return (
     <Field label={label} help={help} error={error}>
       {({ id, describedBy, invalid }) => (
@@ -53,7 +47,7 @@ function JsonField({
             setText(t);
             if (t.trim() === '') {
               setError(undefined);
-              last.current = undefined;
+              markWritten(undefined);
               onValid(undefined);
               return;
             }
@@ -65,7 +59,7 @@ function JsonField({
                   : v !== null && typeof v === 'object' && !Array.isArray(v);
               if (!ok) throw new Error(`Expected a JSON ${expect}`);
               setError(undefined);
-              last.current = v;
+              markWritten(v);
               onValid(v);
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Invalid JSON');
@@ -189,7 +183,7 @@ export function OverrideForm({ kind, entry, disabled, onChange }: Props) {
       {isTool ? (
         <>
           <fieldset className="m-0 grid gap-3 border-0 p-0 sm:grid-cols-2">
-            <legend className="mb-1.5 text-[13px] font-medium">Annotations</legend>
+            <legend className="mb-1.5 text-body-sm font-medium">Annotations</legend>
             {TRI.map(([key, label]) => (
               <Field key={key} label={label}>
                 {({ id }) => (

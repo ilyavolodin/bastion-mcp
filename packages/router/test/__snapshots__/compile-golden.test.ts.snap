@@ -1,0 +1,656 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`7.2 compiled endpoint over a mixed fixture (golden) > 7.2 serializeEndpoint of the whole endpoint stays byte-identical 1`] = `
+{
+  "cacheScope": "private",
+  "capabilities": {
+    "prompts": {
+      "listChanged": true,
+    },
+    "resources": {
+      "listChanged": true,
+      "subscribe": true,
+    },
+    "tools": {
+      "listChanged": true,
+    },
+  },
+  "collisions": [
+    {
+      "installationIds": [
+        "a",
+        "b",
+      ],
+      "kind": "tool",
+      "name": "send",
+    },
+    {
+      "installationIds": [
+        "a",
+        "b",
+      ],
+      "kind": "prompt",
+      "name": "plain",
+    },
+  ],
+  "configVersion": "9",
+  "degraded": [
+    {
+      "code": "unavailable",
+      "installation": "gamma",
+    },
+  ],
+  "dependencies": {
+    "catalogEntryIds": [
+      "e-a",
+      "e-b",
+      "e-d",
+      "e-e",
+      "e-c",
+    ],
+    "installationIds": [
+      "a",
+      "b",
+      "d",
+      "e",
+      "c",
+    ],
+    "teamIds": [
+      "t1",
+    ],
+  },
+  "endpointId": "default",
+  "hash": "061e48aee7ebd9fd",
+  "installations": [
+    {
+      "collisionCount": 2,
+      "degraded": false,
+      "displayName": "Alpha",
+      "id": "a",
+      "promptCount": 2,
+      "resourceCount": 3,
+      "slug": "alpha",
+      "toolCount": 3,
+    },
+    {
+      "collisionCount": 2,
+      "degraded": false,
+      "displayName": "Beta",
+      "id": "b",
+      "promptCount": 1,
+      "resourceCount": 2,
+      "slug": "beta",
+      "toolCount": 2,
+    },
+    {
+      "collisionCount": 0,
+      "degraded": false,
+      "displayName": "Delta",
+      "id": "d",
+      "promptCount": 0,
+      "resourceCount": 0,
+      "slug": "delta",
+      "toolCount": 0,
+    },
+    {
+      "collisionCount": 0,
+      "degraded": false,
+      "displayName": "Epsilon",
+      "id": "e",
+      "promptCount": 0,
+      "resourceCount": 1,
+      "slug": "epsilon",
+      "toolCount": 0,
+    },
+    {
+      "collisionCount": 0,
+      "degraded": true,
+      "displayName": "Gamma",
+      "id": "c",
+      "promptCount": 0,
+      "resourceCount": 0,
+      "slug": "gamma",
+      "toolCount": 0,
+    },
+  ],
+  "items": [
+    {
+      "collided": true,
+      "finalKey": "alpha__plain",
+      "installationId": "a",
+      "issues": [],
+      "kind": "prompt",
+      "overridden": false,
+      "renamed": true,
+      "upstreamKey": "plain",
+    },
+    {
+      "collided": true,
+      "finalKey": "beta__plain",
+      "installationId": "b",
+      "issues": [],
+      "kind": "prompt",
+      "overridden": false,
+      "renamed": true,
+      "upstreamKey": "plain",
+    },
+    {
+      "added": true,
+      "collided": false,
+      "finalKey": "review",
+      "installationId": "a",
+      "issues": [],
+      "kind": "prompt",
+      "overridden": false,
+      "renamed": false,
+      "upstreamKey": "review",
+    },
+    {
+      "collided": false,
+      "finalKey": "bastion+beta:file:///only-b",
+      "installationId": "b",
+      "issues": [],
+      "kind": "resource",
+      "overridden": true,
+      "renamed": true,
+      "upstreamKey": "file:///only-b",
+    },
+    {
+      "collided": false,
+      "finalKey": "bastion+beta:file:///shared",
+      "installationId": "b",
+      "issues": [],
+      "kind": "resource",
+      "overridden": true,
+      "renamed": true,
+      "upstreamKey": "file:///shared",
+    },
+    {
+      "collided": false,
+      "finalKey": "file:///only-a",
+      "installationId": "a",
+      "issues": [],
+      "kind": "resource",
+      "overridden": false,
+      "renamed": false,
+      "upstreamKey": "file:///only-a",
+    },
+    {
+      "collided": false,
+      "finalKey": "file:///shared",
+      "installationId": "a",
+      "issues": [],
+      "kind": "resource",
+      "overridden": false,
+      "renamed": false,
+      "upstreamKey": "file:///shared",
+    },
+    {
+      "added": true,
+      "collided": false,
+      "finalKey": "notes://welcome",
+      "installationId": "a",
+      "issues": [],
+      "kind": "resource",
+      "overridden": false,
+      "renamed": false,
+      "upstreamKey": "notes://welcome",
+    },
+    {
+      "collided": false,
+      "finalKey": "bastion+beta:file:///{p}",
+      "installationId": "b",
+      "issues": [],
+      "kind": "resourceTemplate",
+      "overridden": true,
+      "renamed": true,
+      "upstreamKey": "file:///{p}",
+    },
+    {
+      "added": true,
+      "collided": false,
+      "finalKey": "notes://page/{id}",
+      "installationId": "a",
+      "issues": [],
+      "kind": "resourceTemplate",
+      "overridden": false,
+      "renamed": false,
+      "upstreamKey": "notes://page/{id}",
+    },
+    {
+      "collided": false,
+      "finalKey": "repo://{o}/{r}",
+      "installationId": "a",
+      "issues": [],
+      "kind": "resourceTemplate",
+      "overridden": false,
+      "renamed": false,
+      "upstreamKey": "repo://{o}/{r}",
+    },
+    {
+      "collided": true,
+      "finalKey": "alpha__send",
+      "installationId": "a",
+      "issues": [],
+      "kind": "tool",
+      "overridden": true,
+      "renamed": true,
+      "upstreamKey": "send",
+    },
+    {
+      "collided": true,
+      "finalKey": "beta__send",
+      "installationId": "b",
+      "issues": [],
+      "kind": "tool",
+      "overridden": false,
+      "renamed": true,
+      "upstreamKey": "send",
+    },
+    {
+      "collided": false,
+      "finalKey": "find",
+      "installationId": "a",
+      "issues": [],
+      "kind": "tool",
+      "overridden": true,
+      "renamed": true,
+      "upstreamKey": "search",
+    },
+    {
+      "collided": false,
+      "finalKey": "search",
+      "installationId": "b",
+      "issues": [],
+      "kind": "tool",
+      "overridden": false,
+      "renamed": false,
+      "upstreamKey": "search",
+    },
+    {
+      "collided": false,
+      "finalKey": "widget",
+      "installationId": "a",
+      "issues": [],
+      "kind": "tool",
+      "overridden": false,
+      "renamed": false,
+      "upstreamKey": "widget",
+    },
+  ],
+  "kind": "default",
+  "needsAuth": [
+    {
+      "installation": "delta",
+    },
+  ],
+  "prefixing": false,
+  "principalId": "u1",
+  "promptRoutes": [
+    [
+      "alpha__plain",
+      {
+        "finalName": "alpha__plain",
+        "installationId": "a",
+        "plan": {
+          "hidden": [],
+          "pinned": {},
+          "upstreamName": "plain",
+        },
+        "upstreamName": "plain",
+      },
+    ],
+    [
+      "beta__plain",
+      {
+        "finalName": "beta__plain",
+        "installationId": "b",
+        "upstreamName": "plain",
+      },
+    ],
+    [
+      "review",
+      {
+        "finalName": "review",
+        "hosted": {
+          "messages": [
+            {
+              "role": "user",
+              "text": "Review {{repo}}",
+            },
+          ],
+        },
+        "installationId": "a",
+        "plan": {
+          "hidden": [],
+          "pinned": {},
+          "upstreamName": "review",
+        },
+        "upstreamName": "review",
+      },
+    ],
+  ],
+  "prompts": [
+    {
+      "description": "upstream",
+      "name": "alpha__plain",
+    },
+    {
+      "name": "beta__plain",
+    },
+    {
+      "name": "review",
+    },
+  ],
+  "resourceTemplates": [
+    {
+      "name": "files",
+      "uriTemplate": "bastion+beta:file:///{p}",
+    },
+    {
+      "mimeType": "text/plain",
+      "name": "page",
+      "uriTemplate": "notes://page/{id}",
+    },
+    {
+      "name": "repo",
+      "uriTemplate": "repo://{o}/{r}",
+    },
+  ],
+  "resources": [
+    {
+      "name": "only-b",
+      "uri": "bastion+beta:file:///only-b",
+    },
+    {
+      "name": "shared-b",
+      "uri": "bastion+beta:file:///shared",
+    },
+    {
+      "name": "only-a",
+      "uri": "file:///only-a",
+    },
+    {
+      "name": "shared",
+      "uri": "file:///shared",
+    },
+    {
+      "mimeType": "text/plain",
+      "name": "welcome",
+      "uri": "notes://welcome",
+    },
+  ],
+  "serverInfo": {
+    "name": "bastion",
+    "title": "Acme MCP",
+    "version": "1.2.3",
+  },
+  "toolRoutes": [
+    [
+      "alpha__send",
+      {
+        "finalName": "alpha__send",
+        "installationId": "a",
+        "plan": {
+          "defaults": {},
+          "pinned": {
+            "channel": "C1",
+          },
+          "schema": {
+            "properties": {},
+            "type": "object",
+          },
+          "upstreamName": "send",
+          "validate": true,
+        },
+        "upstreamName": "send",
+      },
+    ],
+    [
+      "beta__send",
+      {
+        "finalName": "beta__send",
+        "installationId": "b",
+        "upstreamName": "send",
+      },
+    ],
+    [
+      "find",
+      {
+        "finalName": "find",
+        "installationId": "a",
+        "plan": {
+          "defaults": {},
+          "pinned": {},
+          "schema": {
+            "properties": {
+              "q": {
+                "type": "string",
+              },
+            },
+            "type": "object",
+          },
+          "upstreamName": "search",
+          "validate": false,
+        },
+        "upstreamName": "search",
+      },
+    ],
+    [
+      "search",
+      {
+        "finalName": "search",
+        "installationId": "b",
+        "upstreamName": "search",
+      },
+    ],
+    [
+      "widget",
+      {
+        "finalName": "widget",
+        "installationId": "a",
+        "plan": {
+          "defaults": {},
+          "pinned": {},
+          "schema": {
+            "properties": {
+              "q": {
+                "type": "string",
+              },
+            },
+            "type": "object",
+          },
+          "upstreamName": "widget",
+          "validate": false,
+        },
+        "upstreamName": "widget",
+      },
+    ],
+  ],
+  "tools": [
+    {
+      "description": "Send it",
+      "inputSchema": {
+        "properties": {},
+        "type": "object",
+      },
+      "name": "alpha__send",
+    },
+    {
+      "description": "send description",
+      "inputSchema": {
+        "properties": {
+          "q": {
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "name": "beta__send",
+    },
+    {
+      "description": "search description",
+      "inputSchema": {
+        "properties": {
+          "q": {
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "name": "find",
+    },
+    {
+      "description": "search description",
+      "inputSchema": {
+        "properties": {
+          "q": {
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "name": "search",
+    },
+    {
+      "_meta": {
+        "ui": {
+          "resourceUri": "ui://widget",
+        },
+      },
+      "description": "widget description",
+      "inputSchema": {
+        "properties": {
+          "q": {
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "name": "widget",
+    },
+  ],
+  "ttlMs": 60000,
+  "uriIndex": {
+    "exact": [
+      [
+        "bastion+beta:file:///only-b",
+        {
+          "installationId": "b",
+          "route": {
+            "kind": "resource",
+            "prefixSlug": "beta",
+          },
+          "upstreamUri": "file:///only-b",
+        },
+      ],
+      [
+        "bastion+beta:file:///shared",
+        {
+          "installationId": "b",
+          "route": {
+            "kind": "resource",
+            "prefixSlug": "beta",
+          },
+          "upstreamUri": "file:///shared",
+        },
+      ],
+      [
+        "file:///only-a",
+        {
+          "installationId": "a",
+          "route": {
+            "kind": "resource",
+          },
+          "upstreamUri": "file:///only-a",
+        },
+      ],
+      [
+        "file:///shared",
+        {
+          "installationId": "a",
+          "route": {
+            "kind": "resource",
+          },
+          "upstreamUri": "file:///shared",
+        },
+      ],
+      [
+        "notes://welcome",
+        {
+          "installationId": "a",
+          "route": {
+            "hosted": {
+              "def": {
+                "name": "welcome",
+                "text": "Hello",
+              },
+              "kind": "resource",
+            },
+            "kind": "resource",
+          },
+          "upstreamUri": "notes://welcome",
+        },
+      ],
+    ],
+    "rewritten": [
+      [
+        "beta",
+        "b",
+      ],
+    ],
+    "seen": [
+      [
+        "ui://widget",
+        "a",
+      ],
+    ],
+    "templates": [
+      {
+        "advertised": "repo://{o}/{r}",
+        "installationId": "a",
+        "route": {
+          "kind": "template",
+          "pinnedVariables": {},
+          "upstreamTemplate": "repo://{o}/{r}",
+        },
+      },
+      {
+        "advertised": "notes://page/{id}",
+        "installationId": "a",
+        "route": {
+          "hosted": {
+            "def": {
+              "name": "page",
+              "text": "Page {{id}}",
+            },
+            "kind": "template",
+            "uriTemplate": "notes://page/{id}",
+          },
+          "kind": "template",
+          "pinnedVariables": {},
+          "upstreamTemplate": "notes://page/{id}",
+        },
+      },
+      {
+        "advertised": "bastion+beta:file:///{p}",
+        "installationId": "b",
+        "route": {
+          "kind": "template",
+          "pinnedVariables": {},
+          "prefixSlug": "beta",
+          "upstreamTemplate": "file:///{p}",
+        },
+      },
+    ],
+  },
+  "warnings": [
+    {
+      "code": "uri_conflict",
+      "hidden": "e",
+      "owner": "a",
+      "uri": "file:///only-a",
+    },
+  ],
+}
+`;

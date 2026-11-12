@@ -1,6 +1,7 @@
+import { NIL_UUID } from '@bastion-mcp/core';
 import type { DbExecutor } from './client';
 
-export const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+export { NIL_UUID };
 
 /**
  * Bumps `config_versions(scope, scope_id)` and returns the new version (4.3). The ui role publishes

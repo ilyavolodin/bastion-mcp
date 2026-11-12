@@ -1,5 +1,4 @@
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { readJsonBody, startHttp } from '../http';
 
 /**
  * A raw JSON-RPC (2026-07-28 shape) server that implements the Tasks extension `io.modelcontextprotocol/tasks`
@@ -117,40 +116,25 @@ export const startFakeTasksServer = async (
     }
   };
 
-  const server = http.createServer((req, res) => {
-    void (async () => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(chunk as Buffer);
-      let parsed: { id?: unknown; method?: string; params?: Record<string, unknown> } | undefined;
-      try {
-        parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as typeof parsed;
-      } catch {
-        parsed = undefined;
-      }
-      if (req.method !== 'POST' || !parsed) {
-        res.writeHead(405).end();
-        return;
-      }
-      if (parsed.id === undefined) {
-        res.writeHead(202).end();
-        return;
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(handle(parsed)));
-    })().catch(() => {
-      if (!res.headersSent) res.writeHead(500);
-      res.end();
-    });
+  const running = await startHttp(async (req, res) => {
+    const parsed = (await readJsonBody(req)) as
+      | { id?: unknown; method?: string; params?: Record<string, unknown> }
+      | undefined;
+    if (req.method !== 'POST' || !parsed) {
+      res.writeHead(405).end();
+      return;
+    }
+    if (parsed.id === undefined) {
+      res.writeHead(202).end();
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(handle(parsed)));
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
   return {
-    url: `http://127.0.0.1:${port}/mcp`,
-    port,
+    url: `${running.url}/mcp`,
+    port: running.port,
     requests,
-    close: async () => {
-      server.closeAllConnections();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    },
+    close: running.close,
   };
 };

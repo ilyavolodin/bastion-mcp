@@ -49,9 +49,9 @@ export function ProblemAlert({ error, onRetry }: { error: unknown; onRetry?: () 
       <Icon className="mt-0.5 size-5 shrink-0 text-coral-ink" aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <p className="m-0 font-semibold text-coral-ink">{title}</p>
-        {detail ? <p className="m-0 text-[13px]">{detail}</p> : null}
+        {detail ? <p className="m-0 text-body-sm">{detail}</p> : null}
         {fields.length ? (
-          <ul className="m-0 mt-1 list-disc pl-5 text-[13px]">
+          <ul className="m-0 mt-1 list-disc pl-5 text-body-sm">
             {fields.map((f) => (
               <li key={f}>{f}</li>
             ))}

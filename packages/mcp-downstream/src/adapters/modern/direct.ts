@@ -21,14 +21,16 @@ import { z } from 'zod';
 import { TRANSPORT_CODES, toRpcErrorBody } from '../../rpc';
 import type { JsonObject, OpOutcome } from '../../types';
 import type { Exchange, OpRunner } from '../contracts';
-import { first, inputRequiredPayload, isModernVersion, sseMessageFrame } from '../shared';
+import {
+  first,
+  inputRequiredPayload,
+  isModernVersion,
+  SERVER_INFO_KEY,
+  sseMessageFrame,
+} from '../shared';
 import { modernOpContext } from './server';
 
-export const TASK_METHODS: ReadonlySet<string> = new Set([
-  'tasks/get',
-  'tasks/update',
-  'tasks/cancel',
-]);
+const TASK_METHODS: ReadonlySet<string> = new Set(['tasks/get', 'tasks/update', 'tasks/cancel']);
 
 const envelopeSchema = z.looseObject({
   [PROTOCOL_VERSION_META_KEY]: z.string(),
@@ -106,7 +108,7 @@ const withEnvelope = (
   resultType: typeof result.resultType === 'string' ? result.resultType : resultType,
   _meta: {
     ...(isRecord(result._meta) ? result._meta : {}),
-    'io.modelcontextprotocol/serverInfo': serverInfo,
+    [SERVER_INFO_KEY]: serverInfo,
   },
 });
 

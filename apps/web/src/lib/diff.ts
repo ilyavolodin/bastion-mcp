@@ -95,7 +95,7 @@ export function diffLines(a: string, b: string): SideRow[] {
 export const stableStringify = (value: unknown): string =>
   JSON.stringify(sortKeys(value), null, 2) ?? 'null';
 
-const sortKeys = (v: unknown): unknown => {
+export const sortKeys = (v: unknown): unknown => {
   if (Array.isArray(v)) return v.map(sortKeys);
   if (v && typeof v === 'object') {
     return Object.fromEntries(

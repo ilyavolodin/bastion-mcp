@@ -1,5 +1,5 @@
 import type { IncomingMessage, RequestListener, ServerResponse } from 'node:http';
-import type { Keyring } from '@bastion-mcp/core';
+import { type Keyring, SECONDS } from '@bastion-mcp/core';
 import Provider, { type Configuration, errors, interactionPolicy } from 'oidc-provider';
 import {
   ACCESS_TOKEN_TTL_S,
@@ -89,6 +89,87 @@ export type AuthorizationServer = {
 };
 
 const CIMD_ACK = 'draft-02';
+
+/** Consent is remembered per (user, client); pre-approved clients and the credential helper get a grant on the spot. */
+const loadExistingGrantFor =
+  (clientPolicies: OAuthClientPolicyStore): NonNullable<Configuration['loadExistingGrant']> =>
+  async (ctx) => {
+    const oidc = ctx.oidc;
+    const clientId = oidc.client?.clientId;
+    if (!clientId) return undefined;
+    const grantId = oidc.result?.consent?.grantId ?? oidc.session?.grantIdFor(clientId);
+    if (grantId) {
+      const found = await oidc.provider.Grant.find(grantId);
+      if (found) return found;
+    }
+    const policy = await clientPolicies.get(clientId);
+    const accountId = oidc.session?.accountId;
+    if ((policy?.preApproved || clientId === CREDENTIAL_CLIENT_ID) && accountId) {
+      const grant = new (runtime(oidc.provider).Grant)({ clientId, accountId });
+      const requested = [...oidc.requestParamScopes];
+      const known = requested.filter((s) => (BASTION_SCOPES as readonly string[]).includes(s));
+      if (known.length > 0) grant.addOIDCScope(known.join(' '));
+      for (const [resource, server] of Object.entries(oidc.resourceServers ?? {})) {
+        const allowed = requested.filter((s) => server.scope.split(' ').includes(s));
+        if (allowed.length > 0) grant.addResourceScope(resource, allowed.join(' '));
+      }
+      await grant.save(CONSENT_TTL_S);
+      return grant as never;
+    }
+    return undefined;
+  };
+
+const interactionPolicyWithAccountConfirmation = () => {
+  const policy = interactionPolicy.base();
+  // Remembered consent (9.3): native clients use the same Grant lookup, no forced prompt.
+  policy.get('consent')?.checks.remove('native_client_prompt');
+  // The provider keeps its own login session, so a browser that has signed in once would authorize every
+  // app as that account without a word. Each authorization request confirms the account (or signs in as
+  // another) once: the check holds until this interaction has its login result.
+  policy
+    .get('login')
+    ?.checks.add(
+      new interactionPolicy.Check(
+        'confirm_account',
+        'The account the app is authorized as must be confirmed',
+        (ctx) =>
+          ctx.oidc.result?.login
+            ? interactionPolicy.Check.NO_NEED_TO_PROMPT
+            : interactionPolicy.Check.REQUEST_PROMPT,
+      ),
+    );
+  return policy;
+};
+
+const jwtCustomizerFor =
+  (principals: PrincipalDirectory) =>
+  async (
+    _ctx: unknown,
+    token: { kind?: string; clientId?: string },
+    jwt: { payload: Record<string, unknown> },
+  ) => {
+    if (token.kind === 'ClientCredentials') {
+      const account = token.clientId
+        ? await principals.serviceAccountForClient(token.clientId)
+        : null;
+      if (!account) throw new errors.UnauthorizedClient('client is not a service account');
+      jwt.payload.sub = account.id;
+      jwt.payload['bastion:pt'] = 'service';
+    } else {
+      jwt.payload['bastion:pt'] = 'user';
+    }
+  };
+
+/** The provider-relative path for a public `/oauth/*` path (or the RFC 8414 path form); `undefined` when the AS does not serve it. */
+export const mapOauthPath = (pathname: string): string | undefined => {
+  if (pathname === '/.well-known/oauth-authorization-server/oauth') {
+    return '/.well-known/openid-configuration';
+  }
+  if (pathname === '/oauth' || pathname.startsWith('/oauth/')) {
+    return pathname.slice('/oauth'.length) || '/';
+  }
+  return undefined;
+};
 
 export const createAuthorizationServer = async (
   deps: AuthorizationServerDeps,
@@ -191,8 +272,8 @@ export const createAuthorizationServer = async (
         DeviceCode: 600,
         IdToken: 600,
         Grant: CONSENT_TTL_S,
-        Interaction: 3600,
-        Session: 12 * 3600,
+        Interaction: SECONDS.HOUR,
+        Session: 12 * SECONDS.HOUR,
         // 7-day idle, 30-day absolute from the first issue (`iiat`).
         RefreshToken: (_ctx, token) => {
           const nowS = Math.floor(clock.now() / 1000);
@@ -210,73 +291,14 @@ export const createAuthorizationServer = async (
         (await deps.principals.isUserActive(sub))
           ? { accountId: sub, claims: async () => ({ sub }) }
           : undefined,
-      loadExistingGrant: async (ctx) => {
-        const oidc = ctx.oidc;
-        const clientId = oidc.client?.clientId;
-        if (!clientId) return undefined;
-        const grantId = oidc.result?.consent?.grantId ?? oidc.session?.grantIdFor(clientId);
-        if (grantId) {
-          const found = await oidc.provider.Grant.find(grantId);
-          if (found) return found;
-        }
-        const policy = await deps.clientPolicies.get(clientId);
-        const accountId = oidc.session?.accountId;
-        if ((policy?.preApproved || clientId === CREDENTIAL_CLIENT_ID) && accountId) {
-          const grant = new (runtime(oidc.provider).Grant)({ clientId, accountId });
-          const requested = [...oidc.requestParamScopes];
-          const known = requested.filter((s) => (BASTION_SCOPES as readonly string[]).includes(s));
-          if (known.length > 0) grant.addOIDCScope(known.join(' '));
-          for (const [resource, server] of Object.entries(oidc.resourceServers ?? {})) {
-            const allowed = requested.filter((s) => server.scope.split(' ').includes(s));
-            if (allowed.length > 0) grant.addResourceScope(resource, allowed.join(' '));
-          }
-          await grant.save(CONSENT_TTL_S);
-          return grant as never;
-        }
-        return undefined;
-      },
+      loadExistingGrant: loadExistingGrantFor(deps.clientPolicies),
       interactions: {
         url: async (_ctx, interaction) => `${interactionPath}/${interaction.uid}`,
-        policy: (() => {
-          const policy = interactionPolicy.base();
-          // Remembered consent (9.3): native clients use the same Grant lookup, no forced prompt.
-          policy.get('consent')?.checks.remove('native_client_prompt');
-          // The provider keeps its own login session, so a browser that has signed in once would authorize every
-          // app as that account without a word. Each authorization request confirms the account (or signs in as
-          // another) once: the check holds until this interaction has its login result.
-          policy
-            .get('login')
-            ?.checks.add(
-              new interactionPolicy.Check(
-                'confirm_account',
-                'The account the app is authorized as must be confirmed',
-                (ctx) =>
-                  ctx.oidc.result?.login
-                    ? interactionPolicy.Check.NO_NEED_TO_PROMPT
-                    : interactionPolicy.Check.REQUEST_PROMPT,
-              ),
-            );
-          return policy;
-        })(),
+        policy: interactionPolicyWithAccountConfirmation(),
       },
       formats: {
         customizers: {
-          jwt: async (
-            _ctx: unknown,
-            token: { kind?: string; clientId?: string },
-            jwt: { payload: Record<string, unknown> },
-          ) => {
-            if (token.kind === 'ClientCredentials') {
-              const account = token.clientId
-                ? await deps.principals.serviceAccountForClient(token.clientId)
-                : null;
-              if (!account) throw new errors.UnauthorizedClient('client is not a service account');
-              jwt.payload.sub = account.id;
-              jwt.payload['bastion:pt'] = 'service';
-            } else {
-              jwt.payload['bastion:pt'] = 'user';
-            }
-          },
+          jwt: jwtCustomizerFor(deps.principals),
         },
       } as never,
     };
@@ -302,12 +324,8 @@ export const createAuthorizationServer = async (
 
   const listener: RequestListener = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', 'http://internal');
-    let path = url.pathname;
-    if (path === '/.well-known/oauth-authorization-server/oauth') {
-      path = '/.well-known/openid-configuration';
-    } else if (path === '/oauth' || path.startsWith('/oauth/')) {
-      path = path.slice('/oauth'.length) || '/';
-    } else {
+    const path = mapOauthPath(url.pathname);
+    if (path === undefined) {
       res.writeHead(404, { 'content-type': 'application/json' }).end('{"error":"not_found"}');
       return;
     }

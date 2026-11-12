@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
 import {
   type ArgDraft,
-  type AuthMode,
   type BindingDraft,
   HEADER_NAME,
   type SpecDraft,
@@ -41,7 +40,7 @@ export function RowCell({
     <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
       <Label
         htmlFor={id}
-        className={cn('text-[13px] font-medium leading-5 text-ink', hideLabel && 'sr-only')}
+        className={cn('text-body-sm font-medium leading-5 text-ink', hideLabel && 'sr-only')}
       >
         {label}
       </Label>
@@ -51,7 +50,7 @@ export function RowCell({
 }
 
 /** The checkbox cell ("Required", "Secret"): the box centred on the control line. */
-export function CheckCell({
+function CheckCell({
   label,
   checked,
   disabled,
@@ -81,7 +80,7 @@ export function CheckCell({
   );
 }
 
-export function RemoveCell({
+function RemoveCell({
   label,
   disabled,
   onClick,
@@ -108,10 +107,10 @@ export function RemoveCell({
   );
 }
 
-export const ROW = 'grid items-end gap-x-3 gap-y-2';
+const ROW = 'grid items-end gap-x-3 gap-y-2';
 
 /** A row card: the container the columns respond to, and one line for what is wrong with the row. */
-export function RowCard({
+function RowCard({
   label,
   error,
   children,
@@ -132,7 +131,7 @@ export function RowCard({
   );
 }
 
-export const nameProblem = (name: string): string | undefined =>
+const nameProblem = (name: string): string | undefined =>
   name && !TEMPLATE_NAME.test(name) ? 'Use letters, digits and underscore' : undefined;
 
 /** What a row of a list gets: its place in the list, its value, and how to change or remove it. */
@@ -145,10 +144,9 @@ export type RowProps<T> = {
   onRemove: () => void;
 };
 
-/** A row that may carry a credential: it needs the spec and the auth mode to name the secret. */
+/** A row that may carry a credential: it needs the spec to name the secret. */
 export type SecretRowProps<T> = RowProps<T> & {
   spec: SpecDraft;
-  mode: AuthMode;
   /** The id of the `datalist` that suggests `{{var.NAME}}` and `{{secret.NAME}}`. */
   listId: string;
 };
@@ -177,7 +175,7 @@ export function VariableRow({
   onRemove,
 }: RowProps<VariableDraft>) {
   return (
-    <RowCard label={`Variable ${index + 1}`} error={nameProblem(v.name) ?? undefined}>
+    <RowCard label={`Variable ${index + 1}`} error={nameProblem(v.name)}>
       <div
         className={cn(
           ROW,
@@ -262,7 +260,6 @@ export function BindingRow({
   index,
   row,
   spec,
-  mode,
   readOnly,
   listId,
   onChange,
@@ -307,7 +304,7 @@ export function BindingRow({
               list={listId}
               aria-invalid={Boolean(valueBad)}
               disabled={readOnly}
-              className="font-mono text-[13px]"
+              className="font-mono text-body-sm"
               value={row.value}
               placeholder={
                 kind === 'header' ? 'Bearer {{secret.TOKEN}}' : 'a value, or {{var.NAME}}'
@@ -322,12 +319,12 @@ export function BindingRow({
           disabled={readOnly}
           title="A secret value is stored encrypted and injected by Bastion"
           onChange={(on) => {
-            const next = setRowSecret(row, on, secretNamesOf(spec), mode);
+            const next = setRowSecret(row, on, secretNamesOf(spec), spec.authMode);
             onChange(next);
           }}
         />
         <RemoveCell
-          label={`Remove ${noun} ${row.name || ''}`.trim()}
+          label={`Remove ${noun} ${row.name || index + 1}`}
           disabled={readOnly}
           onClick={onRemove}
         />
@@ -340,7 +337,6 @@ export function ArgRow({
   index,
   row,
   spec,
-  mode,
   readOnly,
   listId,
   onChange,
@@ -387,7 +383,7 @@ export function ArgRow({
               list={listId}
               aria-invalid={Boolean(valueBad)}
               disabled={readOnly}
-              className="font-mono text-[13px]"
+              className="font-mono text-body-sm"
               value={row.value}
               placeholder="a value, or {{var.NAME}}"
               onChange={(e) => onChange({ ...row, value: e.target.value })}
@@ -398,7 +394,7 @@ export function ArgRow({
           label="Secret"
           checked={row.secret}
           disabled={readOnly}
-          onChange={(on) => onChange(setRowSecret(row, on, secretNamesOf(spec), mode))}
+          onChange={(on) => onChange(setRowSecret(row, on, secretNamesOf(spec), spec.authMode))}
         />
         <RemoveCell
           label={`Remove argument ${row.name || row.value}`.trim()}

@@ -5,7 +5,7 @@
  * a rollback publishes nothing.
  */
 import type { Publisher, Tx, UnitOfWork } from '@bastion-mcp/api';
-import { REDIS_CHANNELS } from '@bastion-mcp/core';
+import { errorMessage, REDIS_CHANNELS } from '@bastion-mcp/core';
 import {
   flushUnit,
   NIL_UUID,
@@ -20,7 +20,7 @@ import { createResourceStore, loadResourceStoreMeta } from './resource-store';
 const isConflict = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
 
-export const createPublisher = (infra: Pick<Infra, 'publish'>): Publisher => ({
+const createPublisher = (infra: Pick<Infra, 'publish'>): Publisher => ({
   publish: (channel, message) => infra.publish(channel, message),
 });
 
@@ -42,10 +42,7 @@ export const createApiPersistence = async (
   const publishConfig = (event: { scope: string; id: string; version: bigint }) =>
     infra.publish(REDIS_CHANNELS.config, configMessage(event));
   const onPublishError = (error: unknown): void =>
-    infra.logger.warn(
-      { err: error instanceof Error ? error.message : String(error) },
-      'config publish failed',
-    );
+    infra.logger.warn({ err: errorMessage(error) }, 'config publish failed');
 
   const uow: UnitOfWork = {
     async run<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {

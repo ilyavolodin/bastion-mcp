@@ -1,5 +1,4 @@
 import { isRecord } from '@bastion-mcp/core';
-import { z } from 'zod';
 import type { ClaimMap, IdpConnection } from '../ports';
 
 /** Normalized user profile from an IdP (9.1). */
@@ -25,13 +24,6 @@ export const DEFAULT_CLAIM_MAP: ClaimMap = {
   groups: 'groups',
   sub: 'sub',
 };
-
-export const claimMapSchema = z.object({
-  email: z.string().min(1),
-  name: z.string().min(1),
-  groups: z.string().min(1),
-  sub: z.string().min(1),
-});
 
 const read = (claims: Record<string, unknown>, path: string): unknown => {
   if (path in claims) return claims[path];

@@ -45,6 +45,14 @@ import {
   requestToBody,
 } from './forms';
 
+/** What a failed dialog submit says: the API's first message, else the error's own, else a generic line. */
+const submitError = (err: unknown): string =>
+  err instanceof ApiError
+    ? (err.errors[0]?.message ?? (err.detail || err.title))
+    : err instanceof Error && err.message
+      ? err.message
+      : 'The request failed';
+
 /** A server the policy wants approval for, with what the policy said. */
 type Pending = { server: RegistryServerView; reasons: string[] };
 
@@ -78,9 +86,7 @@ function RequestDialog({ pending, onClose }: { pending: Pending | null; onClose:
                 setJustification('');
                 onClose();
               },
-              onError: (err) => {
-                if (err instanceof ApiError) setError(err.errors[0]?.message ?? err.detail);
-              },
+              onError: (err) => setError(submitError(err)),
             });
           }}
         >
@@ -139,11 +145,7 @@ function ServerCard({
         <Tag tone="surface">
           {s.sourceName} · v{s.version}
         </Tag>
-        {s.trust ? (
-          <Tag tone={s.trust === 'official' ? 'ok' : s.trust === 'internal' ? 'info' : 'neutral'}>
-            {TRUST_LABEL[s.trust] ?? s.trust}
-          </Tag>
-        ) : null}
+        {s.trust ? <Tag tone={trustTone(s.trust)}>{TRUST_LABEL[s.trust] ?? s.trust}</Tag> : null}
         {curate && hidden ? <Tag tone="warn">Hidden from members</Tag> : null}
       </div>
       {curate ? (
@@ -235,6 +237,7 @@ function RejectDialog({
                   setReason('');
                   onClose();
                 },
+                onError: (err) => setError(submitError(err)),
               },
             );
           }}
@@ -285,7 +288,7 @@ function Requests() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-label">
                     {r.requesterName} ·{' '}
-                    <span className="font-mono text-[13px]">{r.serverName}</span>
+                    <span className="font-mono text-body-sm">{r.serverName}</span>
                   </div>
                   <div className="text-caption text-muted">
                     {r.reason} · {r.teamName ?? 'No team'} · {formatRelative(r.createdAt)}
@@ -378,7 +381,7 @@ function SourcesStrip({ isAdmin }: { isAdmin: boolean }) {
         active.map((src) => {
           const info = syncInfo(src);
           return (
-            <div key={src.id} className="flex flex-wrap items-center gap-2 text-[13px]">
+            <div key={src.id} className="flex flex-wrap items-center gap-2 text-body-sm">
               <span className="font-semibold">{src.name}</span>
               <Tag tone={trustTone(src.trust)}>{TRUST_LABEL[src.trust] ?? src.trust}</Tag>
               <span className="text-muted">

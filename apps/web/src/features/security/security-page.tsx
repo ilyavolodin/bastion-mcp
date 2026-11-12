@@ -24,7 +24,7 @@ import { useAuth } from '@/auth/auth';
 import { ChartCard } from '@/components/chart-card';
 import { AutoSize, AXIS_TICK, ChartTooltip, dateLabel, GRID, hourLabel } from '@/components/charts';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { PageHeader } from '@/components/page-header';
 import {
   Card,
@@ -250,11 +250,7 @@ function DecisionDialog({
               />
             )}
           </Field>
-          {problem ? (
-            <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-              {problem}
-            </p>
-          ) : null}
+          <FormError message={problem} />
           <Button type="submit" variant={reject ? 'danger' : 'primary'} disabled={decide.isPending}>
             {reject ? 'Keep blocking' : 'Accept definition'}
           </Button>
@@ -276,8 +272,8 @@ function ReviewDetail({ r }: { r: DriftView }) {
         className="flex flex-col gap-2 rounded-md bg-sunken p-3.5"
       >
         <Overline>Upstream now</Overline>
-        <div className="font-mono text-[13px] font-semibold">{r.itemKey}</div>
-        <p className="m-0 text-[13px] leading-5">
+        <div className="font-mono text-body-sm font-semibold">{r.itemKey}</div>
+        <p className="m-0 text-body-sm leading-5">
           {r.description || 'This definition has no description.'}
         </p>
         <div
@@ -309,7 +305,7 @@ function ReviewDetail({ r }: { r: DriftView }) {
         ) : (
           <ShieldAlert className="size-[18px] text-berry-ink" aria-hidden="true" />
         )}
-        <span className="flex-1 text-[13px] leading-5">
+        <span className="flex-1 text-body-sm leading-5">
           <strong className="font-semibold">Guard scan:</strong> {r.scanMessage}
         </span>
       </div>
@@ -413,11 +409,7 @@ function BulkApproveDialog({
               />
             )}
           </Field>
-          {problem ? (
-            <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-              {problem}
-            </p>
-          ) : null}
+          <FormError message={problem} />
           <Button type="submit" disabled={approve.isPending}>
             {approve.isPending ? 'Accepting…' : `Accept ${reviews.length}`}
           </Button>
@@ -514,7 +506,7 @@ function DriftQueue() {
                         size={32}
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-mono text-[13px] leading-5 font-semibold">
+                        <span className="block truncate font-mono text-body-sm leading-5 font-semibold">
                           {r.itemKey}
                         </span>
                         <span className="block text-caption text-muted">
@@ -566,7 +558,7 @@ function RecentFindings({ range }: { range: StatsRange }) {
                 key={`${f.kind}-${f.id}`}
                 className="flex flex-col gap-1.5 rounded-md bg-sunken p-3.5"
               >
-                <span className="flex items-center gap-2 text-[13px] font-semibold">
+                <span className="flex items-center gap-2 text-body-sm font-semibold">
                   <Tag
                     tone={f.kind === 'guard_block' ? 'bad' : f.kind === 'drift' ? 'warn' : 'info'}
                   >

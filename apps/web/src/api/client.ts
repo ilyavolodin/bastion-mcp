@@ -117,9 +117,6 @@ const rememberRowEtags = (path: string, data: unknown): void => {
     }
   }
 };
-export const rememberEtag = (path: string, etag: string): void => {
-  etags.set(path, etag);
-};
 /** Forgets every remembered ETag: on sign out and when the session ends (a 401). */
 export const clearEtags = (): void => etags.clear();
 
@@ -141,38 +138,6 @@ export const buildQuery = (query: Query | undefined): string => {
   }
   const s = params.toString();
   return s ? `?${s}` : '';
-};
-
-type Problem = {
-  type?: string;
-  title?: string;
-  status?: number;
-  detail?: string;
-  code?: string;
-  errors?: { path?: string; pointer?: string; field?: string; message?: string; detail?: string }[];
-};
-
-export const parseProblem = async (res: Response): Promise<ApiError> => {
-  const ct = res.headers.get('content-type') ?? '';
-  if (ct.includes('json')) {
-    try {
-      const p = (await res.json()) as Problem;
-      return new ApiError({
-        status: p.status ?? res.status,
-        ...(p.code ? { code: p.code } : {}),
-        ...(p.title ? { title: p.title } : {}),
-        ...(p.detail ? { detail: p.detail } : {}),
-        ...(p.type ? { type: p.type } : {}),
-        errors: (p.errors ?? []).map((e) => ({
-          path: e.path ?? e.pointer ?? e.field ?? '',
-          message: e.message ?? e.detail ?? 'Invalid value',
-        })),
-      });
-    } catch {
-      // fall through to the generic error
-    }
-  }
-  return new ApiError({ status: res.status, title: res.statusText || undefined });
 };
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

@@ -46,7 +46,7 @@ export function UserMenu({ collapsed }: { collapsed?: boolean }) {
             name={me.name}
             size={36}
             color="var(--gradient-sunset)"
-            className="!bg-grad-sunset text-[13px]"
+            className="!bg-grad-sunset text-body-sm"
           />
           <span className={cn('flex min-w-0 flex-1 flex-col', collapsed && 'max-[1279px]:hidden')}>
             <span className="truncate text-label">{me.name}</span>

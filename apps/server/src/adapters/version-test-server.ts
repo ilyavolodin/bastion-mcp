@@ -9,15 +9,23 @@ import { MAX_STEP_DETAIL_CHARS, VERSION_TEST_LIST_TIMEOUT_MS } from '../timing';
 import { readStderrTail } from './upstream/stderr';
 import type { CatalogRow, StepRunner, TestEnv } from './version-test-types';
 
+type RunCtx = {
+  entry: CatalogRow;
+  versionId: string;
+  authorId: string;
+  spec: ServerSpec;
+  form: Record<string, unknown>;
+  draft: boolean;
+  variables?: Record<string, string>;
+};
+
 /** The hidden installation a test of one version runs against: one per (version, author), reused between runs. */
 const testInstallation = async (
   infra: Infra,
-  entry: CatalogRow,
-  versionId: string,
-  authorId: string,
-  form: Record<string, unknown>,
-  given: Record<string, string> = {},
+  ctx: Pick<RunCtx, 'entry' | 'versionId' | 'authorId' | 'form' | 'variables'>,
 ): Promise<string> => {
+  const { entry, versionId, authorId, form } = ctx;
+  const given = ctx.variables ?? {};
   const slug = `test-${versionId.replaceAll('-', '').slice(0, 10)}`;
   const variables: Record<string, string> = {};
   const declared = Array.isArray(form.variables) ? form.variables : [];
@@ -58,15 +66,7 @@ const testInstallation = async (
 
 export const runServer = async (
   { infra, deps }: TestEnv,
-  ctx: {
-    entry: CatalogRow;
-    versionId: string;
-    authorId: string;
-    spec: ServerSpec;
-    form: Record<string, unknown>;
-    draft: boolean;
-    variables?: Record<string, string>;
-  },
+  ctx: RunCtx,
   step: StepRunner,
 ): Promise<void> => {
   const prisma = infra.db.prisma;
@@ -76,14 +76,7 @@ export const runServer = async (
   let lockfile: unknown = null;
 
   const prepared = await step('prepare', async () => {
-    installationId = await testInstallation(
-      infra,
-      entry,
-      versionId,
-      authorId,
-      ctx.form,
-      ctx.variables,
-    );
+    installationId = await testInstallation(infra, ctx);
     await prisma.definitionPin.deleteMany({ where: { catalogVersionId: versionId } });
     return { status: 'passed', detail: 'test installation ready' };
   });
@@ -221,6 +214,9 @@ export const runServer = async (
       ...listed.tools.map((t) => ({ ...(t as object), kind: 'tool' }) as Definition),
       ...listed.prompts.map((t) => ({ ...(t as object), kind: 'prompt' }) as Definition),
       ...listed.resources.map((t) => ({ ...(t as object), kind: 'resource' }) as Definition),
+      ...listed.resourceTemplates.map(
+        (t) => ({ ...(t as object), kind: 'template' }) as Definition,
+      ),
     ];
     const malicious: string[] = [];
     let suspicious = 0;

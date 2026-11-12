@@ -16,7 +16,7 @@ import {
   oauthClientSecretName,
   secretNamesOf,
 } from '../draft';
-import { type EditorProps, setSpec } from './props';
+import { type EditorProps, rowHandlers, setSpec } from './props';
 import { ArgRow, BindingRow, ReferenceList, RowCell } from './rows';
 
 /**
@@ -56,8 +56,8 @@ export function SecretsSection({ draft, onChange, readOnly }: EditorProps) {
             className="grid items-end gap-x-3 gap-y-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto]"
           >
             <div className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[13px] font-medium leading-5">Secret</span>
-              <code className="flex h-11 items-center truncate font-mono text-[13px]">{name}</code>
+              <span className="text-body-sm font-medium leading-5">Secret</span>
+              <code className="flex h-11 items-center truncate font-mono text-body-sm">{name}</code>
             </div>
             {shared ? (
               <RowCell label={`Value of ${name}`}>
@@ -157,15 +157,9 @@ export function HeadersEditor({ draft, onChange, readOnly }: EditorProps) {
           index={i}
           row={row}
           spec={spec}
-          mode={spec.authMode}
           readOnly={readOnly}
           listId={listId}
-          onChange={(next) =>
-            onChange(setSpec(draft, { headers: spec.headers.map((r, k) => (k === i ? next : r)) }))
-          }
-          onRemove={() =>
-            onChange(setSpec(draft, { headers: spec.headers.filter((_, k) => k !== i) }))
-          }
+          {...rowHandlers(draft, onChange, 'headers', i)}
         />
       ))}
     </section>
@@ -207,17 +201,9 @@ export function PackageSecrets({ draft, onChange, readOnly }: EditorProps) {
             index={i}
             row={row}
             spec={spec}
-            mode={mode}
             readOnly={readOnly}
             listId={listId}
-            onChange={(next) =>
-              onChange(
-                setSpec(draft, { envVars: spec.envVars.map((r, k) => (k === i ? next : r)) }),
-              )
-            }
-            onRemove={() =>
-              onChange(setSpec(draft, { envVars: spec.envVars.filter((_, k) => k !== i) }))
-            }
+            {...rowHandlers(draft, onChange, 'envVars', i)}
           />
         ) : null,
       )}
@@ -228,13 +214,9 @@ export function PackageSecrets({ draft, onChange, readOnly }: EditorProps) {
             index={i}
             row={row}
             spec={spec}
-            mode={mode}
             readOnly={readOnly}
             listId={listId}
-            onChange={(next) =>
-              onChange(setSpec(draft, { args: spec.args.map((r, k) => (k === i ? next : r)) }))
-            }
-            onRemove={() => onChange(setSpec(draft, { args: spec.args.filter((_, k) => k !== i) }))}
+            {...rowHandlers(draft, onChange, 'args', i)}
           />
         ) : null,
       )}

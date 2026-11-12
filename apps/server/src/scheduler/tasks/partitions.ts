@@ -3,8 +3,8 @@ import { dropPartitionsBefore } from '@bastion-mcp/db';
 import type { TaskFn } from '../types';
 
 /** `distribution_events` keep 90 days (25.9). */
-export const DISTRIBUTION_EVENT_RETENTION_DAYS = 90;
-export const PARTITIONS_AHEAD = PARTITION_DAYS_AHEAD;
+const DISTRIBUTION_EVENT_RETENTION_DAYS = 90;
+const PARTITIONS_AHEAD = PARTITION_DAYS_AHEAD;
 
 /** 15.5: partitions of the three telemetry tables exist seven days ahead; idempotent. */
 export const ensureTelemetryPartitions: TaskFn = async ({ infra }) => {

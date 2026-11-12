@@ -7,7 +7,7 @@ export type SetRoleResult =
   | { ok: true; email: string; from: OrgRole; to: OrgRole; ruleManaged: boolean }
   | { ok: false; reason: 'invalid_role' | 'not_found' | 'deactivated' | 'last_admin' };
 
-export const isOrgRole = (value: string | undefined): value is OrgRole =>
+const isOrgRole = (value: string | undefined): value is OrgRole =>
   (ORG_ROLES as readonly string[]).includes(value ?? '');
 
 /**

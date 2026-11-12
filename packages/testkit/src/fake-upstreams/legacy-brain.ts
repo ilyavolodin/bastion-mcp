@@ -22,7 +22,7 @@ export type LegacySessionState = {
 
 export type LegacyReply = { result: unknown } | { error: { code: number; message: string } };
 
-export const LEGACY_TOOLS = [
+const LEGACY_TOOLS = [
   {
     name: 'echo',
     description: 'Echo text',
@@ -53,7 +53,7 @@ export const LEGACY_TOOLS = [
   },
 ] as const;
 
-export const brainMeta = (params: unknown): JsonObject => {
+const brainMeta = (params: unknown): JsonObject => {
   const meta = (params as { _meta?: unknown } | undefined)?._meta;
   return typeof meta === 'object' && meta !== null ? (meta as JsonObject) : {};
 };
@@ -244,8 +244,6 @@ export const createLegacyBrain = (options: LegacyBrainOptions = {}) => {
 
   return { handle, calls };
 };
-
-export type LegacyBrain = ReturnType<typeof createLegacyBrain>;
 
 /** Tools that need an open stream because they send server-to-client requests or notifications. */
 export const STREAMING_TOOLS = new Set(['ask', 'ask2', 'sample', 'roots', 'progress']);

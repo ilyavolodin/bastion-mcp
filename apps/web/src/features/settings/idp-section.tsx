@@ -19,7 +19,7 @@ import {
 import { useAuth } from '@/auth/auth';
 import { CopyField } from '@/components/copy-field';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Card, CardHeader, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { StatusDot } from '@/components/status';
@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { applyServerErrors } from './form-errors';
+import { applyServerErrors } from '@/lib/form-errors';
 
 /** Mirrors `idpCreateSchema` / `idpPatchSchema` of the API (packages/api/src/schemas/identity.ts). */
 const idpSchema = (creating: boolean) =>
@@ -58,7 +58,7 @@ function TestResult({ result }: { result: IdpTestResult }) {
   return (
     <ul
       aria-label="Connection test"
-      className="m-0 flex list-none flex-col gap-1.5 rounded-md bg-sunken p-3 text-[13px]"
+      className="m-0 flex list-none flex-col gap-1.5 rounded-md bg-sunken p-3 text-body-sm"
     >
       {idpTestSteps(result).map((s) => (
         <li key={s.name} className="flex items-center gap-2">
@@ -185,7 +185,7 @@ function IdpDialog({ editing, onClose }: { editing: IdpConnection | 'new'; onClo
       </div>
       {text('scopes', 'Scopes', { help: 'Separated by spaces' })}
       <fieldset className="m-0 grid gap-3.5 border-0 p-0 sm:grid-cols-2">
-        <legend className="mb-1.5 text-[13px] font-medium">Claim names in the ID token</legend>
+        <legend className="mb-1.5 text-body-sm font-medium">Claim names in the ID token</legend>
         {text('claimEmail', 'Email claim', { placeholder: 'email' })}
         {text('claimName', 'Name claim', { placeholder: 'name' })}
         {text('claimGroups', 'Groups claim', { placeholder: 'groups' })}
@@ -213,11 +213,7 @@ function IdpDialog({ editing, onClose }: { editing: IdpConnection | 'new'; onClo
           connection.
         </p>
       ) : null}
-      {formError ? (
-        <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-          {formError}
-        </p>
-      ) : null}
+      <FormError message={formError} />
       <Button type="submit" disabled={pending}>
         Save connection
       </Button>

@@ -249,9 +249,29 @@ describe('Access forms send what the API requires (17.2)', () => {
     capture.stop();
   });
 
+  it('10.4 the simulator starts on the first person and server, with no tool named', async () => {
+    const { user } = await renderRoute('/access');
+    const person = await screen.findByLabelText('Person');
+    const server = screen.getByLabelText('Server');
+    await waitFor(() =>
+      expect(person).toHaveValue((person as HTMLSelectElement).options[0]?.value),
+    );
+    await waitFor(() =>
+      expect(server).toHaveValue((server as HTMLSelectElement).options[0]?.value),
+    );
+    expect(screen.getByLabelText('Tool')).toHaveValue('');
+    const simulate = screen.getByRole('button', { name: /Simulate/ });
+    expect(simulate).toBeDisabled();
+    await user.type(screen.getByLabelText('Tool'), 'lookup');
+    expect(simulate).toBeEnabled();
+  });
+
   it('10.4 the simulator sends a principal, an action and a tool resource', async () => {
     const capture = captureRequests();
     const { user } = await renderRoute('/access');
+    await screen.findByRole('option', { name: /Ana Kim/ });
+    await user.selectOptions(screen.getByLabelText('Person'), 'u-ana');
+    await user.type(screen.getByLabelText('Tool'), 'slack_post_message');
     await user.click(await screen.findByRole('button', { name: /Simulate/ }));
     expect(await expectSent(capture, 'post', '/policies/simulate')).toEqual({
       principal: {

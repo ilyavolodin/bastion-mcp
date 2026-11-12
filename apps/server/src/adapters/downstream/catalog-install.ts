@@ -5,7 +5,7 @@ import type { Infra } from '../../infra';
 type FormLike = { variables?: { required?: boolean; default?: unknown }[]; secrets?: unknown[] };
 
 /** An entry needs setup when the install form has a required variable without default or any user secret (11.4). */
-export const entryNeedsSetup = (form: unknown): boolean => {
+const entryNeedsSetup = (form: unknown): boolean => {
   const f = (form ?? {}) as FormLike;
   const missingVariable = (f.variables ?? []).some(
     (v) => v.required === true && v.default === undefined,

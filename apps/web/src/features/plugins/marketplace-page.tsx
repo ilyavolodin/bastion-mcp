@@ -53,7 +53,7 @@ function RolloutCard({
             label={`${label} ${view.kind === 'snippet' ? 'configuration' : 'checklist'}`}
             tone="sunken"
             buttonLabel="Copy"
-            className="[&>span:first-child]:text-[13px]"
+            className="[&>span:first-child]:text-body-sm"
           />
         </>
       ) : (

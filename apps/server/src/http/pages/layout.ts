@@ -1,9 +1,9 @@
 /** The one layout every server-rendered page uses: brand header, centered Zest card, shared stylesheet. */
 import { fontUrl, PAGES_ASSET_VERSION, PAGES_CSS_PATH, PAGES_THEME_PATH } from './css';
-import { type Child, html, raw, type SafeHtml } from './html';
+import { type Child, html, raw } from './html';
 
 /** The Bastion shield mark (docs/design/Sidebar.dc.html), drawn with `currentColor`. */
-export const BRAND_MARK = raw(
+const BRAND_MARK = raw(
   '<svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="miter" aria-hidden="true" focusable="false"><path d="M14 2.5 24 6.5v7.2c0 5.6-4.2 10.3-10 11.8C8.2 24 4 19.3 4 13.7V6.5L14 2.5z"/><path d="M9 11.5h10M9 15.5h10M14 7.5v13"/></svg>',
 );
 
@@ -59,5 +59,3 @@ ${spec.footnote === undefined ? '' : html`<footer class="foot">${spec.footnote}<
 </html>
 `.value;
 };
-
-export type { SafeHtml };

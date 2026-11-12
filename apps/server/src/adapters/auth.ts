@@ -28,6 +28,7 @@ import {
   UpstreamOAuthBroker,
 } from '@bastion-mcp/auth';
 import {
+  errorMessage,
   type Keyring,
   REDIS_CHANNELS,
   redisKeys,
@@ -41,6 +42,7 @@ import {
   type KeyStore,
   rotateKeyring,
 } from '@bastion-mcp/secrets';
+import { publicOrigin } from '../config';
 import type { AuthServices } from '../contracts';
 import { bastionProviderPages } from '../http/pages/provider-pages';
 import type { Infra } from '../infra';
@@ -79,7 +81,7 @@ const loadStateKeyring = async (keyStore: KeyStore): Promise<Keyring> =>
   buildStateKeyring(await keyStore.listStateKeys(), new Date());
 
 /** Cookie signing keys derived from the internal secret: identical on every replica (22.3). */
-export const deriveCookieKeys = (secret: string, previous?: string): string[] =>
+const deriveCookieKeys = (secret: string, previous?: string): string[] =>
   [secret, previous]
     .filter((s): s is string => typeof s === 'string' && s.length > 0)
     .map((s) => createHmac('sha256', s).update('bastion-oidc-cookies-v1').digest('hex'));
@@ -114,16 +116,13 @@ export const createInstallationLookup = (infra: Infra): InstallationLookup => {
 
 export const createAuthServices = async (infra: Infra): Promise<AuthServices> => {
   const { config, repos, redis, logger, options } = infra;
-  // The public ORIGIN (scheme included): OAuth issuer, resources and callbacks must use the scheme clients really use.
-  const publicOrigin = new URL(config.publicUrl).origin;
   const keyStore = repos.keyStore;
   if (!keyStore) throw new Error('repositories were created without a secret vault');
   const scimStore = repos.scim;
   if (!scimStore) throw new Error('repositories were created without the SCIM conflict error');
   const timers: NodeJS.Timeout[] = [];
   const unsubscribers: (() => void)[] = [];
-  const log = (msg: string, err: unknown) =>
-    logger.warn({ err: err instanceof Error ? err.message : String(err) }, msg);
+  const log = (msg: string, err: unknown) => logger.warn({ err: errorMessage(err) }, msg);
 
   await ensureKeys(keyStore);
 
@@ -144,14 +143,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
   };
   const baseFetch = options.fetch ?? fetch;
   /** IdP, CIMD and upstream AS traffic goes through the SSRF guard (9.6, 23.3) unless a test replaces fetch. */
-  const outboundFetch = options.fetch
-    ? options.fetch
-    : options.allowInsecureHttp
-      ? createSafeFetch(baseFetch, fetchPolicy)
-      : createSafeFetch(baseFetch, {
-          addressPolicy: fetchPolicy.addressPolicy,
-          allowHttpHosts: fetchPolicy.allowHttpHosts,
-        });
+  const outboundFetch = options.fetch ?? createSafeFetch(baseFetch, fetchPolicy);
 
   // --- identity ---------------------------------------------------------------------------------------------
   const principalStore: PrincipalStore = repos.principals;
@@ -187,7 +179,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
   // --- authorization server -------------------------------------------------------------------------------
   const settings = await repos.orgSettings.getAll();
   const authorizationServer = await createAuthorizationServer({
-    host: publicOrigin,
+    host: publicOrigin(config),
     orgName: settings.org.displayName,
     models: repos.oidcModels,
     signingKeys: keyStore,
@@ -222,7 +214,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
 
   // --- IdP login, tokens, minted credentials --------------------------------------------------------------
   const idpDeps = {
-    host: publicOrigin,
+    host: publicOrigin(config),
     connections: repos.idpConnections,
     secrets: infra.secretStore,
     fetch: outboundFetch,
@@ -235,7 +227,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
   // --- upstream OAuth broker ------------------------------------------------------------------------------
   const installationLookup = createInstallationLookup(infra);
   const broker = new UpstreamOAuthBroker({
-    host: publicOrigin,
+    host: publicOrigin(config),
     orgName: settings.org.displayName,
     stateKeyring,
     secrets: infra.secretStore,
@@ -252,7 +244,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
       : {}),
   });
   const minted = new IdpMintedTokens({
-    host: publicOrigin,
+    host: publicOrigin(config),
     idpClients,
     vault: idpTokens,
     broker,
@@ -273,7 +265,7 @@ export const createAuthServices = async (infra: Infra): Promise<AuthServices> =>
     },
   };
   const credentials = new UpstreamCredentialResolver({
-    host: publicOrigin,
+    host: publicOrigin(config),
     secrets: secretResolver,
     broker,
     minted,

@@ -23,7 +23,7 @@ type VerifiedPluginPrincipal = PluginPrincipal & { principal?: Principal };
  * enforces `plugins:read` and revocation; an `InsufficientScopeError` becomes a principal without the scope so the
  * handler answers 403 (`scope plugins:read required`) rather than 401.
  */
-export const createPluginAccess = ({ infra, auth }: PluginRoutesDeps): PluginAccess => ({
+const createPluginAccess = ({ infra, auth }: PluginRoutesDeps): PluginAccess => ({
   async authenticate(secret) {
     try {
       const principal = await auth.verifier.verify(

@@ -18,7 +18,7 @@ import {
 } from '@bastion-mcp/api';
 import {
   bumpConfigVersion,
-  NIL_UUID,
+  type ConfigScope,
   nextUpdatedAt,
   Prisma,
   type PrismaClient,
@@ -57,8 +57,6 @@ export interface CollectionStore {
   upsert(id: string, data: Record<string, unknown>): Promise<Row>;
   remove(id: string): Promise<boolean>;
 }
-
-export type ConfigScope = 'org' | 'user' | 'team' | 'installation' | 'catalog' | 'endpoint';
 
 export type CollectionSpec = {
   collection: Collection;
@@ -209,7 +207,7 @@ export const translateError = (error: unknown, what: string): never => {
 
 // --- the generic collection -----------------------------------------------------------------------------------------
 
-export const delegateOf = (ctx: StoreContext, model: ModelMeta): AnyDelegate =>
+const delegateOf = (ctx: StoreContext, model: ModelMeta): AnyDelegate =>
   (ctx.db as unknown as Record<string, AnyDelegate>)[model.delegate] as AnyDelegate;
 
 export const versionOf = (row: DbRow): Date => {
@@ -459,5 +457,3 @@ export const createCollection = (ctx: StoreContext, spec: CollectionSpec): Colle
     },
   };
 };
-
-export { NIL_UUID };

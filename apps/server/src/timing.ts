@@ -24,7 +24,7 @@ export const SCHEDULER_POLL_MS = MS.SECOND;
 
 /** In-flight work a worker waits for on shutdown (21.2), and the hard kill that follows with slack. */
 export const DRAIN_GRACE_MS = TIMEOUTS_MS.graceful;
-export const HARD_KILL_SLACK_MS = 10 * MS.SECOND;
+const HARD_KILL_SLACK_MS = 10 * MS.SECOND;
 export const HARD_KILL_MS = DRAIN_GRACE_MS + HARD_KILL_SLACK_MS;
 
 /** Connection timeout of the CLI's database and Redis probes. */

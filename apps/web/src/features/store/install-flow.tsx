@@ -1,3 +1,4 @@
+import { isValidSlug } from '@bastion-mcp/core/ids';
 import { Link } from '@tanstack/react-router';
 import { CheckCircle2, KeyRound, Link2 } from 'lucide-react';
 import * as React from 'react';
@@ -23,13 +24,10 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
-import { useSlug } from '@/features/access/forms';
+import { useSlug } from '@/hooks/use-slug';
 import { openAuthorization } from '../servers/use-installation-action';
 
 type Step = 'setup' | 'connect' | 'ready';
-
-/** `installationCreateSchema`: a slug of 2 to 40 characters. */
-const SLUG = /^[a-z0-9-]{2,40}$/;
 
 /** A secret goes to the installation after it exists (`PUT /installations/{id}/secrets/{name}`, 11.4). */
 const putSecret = (id: string, name: string, value: string) =>
@@ -90,7 +88,7 @@ export function InstallFlow({
 
   const submit = form.handleSubmit(async (values) => {
     setError(null);
-    if (!SLUG.test(installSlug)) {
+    if (!isValidSlug(installSlug)) {
       setSlugError('Use 2 to 40 lowercase letters, digits and dashes');
       return;
     }
@@ -213,7 +211,7 @@ export function InstallFlow({
                 />
               )}
             </Field>
-            <label className="flex items-center gap-2.5 text-[13px]">
+            <label className="flex items-center gap-2.5 text-body-sm">
               <Checkbox checked={pinned} onCheckedChange={(c) => setPinned(c === true)} />
               Stay on version {entry.version?.label ?? 'this version'} instead of following updates
             </label>

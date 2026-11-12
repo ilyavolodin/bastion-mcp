@@ -16,7 +16,7 @@ export const MAX_TAG_VALUE_LENGTH = 256;
 export const MAX_TAGS = 64;
 export const MAX_TAG_NAME_LENGTH = 128;
 
-export const TOOL_CALL_ENTITY_ID = 'call';
+const TOOL_CALL_ENTITY_ID = 'call';
 
 type EntityRef = { __entity: { type: string; id: string } };
 
@@ -209,11 +209,10 @@ const installationEntities = (installation: InstallationData, orgId: string): En
   ];
 };
 
-export const installationKey = (installation: InstallationData): string =>
+const installationKey = (installation: InstallationData): string =>
   entityKey(typeName('Installation'), installation.id);
 
-export const toolEntityId = (installationId: string, name: string): string =>
-  `${installationId}/${name}`;
+const toolEntityId = (installationId: string, name: string): string => `${installationId}/${name}`;
 
 export const resourceSlice = (resource: ResourceData, orgId: string): Slice => {
   const orgKey = entityKey(typeName('Org'), orgId);

@@ -8,7 +8,6 @@ import { ErrorBoundary } from '@/components/problem';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Toaster } from '@/components/ui/sonner';
-import { TooltipProvider } from '@/components/ui/tooltip';
 import { SECTIONS, sectionForPath } from '@/lib/roles';
 import { CommandPalette } from './command-palette';
 import { PaletteProvider } from './palette-context';
@@ -57,43 +56,41 @@ export function AppShell() {
   const compact = Boolean(SECTIONS[sectionForPath(path)].compact);
   useServerEvents((n) => toast(n.title, { description: n.body }));
   return (
-    <TooltipProvider>
-      <PaletteProvider>
-        <div className="flex min-h-screen flex-col bg-canvas text-ink">
-          <a
-            href="#main"
-            className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-surface focus:px-4 focus:py-2"
-          >
-            Skip to content
-          </a>
-          {previewEnabled ? <RoleBar /> : null}
-          <div className="flex flex-1 items-stretch">
-            <Sidebar />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <MobileBar />
-              <main
-                id="main"
-                tabIndex={-1}
-                className="flex min-w-0 flex-1 flex-col gap-6 px-8 pb-12 pt-6 max-md:px-4"
-              >
-                {!compact ? (
-                  <p
-                    role="note"
-                    className="m-0 rounded-md bg-sky-soft px-3.5 py-2.5 text-[13px] text-sky-ink md:hidden"
-                  >
-                    This screen is best on a wider display. Home, Store and Activity work here.
-                  </p>
-                ) : null}
-                <ErrorBoundary key={path}>
-                  <Outlet />
-                </ErrorBoundary>
-              </main>
-            </div>
+    <PaletteProvider>
+      <div className="flex min-h-screen flex-col bg-canvas text-ink">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-surface focus:px-4 focus:py-2"
+        >
+          Skip to content
+        </a>
+        {previewEnabled ? <RoleBar /> : null}
+        <div className="flex flex-1 items-stretch">
+          <Sidebar />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <MobileBar />
+            <main
+              id="main"
+              tabIndex={-1}
+              className="flex min-w-0 flex-1 flex-col gap-6 px-8 pb-12 pt-6 max-md:px-4"
+            >
+              {!compact ? (
+                <p
+                  role="note"
+                  className="m-0 rounded-md bg-sky-soft px-3.5 py-2.5 text-body-sm text-sky-ink md:hidden"
+                >
+                  This screen is best on a wider display. Home, Store and Activity work here.
+                </p>
+              ) : null}
+              <ErrorBoundary key={path}>
+                <Outlet />
+              </ErrorBoundary>
+            </main>
           </div>
-          <CommandPalette />
-          <Toaster />
         </div>
-      </PaletteProvider>
-    </TooltipProvider>
+        <CommandPalette />
+        <Toaster />
+      </div>
+    </PaletteProvider>
   );
 }

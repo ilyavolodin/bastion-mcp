@@ -7,7 +7,10 @@ import { z } from 'zod';
 
 const jsonValue = z.json();
 const pointer = z.string().regex(/^(\/[^/]*)*$/, 'must be a JSON Pointer (RFC 6901)');
-const name = z.string().regex(/^[A-Za-z0-9_.-]{1,128}$/, 'must match ^[A-Za-z0-9_.-]{1,128}$');
+/** `NAME_PATTERN` of `@bastion-mcp/core`, restated because the SPA cannot import core's Node-only barrel. */
+const NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;
+const NAME_MESSAGE = 'must match ^[A-Za-z0-9_.-]{1,128}$';
+const name = z.string().regex(NAME_PATTERN, NAME_MESSAGE);
 const description = z.union([
   z.string(),
   z.strictObject({ mode: z.enum(['append', 'prepend', 'replace']), text: z.string() }),
@@ -135,11 +138,11 @@ const added = z
   })
   .superRefine((value, ctx) => {
     for (const key of Object.keys(value.prompts ?? {})) {
-      if (!/^[A-Za-z0-9_.-]{1,128}$/.test(key)) {
+      if (!NAME_PATTERN.test(key)) {
         ctx.addIssue({
           code: 'custom',
           path: ['prompts', key],
-          message: 'must match ^[A-Za-z0-9_.-]{1,128}$',
+          message: NAME_MESSAGE,
         });
       }
     }

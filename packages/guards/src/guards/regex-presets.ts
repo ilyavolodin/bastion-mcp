@@ -2,7 +2,7 @@ import type { GuardAction, GuardPhase } from '../types';
 
 /** Shipped regex presets (13.4). Patterns are RE2 syntax: no lookaround, no backreferences. */
 
-export type PresetRule = {
+type PresetRule = {
   id: string;
   label: string;
   pattern: string;

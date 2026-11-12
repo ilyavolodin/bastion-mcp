@@ -28,7 +28,7 @@ export function InstallationTile({ installation: i }: { installation: Installati
       </div>
       <InstallationStatus status={i.status} />
       {action ? (
-        <span className="inline-flex h-9 items-center justify-center rounded-md bg-tangerine-soft text-[13px] font-medium text-tangerine-ink">
+        <span className="inline-flex h-9 items-center justify-center rounded-md bg-tangerine-soft text-body-sm font-medium text-tangerine-ink">
           {action.label}
         </span>
       ) : (

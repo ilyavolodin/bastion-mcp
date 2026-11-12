@@ -1,5 +1,4 @@
 import { Check, CircleOff, Info, TriangleAlert, X } from 'lucide-react';
-import type * as React from 'react';
 import type { InstallationStatus as InstallationStatusValue } from '@/api/schema';
 import { cn } from '@/lib/cn';
 
@@ -161,17 +160,5 @@ export function OutcomeBadge({ outcome, label }: { outcome: Outcome; label?: str
       <span className="size-[7px] rounded-full bg-current" aria-hidden="true" />
       {label ?? o.label}
     </span>
-  );
-}
-
-export function IconBadge({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <span className={cn('inline-flex items-center justify-center', className)}>{children}</span>
   );
 }

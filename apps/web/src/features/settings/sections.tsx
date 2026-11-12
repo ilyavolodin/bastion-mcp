@@ -40,14 +40,23 @@ function useSection<T extends FieldValues>(key: 'org' | 'drift', schema: z.ZodTy
 }
 
 const shape = orgSettingsSchema.shape;
+
+/** An empty number input arrives as NaN, which must read as a message rather than be sent. */
+const installsSchema = z.object({
+  personalInstalls: shape.personalInstalls,
+  toolWarnThreshold: z
+    .number('Enter a whole number of at least 1')
+    .int('Enter a whole number of at least 1')
+    .positive('Enter a whole number of at least 1'),
+});
+type InstallsValues = z.infer<typeof installsSchema>;
+
 export function OrganizationSection() {
   const org = useSection<OrgSettings['org']>('org', shape.org);
   const settings = useSettings();
   const patch = usePatchSettings();
-  const personal = useForm<{
-    personalInstalls: OrgSettings['personalInstalls'];
-    toolWarnThreshold: number;
-  }>({
+  const personal = useForm<InstallsValues>({
+    resolver: zodResolver(installsSchema),
     values: settings.data
       ? {
           personalInstalls: settings.data.personalInstalls,
@@ -104,12 +113,13 @@ export function OrganizationSection() {
           <Card aria-label="Installs and endpoints" className="gap-4">
             <CardHeader title="Installs and endpoints" />
             <form
+              noValidate
               className="flex flex-col gap-4"
               onSubmit={personal.handleSubmit((v) =>
                 patch
                   .mutateAsync({
                     personalInstalls: v.personalInstalls,
-                    endpoints: { toolWarnThreshold: Number(v.toolWarnThreshold) },
+                    endpoints: { toolWarnThreshold: v.toolWarnThreshold },
                   })
                   .then(() => toast.success('Settings saved')),
               )}
@@ -123,10 +133,15 @@ export function OrganizationSection() {
                   </Select>
                 )}
               </Field>
-              <Field label="Warn above this many tools per endpoint">
-                {({ id }) => (
+              <Field
+                label="Warn above this many tools per endpoint"
+                error={personal.formState.errors.toolWarnThreshold?.message}
+              >
+                {({ id, describedBy, invalid }) => (
                   <Input
                     id={id}
+                    aria-describedby={describedBy}
+                    aria-invalid={invalid}
                     type="number"
                     min={1}
                     {...personal.register('toolWarnThreshold', { valueAsNumber: true })}
@@ -182,7 +197,7 @@ export function SandboxesSection() {
   return (
     <Card aria-label="Sandboxes" className="max-w-2xl gap-3">
       <CardHeader title="Sandboxes" />
-      <p className="m-0 text-[13px] leading-5 text-muted">
+      <p className="m-0 text-body-sm leading-5 text-muted">
         A sandbox is the isolated container a server runs in. Each server picks its own size on its
         Settings tab: small (up to 1 CPU, 512 MiB), medium (up to 2 CPU, 1 GiB) or large (up to 4
         CPU, 4 GiB). The CPU and memory of each size, the warm pool of idle sandboxes kept ready,

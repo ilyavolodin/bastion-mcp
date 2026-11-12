@@ -16,9 +16,6 @@ export function ChartCard({
   table,
   children,
   className,
-  description,
-  actions,
-  id,
   interactive,
 }: {
   title: string;
@@ -26,20 +23,13 @@ export function ChartCard({
   table: ChartTable;
   children: React.ReactNode;
   className?: string;
-  description?: string;
-  actions?: React.ReactNode;
-  id?: string;
   /** The content has focusable children (links): expose it as a group instead of a single image. */
   interactive?: boolean;
 }) {
   const [asTable, setAsTable] = React.useState(false);
   const uid = React.useId();
   return (
-    <Card
-      aria-labelledby={`${uid}-title`}
-      className={cn('gap-3', className)}
-      {...(id ? { id } : {})}
-    >
+    <Card aria-labelledby={`${uid}-title`} className={cn('gap-3', className)}>
       <CardHeader
         id={`${uid}-title`}
         title={title}
@@ -47,7 +37,6 @@ export function ChartCard({
         actions={
           <>
             {legend}
-            {actions}
             <Button
               variant="ghost"
               size="xs"
@@ -61,10 +50,9 @@ export function ChartCard({
           </>
         }
       />
-      {description ? <p className="sr-only">{description}</p> : null}
       {asTable ? (
         <div className="max-h-[320px] overflow-auto">
-          <table className="w-full border-collapse text-left text-[13px]">
+          <table className="w-full border-collapse text-left text-body-sm">
             <caption className="sr-only">{title}</caption>
             <thead>
               <tr>

@@ -1,6 +1,7 @@
+import { errorMessage } from '@bastion-mcp/core';
 import pg from 'pg';
 
-export const SCHEDULER_LOCK_SQL = `SELECT pg_try_advisory_lock(hashtext('bastion-scheduler')) AS locked, pg_backend_pid() AS pid`;
+const SCHEDULER_LOCK_SQL = `SELECT pg_try_advisory_lock(hashtext('bastion-scheduler')) AS locked, pg_backend_pid() AS pid`;
 
 export type LeaderElectionOptions = {
   connectionString: string;
@@ -111,7 +112,7 @@ export class LeaderElection {
       client.on('error', () => undefined);
       await client.end().catch(() => undefined);
       this.options.log?.('scheduler election failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: errorMessage(error),
       });
     }
   }

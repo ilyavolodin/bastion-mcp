@@ -2,10 +2,8 @@ import type { ResourceData } from '@bastion-mcp/policy';
 import type { ApiDeps } from '../ports';
 import type { Collection } from '../ports/store';
 
-export const ORG_RESOURCE_DATA: ResourceData = { type: 'Org' };
-
 /** `() => Org`, for authorization rules that act on the organization. */
-export const org = (): ResourceData => ORG_RESOURCE_DATA;
+export { orgResource as org } from '../services/resources';
 
 /** `If-Match` loader: the `updatedAt` of the row addressed by a path parameter (17.1). */
 export const versionOf =

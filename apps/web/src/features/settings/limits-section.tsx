@@ -26,14 +26,14 @@ import {
   SUBJECT_LABEL,
 } from '@/api/views/settings';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Card, CardHeader, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { applyServerErrors } from './form-errors';
+import { applyServerErrors } from '@/lib/form-errors';
 
 const positive = (what: string) =>
   z
@@ -244,7 +244,7 @@ function LimitDialog({ editing, onClose }: { editing: LimitRule | 'new'; onClose
         'Comma separated ids; empty counts each one separately',
       )}
       <fieldset className="m-0 grid gap-3.5 border-0 p-0 sm:grid-cols-2">
-        <legend className="mb-1.5 text-[13px] font-medium">Narrow it to (optional)</legend>
+        <legend className="mb-1.5 text-body-sm font-medium">Narrow it to (optional)</legend>
         {text('tool', 'Tool', undefined, 'github__*')}
         {text('method', 'Method', undefined, 'tools/call')}
         {text('installationId', 'Installation id')}
@@ -270,11 +270,7 @@ function LimitDialog({ editing, onClose }: { editing: LimitRule | 'new'; onClose
         />
         <span className="text-label">Enabled</span>
       </label>
-      {formError ? (
-        <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-          {formError}
-        </p>
-      ) : null}
+      <FormError message={formError} />
       <Button type="submit" disabled={create.isPending || patch.isPending}>
         Save limit
       </Button>

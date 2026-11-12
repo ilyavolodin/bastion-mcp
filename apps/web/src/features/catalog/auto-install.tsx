@@ -11,7 +11,7 @@ import {
 } from '@/api/hooks';
 import type { AutoInstallPreview, AutoInstallView, TargetChip } from '@/api/views/catalog';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { AvatarStrip, Card, CardHeader, Chip, Tag } from '@/components/primitives';
 import { QueryBoundary } from '@/components/query-boundary';
 import { Button } from '@/components/ui/button';
@@ -157,7 +157,7 @@ export function PolicyDialog({
             )}
           </Field>
           <div className="flex flex-col gap-2">
-            <span className="text-[13px] font-medium">Who gets it</span>
+            <span className="text-body-sm font-medium">Who gets it</span>
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Targets">
               {form.targets.length === 0 ? (
                 <span className="text-caption text-muted">No targets yet</span>
@@ -185,7 +185,7 @@ export function PolicyDialog({
               <Select
                 aria-label="Add a team"
                 value=""
-                className="h-9 w-auto text-[13px]"
+                className="h-9 w-auto text-body-sm"
                 onChange={(e) => {
                   const t = teams.data?.find((x) => x.id === e.target.value);
                   if (t) add({ type: 'team', id: t.id, label: `Team · ${t.name}` });
@@ -201,7 +201,7 @@ export function PolicyDialog({
               <Select
                 aria-label="Add a role"
                 value=""
-                className="h-9 w-auto text-[13px]"
+                className="h-9 w-auto text-body-sm"
                 onChange={(e) => e.target.value && add(roleChip(e.target.value))}
               >
                 <option value="">+ Role</option>
@@ -216,7 +216,7 @@ export function PolicyDialog({
                 placeholder="+ IdP group"
                 value={group}
                 maxLength={256}
-                className="h-9 w-36 text-[13px]"
+                className="h-9 w-36 text-body-sm"
                 onChange={(e) => setGroup(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && group.trim()) {
@@ -280,11 +280,7 @@ export function PolicyDialog({
               }
             />
           </div>
-          {error ? (
-            <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-              {error}
-            </p>
-          ) : null}
+          <FormError message={error} />
           <Button type="submit" disabled={save.isPending}>
             Save policy
           </Button>

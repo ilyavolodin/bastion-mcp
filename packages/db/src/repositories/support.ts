@@ -1,4 +1,4 @@
-import { BastionError, newId } from '@bastion-mcp/core';
+import { BastionError, newId, omitUndefined } from '@bastion-mcp/core';
 import { z } from 'zod';
 import { type AuditInput, appendAuditEvent } from '../audit';
 import { bumpConfigVersion, NIL_UUID } from '../config-version';
@@ -177,6 +177,13 @@ export const toPage = <T>(
   return { items, nextCursor: encodeCursor(cursorOf(last)) };
 };
 
+/** The `ts` range condition shared by the time-ordered logs: `from` inclusive, `to` exclusive. */
+export const tsRange = (
+  from: Date | undefined,
+  to: Date | undefined,
+): { ts?: { gte?: Date; lt?: Date } } =>
+  from || to ? { ts: { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) } } : {};
+
 export const idCursorOf = (row: { id: string }): (string | number)[] => [row.id];
 
 /**
@@ -225,7 +232,7 @@ export const toJsonOrNull = (value: unknown): Prisma.InputJsonValue | typeof Pri
  * `exactOptionalPropertyTypes` (`x?: T`), which `apps/server` enables.
  */
 export const compact = <T extends object>(value: object): T =>
-  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
+  omitUndefined(value as Record<string, unknown>) as T;
 
 export const jsonObjectSchema = z.record(z.string(), z.unknown());
 export type JsonObject = z.infer<typeof jsonObjectSchema>;

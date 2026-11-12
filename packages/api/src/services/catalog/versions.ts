@@ -1,4 +1,4 @@
-import { slugify } from '@bastion-mcp/core';
+import { omitUndefined, slugify } from '@bastion-mcp/core';
 import {
   type ApprovalStatus,
   approvalStatus,
@@ -13,7 +13,7 @@ import {
   sortFiles,
 } from '@bastion-mcp/plugins';
 import { ApiError, ConflictApiError, NotFoundApiError } from '../../errors';
-import type { ListQueryInput } from '../../framework/conventions';
+import { type ListQueryInput, parseSort } from '../../framework/conventions';
 import type { ApiDeps } from '../../ports';
 import type { VersionTestRun } from '../../ports/catalog';
 import type { Page, Row } from '../../ports/store';
@@ -45,9 +45,7 @@ export const listVersions = async (
     limit: query.limit,
     cursor: query.cursor,
     q: query.q,
-    sort: query.sort
-      ? { field: query.sort.replace(/^-/, ''), desc: query.sort.startsWith('-') }
-      : { field: 'createdAt', desc: true },
+    sort: parseSort(query.sort) ?? { field: 'createdAt', desc: true },
     where: { entryId },
   });
 };
@@ -108,7 +106,7 @@ export const updateVersion = async (
     if (clash.length > 0)
       throw new ConflictApiError('this version label already exists', { code: 'version_exists' });
   }
-  const changes = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
+  const changes = omitUndefined(body);
   const row = await ctx.tx.store.update('catalog_versions', versionId, {
     ...changes,
     // A changed spec invalidates the earlier automatic test (11.2).
@@ -147,7 +145,7 @@ const defaultManifest = (entry: Row): PluginManifest =>
 const fileModeOf = (value: unknown): PluginFile['mode'] =>
   value === 'executable' ? 'executable' : 'file';
 
-export const loadContent = async (
+const loadContent = async (
   deps: ApiDeps,
   entry: Row,
   versionId: string,

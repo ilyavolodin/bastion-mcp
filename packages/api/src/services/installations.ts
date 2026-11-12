@@ -18,12 +18,13 @@ import {
   ValidationApiError,
 } from '../errors';
 import { toPolicyPrincipal } from '../framework/auth';
+import { parseSort } from '../framework/conventions';
 import type { ApiDeps } from '../ports';
 import type { SecretMeta } from '../ports/secrets';
 import type { Page, Row } from '../ports/store';
 import type { installationCreateSchema, installationPatchSchema } from '../schemas/installations';
 import { CrudService, type ReadCtx, type WriteCtx } from './crud';
-import { installationResource } from './resources';
+import { installationResource, withServiceTeam } from './resources';
 
 export const installations = new CrudService({
   collection: 'installations',
@@ -36,7 +37,7 @@ type CreateBody = zType.output<typeof installationCreateSchema>;
 type PatchBody = zType.output<typeof installationPatchSchema>;
 
 /** Reads an org setting row (`settings` collection, id = key, `value` = JSON) (19.2). */
-export const readSetting = async <T>(deps: ApiDeps, key: string, fallback: T): Promise<unknown> => {
+const readSetting = async <T>(deps: ApiDeps, key: string, fallback: T): Promise<unknown> => {
   const row = await deps.store.get('settings', key);
   return row && 'value' in row ? row.value : fallback;
 };
@@ -69,16 +70,11 @@ export const listInstallations = async (
     catalogEntryId?: string | undefined;
   },
 ): Promise<Page<Row>> => {
-  const sort = query.sort
-    ? query.sort.startsWith('-')
-      ? { field: query.sort.slice(1), desc: true }
-      : { field: query.sort, desc: false }
-    : undefined;
   const page = await ctx.deps.store.list('installations', {
     limit: query.limit,
     cursor: query.cursor,
     q: query.q,
-    sort,
+    sort: parseSort(query.sort),
     where: {
       ...(query.status ? { status: query.status } : {}),
       ...(query.catalogEntryId ? { catalogEntryId: query.catalogEntryId } : {}),
@@ -99,12 +95,6 @@ export const listInstallations = async (
     }
   }
   return { items, nextCursor: page.nextCursor };
-};
-
-const withServiceTeam = async (deps: ApiDeps, row: Row): Promise<Row> => {
-  if (row.ownerType !== 'service' || !str(row.ownerId)) return row;
-  const account = await deps.store.get('service_accounts', String(row.ownerId));
-  return account && str(account.teamId) ? { ...row, ownerServiceTeamId: account.teamId } : row;
 };
 
 // --- creation -----------------------------------------------------------------------------------------
@@ -421,7 +411,7 @@ const viewerOf = async (ctx: ReadCtx, row: Row): Promise<PrincipalData> => {
   return ctx.subject;
 };
 
-export const compileInstallation = async (
+const compileInstallation = async (
   ctx: ReadCtx & { signal?: AbortSignal | undefined },
   row: Row,
 ): Promise<EffectiveEndpoint> => {

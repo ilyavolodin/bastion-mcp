@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { newId } from '@bastion-mcp/core';
+import { errorMessage, newId } from '@bastion-mcp/core';
 import pg from 'pg';
 
 const LOCK_KEY = 7_201_777;
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS "_prisma_migrations" (
 export type BundledMigration = { name: string; sql: string; checksum: string };
 
 /** Where the SQL lives: `BASTION_MIGRATIONS_DIR`, `<app>/prisma/migrations` (image, build), or the repo checkout. */
-export const migrationsDir = (env: Record<string, string | undefined> = process.env): string => {
+const migrationsDir = (env: Record<string, string | undefined> = process.env): string => {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     env.BASTION_MIGRATIONS_DIR,
@@ -132,9 +132,7 @@ export const migrate = async (
         await client.query('COMMIT');
       } catch (error) {
         await client.query('ROLLBACK').catch(() => undefined);
-        throw new Error(
-          `migration ${m.name} failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        throw new Error(`migration ${m.name} failed: ${errorMessage(error)}`);
       }
       applied.push(m.name);
     }

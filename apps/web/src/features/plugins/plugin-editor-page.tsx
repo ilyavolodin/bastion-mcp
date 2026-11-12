@@ -72,7 +72,7 @@ function SkillForm({
         noValidate
       >
         {parsed.error ? (
-          <p role="alert" className="m-0 rounded-md bg-coral-soft p-3 text-[13px] text-coral-ink">
+          <p role="alert" className="m-0 rounded-md bg-coral-soft p-3 text-body-sm text-coral-ink">
             {parsed.error}
           </p>
         ) : null}
@@ -192,7 +192,7 @@ function FilesStep({
                 ))}
               </ul>
               {nodes.some((n) => n.classification === 'executable') ? (
-                <div role="note" className="rounded-md bg-coral-soft p-3 text-[13px]">
+                <div role="note" className="rounded-md bg-coral-soft p-3 text-body-sm">
                   <strong className="font-semibold text-coral-ink">Executable content</strong>
                   <ul className="m-0 mt-1 list-disc pl-4 font-mono text-[12px]">
                     {nodes
@@ -313,7 +313,6 @@ function Editor({ detail }: { detail: CatalogEntryDetail }) {
           draft={vis}
           onChange={(p) => setVis({ ...vis, ...p })}
           versionLabel={label}
-          noun={'v'}
           canPublish={
             version.status === 'draft' && isPassing(current.data?.testResult) && !needsApproval
           }
@@ -323,7 +322,6 @@ function Editor({ detail }: { detail: CatalogEntryDetail }) {
               ? 'An Admin approves the executable files with their diff before this publishes.'
               : 'Publish needs a passing test of this exact version.'
           }
-          entryId={entry.id}
           onPublish={() =>
             publish.mutate(
               { visibility: vis.visibility },

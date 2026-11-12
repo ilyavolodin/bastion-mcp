@@ -3,7 +3,6 @@ import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
-import type * as React from 'react';
 import type { UiRole } from '@/api/views/session';
 import { AuthProvider } from '@/auth/auth';
 import { type MockDb, resetDb } from '@/mocks/db';
@@ -37,13 +36,6 @@ export async function renderRoute(
   );
   await screen.findByRole('navigation', { name: 'Main', hidden: true });
   return { ...utils, router, qc, user };
-}
-
-/** Renders one component with a query client only (no router). */
-export function renderWithClient(ui: React.ReactElement) {
-  const qc = testQueryClient();
-  const user = userEvent.setup();
-  return { ...render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>), qc, user };
 }
 
 export const expectNoA11yViolations = async (container: HTMLElement) => {

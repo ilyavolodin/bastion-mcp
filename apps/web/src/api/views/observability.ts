@@ -15,7 +15,6 @@ type Series = Res<'get', '/stats/calls'>;
 // --- time ranges and filters ----------------------------------------------------------------------------------
 
 export type StatsRange = '1h' | '24h' | '7d' | '14d' | '90d';
-export { DAY, HOUR, MINUTE };
 
 export const RANGE_MS: Record<StatsRange, number> = {
   '1h': HOUR,
@@ -327,10 +326,6 @@ export const GUARD_ACTION_LABEL = (action: string): string =>
         : action === 'warn' || action === 'confirm'
           ? 'Warned'
           : 'Allowed';
-
-/** Guard results that flagged something (clean results are noise in the drawer). */
-export const flaggedResults = (c: CallRow): GuardResult[] =>
-  (c.guardResults ?? []).filter((r) => r.verdict !== 'clean');
 
 // --- findings ----------------------------------------------------------------------------------------------------
 

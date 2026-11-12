@@ -1,7 +1,6 @@
 /** Shared building blocks of the operations: identities, Cedar inputs, upstream contexts, spans and guard application. */
 
 import {
-  canonicalDigest,
   isRecord,
   type RequestStateBinding,
   type TemplateContext,
@@ -25,8 +24,15 @@ import type {
   UpstreamNotification,
 } from '@bastion-mcp/mcp-upstream';
 import { SPAN_ATTRS } from '@bastion-mcp/mcp-upstream';
-import type { InstallationData, McpRequestContext, ToolAnnotations } from '@bastion-mcp/policy';
-import type { EffectiveEndpoint, InstallationInfo } from '@bastion-mcp/router';
+import type { McpRequestContext, ToolAnnotations } from '@bastion-mcp/policy';
+import {
+  type EffectiveEndpoint,
+  type InstallationInfo,
+  resolveResourceUriWithSeen,
+  type SeenUriStore,
+  type UriIndex,
+  type UriTarget,
+} from '@bastion-mcp/router';
 import { SPAN_NAMES } from '@bastion-mcp/telemetry';
 import {
   context,
@@ -75,18 +81,6 @@ export const needsInstallationVariables = (plan: { pinned?: unknown } | undefine
   plan?.pinned !== undefined && JSON.stringify(plan.pinned).includes('{{');
 
 // --- Cedar (10.4, 12.4) ------------------------------------------------------------------------------------------
-
-export const installationDataOf = (info: InstallationInfo): InstallationData => {
-  if (info.policy) return info.policy;
-  const data: InstallationData = { id: info.id, catalogEntryId: info.catalogEntryId };
-  if (info.owner.kind === 'user') data.ownerUserId = info.owner.id;
-  else if (info.owner.kind === 'team') data.ownerTeamId = info.owner.id;
-  else {
-    data.ownerServiceId = info.owner.id;
-    if (info.owner.teamId !== undefined) data.ownerServiceTeamId = info.owner.teamId;
-  }
-  return data;
-};
 
 const zoneFormats = new Map<string, Intl.DateTimeFormat>();
 /** Zones come from policy data; the memo stays bounded however many distinct ones appear. */
@@ -160,7 +154,7 @@ export const toolAnnotationsOf = (tool: Record<string, unknown> | undefined): To
 export const spanContextOf = (ctx: Pick<OpContext, 'trace'>): SpanContext =>
   trace.getSpanContext(context.active()) ?? ctx.trace;
 
-export const traceCarrierOf = (sc: SpanContext): { traceparent: string } => ({
+const traceCarrierOf = (sc: SpanContext): { traceparent: string } => ({
   traceparent: `00-${sc.traceId}-${sc.spanId}-${(sc.traceFlags & 0xff).toString(16).padStart(2, '0')}`,
 });
 
@@ -288,7 +282,18 @@ export const bindingOf = (
   args: upstreamArgs,
 });
 
-export const argsDigest = (value: unknown): string => canonicalDigest(value).toString('hex');
+/** The installation that serves a resource URI, through the URI index and the seen-URI store (7.4); `undefined` when none does. */
+export const resolveResourceInstallation = async (
+  uriIndex: UriIndex,
+  installations: ReadonlyMap<string, InstallationInfo>,
+  uri: string,
+  seen: { store: SeenUriStore; principalId: string; endpointId: string },
+): Promise<{ target: UriTarget; installation: InstallationInfo } | undefined> => {
+  const resolved = await resolveResourceUriWithSeen(uriIndex, uri, seen);
+  if (!resolved.ok) return undefined;
+  const installation = installations.get(resolved.target.installationId);
+  return installation ? { target: resolved.target, installation } : undefined;
+};
 
 // --- guards (13) -------------------------------------------------------------------------------------------------------
 

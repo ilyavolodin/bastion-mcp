@@ -3,15 +3,19 @@ import { ScimStoreConflictError } from '@bastion-mcp/auth';
 import {
   type BastionConfig,
   type Clock,
-  newId,
+  errorMessage,
   REDIS_CHANNELS,
   systemClock,
 } from '@bastion-mcp/core';
 import {
+  bumpConfigVersion,
+  type ConfigEvent,
   createDb,
   createRepositories,
   createSecretRepository,
   type Db,
+  type DbExecutor,
+  NIL_UUID,
   type Repositories,
   type RepositoryDeps,
   withTransaction,
@@ -31,7 +35,7 @@ import { RedisPubSub } from './adapters/redis';
 import { createSecretStore } from './adapters/secret-store';
 import { defaultWorkerId, readServerEnv, type ServerEnv, type ServerOptions } from './config';
 
-export type AppLogger = Logger;
+type AppLogger = Logger;
 
 /** What every adapter and role needs: connections, crypto and repositories (CONTRIBUTING rule 6). */
 export type Infra = {
@@ -69,6 +73,31 @@ export const configMessage = (event: { scope: string; id: string; version?: bigi
     ...(event.version === undefined ? {} : { version: String(event.version) }),
   });
 
+/**
+ * Inside a bulk-write transaction: bumps the `org` config version, then `catalog` once per entry id (in the given
+ * order), and returns the events to hand to `publishConfigEvents` after the commit.
+ */
+export const bumpOrgAndCatalog = async (
+  tx: DbExecutor,
+  catalogIds: readonly string[],
+): Promise<ConfigEvent[]> => {
+  const events: ConfigEvent[] = [
+    { scope: 'org', id: NIL_UUID, version: await bumpConfigVersion(tx, 'org') },
+  ];
+  for (const id of catalogIds) {
+    events.push({ scope: 'catalog', id, version: await bumpConfigVersion(tx, 'catalog', id) });
+  }
+  return events;
+};
+
+/** After the commit: one `bastion:config` message per event, in order. */
+export const publishConfigEvents = async (
+  infra: Pick<Infra, 'publish'>,
+  events: readonly ConfigEvent[],
+): Promise<void> => {
+  for (const event of events) await infra.publish(REDIS_CHANNELS.config, configMessage(event));
+};
+
 export const createInfra = (
   config: BastionConfig,
   options: ServerOptions = {},
@@ -101,10 +130,7 @@ export const createInfra = (
     try {
       await redis.publish(channel, typeof message === 'string' ? message : JSON.stringify(message));
     } catch (error) {
-      logger.warn(
-        { err: error instanceof Error ? error.message : String(error), channel },
-        'publish failed',
-      );
+      logger.warn({ err: errorMessage(error), channel }, 'publish failed');
     }
   };
 
@@ -112,10 +138,7 @@ export const createInfra = (
     publishConfig: (event: { scope: string; id: string; version: bigint }) =>
       publish(REDIS_CHANNELS.config, configMessage(event)),
     onPublishError: (error: unknown) =>
-      logger.warn(
-        { err: error instanceof Error ? error.message : String(error) },
-        'config publish failed',
-      ),
+      logger.warn({ err: errorMessage(error) }, 'config publish failed'),
   };
   const deps: RepositoryDeps = {
     scimConflictError: (message) => new ScimStoreConflictError(message),
@@ -159,5 +182,3 @@ export const createInfra = (
     },
   };
 };
-
-export { newId };

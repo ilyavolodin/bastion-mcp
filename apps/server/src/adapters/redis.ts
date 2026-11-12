@@ -1,5 +1,4 @@
 import type { RedisLike as AuthRedisLike, OAuthRedisLike, PubSub } from '@bastion-mcp/auth';
-import { REDIS_CHANNELS } from '@bastion-mcp/core';
 import type { Redis } from 'ioredis';
 
 /** `RedisLike` of the identity layer (TTL seconds, void returns) over ioredis. */
@@ -76,5 +75,3 @@ export class RedisPubSub implements PubSub {
     this.handlers.clear();
   }
 }
-
-export const CONFIG_CHANNEL = REDIS_CHANNELS.config;

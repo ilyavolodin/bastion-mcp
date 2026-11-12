@@ -1,3 +1,4 @@
+import { isValidSlug } from '@bastion-mcp/core/ids';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Network, Plus, TriangleAlert } from 'lucide-react';
 import * as React from 'react';
@@ -25,7 +26,7 @@ import { useAuth } from '@/auth/auth';
 import { ClientConfigTabs } from '@/components/client-config';
 import { CopyField } from '@/components/copy-field';
 import { EmptyState } from '@/components/empty-state';
-import { Field } from '@/components/form';
+import { Field, FormError } from '@/components/form';
 import { Card, CardHeader, Chip, Tag } from '@/components/primitives';
 import { ProblemAlert } from '@/components/problem';
 import { QueryBoundary } from '@/components/query-boundary';
@@ -33,27 +34,27 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select, Textarea } from '@/components/ui/input';
-import { useSlug } from '@/features/access/forms';
+import { useSlug } from '@/hooks/use-slug';
 
 /** The constraints of `endpointCreateSchema`: slug 2 to 40 of a-z 0-9 and dashes, name 1 to 200, 50 servers. */
-export const endpointFormSchema = z.object({
+const endpointFormSchema = z.object({
   displayName: z
     .string()
     .trim()
     .min(1, 'Give the endpoint a name')
     .max(200, 'Up to 200 characters'),
-  slug: z.string().regex(/^[a-z0-9-]{2,40}$/, 'Use 2 to 40 lowercase letters, digits and dashes'),
+  slug: z.string().refine(isValidSlug, 'Use 2 to 40 lowercase letters, digits and dashes'),
   installationIds: z.array(z.string()).min(1, 'Pick at least one server').max(50, 'At most 50'),
   prefixMode: z.enum(['always', 'onCollision']),
   instructions: z.string().max(8000, 'Up to 8000 characters'),
 });
 
-export function ToolCountWarning({ count, threshold }: { count: number; threshold: number }) {
+function ToolCountWarning({ count, threshold }: { count: number; threshold: number }) {
   if (count <= threshold) return null;
   return (
     <p
       role="status"
-      className="m-0 flex items-start gap-2 rounded-md bg-tangerine-soft p-3 text-[13px] text-tangerine-ink"
+      className="m-0 flex items-start gap-2 rounded-md bg-tangerine-soft p-3 text-body-sm text-tangerine-ink"
     >
       <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <span>
@@ -151,7 +152,7 @@ function EndpointDialog({
             )}
           </Field>
           <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-            <legend className="mb-1.5 text-[13px] font-medium">Servers</legend>
+            <legend className="mb-1.5 text-body-sm font-medium">Servers</legend>
             {installations.map((i) => (
               <label
                 key={i.id}
@@ -173,11 +174,7 @@ function EndpointDialog({
                 ) : null}
               </label>
             ))}
-            {form.formState.errors.installationIds ? (
-              <p role="alert" className="m-0 text-caption font-medium text-coral-ink">
-                {form.formState.errors.installationIds.message}
-              </p>
-            ) : null}
+            <FormError message={form.formState.errors.installationIds?.message} />
           </fieldset>
           <ToolCountWarning count={tools} threshold={me.org.toolWarnThreshold} />
           <Field

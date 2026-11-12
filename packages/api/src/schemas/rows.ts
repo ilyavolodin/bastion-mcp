@@ -246,13 +246,13 @@ export const catalogVersionRow = row('CatalogVersion', {
   publishedAt: isoOrNull,
 });
 
-export const executableDiffEntry = z.looseObject({
+const executableDiffEntry = z.looseObject({
   path: z.string(),
   change: z.enum(['added', 'modified', 'removed']),
   after: z.string().nullable().optional(),
 });
 
-export const versionApproval = z.object({
+const versionApproval = z.object({
   status: z.enum(['not-required', 'pending', 'approved', 'stale']),
   reviewedDiffSha256: z.string(),
   executables: z.array(z.looseObject({})),
@@ -334,7 +334,7 @@ export const importResult = z
   .meta({ id: 'CatalogImportResult' });
 
 /** One guard's verdict on one call or definition, as the pipeline records it (13.1, `GuardResultRecord`). */
-export const guardResultRecord = z.looseObject({
+const guardResultRecord = z.looseObject({
   guard: z.string(),
   type: z.string(),
   phase: z.enum(['request', 'response', 'definition']),

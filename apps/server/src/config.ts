@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { type BastionConfig, ConfigError, loadConfig, parseConfigFile } from '@bastion-mcp/core';
+import { type BastionConfig, loadConfig, parseConfigFile } from '@bastion-mcp/core';
 import { DEFAULT_SERVER_VERSION, defaultWorkerId } from './resource-env';
 
 type EnvSource = Record<string, string | undefined>;
@@ -37,21 +37,6 @@ export const loadServerConfig = (env: Record<string, string | undefined>): Basti
   return loadConfig(env, values);
 };
 
-/** Prints every error and exits non-zero (used by the CLI and `main`). */
-export const loadConfigOrExit = (env: Record<string, string | undefined>): BastionConfig => {
-  try {
-    return loadServerConfig(env);
-  } catch (error) {
-    if (error instanceof ConfigError) {
-      for (const issue of error.issues)
-        console.error(`config error: ${issue.path}: ${issue.message}`);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
-    process.exit(1);
-  }
-};
-
 export const publicHost = (config: BastionConfig): string => new URL(config.publicUrl).host;
 
 /** Scheme and host as clients reach Bastion (`http://localhost:8080` in an evaluation): the base of every OAuth URL. */
@@ -65,7 +50,7 @@ export type ServerOptions = {
   workerId?: string;
   /** `127.0.0.1` in tests; defaults to `0.0.0.0`. */
   listenHost?: string;
-  /** Port for the internal RPC listener address advertised in the worker registry. Defaults to config. */
+  /** Host advertised in the worker registry for the internal RPC listener; defaults to the egress host. */
   advertiseHost?: string;
   /** Lets openid-client call `http://` IdPs and upstream authorization servers (tests only). */
   allowInsecureHttp?: boolean;
@@ -79,13 +64,11 @@ export type ServerOptions = {
   skipMigrationCheck?: boolean;
   /** Run the scheduler even when the role is not ui; `false` disables it for the ui role. */
   scheduler?: boolean;
-  /** Public path for CORS allowed origins besides the public URL. */
+  /** CORS allowed origins besides the public URL. */
   extraCorsOrigins?: string[];
   /** SSE keep-alive for MCP streams. */
   keepAliveMs?: number;
-  /** Idle sweep and similar timing knobs for tests. */
-  timing?: { instanceIdleMs?: number; workerHeartbeatMs?: number };
-  /** Extra health checks for tests. */
+  /** Replaces the printer of the generated bootstrap admin password (tests); defaults to stdout. */
   printBootstrapPassword?: (email: string, password: string) => void;
   /** Static asset directory; defaults to `public` next to the bundle. */
   publicDir?: string;

@@ -18,6 +18,7 @@ export { isLegacyExchange, registerMcpRoutes } from './http/plugin';
 export { EndpointResolver } from './http/resolver';
 export { NotifyHub } from './notify-hub';
 export type { OperationDeps, ReadCachePort } from './operations/deps';
+export { defaultToPolicyPrincipal } from './operations/deps';
 export { createOperations, createOpRunner } from './operations/registry';
 export { CONFIRM_KEY, CONFIRM_MARKER } from './operations/routed';
 export type * from './ports';

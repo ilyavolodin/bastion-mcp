@@ -53,6 +53,15 @@ import type { RemotePool } from './pool';
 
 const CONNECT_RETRY_DELAY_MS = 250;
 
+/** The five values one upstream call carries from `dispatch` to the session that runs it. */
+type RoutedRequest = {
+  installation: ResolvedInstallation;
+  method: string;
+  params: JsonObject;
+  ctx: UpstreamCallContext;
+  binding: RequestStateBinding;
+};
+
 export type SessionInfo = {
   installation: ResolvedInstallation;
   session: UpstreamSession;
@@ -326,6 +335,7 @@ export class UpstreamService implements InternalRpcHandlers {
     }
     const effectiveParams = prepared?.params ?? params;
     const binding = prepared?.binding ?? this.binding(installation, method, effectiveParams, ctx);
+    const request: RoutedRequest = { installation, method, params: effectiveParams, ctx, binding };
 
     if (spec.type === 'remote' && spec.transport === 'streamable-http') {
       const pooled = await this.deps.pool.get(installation, ctx.principal, credential, signal);
@@ -336,37 +346,19 @@ export class UpstreamService implements InternalRpcHandlers {
           credentialHash: credential.credentialHash,
           principalId: ctx.principal.userId,
         });
-        return this.runOnSession(
-          pooled.session,
-          installation,
-          method,
-          effectiveParams,
-          ctx,
-          binding,
-        );
+        return this.runOnSession(pooled.session, request);
       }
     }
-    return this.dispatchOwned(
-      installation,
-      credential,
-      method,
-      effectiveParams,
-      ctx,
-      binding,
-      false,
-    );
+    return this.dispatchOwned(request, credential, 'first');
   }
 
   /** Sandboxes and legacy remote sessions: find or become the owner, else forward (21.2). */
   private async dispatchOwned(
-    installation: ResolvedInstallation,
+    request: RoutedRequest,
     credential: ResolvedCredential,
-    method: string,
-    params: JsonObject,
-    ctx: UpstreamCallContext,
-    binding: RequestStateBinding,
-    isRetry: boolean,
+    attempt: 'first' | 'retry',
   ): Promise<UpstreamOutcome> {
+    const { installation, method, params, ctx } = request;
     const record = await this.deps.instances.instanceFor(installation);
     const args: EnsureArgs = {
       record,
@@ -377,7 +369,7 @@ export class UpstreamService implements InternalRpcHandlers {
     };
     const ensured = await this.deps.instances.ensure(args);
     if (ensured.kind === 'local') {
-      return this.runOnLive(ensured.live, installation, method, params, ctx, binding);
+      return this.runOnLive(ensured.live, request);
     }
     try {
       const outcome = await this.deps.rpc.forwardOp(
@@ -388,7 +380,7 @@ export class UpstreamService implements InternalRpcHandlers {
       );
       return outcome;
     } catch (error) {
-      if (!(error instanceof ForwardConnectError) || isRetry) {
+      if (!(error instanceof ForwardConnectError) || attempt === 'retry') {
         if (error instanceof ForwardConnectError) {
           throw new UpstreamUnavailableError('the worker owning this server is unreachable', {
             installation: installation.slug,
@@ -398,40 +390,28 @@ export class UpstreamService implements InternalRpcHandlers {
       }
       // The connection failed: wait 250 ms, re-read the lease and retry once; a dead owner is taken over (21.2).
       await this.sleep(CONNECT_RETRY_DELAY_MS);
-      return this.dispatchOwned(installation, credential, method, params, ctx, binding, true);
+      return this.dispatchOwned(request, credential, 'retry');
     }
   }
 
-  private runOnLive(
-    live: LiveInstance,
-    installation: ResolvedInstallation,
-    method: string,
-    params: JsonObject,
-    ctx: UpstreamCallContext,
-    binding: RequestStateBinding,
-  ): Promise<UpstreamOutcome> {
+  private runOnLive(live: LiveInstance, request: RoutedRequest): Promise<UpstreamOutcome> {
     this.announce({
-      installation,
+      installation: request.installation,
       session: live.session,
       credentialHash: live.credentialHash,
       principalId: live.principalId,
       instanceId: live.id,
     });
-    return this.deps.instances.run(live, (session) =>
-      this.runOnSession(session, installation, method, params, ctx, binding),
-    );
+    return this.deps.instances.run(live, (session) => this.runOnSession(session, request));
   }
 
   // --- the operation itself ------------------------------------------------------------------------------------------
 
   private async runOnSession(
     session: UpstreamSession,
-    installation: ResolvedInstallation,
-    method: string,
-    params: JsonObject,
-    ctx: UpstreamCallContext,
-    binding: RequestStateBinding,
+    request: RoutedRequest,
   ): Promise<UpstreamOutcome> {
+    const { installation, method, params, ctx, binding } = request;
     const started = performance.now();
     const span = upstreamMcpSpan({
       method,
@@ -689,7 +669,13 @@ export class UpstreamService implements InternalRpcHandlers {
           installation: installation.slug,
         });
       }
-      return this.runOnLive(ensured.live, installation, body.method, body.params, ctx, binding);
+      return this.runOnLive(ensured.live, {
+        installation,
+        method: body.method,
+        params: body.params,
+        ctx,
+        binding,
+      });
     });
   }
 

@@ -10,8 +10,8 @@ import type { JsonObject, OpContext, Operation, OpOutcome } from '../types';
 import type { OperationDeps } from './deps';
 import { isRecord } from './support';
 
-export const SKILLS_EXTENSION = 'io.modelcontextprotocol/skills';
-export const SKILLS_CAPABILITY = { directoryRead: true } as const;
+const SKILLS_EXTENSION = 'io.modelcontextprotocol/skills';
+const SKILLS_CAPABILITY = { directoryRead: true } as const;
 
 /** Capabilities of an endpoint (7.6): what the router computed, plus extensions Bastion serves itself. */
 export const serverCapabilities = (

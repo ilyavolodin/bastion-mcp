@@ -19,7 +19,7 @@ import { installationResource } from './resources';
 export type Rejection = { path: string; reason: string };
 
 /** Parses an untrusted overrides document; failures are 400 problems with the JSON pointer of each issue. */
-export const parseDoc = (input: unknown): OverridesDocument => {
+const parseDoc = (input: unknown): OverridesDocument => {
   const parsed = parseOverrides(input);
   if (!parsed.ok) {
     throw new ValidationApiError(
@@ -38,7 +38,7 @@ const asDoc = (value: unknown): OverridesDocument => {
 const level = z.enum(['none', 'cosmetic', 'full']).catch('cosmetic');
 
 /** The installation layer is bounded by the entry's `userOverrides`; personal installs have no entry (12.1). */
-export const levelFor = async (
+const levelFor = async (
   ctx: Pick<ReadCtx, 'deps'>,
   installation: Row,
 ): Promise<UserOverridesLevel> => {

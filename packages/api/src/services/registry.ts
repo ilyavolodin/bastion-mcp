@@ -32,6 +32,7 @@ import {
 import { ApiError, ConflictApiError, ForbiddenApiError, NotFoundApiError } from '../errors';
 import type { ApiDeps } from '../ports';
 import type { Row } from '../ports/store';
+import { visiblePage } from './catalog/entries';
 import { CrudService, nowIso, type ReadCtx, type WriteCtx } from './crud';
 
 export const registrySources = new CrudService({
@@ -66,7 +67,7 @@ export const sourceOf = (row: Row): RegistrySource => ({
 
 const REQUEST_STATUS = ['open', 'approved', 'rejected', 'cancelled'] as const;
 
-export const requestOf = (row: Row): InstallRequest => ({
+const requestOf = (row: Row): InstallRequest => ({
   id: row.id,
   requesterId: String(row.requesterId),
   sourceId: String(row.sourceId),
@@ -93,7 +94,7 @@ const requestFields = (r: InstallRequest): Record<string, unknown> => ({
   createdAt: r.createdAt.toISOString(),
 });
 
-export const actorOf = (principal: Principal): InstallActor => ({
+const actorOf = (principal: Principal): InstallActor => ({
   id: principal.id,
   orgRole: principal.orgRole,
   managedTeamIds: principal.teams.filter((t) => t.role === 'manager').map((t) => t.teamId),
@@ -177,12 +178,16 @@ export const syncNow = async (ctx: WriteCtx, id: string, full: boolean) => {
   };
 };
 
+/** The policy stored in a `registry_policies` row, or the default when the source has none. */
+const policyOf = (row: Row | null | undefined): RegistryPolicy =>
+  row ? parseRegistryPolicy(row.policy) : DEFAULT_REGISTRY_POLICY;
+
 export const getPolicy = async (ctx: Pick<ReadCtx, 'deps'>, sourceId: string) => {
   await registrySources.require(ctx, sourceId);
   const row = await ctx.deps.store.get('registry_policies', sourceId);
   return {
     sourceId,
-    policy: row ? parseRegistryPolicy(row.policy) : DEFAULT_REGISTRY_POLICY,
+    policy: policyOf(row),
     updatedAt: row?.updatedAt ?? null,
   };
 };
@@ -221,7 +226,7 @@ const safeMap = (row: RegistryServerRow, prefer?: 'remote' | 'package'): Mapping
   }
 };
 
-export const serverSummary = (
+const serverSummary = (
   row: RegistryServerRow,
   source?: { name: string; trust: RegistryTrust; enabled: boolean },
 ) => ({
@@ -249,7 +254,7 @@ const seesWholeRegistry = (principal: Pick<Principal, 'orgRole'>): boolean =>
 
 const policiesBySource = async (deps: ApiDeps): Promise<Map<string, RegistryPolicy>> => {
   const rows = await deps.store.list('registry_policies', { limit: 200 });
-  return new Map(rows.items.map((row) => [row.id, parseRegistryPolicy(row.policy)]));
+  return new Map(rows.items.map((row) => [row.id, policyOf(row)]));
 };
 
 const PAGES_TO_FILL = 8;
@@ -317,8 +322,7 @@ const findServer = async (
 };
 
 const loadPolicy = async (deps: ApiDeps, sourceId: string): Promise<RegistryPolicy> => {
-  const row = await deps.store.get('registry_policies', sourceId);
-  return row ? parseRegistryPolicy(row.policy) : DEFAULT_REGISTRY_POLICY;
+  return policyOf(await deps.store.get('registry_policies', sourceId));
 };
 
 export const serverDetail = async (
@@ -374,7 +378,7 @@ const planFor = async (
   sourceId: string,
   name: string,
   version: string,
-  prefer: 'remote' | 'package' | undefined,
+  prefer?: 'remote' | 'package',
 ): Promise<Planned> => {
   const row = await findServer(deps, sourceId, name, version);
   if (row.status === 'deleted') {
@@ -432,23 +436,24 @@ const uniqueSlug = async (
   throw new ConflictApiError('could not find a free slug');
 };
 
-/** Creates or reuses the catalog entry, pins the version and creates the installation (11.7). */
-export const executePlan = async (
+type PlanMapping = Planned['mapping'];
+
+/** Finds the registry's catalog entry or creates it, and adds the installing user to its visibility (11.7). */
+const ensureEntry = async (
   ctx: WriteCtx,
   plan: InstallPlan,
-  mapping: Planned['mapping'],
   trust: RegistryTrust,
-): Promise<{ entry: Row; version: Row; installation: Row }> => {
+): Promise<Row> => {
   const { catalogEntry: ce } = plan;
   const store = ctx.tx.store;
   const key = {
     registrySourceId: ce.source.registrySourceId,
     registryServerName: ce.source.serverName,
   };
-  let entry = (await store.find('catalog_entries', key))[0];
-  if (!entry) {
+  const existing = (await store.find('catalog_entries', key))[0];
+  if (!existing) {
     const slug = await uniqueSlug(ctx, 'catalog_entries', ce.slug, {});
-    entry = await store.insert('catalog_entries', {
+    return store.insert('catalog_entries', {
       id: ctx.deps.newId(),
       slug,
       kind: 'mcp_server',
@@ -468,35 +473,56 @@ export const executePlan = async (
       createdBy: plan.installation.userId,
       createdAt: nowIso(ctx.deps),
     });
-  } else if (!JSON.stringify(entry.visibility).includes(plan.installation.userId)) {
-    const vis = (entry.visibility ?? { org: false, teamIds: [], userIds: [] }) as {
-      org?: boolean;
-      teamIds?: string[];
-      userIds?: string[];
-    };
-    entry = await store.update('catalog_entries', entry.id, {
-      visibility: { ...vis, userIds: [...(vis.userIds ?? []), plan.installation.userId] },
-    });
   }
-  let version = (
+  const vis = (existing.visibility ?? { org: false, teamIds: [], userIds: [] }) as {
+    org?: boolean;
+    teamIds?: string[];
+    userIds?: string[];
+  };
+  if (vis.userIds?.includes(plan.installation.userId)) return existing;
+  return store.update('catalog_entries', existing.id, {
+    visibility: { ...vis, userIds: [...(vis.userIds ?? []), plan.installation.userId] },
+  });
+};
+
+/** Finds the pinned version of the entry or creates it as a draft (11.7). */
+const ensureVersion = async (
+  ctx: WriteCtx,
+  plan: InstallPlan,
+  mapping: PlanMapping,
+  entry: Row,
+): Promise<Row> => {
+  const { catalogEntry: ce } = plan;
+  const store = ctx.tx.store;
+  const existing = (
     await store.find('catalog_versions', { entryId: entry.id, label: ce.pinnedVersion })
   )[0];
-  if (!version) {
-    version = await store.insert('catalog_versions', {
-      id: ctx.deps.newId(),
-      entryId: entry.id,
-      label: ce.pinnedVersion,
-      serverSpec: mapping.spec,
-      installForm: mapping.form,
-      overrides: {},
-      limits: [],
-      runtime: { kind: ce.runtime },
-      status: 'draft',
-      testResult: null,
-      createdBy: plan.installation.userId,
-      createdAt: nowIso(ctx.deps),
-    });
-  }
+  if (existing) return existing;
+  return store.insert('catalog_versions', {
+    id: ctx.deps.newId(),
+    entryId: entry.id,
+    label: ce.pinnedVersion,
+    serverSpec: mapping.spec,
+    installForm: mapping.form,
+    overrides: {},
+    limits: [],
+    runtime: { kind: ce.runtime },
+    status: 'draft',
+    testResult: null,
+    createdBy: plan.installation.userId,
+    createdAt: nowIso(ctx.deps),
+  });
+};
+
+/** Creates the user's installation of the pinned version under a slug that is free for them (11.7). */
+const createInstallation = async (
+  ctx: WriteCtx,
+  plan: InstallPlan,
+  mapping: PlanMapping,
+  entry: Row,
+  version: Row,
+): Promise<Row> => {
+  const { catalogEntry: ce } = plan;
   const slug = await uniqueSlug(
     ctx,
     'installations',
@@ -507,7 +533,7 @@ export const executePlan = async (
     },
   );
   const needsSetup = mapping.form.variables.length > 0 || mapping.form.secrets.length > 0;
-  const installation = await store.insert('installations', {
+  return ctx.tx.store.insert('installations', {
     id: ctx.deps.newId(),
     ownerType: 'user',
     ownerId: plan.installation.userId,
@@ -527,6 +553,18 @@ export const executePlan = async (
     statusDetail: { automaticTest: plan.automaticTest },
     createdAt: nowIso(ctx.deps),
   });
+};
+
+/** Creates or reuses the catalog entry, pins the version and creates the installation (11.7). */
+const executePlan = async (
+  ctx: WriteCtx,
+  plan: InstallPlan,
+  mapping: PlanMapping,
+  trust: RegistryTrust,
+): Promise<{ entry: Row; version: Row; installation: Row }> => {
+  const entry = await ensureEntry(ctx, plan, trust);
+  const version = await ensureVersion(ctx, plan, mapping, entry);
+  const installation = await createInstallation(ctx, plan, mapping, entry, version);
   return { entry, version, installation };
 };
 
@@ -662,7 +700,7 @@ export const submitRequest = async (
   body: { sourceId: string; name: string; version: string; justification: string },
 ): Promise<Row> => {
   await registrySources.require(ctx, body.sourceId);
-  await planFor(ctx.deps, body.sourceId, body.name, body.version, undefined);
+  await planFor(ctx.deps, body.sourceId, body.name, body.version);
   const open = await ctx.tx.store.find('install_requests', {
     requesterId: ctx.principal.id,
     sourceId: body.sourceId,
@@ -697,7 +735,7 @@ export const submitRequest = async (
   return row;
 };
 
-/** Requesters see their own; managers those of their teams' members; admins all (11.7). */
+/** Requesters see their ownOnly; managers those of their teams' members; admins all (11.7). */
 export const listRequests = async (
   ctx: Pick<ReadCtx, 'deps' | 'principal'>,
   query: { limit: number; cursor?: string | undefined; status?: string | undefined },
@@ -709,27 +747,23 @@ export const listRequests = async (
       ? {}
       : { requesterId: actor.id }),
   };
-  const page = await ctx.deps.store.list('install_requests', {
-    limit: query.limit,
-    cursor: query.cursor,
-    sort: { field: 'createdAt', desc: true },
-    where,
-  });
-  if (actor.orgRole === 'admin' || actor.managedTeamIds.length === 0) return page;
-  const items: Row[] = [];
-  for (const row of page.items) {
-    const requesterTeams = await teamIdsOf(ctx.deps, String(row.requesterId));
-    if (
-      row.requesterId === actor.id ||
-      actor.managedTeamIds.some((t) => requesterTeams.includes(t))
-    ) {
-      items.push(row);
+  const ownOnly = actor.orgRole === 'admin' || actor.managedTeamIds.length === 0;
+  const teamsByRequester = new Map<string, string[]>();
+  const visible = async (row: Row): Promise<boolean> => {
+    if (ownOnly || row.requesterId === actor.id) return true;
+    const requesterId = String(row.requesterId);
+    let requesterTeams = teamsByRequester.get(requesterId);
+    if (!requesterTeams) {
+      requesterTeams = await teamIdsOf(ctx.deps, requesterId);
+      teamsByRequester.set(requesterId, requesterTeams);
     }
-  }
-  return { items, nextCursor: page.nextCursor };
+    const teams = requesterTeams;
+    return actor.managedTeamIds.some((t) => teams.includes(t));
+  };
+  return visiblePage(ctx, 'install_requests', { ...query, sort: '-createdAt' }, where, visible);
 };
 
-export const requestById = async (deps: ApiDeps, id: string): Promise<Row> => {
+const requestById = async (deps: ApiDeps, id: string): Promise<Row> => {
   const row = await deps.store.get('install_requests', id);
   if (!row) throw new NotFoundApiError('install request');
   return row;
@@ -739,13 +773,7 @@ export const approveInstallRequest = async (ctx: WriteCtx, id: string) => {
   const row = await requestById(ctx.deps, id);
   const request = requestOf(row);
   const source = sourceOf(await registrySources.require(ctx, request.sourceId));
-  const planned = await planFor(
-    ctx.deps,
-    request.sourceId,
-    request.serverName,
-    request.version,
-    undefined,
-  );
+  const planned = await planFor(ctx.deps, request.sourceId, request.serverName, request.version);
   const policy = await loadPolicy(ctx.deps, request.sourceId);
   const approvalCtx: ApprovalContext = {
     actor: actorOf(ctx.principal),

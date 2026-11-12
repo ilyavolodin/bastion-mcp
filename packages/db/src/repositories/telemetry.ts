@@ -14,37 +14,30 @@ import {
   mergeBuckets,
   percentileFromBuckets,
 } from '../latency';
-import { dropPartitionsBefore, ensurePartitions, type PartitionedTable } from '../partitions';
 import {
-  clampLimit,
+  dropPartitionsBefore,
+  ensurePartitions,
+  PARTITIONED_TABLES,
+  type PartitionedTable,
+  withPartitionRetry,
+} from '../partitions';
+import {
   decodeCursor,
-  encodeCursor,
   InvalidCursorError,
   type Paged,
   type PrismaLike,
+  paginate,
   type RepoContext,
   type RepoOptions,
   toContext,
   toJsonOrNull,
+  tsRange,
   ValidationError,
 } from './support';
 
 // --- partition-aware inserts ------------------------------------------------------------------------------------------
 
-/** Runs an insert; when Postgres has no partition for the timestamp, creates today+7 days and retries once. */
-export const withPartitionRetry = async <T>(
-  db: PrismaLike,
-  table: PartitionedTable,
-  fn: () => Promise<T>,
-): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error) {
-    if (!/no partition of relation/i.test(String(error))) throw error;
-    await ensurePartitions(db, table, PARTITION_DAYS_AHEAD);
-    return fn();
-  }
-};
+export { withPartitionRetry } from '../partitions';
 
 // --- call_log: write side (15.5) ---------------------------------------------------------------------------------------
 
@@ -209,6 +202,16 @@ const callCursor = (cursor: string | undefined): { ts: Date; id: string } | unde
   return { ts: new Date(ts), id };
 };
 
+/** Keyset condition of the newest-first `(ts, id)` order: rows strictly after the cursor row. */
+const beforeTsId = (cursor: { ts: Date; id: string } | undefined) =>
+  cursor ? { OR: [{ ts: { lt: cursor.ts } }, { ts: cursor.ts, id: { lt: cursor.id } }] } : {};
+
+/** Cursor of a row in the `(ts, id)` order: `[tsMillis, id]`. */
+const tsIdCursorOf = (row: { ts: Date; id: string }): (string | number)[] => [
+  row.ts.getTime(),
+  row.id,
+];
+
 // --- rollups (15.5) ----------------------------------------------------------------------------------------------------------
 
 export type StatsTier = 'minute' | 'hour' | 'day';
@@ -331,6 +334,38 @@ export const chooseTier = (from: Date, to: Date, now: Date = new Date()): StatsT
 };
 
 const numberOf = (v: bigint | number | null): number => (v === null ? 0 : Number(v));
+
+type RawStatsRow = Record<string, unknown> & {
+  cnt: number;
+  err: number;
+  bytes: bigint | null;
+  lat: number[];
+};
+
+/** Maps one aggregated SQL row to a `StatsRow`: only the requested groups are present, `NIL_UUID` ids become null. */
+const toStatsRow = (r: RawStatsRow, groups: readonly string[]): StatsRow => {
+  const lat = mergeBuckets(r.lat, []);
+  const row: StatsRow = {
+    count: r.cnt,
+    errorCount: r.err,
+    bytesOut: numberOf(r.bytes),
+    p50: percentileFromBuckets(lat, 0.5),
+    p95: percentileFromBuckets(lat, 0.95),
+    p99: percentileFromBuckets(lat, 0.99),
+    latencyBuckets: lat,
+  };
+  if (groups.includes('time')) row.bucket = r.bucket as Date;
+  if (groups.includes('installation')) {
+    row.installationId = r.installation_id === NIL_UUID ? null : (r.installation_id as string);
+  }
+  if (groups.includes('catalogEntry')) {
+    row.catalogEntryId =
+      r.catalog_entry_id === NIL_UUID ? null : ((r.catalog_entry_id as string | null) ?? null);
+  }
+  if (groups.includes('item')) row.itemName = r.item_name as string;
+  if (groups.includes('outcome')) row.outcome = r.outcome as string;
+  return row;
+};
 
 export type RetentionPolicy = {
   /** `logs.retentionDays`: call_log, egress_events and distribution_events partitions older than this go. */
@@ -475,7 +510,6 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
     insertBatch,
 
     async list(filter: CallListFilter = {}): Promise<Paged<CallSummary>> {
-      const limit = clampLimit(filter.limit);
       const cursor = callCursor(filter.cursor);
       let principalIds: string[] | undefined;
       if (filter.teamIds) {
@@ -487,45 +521,35 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
         if (filter.principalId) principalIds = principalIds.filter((p) => p === filter.principalId);
       }
       const outcomes = filter.outcome === undefined ? undefined : [filter.outcome].flat();
-      const rows = await db.callLog.findMany({
-        where: {
-          AND: [
-            principalIds
-              ? { principalId: { in: principalIds } }
-              : filter.principalId
-                ? { principalId: filter.principalId }
-                : {},
-            filter.installationId ? { installationId: filter.installationId } : {},
-            filter.catalogEntryId ? { catalogEntryId: filter.catalogEntryId } : {},
-            filter.endpointId ? { endpointId: filter.endpointId } : {},
-            filter.clientId ? { clientId: filter.clientId } : {},
-            filter.method ? { method: filter.method } : {},
-            filter.itemName ? { itemName: filter.itemName } : {},
-            outcomes ? { outcome: { in: outcomes } } : {},
-            filter.from || filter.to
-              ? {
-                  ts: {
-                    ...(filter.from ? { gte: filter.from } : {}),
-                    ...(filter.to ? { lt: filter.to } : {}),
-                  },
-                }
-              : {},
-            cursor
-              ? { OR: [{ ts: { lt: cursor.ts } }, { ts: cursor.ts, id: { lt: cursor.id } }] }
-              : {},
-          ],
-        },
-        select: SUMMARY_SELECT,
-        orderBy: [{ ts: 'desc' }, { id: 'desc' }],
-        take: limit + 1,
-      });
-      const hasMore = rows.length > limit;
-      const items = rows.slice(0, limit);
-      const last = items[items.length - 1];
-      return {
-        items,
-        nextCursor: hasMore && last ? encodeCursor([last.ts.getTime(), last.id]) : null,
-      };
+      return paginate(
+        filter,
+        (take) =>
+          db.callLog.findMany({
+            where: {
+              AND: [
+                principalIds
+                  ? { principalId: { in: principalIds } }
+                  : filter.principalId
+                    ? { principalId: filter.principalId }
+                    : {},
+                filter.installationId ? { installationId: filter.installationId } : {},
+                filter.catalogEntryId ? { catalogEntryId: filter.catalogEntryId } : {},
+                filter.endpointId ? { endpointId: filter.endpointId } : {},
+                filter.clientId ? { clientId: filter.clientId } : {},
+                filter.method ? { method: filter.method } : {},
+                filter.itemName ? { itemName: filter.itemName } : {},
+                outcomes ? { outcome: { in: outcomes } } : {},
+                tsRange(filter.from, filter.to),
+                beforeTsId(cursor),
+              ],
+            },
+            select: SUMMARY_SELECT,
+            orderBy: [{ ts: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+        tsIdCursorOf,
+        (row) => row,
+      );
     },
 
     /** One call with previews and guard/policy details; pass `ts` to read a single partition. */
@@ -575,20 +599,16 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
         query.outcome === undefined ? Prisma.empty : Prisma.sql`AND outcome = ${query.outcome}`,
       ];
       const where = Prisma.join(filters, ' ');
-      const colList =
+      // `Prisma.join` rejects an empty list, so the ungrouped query falls back to the constant column.
+      const joined =
         cols.length === 0
-          ? Prisma.sql`1 AS g`
+          ? undefined
           : Prisma.join(
               cols.map((c) => Prisma.raw(c)),
               ', ',
             );
-      const groupList =
-        cols.length === 0
-          ? Prisma.sql`g`
-          : Prisma.join(
-              cols.map((c) => Prisma.raw(c)),
-              ', ',
-            );
+      const colList = joined ?? Prisma.sql`1 AS g`;
+      const groupList = joined ?? Prisma.sql`g`;
       const joinOn =
         cols.length === 0
           ? Prisma.sql`h.g = a.g`
@@ -605,13 +625,7 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
               cols.map((c) => Prisma.sql`a.${Prisma.raw(c)}`),
               ', ',
             )},`;
-      type Raw = Record<string, unknown> & {
-        cnt: number;
-        err: number;
-        bytes: bigint | null;
-        lat: number[];
-      };
-      const raw = await db.$queryRaw<Raw[]>`
+      const raw = await db.$queryRaw<RawStatsRow[]>`
         WITH base AS (
           SELECT bucket, installation_id, catalog_entry_id, item_name, outcome, "count", error_count, bytes_out, latency_buckets
           FROM ${table} WHERE ${where}
@@ -629,32 +643,7 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
                  LEFT JOIN h ON ${joinOn} AND h.ord = g2.ord ORDER BY g2.ord) AS lat
         FROM a
         ORDER BY ${groupList}`;
-      const rows = raw.map((r): StatsRow => {
-        const lat = mergeBuckets(r.lat, []);
-        const row: StatsRow = {
-          count: r.cnt,
-          errorCount: r.err,
-          bytesOut: numberOf(r.bytes),
-          p50: percentileFromBuckets(lat, 0.5),
-          p95: percentileFromBuckets(lat, 0.95),
-          p99: percentileFromBuckets(lat, 0.99),
-          latencyBuckets: lat,
-        };
-        if (groups.includes('time')) row.bucket = r.bucket as Date;
-        if (groups.includes('installation')) {
-          row.installationId =
-            r.installation_id === NIL_UUID ? null : (r.installation_id as string);
-        }
-        if (groups.includes('catalogEntry')) {
-          row.catalogEntryId =
-            r.catalog_entry_id === NIL_UUID
-              ? null
-              : ((r.catalog_entry_id as string | null) ?? null);
-        }
-        if (groups.includes('item')) row.itemName = r.item_name as string;
-        if (groups.includes('outcome')) row.outcome = r.outcome as string;
-        return row;
-      });
+      const rows = raw.map((r) => toStatsRow(r, groups));
       return { tier, rows };
     },
 
@@ -684,17 +673,16 @@ export const createCallLogRepository = (arg: PrismaLike | RepoContext, options?:
         })
       ).count;
       const cutoff = new Date(now.getTime() - policy.logsRetentionDays * day);
-      const partitions = {
-        call_log: await dropPartitionsBefore(db, 'call_log', cutoff),
-        egress_events: await dropPartitionsBefore(db, 'egress_events', cutoff),
-        distribution_events: await dropPartitionsBefore(db, 'distribution_events', cutoff),
-      };
+      const partitions = { call_log: 0, egress_events: 0, distribution_events: 0 };
+      for (const table of PARTITIONED_TABLES) {
+        partitions[table] = await dropPartitionsBefore(db, table, cutoff);
+      }
       return { statsRows, partitions };
     },
 
     /** Creates the daily partitions the scheduler keeps 7 days ahead (15.5). */
     async ensurePartitionsAhead(daysAhead = PARTITION_DAYS_AHEAD): Promise<void> {
-      for (const table of ['call_log', 'egress_events', 'distribution_events'] as const) {
+      for (const table of PARTITIONED_TABLES) {
         await ensurePartitions(db, table, daysAhead);
       }
     },
@@ -773,7 +761,6 @@ export const createEgressEventRepository = (
       limit?: number;
       cursor?: string;
     }): Promise<Paged<EgressEventView>> {
-      const limit = clampLimit(filter.limit);
       const cursor = callCursor(filter.cursor);
       let instanceIds: string[] | undefined;
       if (filter.installationId) {
@@ -785,44 +772,32 @@ export const createEgressEventRepository = (
         ).map((i) => i.id);
         if (filter.instanceId) instanceIds = instanceIds.filter((i) => i === filter.instanceId);
       }
-      const rows = await db.egressEvent.findMany({
-        where: {
-          AND: [
-            instanceIds
-              ? { instanceId: { in: instanceIds } }
-              : filter.instanceId
-                ? { instanceId: filter.instanceId }
-                : {},
-            filter.decision ? { decision: filter.decision } : {},
-            filter.from || filter.to
-              ? {
-                  ts: {
-                    ...(filter.from ? { gte: filter.from } : {}),
-                    ...(filter.to ? { lt: filter.to } : {}),
-                  },
-                }
-              : {},
-            cursor
-              ? { OR: [{ ts: { lt: cursor.ts } }, { ts: cursor.ts, id: { lt: cursor.id } }] }
-              : {},
-          ],
-        },
-        orderBy: [{ ts: 'desc' }, { id: 'desc' }],
-        take: limit + 1,
-      });
-      const hasMore = rows.length > limit;
-      const items = rows.slice(0, limit).map(
+      return paginate(
+        filter,
+        (take) =>
+          db.egressEvent.findMany({
+            where: {
+              AND: [
+                instanceIds
+                  ? { instanceId: { in: instanceIds } }
+                  : filter.instanceId
+                    ? { instanceId: filter.instanceId }
+                    : {},
+                filter.decision ? { decision: filter.decision } : {},
+                tsRange(filter.from, filter.to),
+                beforeTsId(cursor),
+              ],
+            },
+            orderBy: [{ ts: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+        tsIdCursorOf,
         (r): EgressEventView => ({
           ...r,
           bytesUp: r.bytesUp === null ? null : Number(r.bytesUp),
           bytesDown: r.bytesDown === null ? null : Number(r.bytesDown),
         }),
       );
-      const last = items[items.length - 1];
-      return {
-        items,
-        nextCursor: hasMore && last ? encodeCursor([last.ts.getTime(), last.id]) : null,
-      };
     },
   };
 };

@@ -10,12 +10,14 @@ import {
   type EndpointView,
   groupEgress,
   type InstallationView,
+  runningVersions,
   specInfo,
   toCapabilities,
   toEndpointView,
   toInstallationView,
   toStoreEntryDetailView,
   toStoreEntryView,
+  versionsToFetch,
 } from '../views/servers';
 import { keys, useApiMutation } from './base';
 import { fetchTeams, orEmpty } from './lookups';
@@ -23,11 +25,6 @@ import { useMe } from './session';
 
 // --- Installations ------------------------------------------------------------------------------
 
-/**
- * The installations the caller may manage (all of them for an administrator; `mine` narrows to their own and their
- * teams') with owner names and what their server specs say (runtime, sign-in mode). The rows carry
- * only ids, so this reads the teams and people and the catalog versions of the installations, a bounded fan-out.
- */
 /** Installed for this account or for one of its teams (an administrator may manage more than that). */
 const ownedByCaller = (
   i: { ownerType: string; ownerId: string },
@@ -36,6 +33,11 @@ const ownedByCaller = (
   (i.ownerType === 'user' && i.ownerId === me.id) ||
   (i.ownerType === 'team' && me.teams.some((t) => t.id === i.ownerId));
 
+/**
+ * The installations the caller may manage (all of them for an administrator; `mine` narrows to their own and their
+ * teams') with owner names and what their server specs say (runtime, sign-in mode). The rows carry
+ * only ids, so this reads the teams and people and the catalog versions of the installations, a bounded fan-out.
+ */
 export const useInstallations = ({ mine = false }: { mine?: boolean } = {}) => {
   const me = useMe();
   return useQuery({
@@ -64,25 +66,8 @@ export const useInstallations = ({ mine = false }: { mine?: boolean } = {}) => {
         const entry = await api.get(`/catalog/${id}`, { signal }).catch(() => null);
         currentOf.set(id, entry?.currentVersionId ?? null);
       });
-      const versions = new Map<string, { running: string | null; latest: string | null }>();
-      for (const r of rows) {
-        if (!r.catalogEntryId) continue;
-        const latest = currentOf.get(r.catalogEntryId) ?? null;
-        versions.set(r.id, {
-          running: r.pinnedVersion ? r.catalogVersionId : (latest ?? r.catalogVersionId),
-          latest,
-        });
-      }
-      const wanted = [
-        ...new Map(
-          [...versions.entries()].flatMap(([id, v]) => {
-            const row = rows.find((r) => r.id === id);
-            return [v.running, v.latest]
-              .filter((versionId): versionId is string => versionId !== null)
-              .map((versionId) => [versionId, row?.catalogEntryId ?? ''] as const);
-          }),
-        ).entries(),
-      ];
+      const versions = runningVersions(rows, currentOf);
+      const wanted = versionsToFetch(rows, versions);
       const versionLabels = new Map<string, string>();
       const specs = new Map<string, ReturnType<typeof specInfo>>();
       await mapInBatches(wanted, FAN_OUT, async ([versionId, entryId]) => {
@@ -269,6 +254,7 @@ export const usePreviewOverrides = () =>
 /** The overrides every installation of a catalog entry gets (set by an Admin or the entry's owner). */
 export const useEntryOverrides = (entryId: string) =>
   useQuery({
+    enabled: entryId !== '',
     queryKey: ['catalog', entryId, 'default-overrides'],
     queryFn: ({ signal }) => api.get(`/catalog/${entryId}/default-overrides`, { signal }),
   });

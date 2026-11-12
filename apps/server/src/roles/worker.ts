@@ -137,7 +137,7 @@ export const createWorker = async (
       legacyMaxSessionsPerPrincipal: config.legacyMaxSessionsPerPrincipal,
       listPageSize: config.listPageSize,
       captureContent: config.otelCaptureContent,
-      allowedOrigins: [new URL(config.publicUrl).origin, ...(infra.options.extraCorsOrigins ?? [])],
+      allowedOrigins: [publicOrigin(config), ...(infra.options.extraCorsOrigins ?? [])],
       ...(infra.options.keepAliveMs === undefined
         ? {}
         : { keepAliveMs: infra.options.keepAliveMs }),

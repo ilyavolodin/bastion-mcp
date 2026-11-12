@@ -168,7 +168,8 @@ export const selectInstallations = (
   return ordered;
 };
 
-const installationData = (i: InstallationInfo): InstallationData => {
+/** Cedar `Installation` entity data of an installation: its stored policy data, else id and owner by kind (10.4). */
+export const installationData = (i: InstallationInfo): InstallationData => {
   const data: InstallationData = i.policy ?? { id: i.id, catalogEntryId: i.catalogEntryId };
   if (i.policy) return data;
   if (i.owner.kind === 'user') data.ownerUserId = i.owner.id;
@@ -451,7 +452,7 @@ const policyAnnotations = (tool: UpstreamTool) => {
   return out;
 };
 
-const toolCountsFor = <T extends { installation: InstallationInfo }>(list: readonly T[]) => {
+const countByInstallation = <T extends { installation: InstallationInfo }>(list: readonly T[]) => {
   const counts = new Map<string, number>();
   for (const e of list) counts.set(e.installation.id, (counts.get(e.installation.id) ?? 0) + 1);
   return counts;
@@ -595,24 +596,37 @@ const partitionByVisibility = <E>(
     visible.has(resources[index] as VisibilityResource) ? [{ entry, index }] : [],
   );
 
-/** Steps 3 to 8 of 7.2 over already-loaded data. Deterministic: same input, same output. */
-export const assembleEndpoint = (
-  loaded: readonly LoadedInstallation[],
-  input: CompileInput,
-): EffectiveEndpoint => {
-  const { principal, endpoint, policy, requestContext } = input;
-  const single = SINGLE_KINDS.has(endpoint.kind);
-  const mode = single ? 'onCollision' : endpoint.prefixMode;
-  const collected = collectEntries(loaded);
-  const { degraded, needsAuth, warnings, instData, addedOf } = collected;
+type FinalLists = {
+  finalTools: readonly UpstreamTool[];
+  finalPrompts: readonly UpstreamPrompt[];
+  finalResources: readonly UpstreamResource[];
+  finalTemplates: readonly UpstreamResourceTemplate[];
+};
 
-  // Namespacing (7.3).
-  const toolNames = resolveNames(nameCandidates(collected.tools), mode).map((r) => r.name);
-  const promptNames = resolveNames(nameCandidates(collected.prompts), mode).map((r) => r.name);
+/** What Bastion itself serves for one item of one installation (12.2), if anything. */
+const addedDefOf = <K extends keyof MergedAdded>(
+  addedOf: ReadonlyMap<string, MergedAdded>,
+  kind: K,
+  e: { installation: InstallationInfo; upstreamKey: string },
+): MergedAdded[K][string] | undefined => {
+  const added = addedOf.get(e.installation.id)?.[kind] as
+    | Record<string, MergedAdded[K][string]>
+    | undefined;
+  return added?.[e.upstreamKey];
+};
 
-  // Cedar visibility (7.2) with FINAL annotations; the policy sees upstream names and URIs.
+/**
+ * Cedar visibility (7.2): three `filterVisible` calls, in this order: tools, prompts, then resources and templates
+ * together. The policy sees upstream names and URIs with the FINAL tool annotations.
+ */
+const visibleEntries = (
+  collected: Collected,
+  policy: EndpointPolicy,
+  principal: CompileInput['principal'],
+  requestContext: CompileInput['requestContext'],
+) => {
   const instOf = (e: { installation: InstallationInfo }): InstallationData =>
-    instData.get(e.installation.id) as InstallationData;
+    collected.instData.get(e.installation.id) as InstallationData;
   const visibleOf = (
     action: 'seeTool' | 'seePrompt' | 'seeResource',
     resources: readonly VisibilityResource[],
@@ -641,6 +655,122 @@ export const assembleEndpoint = (
   const resourceRes = collected.resources.map(asResource);
   const templateRes = collected.templates.map(asResource);
   const visibleRes = visibleOf('seeResource', [...resourceRes, ...templateRes]);
+  return { toolRes, visibleTools, promptRes, visiblePrompts, resourceRes, templateRes, visibleRes };
+};
+
+/** The input of the URI index (7.4): kept resources and templates with their routes, `ui://` links from tool `_meta`, and prefixed installations. */
+const buildUriInput = (
+  keptResources: readonly ResourceEntry[],
+  keptTemplates: readonly TemplateEntry[],
+  keptTools: readonly ToolEntry[],
+  loaded: readonly LoadedInstallation[],
+  addedOf: ReadonlyMap<string, MergedAdded>,
+): UriIndexInput => {
+  const uriInput: UriIndexInput = { resources: [], templates: [], seen: [], rewritten: [] };
+  for (const e of keptResources) {
+    const hostedDef = addedDefOf(addedOf, 'resources', e);
+    const base: ResourceRoute = e.final?.route ?? { kind: 'resource' };
+    const route: ResourceRoute = hostedDef
+      ? { ...base, hosted: { kind: 'resource', def: hostedDef } }
+      : base;
+    uriInput.resources.push({
+      installationId: e.installation.id,
+      advertisedUri: e.item.uri,
+      upstreamUri: e.upstreamKey,
+      route,
+    });
+  }
+  for (const e of keptTemplates) {
+    const hostedDef = addedDefOf(addedOf, 'resourceTemplates', e);
+    const base: ResourceRoute = e.final?.route ?? {
+      kind: 'template',
+      upstreamTemplate: e.upstreamKey,
+      pinnedVariables: {},
+    };
+    uriInput.templates.push({
+      installationId: e.installation.id,
+      advertised: e.item.uriTemplate,
+      route: hostedDef
+        ? { ...base, hosted: { kind: 'template', uriTemplate: e.upstreamKey, def: hostedDef } }
+        : base,
+    });
+  }
+  for (const e of keptTools) {
+    const ui = (e.item._meta as { ui?: { resourceUri?: unknown } } | undefined)?.ui;
+    if (typeof ui?.resourceUri === 'string') {
+      uriInput.seen.push({ installationId: e.installation.id, uri: ui.resourceUri });
+    }
+  }
+  for (const { installation } of loaded) {
+    if (wantsUriPrefix(installation.layers)) {
+      uriInput.rewritten.push({
+        slug: effectiveSlug(installation),
+        installationId: installation.id,
+      });
+    }
+  }
+  return uriInput;
+};
+
+/** Capabilities (7.6): advertised when any installation has them or the final lists are not empty. */
+const endpointCapabilities = (
+  loaded: readonly LoadedInstallation[],
+  finals: FinalLists,
+): EndpointCapabilities => {
+  const capabilities: EndpointCapabilities = {};
+  const anyCap = (key: 'tools' | 'prompts' | 'resources' | 'completions' | 'subscribe') =>
+    loaded.some((l) => l.installation.capabilities[key] === true);
+  if (anyCap('tools') || finals.finalTools.length > 0) capabilities.tools = { listChanged: true };
+  if (anyCap('prompts') || finals.finalPrompts.length > 0) {
+    capabilities.prompts = { listChanged: true };
+  }
+  if (anyCap('resources') || finals.finalResources.length > 0 || finals.finalTemplates.length > 0) {
+    capabilities.resources = anyCap('subscribe')
+      ? { listChanged: true, subscribe: true }
+      : { listChanged: true };
+  }
+  if (anyCap('completions')) capabilities.completions = {};
+  return capabilities;
+};
+
+/** One summary per installation, in load order, with its kept item counts and collisions. */
+const installationSummaries = (
+  loaded: readonly LoadedInstallation[],
+  counts: { tool: Map<string, number>; prompt: Map<string, number>; resource: Map<string, number> },
+  collisions: readonly Collision[],
+  degraded: readonly DegradedEntry[],
+): InstallationSummary[] => {
+  const degradedSlugs = new Set(degraded.map((d) => d.installation));
+  return loaded.map(({ installation }) => ({
+    id: installation.id,
+    slug: effectiveSlug(installation),
+    displayName: installation.displayName,
+    toolCount: counts.tool.get(installation.id) ?? 0,
+    promptCount: counts.prompt.get(installation.id) ?? 0,
+    resourceCount: counts.resource.get(installation.id) ?? 0,
+    collisionCount: collisions.filter((c) => c.installationIds.includes(installation.id)).length,
+    degraded: degradedSlugs.has(effectiveSlug(installation)),
+  }));
+};
+
+/** Steps 3 to 8 of 7.2 over already-loaded data. Deterministic: same input, same output. */
+export const assembleEndpoint = (
+  loaded: readonly LoadedInstallation[],
+  input: CompileInput,
+): EffectiveEndpoint => {
+  const { principal, endpoint, policy, requestContext } = input;
+  const single = SINGLE_KINDS.has(endpoint.kind);
+  const mode = single ? 'onCollision' : endpoint.prefixMode;
+  const collected = collectEntries(loaded);
+  const { degraded, needsAuth, warnings, addedOf } = collected;
+
+  // Namespacing (7.3).
+  const toolNames = resolveNames(nameCandidates(collected.tools), mode).map((r) => r.name);
+  const promptNames = resolveNames(nameCandidates(collected.prompts), mode).map((r) => r.name);
+
+  // Cedar visibility (7.2) with FINAL annotations; the policy sees upstream names and URIs.
+  const { toolRes, visibleTools, promptRes, visiblePrompts, resourceRes, templateRes, visibleRes } =
+    visibleEntries(collected, policy, principal, requestContext);
 
   const items: ItemMeta[] = [];
   const toolRoutes = new Map<string, ToolRoute>();
@@ -678,7 +808,7 @@ export const assembleEndpoint = (
     keptPromptNames.push(name);
     finalPrompts.push({ ...e.item, name });
     const plan: PromptPlan | undefined = e.final?.plan;
-    const hosted = addedOf.get(e.installation.id)?.prompts[e.upstreamKey];
+    const hosted = addedDefOf(addedOf, 'prompts', e);
     promptRoutes.set(name, {
       installationId: e.installation.id,
       upstreamName: e.upstreamKey,
@@ -727,7 +857,7 @@ export const assembleEndpoint = (
       upstreamKey: e.upstreamKey,
       finalKey: name,
       overridden: e.overridden,
-      ...(addedOf.get(e.installation.id)?.prompts[e.upstreamKey] ? { added: true as const } : {}),
+      ...(addedDefOf(addedOf, 'prompts', e) ? { added: true as const } : {}),
       renamed: name !== e.upstreamKey,
       collided: isCollided('prompt', name, e),
       issues: e.issues,
@@ -735,55 +865,13 @@ export const assembleEndpoint = (
   });
 
   // URI index (7.4).
-  const uriInput: UriIndexInput = { resources: [], templates: [], seen: [], rewritten: [] };
   const keptResources = partitionByVisibility(collected.resources, resourceRes, visibleRes).map(
     (v) => v.entry,
   );
-  for (const e of keptResources) {
-    const hostedDef = addedOf.get(e.installation.id)?.resources[e.upstreamKey];
-    const base: ResourceRoute = e.final?.route ?? { kind: 'resource' };
-    const route: ResourceRoute = hostedDef
-      ? { ...base, hosted: { kind: 'resource', def: hostedDef } }
-      : base;
-    uriInput.resources.push({
-      installationId: e.installation.id,
-      advertisedUri: e.item.uri,
-      upstreamUri: e.upstreamKey,
-      route,
-    });
-  }
   const keptTemplates = partitionByVisibility(collected.templates, templateRes, visibleRes).map(
     (v) => v.entry,
   );
-  for (const e of keptTemplates) {
-    const hostedDef = addedOf.get(e.installation.id)?.resourceTemplates[e.upstreamKey];
-    const base: ResourceRoute = e.final?.route ?? {
-      kind: 'template',
-      upstreamTemplate: e.upstreamKey,
-      pinnedVariables: {},
-    };
-    uriInput.templates.push({
-      installationId: e.installation.id,
-      advertised: e.item.uriTemplate,
-      route: hostedDef
-        ? { ...base, hosted: { kind: 'template', uriTemplate: e.upstreamKey, def: hostedDef } }
-        : base,
-    });
-  }
-  for (const e of keptTools) {
-    const ui = (e.item._meta as { ui?: { resourceUri?: unknown } } | undefined)?.ui;
-    if (typeof ui?.resourceUri === 'string') {
-      uriInput.seen.push({ installationId: e.installation.id, uri: ui.resourceUri });
-    }
-  }
-  for (const { installation } of loaded) {
-    if (wantsUriPrefix(installation.layers)) {
-      uriInput.rewritten.push({
-        slug: effectiveSlug(installation),
-        installationId: installation.id,
-      });
-    }
-  }
+  const uriInput = buildUriInput(keptResources, keptTemplates, keptTools, loaded, addedOf);
   const { index, conflicts, hiddenKeys } = buildUriIndex(uriInput);
   for (const c of conflicts) warnings.push({ code: 'uri_conflict', ...c });
   const finalResources: UpstreamResource[] = [];
@@ -796,7 +884,7 @@ export const assembleEndpoint = (
       upstreamKey: e.upstreamKey,
       finalKey: e.item.uri,
       overridden: e.overridden,
-      ...(addedOf.get(e.installation.id)?.resources[e.upstreamKey] ? { added: true as const } : {}),
+      ...(addedDefOf(addedOf, 'resources', e) ? { added: true as const } : {}),
       renamed: e.item.uri !== e.upstreamKey,
       collided: false,
       issues: e.issues,
@@ -811,9 +899,7 @@ export const assembleEndpoint = (
       upstreamKey: e.upstreamKey,
       finalKey: e.item.uriTemplate,
       overridden: e.overridden,
-      ...(addedOf.get(e.installation.id)?.resourceTemplates[e.upstreamKey]
-        ? { added: true as const }
-        : {}),
+      ...(addedDefOf(addedOf, 'resourceTemplates', e) ? { added: true as const } : {}),
       renamed: e.item.uriTemplate !== e.upstreamKey,
       collided: false,
       issues: e.issues,
@@ -833,34 +919,19 @@ export const assembleEndpoint = (
   );
 
   // Capabilities and instructions (7.6).
-  const capabilities: EndpointCapabilities = {};
-  const anyCap = (key: 'tools' | 'prompts' | 'resources' | 'completions' | 'subscribe') =>
-    loaded.some((l) => l.installation.capabilities[key] === true);
-  if (anyCap('tools') || finalTools.length > 0) capabilities.tools = { listChanged: true };
-  if (anyCap('prompts') || finalPrompts.length > 0) capabilities.prompts = { listChanged: true };
-  if (anyCap('resources') || finalResources.length > 0 || finalTemplates.length > 0) {
-    capabilities.resources = anyCap('subscribe')
-      ? { listChanged: true, subscribe: true }
-      : { listChanged: true };
-  }
-  if (anyCap('completions')) capabilities.completions = {};
+  const capabilities = endpointCapabilities(loaded, {
+    finalTools,
+    finalPrompts,
+    finalResources,
+    finalTemplates,
+  });
 
   const counts = {
-    tool: toolCountsFor(keptTools),
-    prompt: toolCountsFor(keptPrompts),
-    resource: toolCountsFor(keptResources),
+    tool: countByInstallation(keptTools),
+    prompt: countByInstallation(keptPrompts),
+    resource: countByInstallation(keptResources),
   };
-  const degradedSlugs = new Set(degraded.map((d) => d.installation));
-  const installations: InstallationSummary[] = loaded.map(({ installation }) => ({
-    id: installation.id,
-    slug: effectiveSlug(installation),
-    displayName: installation.displayName,
-    toolCount: counts.tool.get(installation.id) ?? 0,
-    promptCount: counts.prompt.get(installation.id) ?? 0,
-    resourceCount: counts.resource.get(installation.id) ?? 0,
-    collisionCount: collisions.filter((c) => c.installationIds.includes(installation.id)).length,
-    degraded: degradedSlugs.has(effectiveSlug(installation)),
-  }));
+  const installations = installationSummaries(loaded, counts, collisions, degraded);
 
   const instructions = buildInstructions(endpoint, collected.instructionParts);
   const teamIds = new Set(principalTeamIds(principal));

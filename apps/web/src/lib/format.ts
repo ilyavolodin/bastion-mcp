@@ -95,19 +95,3 @@ export const RUNTIME_LABEL = {
   python: 'Python',
   oci: 'Container',
 } as const;
-
-export const AUTH_LABEL = {
-  oauth: 'Connect with OAuth',
-  userSecret: 'Needs your API key',
-  teamSecret: 'Ready to use',
-  orgSecret: 'Ready to use',
-  enterpriseManaged: 'Uses your company sign-in',
-  tokenExchange: 'Uses your company sign-in',
-  none: 'Ready to use',
-} as const;
-
-export const ISOLATION_LABEL = {
-  none: 'No isolation',
-  namespaces: 'Namespaces',
-  gvisor: 'gVisor',
-} as const;
