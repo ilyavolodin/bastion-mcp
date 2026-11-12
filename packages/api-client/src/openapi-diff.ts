@@ -164,9 +164,13 @@ const compareSchema = (
 ): void => {
   const b = resolveRef(ctx.before, before);
   const a = resolveRef(ctx.after, after);
-  const key = `${where}|${str(obj(before).$ref) ?? ''}|${str(obj(after).$ref) ?? ''}`;
-  if (seen.has(key)) return;
-  seen.add(key);
+  // Cycle guard: a $ref pair already being compared further up this path is a recursive schema; cut it off.
+  const refs = `${str(obj(before).$ref) ?? ''}|${str(obj(after).$ref) ?? ''}`;
+  const key = refs === '|' ? undefined : refs;
+  if (key !== undefined) {
+    if (seen.has(key)) return;
+    seen.add(key);
+  }
   const push: Push = (kind, message) => {
     ctx.out.push({ kind, where, message });
   };
@@ -182,6 +186,7 @@ const compareSchema = (
   compareVariants(b, a, direction, push, (i, bv, av) =>
     compareSchema(ctx, bv, av, direction, `${where}|${i}`, seen),
   );
+  if (key !== undefined) seen.delete(key);
 };
 
 const paramKey = (p: Obj): string => `${str(p.in) ?? ''}:${str(p.name) ?? ''}`;
