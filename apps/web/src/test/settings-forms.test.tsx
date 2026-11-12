@@ -38,6 +38,20 @@ describe('Settings forms send what the API accepts (19.2)', () => {
     capture.stop();
   });
 
+  it('19.2 installs: an empty or non-positive tool warning threshold shows a field error and sends nothing', async () => {
+    const capture = captureRequests();
+    const { user } = await renderRoute('/settings');
+    const threshold = await screen.findByLabelText('Warn above this many tools per endpoint');
+    await clear(user, threshold);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Enter a whole number of at least 1')).toBeInTheDocument();
+    await user.type(threshold, '0');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Enter a whole number of at least 1')).toBeInTheDocument();
+    expect(capture.calls.some((c) => c.method === 'patch')).toBe(false);
+    capture.stop();
+  });
+
   it('19.2 tool changes: the auto-approval limit is sent as its own setting', async () => {
     const capture = captureRequests();
     const { user } = await renderRoute('/settings?section=drift');
