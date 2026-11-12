@@ -380,8 +380,8 @@ export type DriftView = DriftRow & {
   description: string;
   verdict: Verdict;
   scanMessage: string;
-  /** The catalog's risk rating of the server the change belongs to; null when no catalog entry is known. */
-  risk: 'low' | 'medium' | 'high' | null;
+  /** The catalog's risk rating of the server the change belongs to; medium when no catalog entry is known. */
+  risk: 'low' | 'medium' | 'high';
 };
 
 export const descriptionOf = (definition: Record<string, unknown>): string =>
@@ -412,7 +412,7 @@ export const driftViews = (
       description: descriptionOf(r.newDefinition),
       verdict,
       scanMessage: scanMessage(r.guardResults),
-      risk: (r.installationId && catalogRisk.get(r.installationId)) || null,
+      risk: (r.installationId && catalogRisk.get(r.installationId)) || 'medium',
     };
   });
 

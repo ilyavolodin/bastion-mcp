@@ -162,7 +162,7 @@ describe('observability views (15.5, 13.6, 17.2)', () => {
     expect(sentry?.description).toMatch(/slack_post_message/);
     expect(views.find((v) => v.id === 'dr-2')).toMatchObject({
       serverName: 'Unknown server',
-      risk: null,
+      risk: 'medium',
     });
     const clean = driftViews(
       rows,
