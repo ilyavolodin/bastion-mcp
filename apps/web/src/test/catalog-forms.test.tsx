@@ -133,6 +133,17 @@ describe('Catalog forms send what the API requires (17.2)', () => {
     capture.stop();
   });
 
+  it('11.4 two unnamed header rows get distinct remove names by row number', async () => {
+    const { user } = await renderRoute('/catalog/new');
+    await user.type(await screen.findByLabelText(/Display name/), 'LAN server');
+    await user.selectOptions(screen.getByLabelText('Runtime'), 'remote');
+    await user.click(screen.getByRole('button', { name: /Authentication/ }));
+    await user.click(await screen.findByRole('button', { name: 'Custom header' }));
+    await user.click(screen.getByRole('button', { name: 'Custom header' }));
+    expect(screen.getByRole('button', { name: 'Remove header 1' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Remove header 2' })).toBeVisible();
+  });
+
   it('11.1 a remote server with OAuth sends transport, url and an oauth auth block', async () => {
     const capture = captureRequests();
     const { user } = await renderRoute('/catalog/new');

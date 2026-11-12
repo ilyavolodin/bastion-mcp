@@ -324,7 +324,7 @@ export function BindingRow({
           }}
         />
         <RemoveCell
-          label={`Remove ${noun} ${row.name || ''}`.trim()}
+          label={`Remove ${noun} ${row.name || index + 1}`}
           disabled={readOnly}
           onClick={onRemove}
         />
