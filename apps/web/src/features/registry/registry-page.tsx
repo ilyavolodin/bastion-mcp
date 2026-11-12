@@ -45,6 +45,14 @@ import {
   requestToBody,
 } from './forms';
 
+/** What a failed dialog submit says: the API's first message, else the error's own, else a generic line. */
+const submitError = (err: unknown): string =>
+  err instanceof ApiError
+    ? (err.errors[0]?.message ?? (err.detail || err.title))
+    : err instanceof Error && err.message
+      ? err.message
+      : 'The request failed';
+
 /** A server the policy wants approval for, with what the policy said. */
 type Pending = { server: RegistryServerView; reasons: string[] };
 
@@ -78,9 +86,7 @@ function RequestDialog({ pending, onClose }: { pending: Pending | null; onClose:
                 setJustification('');
                 onClose();
               },
-              onError: (err) => {
-                if (err instanceof ApiError) setError(err.errors[0]?.message ?? err.detail);
-              },
+              onError: (err) => setError(submitError(err)),
             });
           }}
         >
@@ -231,6 +237,7 @@ function RejectDialog({
                   setReason('');
                   onClose();
                 },
+                onError: (err) => setError(submitError(err)),
               },
             );
           }}
