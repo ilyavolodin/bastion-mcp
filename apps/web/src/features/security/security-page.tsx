@@ -521,7 +521,7 @@ function DriftQueue() {
                           {r.serverName} · {formatRelative(r.createdAt)}
                         </span>
                       </span>
-                      <Tag tone={RISK[r.risk].tone}>{RISK[r.risk].label}</Tag>
+                      {r.risk ? <Tag tone={RISK[r.risk].tone}>{RISK[r.risk].label}</Tag> : null}
                     </button>
                   </li>
                 ))}

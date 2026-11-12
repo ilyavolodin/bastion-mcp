@@ -237,11 +237,23 @@ export const useDriftReviews = (status: 'open' | 'all' = 'open', enabled = true)
     queryKey: [...keys.drift, status],
     enabled,
     queryFn: async ({ signal }) => {
-      const [rows, installations] = await Promise.all([
+      const [rows, installations, entries] = await Promise.all([
         fetchAll('/drift-reviews', status === 'open' ? { status } : undefined, undefined, signal),
         orEmpty(fetchAll('/installations', undefined, undefined, signal)),
+        orEmpty(fetchAll('/catalog', {}, undefined, signal)),
       ]);
-      return driftViews(rows, new Map(installations.map((i) => [i.id, i.displayName])));
+      const entryRisk = new Map(entries.map((e) => [e.id, e.risk]));
+      const catalogRisk = new Map(
+        installations.flatMap((i) => {
+          const risk = i.catalogEntryId ? entryRisk.get(i.catalogEntryId) : undefined;
+          return risk ? [[i.id, risk] as const] : [];
+        }),
+      );
+      return driftViews(
+        rows,
+        new Map(installations.map((i) => [i.id, i.displayName])),
+        catalogRisk,
+      );
     },
   });
 

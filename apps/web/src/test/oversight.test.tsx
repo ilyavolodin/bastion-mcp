@@ -160,6 +160,24 @@ describe('Security (13.6)', () => {
     ).toBeInTheDocument();
   });
 
+  it('13.6 the risk tag on a changed definition is the catalog risk of its server, not the guard verdict', async () => {
+    await renderRoute('/security');
+    const list = await screen.findByRole('list', { name: 'Reviews' });
+    const db = getDb().data;
+    const review = db.observability.drift.find((d) => d.id === 'dr-1');
+    const installation = db.servers.installations.find((i) => i.id === review?.installationId);
+    const risk = db.catalog.entries.find((e) => e.id === installation?.catalogEntryId)?.risk;
+    expect(risk).toBeTruthy();
+    const row = within(list)
+      .getByRole('button', { name: /get_event/ })
+      .closest('li') as HTMLElement;
+    expect(
+      within(row).getByText(risk === 'high' ? 'High' : risk === 'low' ? 'Low' : 'Medium'),
+    ).toBeInTheDocument();
+    // The guard scan of this review is malicious, which the old tag rated "High" whatever the catalog said.
+    expect(screen.getByText(/flagged this definition as malicious/)).toBeInTheDocument();
+  });
+
   it('a malicious scan blocks accepting; keeping the block asks for a reason and rejects the review', async () => {
     const { user } = await renderRoute('/security');
     expect(await screen.findByRole('button', { name: 'Accept new definition' })).toBeDisabled();

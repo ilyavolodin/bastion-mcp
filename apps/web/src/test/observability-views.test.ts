@@ -150,16 +150,26 @@ describe('observability views (15.5, 13.6, 17.2)', () => {
     expect(scanMessage([full('a', 'clean'), full('b', 'clean')])).toMatch(/2 guards found nothing/);
   });
 
-  it('13.6 joins server names into drift reviews and rates their risk from the verdict', () => {
+  it('13.6 joins server names into drift reviews and rates their risk from the catalog, not the guard scan', () => {
     const rows = buildObservabilityData(T0).drift;
-    const views = driftViews(rows, new Map([['i-sentry', 'Sentry']]));
+    const views = driftViews(
+      rows,
+      new Map([['i-sentry', 'Sentry']]),
+      new Map([['i-sentry', 'high']]),
+    );
     const sentry = views.find((v) => v.id === 'dr-1');
     expect(sentry).toMatchObject({ serverName: 'Sentry', verdict: 'malicious', risk: 'high' });
     expect(sentry?.description).toMatch(/slack_post_message/);
     expect(views.find((v) => v.id === 'dr-2')).toMatchObject({
       serverName: 'Unknown server',
-      risk: 'low',
+      risk: null,
     });
+    const clean = driftViews(
+      rows,
+      new Map([['i-sentry', 'Sentry']]),
+      new Map([['i-sentry', 'medium']]),
+    ).find((v) => v.id === 'dr-1');
+    expect(clean?.risk).toBe('medium');
   });
 
   it('13.6 names the subject of a finding when it is a person or a server', () => {

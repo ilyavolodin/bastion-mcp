@@ -380,7 +380,8 @@ export type DriftView = DriftRow & {
   description: string;
   verdict: Verdict;
   scanMessage: string;
-  risk: 'low' | 'medium' | 'high';
+  /** The catalog's risk rating of the server the change belongs to; null when no catalog entry is known. */
+  risk: 'low' | 'medium' | 'high' | null;
 };
 
 export const descriptionOf = (definition: Record<string, unknown>): string =>
@@ -397,9 +398,11 @@ export const scanMessage = (results: readonly GuardResult[]): string => {
     : `${flagged.join(', ')} flagged this definition as ${verdict}.`;
 };
 
+/** A drift review's risk is the catalog's: the rating of the entry its installation was made from (13.6). */
 export const driftViews = (
   rows: readonly DriftRow[],
   installations: ReadonlyMap<string, string>,
+  catalogRisk: ReadonlyMap<string, 'low' | 'medium' | 'high'> = new Map(),
 ): DriftView[] =>
   rows.map((r) => {
     const verdict = worstVerdict(r.guardResults);
@@ -409,7 +412,7 @@ export const driftViews = (
       description: descriptionOf(r.newDefinition),
       verdict,
       scanMessage: scanMessage(r.guardResults),
-      risk: verdict === 'malicious' ? 'high' : verdict === 'suspicious' ? 'medium' : 'low',
+      risk: (r.installationId && catalogRisk.get(r.installationId)) || null,
     };
   });
 
