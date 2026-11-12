@@ -32,6 +32,7 @@ import {
 import { ApiError, ConflictApiError, ForbiddenApiError, NotFoundApiError } from '../errors';
 import type { ApiDeps } from '../ports';
 import type { Row } from '../ports/store';
+import { visiblePage } from './catalog/entries';
 import { CrudService, nowIso, type ReadCtx, type WriteCtx } from './crud';
 
 export const registrySources = new CrudService({
@@ -734,7 +735,7 @@ export const submitRequest = async (
   return row;
 };
 
-/** Requesters see their own; managers those of their teams' members; admins all (11.7). */
+/** Requesters see their ownOnly; managers those of their teams' members; admins all (11.7). */
 export const listRequests = async (
   ctx: Pick<ReadCtx, 'deps' | 'principal'>,
   query: { limit: number; cursor?: string | undefined; status?: string | undefined },
@@ -746,30 +747,20 @@ export const listRequests = async (
       ? {}
       : { requesterId: actor.id }),
   };
-  const page = await ctx.deps.store.list('install_requests', {
-    limit: query.limit,
-    cursor: query.cursor,
-    sort: { field: 'createdAt', desc: true },
-    where,
-  });
-  if (actor.orgRole === 'admin' || actor.managedTeamIds.length === 0) return page;
-  const items: Row[] = [];
+  const ownOnly = actor.orgRole === 'admin' || actor.managedTeamIds.length === 0;
   const teamsByRequester = new Map<string, string[]>();
-  for (const row of page.items) {
+  const visible = async (row: Row): Promise<boolean> => {
+    if (ownOnly || row.requesterId === actor.id) return true;
     const requesterId = String(row.requesterId);
-    if (row.requesterId === actor.id) {
-      items.push(row);
-      continue;
-    }
     let requesterTeams = teamsByRequester.get(requesterId);
     if (!requesterTeams) {
       requesterTeams = await teamIdsOf(ctx.deps, requesterId);
       teamsByRequester.set(requesterId, requesterTeams);
     }
     const teams = requesterTeams;
-    if (actor.managedTeamIds.some((t) => teams.includes(t))) items.push(row);
-  }
-  return { items, nextCursor: page.nextCursor };
+    return actor.managedTeamIds.some((t) => teams.includes(t));
+  };
+  return visiblePage(ctx, 'install_requests', { ...query, sort: '-createdAt' }, where, visible);
 };
 
 const requestById = async (deps: ApiDeps, id: string): Promise<Row> => {

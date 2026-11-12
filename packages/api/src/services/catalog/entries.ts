@@ -36,7 +36,7 @@ export const visiblePage = async (
   collection: Collection,
   query: ListQueryInput,
   where: Record<string, unknown>,
-  keep: (row: Row) => boolean,
+  keep: (row: Row) => boolean | Promise<boolean>,
 ): Promise<Page<Row>> => {
   const items: Row[] = [];
   let cursor = query.cursor;
@@ -48,7 +48,7 @@ export const visiblePage = async (
       toListQuery({ ...query, limit: query.limit - items.length, cursor }, where),
     );
     for (const row of page.items) {
-      if (keep(row)) items.push(row);
+      if (await keep(row)) items.push(row);
     }
     nextCursor = page.nextCursor;
     if (items.length >= query.limit || nextCursor === null) break;

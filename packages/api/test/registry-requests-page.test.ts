@@ -49,25 +49,25 @@ describe('11.7 manager request pages', () => {
     expect(all.ids).toEqual(['r2', 'r3', 'r4', 'req-1', 'r5']);
   });
 
-  it('11.7 a short page keeps a non-null cursor and the next page continues after it', async () => {
+  it('11.7 a page is filled with visible rows and the cursor continues after them', async () => {
     api = await buildTestApi();
     await seedRequests(api);
     const first = await page(api, { limit: '2' });
-    expect(first.ids).toEqual(['r2']);
+    expect(first.ids).toEqual(['r2', 'r3']);
     expect(first.nextCursor).not.toBeNull();
     const second = await page(api, { limit: '2', cursor: String(first.nextCursor) });
-    expect(second.ids).toEqual(['r3', 'r4']);
+    expect(second.ids).toEqual(['r4', 'req-1']);
     expect(second.nextCursor).not.toBeNull();
     const third = await page(api, { limit: '2', cursor: String(second.nextCursor) });
-    expect(third.ids).toEqual(['req-1', 'r5']);
+    expect(third.ids).toEqual(['r5']);
     expect(third.nextCursor).toBeNull();
   });
 
-  it('11.7 a page of only foreign rows is empty with a non-null cursor', async () => {
+  it('11.7 a leading foreign row does not yield an empty page while visible rows remain', async () => {
     api = await buildTestApi();
     await seedRequests(api);
     const first = await page(api, { limit: '1' });
-    expect(first.ids).toEqual([]);
+    expect(first.ids).toEqual(['r2']);
     expect(first.nextCursor).not.toBeNull();
   });
 });
