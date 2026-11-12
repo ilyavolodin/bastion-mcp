@@ -198,16 +198,12 @@ describe('9.1 IdP sign-in completion', () => {
     expect(t.hookEvents[0]?.map((e) => e.type)).toEqual(['user.created']);
   });
 
-  it('the state cookie is cleared first; addCookie re-sends earlier cookies, so they repeat (pinned quirk)', async () => {
+  it('the state cookie is cleared first and every cookie is sent exactly once, in order', async () => {
     const t = await build();
     const res = await callback(t.app, 'bastion_login=s1');
     const clear = 'bastion_login=; Path=/auth/callback; Max-Age=0; HttpOnly; SameSite=Lax';
     const sid = 'bastion_sid=sid1; Path=/; Max-Age=60; HttpOnly; SameSite=Lax';
     expect(setCookies(res)).toEqual([
-      clear,
-      clear,
-      sid,
-      clear,
       clear,
       sid,
       'bastion_csrf=csrf1; Path=/; Max-Age=60; SameSite=Lax',

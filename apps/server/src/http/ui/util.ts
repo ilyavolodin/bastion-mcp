@@ -43,9 +43,7 @@ export const cookiesSecure = (infra: Infra): boolean =>
   new URL(infra.config.publicUrl).protocol === 'https:';
 
 export const addCookie = (reply: FastifyReply, cookie: string): void => {
-  const previous = reply.getHeader('set-cookie');
-  const list = Array.isArray(previous) ? previous : typeof previous === 'string' ? [previous] : [];
-  reply.header('set-cookie', [...list, cookie]);
+  reply.header('set-cookie', cookie); // Fastify appends to an existing set-cookie
 };
 
 export const cookieValue = (req: FastifyRequest, name: string): string | undefined =>
