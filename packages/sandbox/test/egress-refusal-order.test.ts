@@ -79,3 +79,42 @@ describe('8.8 the allowlist is checked before any DNS lookup', () => {
     expect(resolver).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('8.8 the resolve timeout timer', () => {
+  let proxy: EgressProxy | undefined;
+  afterEach(async () => {
+    await proxy?.close();
+    vi.restoreAllMocks();
+  });
+
+  it('is cleared once the resolver settles first', async () => {
+    const RESOLVE_MS = 12_345;
+    const created: unknown[] = [];
+    const cleared: unknown[] = [];
+    const realSet = globalThis.setTimeout;
+    const realClear = globalThis.clearTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      const handle = realSet(fn, ms);
+      if (ms === RESOLVE_MS) created.push(handle);
+      return handle;
+    }) as typeof setTimeout);
+    vi.spyOn(globalThis, 'clearTimeout').mockImplementation(((handle: never) => {
+      cleared.push(handle);
+      return realClear(handle);
+    }) as typeof clearTimeout);
+    const proxyWithTimeout = createEgressProxy({
+      policies: {
+        get: async () => ({ tokenSha256: sha256Hex(TOKEN), allow: ['ok.test'], phase: 'running' }),
+      },
+      audit: { record: () => {} },
+      resolver: async () => ['93.184.216.34'],
+      connect: () => net.connect({ host: '127.0.0.1', port: 1 }),
+      resolveTimeoutMs: RESOLVE_MS,
+    });
+    proxy = proxyWithTimeout;
+    const { port } = await proxyWithTimeout.listenTcp(0, '127.0.0.1');
+    await viaConnect(port, 'ok.test:443');
+    expect(created).toHaveLength(1);
+    expect(cleared).toContain(created[0]);
+  });
+});

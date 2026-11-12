@@ -153,12 +153,18 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
 
   const resolveOnce = async (host: string): Promise<string[]> => {
     if (net.isIP(host)) return [host];
-    return await Promise.race([
-      resolver(host),
-      new Promise<string[]>((_, reject) =>
-        setTimeout(() => reject(new Error('DNS timeout')), resolveTimeout).unref(),
-      ),
-    ]);
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        resolver(host),
+        new Promise<string[]>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('DNS timeout')), resolveTimeout);
+          timer.unref();
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   };
 
   const emitAudit = (event: EgressAuditEvent): void => {
