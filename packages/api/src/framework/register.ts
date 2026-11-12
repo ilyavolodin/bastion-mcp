@@ -180,7 +180,7 @@ const run = async (
     },
   };
 
-  if (def.stream) return stream(def, base, req, reply, deps, abort);
+  if (def.stream) return stream(def, base, req, reply, deps);
 
   const key = def.method === 'POST' ? headerOf(req, 'idempotency-key') : undefined;
   const fingerprint = key ? fingerprintOf(def.method, req.url, req.body) : '';
@@ -295,7 +295,6 @@ const stream = async (
   req: FastifyRequest,
   reply: FastifyReply,
   deps: ApiDeps,
-  abort: AbortController,
 ): Promise<FastifyReply> => {
   const source = (await (def.handler as (ctx: unknown) => unknown)(base)) as SseSource;
   reply.hijack();
@@ -331,7 +330,6 @@ const stream = async (
   cleanup = source.subscribe(emit, end);
   if (closed) cleanup();
   req.raw.on('close', () => {
-    abort.abort();
     clearTimeout(max);
     end();
   });
