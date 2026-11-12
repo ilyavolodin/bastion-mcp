@@ -238,7 +238,7 @@ describe('8.8 refusal wire forms', () => {
     await viaConnect('ok.test:443');
     await viaHttp('http://meta.test/');
     expect(audit.map((e) => [e.protocol, e.host, e.decision, e.reason, e.resolvedIp])).toEqual([
-      ['connect', 'evil.test', 'deny', 'not-allowlisted', '93.184.216.36'],
+      ['connect', 'evil.test', 'deny', 'not-allowlisted', null],
       ['connect', 'priv.test', 'deny', 'ssrf-blocked', '10.0.0.7'],
       ['connect', 'gone.test', 'deny', 'unresolvable', null],
       ['connect', 'ok.test', 'deny', 'connect-failed', '93.184.216.34'],

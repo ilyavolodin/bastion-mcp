@@ -10,12 +10,14 @@ import { type EgressAuditEvent, type EgressAuditSink, shouldAudit } from './audi
 import {
   mirrorRules as buildMirrorRules,
   canonicalHost,
+  cidrRules,
   type DenyReason,
   decideResolved,
   denyDetail,
   type EgressPolicy,
   type EgressPolicyStore,
   type EgressProtocol,
+  matchName,
   parseHostPort,
   parseProxyAuthorization,
   verifyEgressToken,
@@ -185,6 +187,19 @@ export const createEgressProxy = (options: EgressProxyOptions): EgressProxy => {
     protocol: EgressProtocol,
   ): Promise<Outcome & { resolvedIp: string | null }> => {
     const host = canonicalHost(target.host);
+    // A name no rule allows is refused before any DNS lookup, unless a CIDR rule could still allow its address.
+    if (
+      !matchName({
+        host,
+        port: target.port,
+        protocol,
+        policy: identity.policy,
+        mirrorRules: mirrors,
+      }).allowed &&
+      cidrRules(identity.policy.allow).length === 0
+    ) {
+      return { allowed: false, reason: 'not-allowlisted', resolvedIp: null };
+    }
     let addresses: string[];
     try {
       addresses = await resolveOnce(host);
