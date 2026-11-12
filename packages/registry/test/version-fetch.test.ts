@@ -75,11 +75,11 @@ describe('11.3 version resolver request plumbing (characterization)', () => {
     expect((error as RegistryUnavailableError).cause).toBe(boom);
   });
 
-  it('pinned: invalid package-index JSON is reported as RegistryUnavailableError (both resolvers)', async () => {
+  it('invalid package-index JSON is reported as RegistryInvalidResponseError (both resolvers)', async () => {
     const bad = recording(() => new Response('not json', { status: 200 }));
     const npm = createNpmVersionResolver('https://npm.example', { fetch: bad.fetch });
     const pypi = createPypiVersionResolver('https://pypi.example', { fetch: bad.fetch });
-    await expect(npm.latest('npm', 'x')).rejects.toBeInstanceOf(RegistryUnavailableError);
+    await expect(npm.latest('npm', 'x')).rejects.toBeInstanceOf(RegistryInvalidResponseError);
     await expect(pypi.latest('pypi', 'x')).rejects.toThrow(
       'package registry answered invalid JSON',
     );

@@ -67,7 +67,9 @@ const fetchJson = async (
   try {
     return JSON.parse(text);
   } catch (error) {
-    throw new RegistryUnavailableError('package registry answered invalid JSON', { cause: error });
+    throw new RegistryInvalidResponseError('package registry answered invalid JSON', {
+      cause: error,
+    });
   }
 };
 

@@ -7,6 +7,7 @@ import {
   createVersionResolver,
   importFromClientConfig,
   importFromServerJson,
+  RegistryInvalidResponseError,
   RegistryMappingError,
   RegistryUnavailableError,
   type VersionResolver,
@@ -307,7 +308,7 @@ describe('11.3 version resolvers (local fake npm and PyPI)', () => {
     const npm = createNpmVersionResolver(base);
     await expect(npm.latest('npm', 'missing')).rejects.toBeInstanceOf(RegistryMappingError);
     await expect(npm.latest('npm', 'notags')).rejects.toThrow(/no latest/);
-    await expect(npm.latest('npm', 'broken')).rejects.toBeInstanceOf(RegistryUnavailableError);
+    await expect(npm.latest('npm', 'broken')).rejects.toBeInstanceOf(RegistryInvalidResponseError);
   });
 
   it('11.3 PyPI resolver derives the JSON API from the simple index URL', async () => {
