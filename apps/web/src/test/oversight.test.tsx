@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { applyServerEvent, openEventStream } from '@/api/events';
+import { POLL_SANDBOXES_MS } from '@/api/timing';
 import { getDb } from '@/mocks/db';
 import { DAY } from '@/mocks/util';
 import { expectNoA11yViolations, renderRoute } from './utils';
@@ -23,6 +24,13 @@ describe('Observability (15, 18.3)', () => {
     expect(await within(list).findByRole('link', { name: 'Notion' })).toBeInTheDocument();
     expect(within(list).getByText('Running')).toBeInTheDocument();
     expect(within(list).getByText('Starting')).toBeInTheDocument();
+  });
+
+  it('15.5 the running sandboxes are re-read at the named polling interval', async () => {
+    const { qc } = await renderRoute('/observability');
+    await screen.findByRole('region', { name: 'Running sandboxes' });
+    const query = qc.getQueryCache().findAll({ queryKey: ['stats', 'sandboxes-live'] })[0];
+    expect(query?.observers[0]?.options.refetchInterval).toBe(POLL_SANDBOXES_MS);
   });
 
   it('renders five panels, each with an accessible table toggle', async () => {
