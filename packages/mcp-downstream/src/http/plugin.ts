@@ -349,8 +349,10 @@ export const registerMcpRoutes = async (app: FastifyInstance, deps: HttpDeps): P
       );
     };
 
+    // A trailing slash is the same endpoint: without its own route it would fall into the `/mcp/*` wildcard below.
     for (const url of ['/mcp', '/mcp/e/:slug', '/mcp/i/:slug', '/mcp/c/:slug']) {
       scope.route({ method: ['GET', 'POST', 'DELETE'], url, handler });
+      scope.route({ method: ['GET', 'POST', 'DELETE'], url: `${url}/`, handler });
     }
     // Everything else under /mcp is a 404 behind the same flood limit.
     scope.all('/mcp/*', async (_req, reply) => reply.code(404).send({ error: 'not_found' }));

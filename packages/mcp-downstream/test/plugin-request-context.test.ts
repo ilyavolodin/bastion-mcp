@@ -142,12 +142,23 @@ describe('6.2 the request context built for one /mcp exchange', () => {
     });
   });
 
-  it('a trailing slash never reaches the handler: it is the wildcard 404, after verification', async () => {
+  it('6.2 a trailing slash serves the same endpoint as the path without it', async () => {
     current = await stack();
-    const res = await post('{}', {}, '/mcp/');
+    const bare = await post('{}', {}, '/mcp');
+    const slash = await post('{}', {}, '/mcp/');
+    expect(slash?.statusCode).toBe(bare?.statusCode);
+    expect(slash?.body).toBe(bare?.body);
+    const installation = await post('{}', {}, '/mcp/i/github/?x=1');
+    expect(installation?.statusCode).toBe(200);
+    expect(current.seen.map((s) => s.exchange.rc.path)).toEqual(['/mcp', '/mcp', '/mcp/i/github']);
+    expect(current.seen[1]?.exchange.rc.endpointPath).toEqual({ kind: 'default' });
+  });
+
+  it('6.2 any other path under /mcp is still a 404 that never reaches an adapter', async () => {
+    current = await stack();
+    const res = await post('{}', {}, '/mcp/x/y');
     expect(res?.statusCode).toBe(404);
     expect(res?.json()).toEqual({ error: 'not_found' });
-    expect(current.verified).toHaveLength(1);
     expect(current.seen).toEqual([]);
   });
 
