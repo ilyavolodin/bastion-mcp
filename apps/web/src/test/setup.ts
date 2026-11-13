@@ -1,4 +1,5 @@
-import '@testing-library/jest-dom/vitest';
+import * as jestDomMatchers from '@testing-library/jest-dom/matchers';
+import type {} from '@testing-library/jest-dom/vitest';
 import { cleanup, configure } from '@testing-library/react';
 import { toHaveNoViolations } from 'jest-axe';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
@@ -10,6 +11,9 @@ import { clearSseClients } from '@/mocks/state';
 import { findOperation, type HttpMethod, requiresIfMatch } from './contract';
 import { ifMatchPolicy } from './if-match';
 
+// Not `@testing-library/jest-dom/vitest`: the lockfile holds two vitest copies (one per @types/node), and that entry
+// extends the other copy's `expect`, which breaks `toMatchInlineSnapshot` on Linux ("snapshot state ... is not found").
+expect.extend(jestDomMatchers);
 expect.extend(toHaveNoViolations);
 configure({ asyncUtilTimeout: 30_000 });
 
